@@ -31,6 +31,6 @@ private:
     int swap(int from, int to, int neighbour);
     int hop(int from, int to, int neighbour);
 
-    int numOps;
+    int numOps; // Length of chromosome
     vector<int> vals;
 };

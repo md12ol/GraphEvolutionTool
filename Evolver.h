@@ -16,6 +16,7 @@ public:
     explicit Evolver(const string &pathToConfigFile);
 
     int evolve(bool verbose = true);
+    float fitness(Graph &G);
 
 private:
     bool biggerBetter;

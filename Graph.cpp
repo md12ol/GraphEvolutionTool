@@ -6,10 +6,11 @@
  *
  * @param numNodes
  * @param weightedGraph
+ * @param multiGraph
  * @param directedGraph
  * @param adjListRep        // Should connectivity be stored as lists or should a matrix be used?
  */
-Graph::Graph(int numNodes, bool weightedGraph, bool directedGraph, bool adjListRep) {
+Graph::Graph(int numNodes, bool weightedGraph, bool multiGraph, bool directedGraph, bool adjListRep) {
 
 }
 
