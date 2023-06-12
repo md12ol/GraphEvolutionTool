@@ -3,6 +3,10 @@
 template<class representation>
 Evolver<representation>::Evolver(char pathToConfigFile[]){
 
+    // Initialize the population
+    // Calculate fitness of each member of the population
+    // Generate the first repo
+
 }
 
 template<class representation>

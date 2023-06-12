@@ -16,8 +16,8 @@ public:
     int copy(EEOPS &other);
     int crossover(EEOPS &other);
     int mutate(int numMuts);
-    int print(ostream &to);
     int express(Graph &G);
+    int print(ostream &to);
 
 private:
     int initialize();
@@ -31,6 +31,8 @@ private:
     int swap(int from, int to, int neighbour);
     int hop(int from, int to, int neighbour);
 
-    int numOps; // Length of chromosome
-    vector<int> vals;
+    int generateGene();
+
+    int numGenes; // Length of chromosome
+    vector<int> genes;
 };
