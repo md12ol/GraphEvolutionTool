@@ -2,6 +2,7 @@
 #include <vector>
 
 #include "Graph.h"
+#include "Representation.h"
 
 using namespace std;
 
@@ -17,7 +18,7 @@ public:
     int crossover(SDA &other);
     int mutate(int numMuts);
     int express(Graph &G);
-    int print(ostream &outStrm);
+    int print(ostream &to);
 
 private:
     int initialize();

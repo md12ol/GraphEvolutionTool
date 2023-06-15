@@ -6,19 +6,23 @@
 
 class Representation {
 public:
-    Representation();
-    Representation(Representation &other);
-    ~Representation();
 
-    int randomize();
-    int copy(Representation &other);
-    int crossover(Representation &other);
-    int mutate(int numMuts);
-    int express(Graph &G);
-    int print(ostream &to);
+    virtual Representation(Representation &other) = 0;
+
+    virtual int randomize() = 0;
+    virtual int copy(Representation &other) = 0;
+    virtual int crossover(Representation &other) = 0;
+    virtual int mutate(int numMuts) = 0;
+    virtual int express(Graph &G) = 0;
+    virtual int print(ostream &to) = 0;
+
+    ~Representation() {}
+
+protected:
+    Representation() {}
 
 private:
-    int initialize();
+    virtual int initialize() = 0;
 };
 
 #endif //GRAPHEVOLUTIONTOOL_REPRESENTATION_H
