@@ -5,7 +5,7 @@
 
 using namespace std;
 
-class SDA {
+class SDA: public Representation {
 public:
     SDA();
     explicit SDA(int numStates, int numChars, int maxRespLen, int outputLen, int initState = 0, bool verbose = false);

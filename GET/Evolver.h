@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "SDA.h"
-#include "EEOPS.h"
+#include "GET/EEOPS.h"
 #include "Graph.h"
 
 using namespace std;
