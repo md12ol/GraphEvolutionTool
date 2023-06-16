@@ -7,8 +7,6 @@
 class Representation {
 public:
 
-    virtual Representation(Representation &other) = 0;
-
     virtual int randomize() = 0;
     virtual int copy(Representation &other) = 0;
     virtual int crossover(Representation &other) = 0;
@@ -16,10 +14,11 @@ public:
     virtual int express(Graph &G) = 0;
     virtual int print(ostream &to) = 0;
 
-    ~Representation() {}
+    ~Representation() = default;
 
 protected:
-    Representation() {}
+    Representation() = default;
+    Representation(Representation &other) = default;
 
 private:
     virtual int initialize() = 0;
