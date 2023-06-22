@@ -39,4 +39,10 @@
  * Population Size =
  *
  *
+ *
+ *
+ *
 */
+
+// If you want to maximize fitness set this to true.  Otherwise set it to false.
+#define BIGGER_BETTER true

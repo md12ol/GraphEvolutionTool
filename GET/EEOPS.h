@@ -2,10 +2,11 @@
 #include <vector>
 
 #include "Graph.h"
+#include "Representation.h"
 
 using namespace std;
 
-class EEOPS {
+class EEOPS: public Representation {
 public:
     EEOPS();
     EEOPS(int numOps);
