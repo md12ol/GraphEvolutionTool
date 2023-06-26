@@ -33,7 +33,7 @@ SDA::SDA(SDA &other) {
 
 SDA::~SDA() = default;
 
-int SDA::initialize() {
+int SDA::initialize() {// Same as the create method the name was just changes
     initChar = (int) lrand48() % numChars;
 
     vector<int> oneState;
