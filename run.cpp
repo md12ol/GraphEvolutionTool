@@ -1,11 +1,10 @@
-//#include <GET>
-
+#include "./GET/Evolver.h"
 
 int fitness(){
     return 10;
 }
 
 int main(){
-//    GET thing;
+//    Evolver theSystem;
 //    thing.evolveGraph(*fitness);
 }

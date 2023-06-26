@@ -146,6 +146,10 @@ Evolver<representation>::Evolver() {// This method is going to be similar to the
     // Do the mating events
     // Etc.
 
+    // AS A STARTING POINT
+    // This method will be similar to the main method in main.cpp
+    // The rest of this file will be like the methods in main.h
+
     //if (BIGGER_BETTER){
     //    cout<<"WOO!"<<endl;
     //}
