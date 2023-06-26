@@ -21,8 +21,8 @@ SDA::SDA(int numStates, int numChars, int maxRespLen, int outputLen, int initSta
             vec1.reserve(maxRespLen);
         }
     }
-    initialize();
-    if (verbose) cout << "SDA Made with " << numStates << " numStates." << endl;
+    create();
+    if (verbose) cout << "SDA made with " << numStates << " numStates." << endl;
 }
 
 SDA::SDA() : SDA(10, 2, 2, 1000) {}
@@ -33,7 +33,7 @@ SDA::SDA(SDA &other) {
 
 SDA::~SDA() = default;
 
-int SDA::initialize() {
+int SDA::create() {
     initChar = (int) lrand48() % numChars;
 
     vector<int> oneState;
@@ -63,6 +63,12 @@ int SDA::initialize() {
         }
         responses.push_back(oneStateResps);
     }
+    if (verbose) cout << "SDA initialized." << endl;
+    return 0;
+}
+
+int SDA::setOutputLen(int newLen) {
+    this->outputLen = newLen;
     return 0;
 }
 
@@ -103,9 +109,28 @@ int SDA::copy(SDA &other) {
     }
 
     initChar = other.initChar;
+    if (numStates != other.numStates) {
+        transitions.reserve(other.numStates);
+        responses.reserve(other.numStates);
+    }
     numStates = other.numStates;
     initState = other.initState;
+    if (numChars != other.numChars) {
+        for (auto &stateTrans: transitions) {
+            stateTrans.reserve(other.numChars);
+        }
+        for (auto &stateResp: responses) {
+            stateResp.reserve(other.numChars);
+        }
+    }
     numChars = other.numChars;
+    if (maxRespLen != other.maxRespLen) {
+        for (auto &stateResp: responses) {
+            for (auto &resp: stateResp) {
+                resp.reserve(other.maxRespLen);
+            }
+        }
+    }
     maxRespLen = other.maxRespLen;
     outputLen = other.outputLen;
     verbose = other.verbose;
@@ -118,57 +143,55 @@ int SDA::copy(SDA &other) {
 
 int SDA::crossover(SDA &other) {
     if (initChar < 0) {
-        cout << "Error in SDA Class: twoPtCrossover(...): this SDA has not been initialized.";
+        cout << "Error in SDA Class: crossover(...): this SDA has not been initialized.";
         return -1;
     }
     if (other.initChar < 0) {
-        cout << "Error in SDA Class: twoPtCrossover(...): other SDA has not been initialized.";
+        cout << "Error in SDA Class: crossover(...): other SDA has not been initialized.";
         return -1;
     }
     if (numStates != other.numStates) {
-        cout << "Error in SDA Class: twoPtCrossover(...): the two SDAs have a different numStates.";
+        cout << "Error in SDA Class: crossover(...): the two SDAs have a different numStates.";
         return 1;
     }
     if (numChars != other.numChars) {
-        cout << "Error in SDA Class: twoPtCrossover(...): the two SDAs have a different numChars.";
+        cout << "Error in SDA Class: crossover(...): the two SDAs have a different numChars.";
         return 1;
     }
     if (maxRespLen != other.maxRespLen) {
-        cout << "Error in SDA Class: twoPtCrossover(...): the two SDAs have a different maxRespLen.";
+        cout << "Error in SDA Class: crossover(...): the two SDAs have a different maxRespLen.";
         return 1;
     }
 
-    int cp1, cp2;
-    int swapInt;
+    int crossStart, crossEnd, swapInt;
     vector<int> swapVec;
     swapVec.reserve(numChars);
 
     do {
-        cp1 = (int) lrand48() % numStates;
-        cp2 = (int) lrand48() % numStates;
-        if (cp1 > cp2) {
-            swapInt = cp1;
-            cp1 = cp2;
-            cp2 = swapInt;
+        crossStart = (int) lrand48() % (numStates + 1);
+        crossEnd = (int) lrand48() % (numStates + 1);
+        if (crossStart > crossEnd) {
+            swapInt = crossStart;
+            crossStart = crossEnd;
+            crossEnd = swapInt;
         }
-    } while (cp1 == cp2);
+    } while (crossStart == crossEnd);
 
-    if (cp1 == 0) {
+    if (crossStart == 0) {
         swapInt = initChar;
         initChar = other.initChar;
         other.initChar = swapInt;
     }
 
-    for (int s = cp1; s < cp2; s++) {
-        swapVec = transitions.at(s);
-        transitions.at(s) = other.transitions.at(s);
-        other.transitions.at(s) = swapVec;
-        swapVec = responses.at(s).at(0);
-        responses.at(s).at(0) = other.responses.at(s).at(0);
-        other.responses.at(s).at(0) = swapVec;
-        swapVec = responses.at(s).at(1);
-        responses.at(s).at(1) = other.responses.at(s).at(1);
-        other.responses.at(s).at(1) = swapVec;
+    for (int state = crossStart; state < crossEnd; state++) {
+        swapVec = transitions.at(state);
+        transitions.at(state) = other.transitions.at(state);
+        other.transitions.at(state) = swapVec;
+        for (int trans = 0; trans < numChars; trans++) {
+            swapVec = responses.at(state).at(trans);
+            responses.at(state).at(trans) = other.responses.at(state).at(trans);
+            other.responses.at(state).at(trans) = swapVec;
+        }
     }
     return 0;
 }
@@ -179,51 +202,108 @@ int SDA::mutate(int numMuts) {
         return -1;
     }
 
-    int mutPt;
+    int mutPt, respSize;
     vector<int> oneResponse;
-    int respSize;
 
     for (int mut = 0; mut < numMuts; ++mut) {
-        mutPt = (int) lrand48() % (2 * numStates + 1);
-
-        if (mutPt == 0) {
+        if (drand48() < 0.04) { // 4% chance of mutating initial character
             initChar = (int) lrand48() % numChars;
             return 0;
-        }
-        mutPt = (mutPt - 1) / 2;
-        int transNum = (int) lrand48() % numChars;
-        if ((int) lrand48() % 2 == 0) { // Mutate transition
-            transitions.at(mutPt).at(transNum) = (int) lrand48() % numStates;
-        } else { // Mutate response
-            oneResponse.clear();
-            respSize = (int) lrand48() % 2 + 1;
-            for (int i = 0; i < respSize; ++i) {
-                oneResponse.push_back((int) lrand48() % numChars);
+        } else {
+            mutPt = (int) lrand48() % numStates;
+            int transNum = (int) lrand48() % numChars;
+
+            if ((int) lrand48() % 2 == 0) { // Mutate transition (50%)
+                transitions.at(mutPt).at(transNum) = (int) lrand48() % numStates;
+            } else { // Mutate response (50%)
+                oneResponse.clear();
+                respSize = (int) lrand48() % maxRespLen + 1;
+                for (int i = 0; i < respSize; ++i) {
+                    oneResponse.push_back((int) lrand48() % numChars);
+                }
+                responses.at(mutPt).at(transNum) = oneResponse;
             }
-            responses.at(mutPt).at(transNum) = oneResponse;
         }
     }
     return 0;
 }
 
 int SDA::express(Graph &G) {
-    return 0;
+    if (initChar < 0) {
+        cout << "Error in SDA Class: fillOutput(...): this SDA has not been initialized.";
+        return -1;
+    }
+    vector<int> output(outputLen);
+    int headIdx = 0;
+    int tailIdx = 0;
+    curState = initState;
+    output[headIdx++] = initChar;
+    while (headIdx < outputLen) {
+        for (int val: responses[curState][output[tailIdx]]) {
+            if (headIdx < outputLen) {
+                output[headIdx++] = val;
+            }
+        }
+        curState = transitions[curState][output[tailIdx++]];
+    }
+    G.ex
 }
 
-int SDA::print(ostream &outStrm = cout) {
+int SDA::fillOutput(vector<int> &output, bool printToo, ostream &outStream) {
     if (initChar < 0) {
-        cout << "Error in SDA Class: printSDA(...): this SDA has not been initialized.";
+        cout << "Error in SDA Class: fillOutput(...): this SDA has not been initialized.";
+        return -1;
+    }
+    if (output.capacity() < outputLen) {
+        cout << "Error in SDA Class: fillOutput(...): output vector capacity is " << output.capacity();
+        cout << " but the outputLen is " << outputLen << "." << endl;
         return -1;
     }
 
-    outStrm << initState << " <- " << initChar << endl;
-    for (int state = 0; state < numStates; ++state) {
-        for (int t = 0; t < numChars; ++t) {
-            outStrm << state << " + " << t << " -> " << transitions.at(state).at(t) << " [";
-            for (int v: responses.at(state).at(t)) {
-                outStrm << " " << v;
+    int headIdx = 0;
+    int tailIdx = 0;
+    curState = initState;
+    output[headIdx++] = initChar;
+    if (printToo) outStream << initChar;
+
+    while (headIdx < outputLen) {
+        for (int val: responses[curState][output[tailIdx]]) {
+            if (headIdx < outputLen) {
+                output[headIdx++] = val;
+                if (printToo) outStream << " " << val;
             }
-            outStrm << " ]" << endl;
+        }
+        curState = transitions[curState][output[tailIdx++]];
+    }
+    if (printToo) outStream << endl;
+    return 0;
+}
+
+vector<int> SDA::rtnOutput(bool printToo, ostream &outStream) {
+    if (initChar < 0) {
+        cout << "Error in SDA Class: rtnOutput(...): this SDA has not been initialized.";
+        return {-1};
+    }
+
+    vector<int> output(outputLen);
+    fillOutput(output, printToo, outStream);
+    return output;
+}
+
+int SDA::print(ostream &to = cout) {
+    if (initChar < 0) {
+        cout << "Error in SDA Class: print(...): this SDA has not been initialized.";
+        return -1;
+    }
+
+    to << initState << " <- " << initChar << endl;
+    for (int state = 0; state < numStates; ++state) {
+        for (int trans = 0; trans < numChars; ++trans) {
+            to << state << " + " << trans << " -> " << transitions[state][trans] << " [";
+            for (int vec: responses[state][trans]) {
+                to << " " << vec;
+            }
+            to << " ]" << endl;
         }
     }
     if (verbose) cout << "SDA Printed." << endl;
