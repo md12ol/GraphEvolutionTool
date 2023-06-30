@@ -25,7 +25,7 @@ Evolver<representation>::Evolver() {// This method is going to be similar to the
             cout << "Fitness of SDA: " << fit[x] << endl;
         //     report(runStats); // Initial Report
         }
-        for(int x = 0; x < numGenerations; x++){// perform the specefied number of mating events
+        for(int x = 0; x < NUM_MATING_EVENTS; x++){// perform the specefied number of mating events
             matingEvent();// perform the mating event with the current population
             //print fitness values
             for(int x = 0; x < SDAPop.size(); x++){//Generate the report ( can be combined with the fitness evaluation loop above ?)

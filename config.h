@@ -50,3 +50,17 @@
 #define MAX_WEIGHT (int) 1
 #define MULTI_GRAPH FALSE
 #endif
+
+
+
+
+/**
+ * The follwoing defenitions are for the evolutionary algorithm settings
+ * All the following can be modified by user
+*/
+#define POPULATION_SIZE (int) 10
+#define NUM_MATING_EVENTS (int) 10000
+#define TOURNAMENT_SIZE (int) 7
+#define CROSSOVER_RATE (float) 0.5
+#define DYNAMIC_MUTATION_RATE TRUE
+#define MUTATION_RATE (float) 0.05
