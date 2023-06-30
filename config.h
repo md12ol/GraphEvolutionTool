@@ -51,11 +51,7 @@
 #define MULTI_GRAPH FALSE
 #endif
 
-
-
-
-/**
- * The following definitions are for setting the parameters of the evolutionary algorithm.
+ /* The following definitions are for setting the parameters of the evolutionary algorithm.
  * All of which can be modified by the user.
  */
 #define POPULATION_SIZE (int)10         // SET BY USER
