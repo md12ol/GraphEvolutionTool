@@ -22,7 +22,7 @@ public:
     int print(ostream &to) override;
 
 private:
-    int create();   // Randomly initialize the SDA by setting initChar and filling the transitions and response vectors
+    int create();       // Randomly initialize the SDA by setting initChar and filling the transitions and response vectors
 
     int initChar{};     // The initial character to drive the first transition
     int numStates{};    // The number of states in the SDA

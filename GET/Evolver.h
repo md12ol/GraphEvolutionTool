@@ -7,6 +7,8 @@
 #include "GET/EEOPS.h"
 #include "Graph.h"
 
+ // Kevin, replace the variables without declaration either with global definitions or instance variables in Evolver.
+
  const int popSize = 10;// size of the initial population
  int numGenerations = 10000;// number of mating events that will be performed
  double mutationRate = 0.05;// 
@@ -31,6 +33,8 @@ private:
 
     vector<representation> population;
     vector<float> fitnessVals;
+
+    float currentMutationRate;
 };
 
 /**This method initializes the population
