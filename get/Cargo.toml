@@ -1,0 +1,13 @@
+[package]
+name = "get"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Change pyo3 to include "abi3-py38" (or your min supported version)
+pyo3 = { version = "0.27.2", features = ["extension-module", "abi3-py38"] }
+
+rayon = "1.8"
+rand = "0.9"
+rand_chacha = "0.9"
+serde = { version = "1.0", features = ["derive"] }
