@@ -3,12 +3,22 @@ We need to do the following
 - We will use MultiGraphs
 - edge_edit and sda genomes
 - generational and/or steady state
-graph "class"
+
 
 traits
-- evolution trait
+- genome trait
     - crossover method
-     - EE implement 
-     - SDA implement
-    - mutation
+    - mutation 
+    - copy
+    - print
+    - express (all different genomes express to a instance of Graph type)
 
+- EA Engine trait
+    - 2 impls of trait (generational, steady state)
+    - population initialization
+    - selection
+    - population fitness evaluation
+    - ?
+
+- Fitness Trait
+    - 
