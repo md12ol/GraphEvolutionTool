@@ -1,6 +1,6 @@
 use rand::Rng;
 
-use super::genome::Genome;
+use super::genome::{EdgeEditContext, Express, Genome};
 use crate::graph::Graph;
 
 /// Edit-script genome: a list of encoded graph-edit opcodes.
@@ -10,11 +10,6 @@ use crate::graph::Graph;
 pub struct EdgeEditGenome(pub Vec<u64>);
 
 impl Genome for EdgeEditGenome {
-    fn express(&self) -> Graph {
-        // TODO: decode each opcode and apply it to a base graph.
-        todo!("edge-edit express")
-    }
-
     fn crossover<R: Rng + ?Sized>(&mut self, _b: &mut Self, _rng: &mut R) {
         // TODO: two-point crossover over the opcode vector.
         todo!("edge-edit crossover")
@@ -29,7 +24,16 @@ impl Genome for EdgeEditGenome {
         self.clone()
     }
 
-    fn print(&self) {
-        println!("EdgeEditGenome({} ops): {:?}", self.0.len(), self.0);
+    fn print(&self) -> String {
+        format!("EdgeEditGenome({} ops): {:?}", self.0.len(), self.0)
+    }
+}
+
+impl Express for EdgeEditGenome {
+    type Context = EdgeEditContext;
+
+    fn express(&self, _context: &Self::Context) -> Graph {
+        // TODO: clone the base graph, decode each opcode, and apply its edit.
+        todo!("edge-edit express")
     }
 }
