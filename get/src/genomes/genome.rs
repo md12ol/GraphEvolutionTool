@@ -7,6 +7,12 @@ use crate::graph::Graph;
 /// `Clone + Send + Sync` allows the GA to copy individuals and evaluate a
 /// population across worker threads.
 pub trait Genome: Clone + Send + Sync {
+    /// Run-level configuration required to express this genome.
+    type Context;
+
+    /// Express this genome as a graph using shared run-level configuration.
+    fn express(&self, context: &Self::Context) -> Graph;
+
     /// Recombine two parents in place, leaving the resulting children in
     /// `self` and `other`.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R);
@@ -18,13 +24,6 @@ pub trait Genome: Clone + Send + Sync {
 
     /// Return a human-readable description of the genome.
     fn print(&self) -> String;
-}
-
-/// Converts a genome into its phenotype using run-specific configuration.
-pub trait Express {
-    type Context;
-
-    fn express(&self, context: &Self::Context) -> Graph;
 }
 
 /// Configuration used when an edge-edit genome modifies an initial graph.

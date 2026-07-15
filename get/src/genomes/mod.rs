@@ -3,5 +3,5 @@ pub mod genome;
 pub mod sda;
 
 pub use edge_edit::EdgeEditGenome;
-pub use genome::{EdgeEditContext, Express, Genome, SdaContext};
+pub use genome::{EdgeEditContext, Genome, SdaContext};
 pub use sda::SdaGenome;

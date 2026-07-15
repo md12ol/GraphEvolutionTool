@@ -1,6 +1,6 @@
 use rand::Rng;
 
-use super::genome::{Express, Genome, SdaContext};
+use super::genome::{Genome, SdaContext};
 use crate::graph::Graph;
 
 /// Self-driving-automaton genome: a finite-state machine whose run emits the
@@ -15,6 +15,13 @@ pub struct SdaGenome {
 }
 
 impl Genome for SdaGenome {
+    type Context = SdaContext;
+
+    fn express(&self, _context: &Self::Context) -> Graph {
+        // TODO: run the automaton and fold its output into a graph.
+        todo!("SDA express")
+    }
+
     /// One-point crossover over states: choose a cut point and swap every state
     /// row (transitions and responses) from the cut onward between the parents.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) {
@@ -52,14 +59,5 @@ impl Genome for SdaGenome {
             self.init_char,
             self.transitions.len()
         )
-    }
-}
-
-impl Express for SdaGenome {
-    type Context = SdaContext;
-
-    fn express(&self, _context: &Self::Context) -> Graph {
-        // TODO: run the automaton and fold its output into a graph.
-        todo!("SDA express")
     }
 }
