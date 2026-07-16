@@ -1,107 +1,190 @@
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Graph {
     pub num_nodes: usize,
-    /// Weighted adjacency matrix: `adjacency[u][v]` is the weight of edge `u—v`,
-    /// or 0 if there is no edge. Kept symmetric (`[u][v] == [v][u]`) since the
-    /// graph is undirected.
-    pub adjacency: Vec<Vec<u32>>
+    /// Symmetric adjacency matrix whose entries are edge weights.
+    ///
+    /// A zero entry means that no edge exists. A value greater than one
+    /// represents parallel edges between the same pair of vertices.
+    pub adjacency: Vec<Vec<u32>>,
 }
 
 impl Graph {
     /// Create an empty graph with `num_nodes` nodes and no edges.
     pub fn new(num_nodes: usize) -> Self {
-        Graph {
+        Self {
             num_nodes,
-            adjacency: vec![vec![0; num_nodes]; num_nodes]
+            adjacency: vec![vec![0; num_nodes]; num_nodes],
         }
     }
 
-    /// Return true if an edge (nonzero weight) exists between `u` and `v`.
+    /// Return true if at least one edge exists between `u` and `v`.
     pub fn has_edge(&self, u: usize, v: usize) -> bool {
-        return self.weight(u, v) != 0;
+        self.weight(u, v) != 0
     }
 
-    /// Return the weight of edge `u—v`, or 0 if there is no edge
-    /// (or either endpoint is out of range).
+    /// Return the edge multiplicity, or zero for invalid vertices.
     pub fn weight(&self, u: usize, v: usize) -> u32 {
         if u >= self.num_nodes || v >= self.num_nodes {
             return 0;
         }
-        return self.adjacency[u][v];
+        self.adjacency[u][v]
     }
 
-    /// Add every weighted edge in `edges` to the graph.
-    pub fn set_edges(&mut self, edges: &Vec<(usize, usize, u32)>) {
-        for &(u, v, w) in edges {
-            self.add_edge(u, v, w);
-        }
-    }
-
-    /// Set the undirected edge between `u` and `v` to `weight`.
+    /// Set the multiplicity of an undirected edge directly.
     ///
-    /// A `weight` of 0 clears the edge. No-op if either endpoint is out of range
-    /// or `u == v` (self-loops are not allowed).
-    pub fn add_edge(&mut self, u: usize, v: usize, weight: u32) {
+    /// A zero weight clears the edge. Self-loops and invalid vertices are
+    /// ignored.
+    pub fn set_edge(&mut self, u: usize, v: usize, weight: u32) {
         if u >= self.num_nodes || v >= self.num_nodes || u == v {
             return;
         }
+
         self.adjacency[u][v] = weight;
-        self.adjacency[v][u] = weight; // undirected: keep the matrix symmetric
+        self.adjacency[v][u] = weight;
     }
 
-    /// Remove the undirected edge between `u` and `v`, if present.
+    /// Add one parallel edge.
+    pub fn add_edge(&mut self, u: usize, v: usize) {
+        let next = self.weight(u, v) + 1;
+        self.set_edge(u, v, next);
+    }
+
+    /// Remove one parallel edge, if present.
     pub fn remove_edge(&mut self, u: usize, v: usize) {
-        if u >= self.num_nodes || v >= self.num_nodes {
-            return;
+        let current = self.weight(u, v);
+        if current > 0 {
+            self.set_edge(u, v, current - 1);
         }
-        self.adjacency[u][v] = 0;
-        self.adjacency[v][u] = 0;
     }
 
-    /// Return each undirected edge once, as `(u, v, weight)` tuples with `u < v`.
+    /// Remove all parallel edges between `u` and `v`.
+    pub fn clear_edge(&mut self, u: usize, v: usize) {
+        self.set_edge(u, v, 0);
+    }
+
+    /// Set every weighted edge in `edges`.
+    pub fn set_edges(&mut self, edges: &[(usize, usize, u32)]) {
+        for &(u, v, weight) in edges {
+            self.set_edge(u, v, weight);
+        }
+    }
+
+    /// Return each undirected edge once as `(u, v, weight)`.
     pub fn get_edge_list(&self) -> Vec<(usize, usize, u32)> {
         let mut edges = Vec::new();
         for u in 0..self.num_nodes {
-            // start at u + 1 so each undirected edge is emitted exactly once
             for v in (u + 1)..self.num_nodes {
-                let w = self.adjacency[u][v];
-                if w != 0 {
-                    edges.push((u, v, w));
+                let weight = self.adjacency[u][v];
+                if weight != 0 {
+                    edges.push((u, v, weight));
                 }
             }
         }
-        return edges;
+        edges
     }
 
-    /// Return the neighbor of `node` at `index`, wrapping modulo its degree.
-    ///
-    /// Returns `None` if `node` is out of range or has no neighbors.
+    /// Return the distinct neighbor at `index`, wrapping modulo the number of
+    /// distinct neighbors.
     pub fn get_neighbor_at_index(&self, node: usize, index: usize) -> Option<usize> {
         if node >= self.num_nodes {
             return None;
         }
-        let neighbors: Vec<usize> = (0..self.num_nodes)
-            .filter(|&v| self.adjacency[node][v] != 0)
-            .collect();
-        if neighbors.is_empty() {
+
+        let degree = self.degree(node);
+        if degree == 0 {
             return None;
-        } else {
-            return Some(neighbors[index % neighbors.len()]);
         }
+
+        let target = index % degree;
+        let mut seen = 0;
+        for neighbor in 0..self.num_nodes {
+            if self.adjacency[node][neighbor] > 0 {
+                if seen == target {
+                    return Some(neighbor);
+                }
+                seen += 1;
+            }
+        }
+        None
     }
 
-    /// Return the number of neighbors of `node` (0 if out of range).
+    /// Return the number of distinct nodes connected to `node`.
     pub fn degree(&self, node: usize) -> usize {
         if node >= self.num_nodes {
             return 0;
         }
+        self.adjacency[node]
+            .iter()
+            .filter(|&&weight| weight > 0)
+            .count()
+    }
 
-        let mut count = 0;
-        for &w in self.adjacency[node].iter() {
-            if w != 0 {
-                count += 1;
-            }
+    /// Return the total number of incident edge copies, counting parallel
+    /// edges separately.
+    pub fn total_edge_multiplicity(&self, node: usize) -> usize {
+        if node >= self.num_nodes {
+            return 0;
         }
-        return count;
+        self.adjacency[node]
+            .iter()
+            .map(|&weight| weight as usize)
+            .sum()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Graph;
+
+    #[test]
+    fn add_and_remove_change_one_copy() {
+        let mut graph = Graph::new(3);
+
+        graph.add_edge(0, 1);
+        graph.add_edge(0, 1);
+        assert_eq!(graph.weight(0, 1), 2);
+        assert_eq!(graph.weight(1, 0), 2);
+
+        graph.remove_edge(0, 1);
+        assert_eq!(graph.weight(0, 1), 1);
+
+        graph.remove_edge(0, 1);
+        graph.remove_edge(0, 1);
+        assert_eq!(graph.weight(0, 1), 0);
+    }
+
+    #[test]
+    fn graph_supports_arbitrary_multiplicity() {
+        let mut graph = Graph::new(2);
+
+        graph.set_edge(0, 1, 12);
+
+        assert_eq!(graph.weight(0, 1), 12);
+
+        graph.add_edge(0, 1);
+        assert_eq!(graph.weight(0, 1), 13);
+    }
+
+    #[test]
+    fn degree_and_neighbor_selection_use_distinct_neighbors() {
+        let mut graph = Graph::new(4);
+        graph.set_edge(0, 1, 2);
+        graph.set_edge(0, 3, 1);
+
+        assert_eq!(graph.degree(0), 2);
+        assert_eq!(graph.total_edge_multiplicity(0), 3);
+        assert_eq!(graph.get_neighbor_at_index(0, 0), Some(1));
+        assert_eq!(graph.get_neighbor_at_index(0, 1), Some(3));
+        assert_eq!(graph.get_neighbor_at_index(0, 2), Some(1));
+    }
+
+    #[test]
+    fn set_edges_sets_multiplicity_and_preserves_symmetry() {
+        let mut graph = Graph::new(3);
+        graph.set_edges(&[(0, 1, 4), (1, 2, 2)]);
+
+        assert_eq!(graph.get_edge_list(), vec![(0, 1, 4), (1, 2, 2)]);
+        assert_eq!(graph.weight(1, 0), 4);
+        assert_eq!(graph.weight(2, 1), 2);
     }
 }

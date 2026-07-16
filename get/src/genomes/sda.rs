@@ -1,6 +1,6 @@
 use rand::Rng;
 
-use super::genome::Genome;
+use super::genome::{Genome, SdaContext};
 use crate::graph::Graph;
 
 /// Self-driving-automaton genome: a finite-state machine whose run emits the
@@ -15,7 +15,9 @@ pub struct SdaGenome {
 }
 
 impl Genome for SdaGenome {
-    fn express(&self) -> Graph {
+    type Context = SdaContext;
+
+    fn express(&self, _context: &Self::Context) -> Graph {
         // TODO: run the automaton and fold its output into a graph.
         todo!("SDA express")
     }
@@ -51,11 +53,11 @@ impl Genome for SdaGenome {
         self.clone()
     }
 
-    fn print(&self) {
-        println!(
+    fn print(&self) -> String {
+        format!(
             "SdaGenome(init={}, {} states)",
             self.init_char,
             self.transitions.len()
-        );
+        )
     }
 }

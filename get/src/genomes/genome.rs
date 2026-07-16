@@ -1,29 +1,40 @@
 use rand::Rng;
+
 use crate::graph::Graph;
 
-/// The variation-operator interface every genome representation implements.
+/// The variation-operator interface implemented by every genome representation.
 ///
-/// `Clone + Send + Sync` lets populations copy individuals and evolve across threads.
+/// `Clone + Send + Sync` allows the GA to copy individuals and evaluate a
+/// population across worker threads.
 pub trait Genome: Clone + Send + Sync {
-    /// Express a genome as a graph. The graph is the phenotype of the genome.
-    fn express(&self) -> Graph;
+    /// Run-level configuration required to express this genome.
+    type Context;
 
-    /// Recombine two parents in place, producing two children.
-    ///
-    /// `self` and `other` are the parents on entry and the children on return
-    /// (recombined in place). Generic over the RNG so the engine controls the
-    /// reproducible random stream.
+    /// Express this genome as a graph using shared run-level configuration.
+    fn express(&self, context: &Self::Context) -> Graph;
+
+    /// Recombine two parents in place, leaving the resulting children in
+    /// `self` and `other`.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R);
 
-    /// Mutate a genome in place.
-    /// 
-    /// `self` is the genome on entry and the mutated genome on return (mutated in place).
+    /// Mutate this genome in place.
     fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R);
 
-    /// Create a copy of the genome.
     fn copy(&self) -> Self;
 
-    /// Print a genome in a human-readable format.
-    fn print(&self);
+    /// Return a human-readable description of the genome.
+    fn print(&self) -> String;
 }
 
+/// Configuration used when an edge-edit genome modifies an initial graph.
+#[derive(Clone, Debug)]
+pub struct EdgeEditContext {
+    pub base_graph: Graph,
+}
+
+/// Configuration used when an SDA genome generates a graph from scratch.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SdaContext {
+    pub num_nodes: usize,
+    pub max_steps: usize,
+}
