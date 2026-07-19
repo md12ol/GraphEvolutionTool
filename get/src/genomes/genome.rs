@@ -36,5 +36,10 @@ pub struct EdgeEditContext {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SdaContext {
     pub num_nodes: usize,
-    pub max_steps: usize,
+    /// The state the automaton starts in before consuming `init_char`'s
+    /// first transition. Fixed run configuration, not evolved genome data
+    /// (unlike `init_char`, `init_state` is never touched by
+    /// [`Genome::mutate`]/[`Genome::crossover`]), so it lives here rather
+    /// than on `SdaGenome`.
+    pub init_state: usize,
 }
