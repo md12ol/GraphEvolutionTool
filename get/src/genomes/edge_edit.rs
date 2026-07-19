@@ -84,8 +84,9 @@ impl Default for EdgeEditOperationWeights {
 
 /// Edit-script genome: a list of encoded graph-edit operations.
 ///
-/// Each gene stores its opcode in the low four bits and a mixed-radix vertex
-/// payload in the upper 60 bits.
+/// Each gene stores its opcode in the low four bits and a random 32-bit payload
+/// above it. During expression, that payload is decoded into four mixed-radix
+/// vertex parameters.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EdgeEditGenome {
     pub genes: Vec<u64>,
@@ -143,7 +144,8 @@ impl EdgeEditGenome {
 
     fn generate_gene<R: Rng + ?Sized>(rng: &mut R, distribution: &WeightedIndex<f64>) -> u64 {
         let opcode = distribution.sample(rng) as u64;
-        (rng.random::<u64>() & !OPCODE_MASK) | opcode
+        let payload = rng.random::<u32>() as u64;
+        (payload << 4) | opcode
     }
 
     fn decode_vertices(gene: u64, num_nodes: usize) -> [usize; 4] {
@@ -237,6 +239,17 @@ mod tests {
         (payload << 4) | opcode as u64
     }
 
+    fn decode_vertices_like_graph_refiner(gene: u64, num_nodes: usize) -> [usize; 4] {
+        let payload = gene >> 4;
+        let radix = num_nodes as u64;
+        [
+            (payload % radix) as usize,
+            ((payload / radix) % radix) as usize,
+            ((payload / radix.pow(2)) % radix) as usize,
+            ((payload / radix.pow(3)) % radix) as usize,
+        ]
+    }
+
     fn weights_for_add() -> EdgeEditOperationWeights {
         EdgeEditOperationWeights {
             toggle: 0.0,
@@ -302,6 +315,22 @@ mod tests {
     }
 
     #[test]
+    fn random_gene_packing_matches_graph_refiner_exactly() {
+        let distribution = EdgeEditOperationWeights::default().distribution();
+        let mut actual_rng = StdRng::seed_from_u64(29);
+        let mut reference_rng = StdRng::seed_from_u64(29);
+
+        for _ in 0..64 {
+            let actual = EdgeEditGenome::generate_gene(&mut actual_rng, &distribution);
+            let opcode = distribution.sample(&mut reference_rng) as u64;
+            let payload = reference_rng.random::<u32>() as u64;
+            let expected = (payload << 4) | opcode;
+
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
     fn express_decodes_and_applies_genes_in_order_without_changing_base() {
         let mut base_graph = Graph::new(4);
         base_graph.set_edge(0, 1, 2);
@@ -326,6 +355,18 @@ mod tests {
     fn mixed_radix_decode_uses_all_four_vertices() {
         let gene = encode_gene(4, [4, 3, 2, 1], 5);
         assert_eq!(EdgeEditGenome::decode_vertices(gene, 5), [4, 3, 2, 1]);
+    }
+
+    #[test]
+    fn mixed_radix_decode_matches_graph_refiner_exactly() {
+        for num_nodes in [2, 3, 5, 17, 257] {
+            for gene in [0, 8, 0x1234_5678, 0x000f_ffff_ffff_fff4] {
+                assert_eq!(
+                    EdgeEditGenome::decode_vertices(gene, num_nodes),
+                    decode_vertices_like_graph_refiner(gene, num_nodes)
+                );
+            }
+        }
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use crate::graph::Graph;
+use crate::graph::{Graph, MAX_EDGE_MULTIPLICITY};
 
 /// The nine operations encoded by an edge-edit gene.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,12 +32,12 @@ impl GraphOperation {
 
     pub(super) fn apply(self, graph: &mut Graph, v1: usize, v2: usize, v3: usize, v4: usize) {
         match self {
-            Self::Toggle => Self::toggle(graph, v1, v2),
+            Self::Toggle => Self::toggle(graph, v1, v2, v3),
             Self::Hop => Self::hop(graph, v1, v2, v3),
             Self::Add => Self::add(graph, v1, v2),
             Self::Delete => Self::delete(graph, v1, v2),
             Self::Swap => Self::swap(graph, v1, v2, v3, v4),
-            Self::LocalToggle => Self::local_toggle(graph, v1, v2, v3),
+            Self::LocalToggle => Self::local_toggle(graph, v1, v2, v3, v4),
             Self::LocalAdd => Self::local_add(graph, v1, v2, v3),
             Self::LocalDelete => Self::local_delete(graph, v1, v2, v3),
             Self::Null => {}
@@ -48,14 +48,16 @@ impl GraphOperation {
         u < graph.num_nodes && v < graph.num_nodes && u != v
     }
 
-    fn toggle(graph: &mut Graph, u: usize, v: usize) {
+    fn toggle(graph: &mut Graph, u: usize, v: usize, direction: usize) {
         if !Self::valid_pair(graph, u, v) {
             return;
         }
-        if graph.has_edge(u, v) {
-            graph.remove_edge(u, v);
-        } else {
-            graph.add_edge(u, v);
+
+        match graph.weight(u, v) {
+            0 => graph.add_edge(u, v),
+            MAX_EDGE_MULTIPLICITY => graph.remove_edge(u, v),
+            _ if direction.is_multiple_of(2) => graph.remove_edge(u, v),
+            _ => graph.add_edge(u, v),
         }
     }
 
@@ -93,13 +95,14 @@ impl GraphOperation {
         start: usize,
         first_neighbor_index: usize,
         second_neighbor_index: usize,
+        direction: usize,
     ) {
         let Some((_, endpoint)) =
             Self::two_hop_endpoint(graph, start, first_neighbor_index, second_neighbor_index)
         else {
             return;
         };
-        Self::toggle(graph, start, endpoint);
+        Self::toggle(graph, start, endpoint, direction);
     }
 
     fn local_add(
@@ -141,6 +144,10 @@ impl GraphOperation {
         else {
             return;
         };
+
+        if graph.weight(start, endpoint) == MAX_EDGE_MULTIPLICITY {
+            return;
+        }
 
         graph.remove_edge(start, first_neighbor);
         graph.add_edge(start, endpoint);
@@ -231,6 +238,25 @@ mod tests {
     }
 
     #[test]
+    fn toggle_uses_direction_between_forced_boundary_moves() {
+        let mut graph = graph_with_edges(2, &[(0, 1, 2)]);
+
+        GraphOperation::Toggle.apply(&mut graph, 0, 1, 1, 0);
+        assert_eq!(graph.weight(0, 1), 3);
+
+        GraphOperation::Toggle.apply(&mut graph, 0, 1, 0, 0);
+        assert_eq!(graph.weight(0, 1), 2);
+
+        graph.set_edge(0, 1, MAX_EDGE_MULTIPLICITY);
+        GraphOperation::Toggle.apply(&mut graph, 0, 1, 1, 0);
+        assert_eq!(graph.weight(0, 1), MAX_EDGE_MULTIPLICITY - 1);
+
+        graph.clear_edge(0, 1);
+        GraphOperation::Toggle.apply(&mut graph, 0, 1, 0, 0);
+        assert_eq!(graph.weight(0, 1), 1);
+    }
+
+    #[test]
     fn local_operations_follow_a_two_hop_path() {
         let mut graph = graph_with_edges(4, &[(0, 1, 1), (1, 2, 1)]);
 
@@ -238,9 +264,13 @@ mod tests {
         GraphOperation::LocalAdd.apply(&mut graph, 0, 0, 1, 0);
         assert_eq!(graph.weight(0, 2), 2);
 
-        GraphOperation::LocalToggle.apply(&mut graph, 0, 0, 1, 0);
-        assert_eq!(graph.weight(0, 2), 1);
+        GraphOperation::LocalToggle.apply(&mut graph, 0, 0, 1, 1);
+        assert_eq!(graph.weight(0, 2), 3);
 
+        GraphOperation::LocalToggle.apply(&mut graph, 0, 0, 1, 0);
+        assert_eq!(graph.weight(0, 2), 2);
+
+        GraphOperation::LocalDelete.apply(&mut graph, 0, 0, 1, 0);
         GraphOperation::LocalDelete.apply(&mut graph, 0, 0, 1, 0);
         assert_eq!(graph.weight(0, 2), 0);
     }
@@ -265,6 +295,16 @@ mod tests {
 
         assert_eq!(graph.weight(0, 1), 1);
         assert_eq!(graph.weight(0, 2), 3);
+    }
+
+    #[test]
+    fn hop_is_a_noop_when_target_multiplicity_is_saturated() {
+        let mut graph = graph_with_edges(3, &[(0, 1, 2), (1, 2, 1), (0, 2, MAX_EDGE_MULTIPLICITY)]);
+        let before = graph.clone();
+
+        GraphOperation::Hop.apply(&mut graph, 0, 0, 1, 0);
+
+        assert_eq!(graph, before);
     }
 
     #[test]
