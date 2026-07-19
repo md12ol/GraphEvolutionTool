@@ -1,3 +1,6 @@
+/// Maximum number of parallel edge copies allowed between two vertices.
+pub const MAX_EDGE_MULTIPLICITY: u32 = 5;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Graph {
     pub num_nodes: usize,
@@ -5,7 +8,7 @@ pub struct Graph {
     ///
     /// A zero entry means that no edge exists. A value greater than one
     /// represents parallel edges between the same pair of vertices.
-    pub adjacency: Vec<Vec<u32>>,
+    adjacency: Vec<Vec<u32>>,
 }
 
 impl Graph {
@@ -32,20 +35,25 @@ impl Graph {
 
     /// Set the multiplicity of an undirected edge directly.
     ///
-    /// A zero weight clears the edge. Self-loops and invalid vertices are
-    /// ignored.
+    /// A zero weight clears the edge. Values above
+    /// [`MAX_EDGE_MULTIPLICITY`] are clamped to the maximum. Self-loops and
+    /// invalid vertices are ignored.
     pub fn set_edge(&mut self, u: usize, v: usize, weight: u32) {
         if u >= self.num_nodes || v >= self.num_nodes || u == v {
             return;
         }
 
+        let weight = weight.min(MAX_EDGE_MULTIPLICITY);
         self.adjacency[u][v] = weight;
         self.adjacency[v][u] = weight;
     }
 
-    /// Add one parallel edge.
+    /// Add one parallel edge, saturating at [`MAX_EDGE_MULTIPLICITY`].
     pub fn add_edge(&mut self, u: usize, v: usize) {
-        let next = self.weight(u, v) + 1;
+        let next = self
+            .weight(u, v)
+            .saturating_add(1)
+            .min(MAX_EDGE_MULTIPLICITY);
         self.set_edge(u, v, next);
     }
 
@@ -134,7 +142,7 @@ impl Graph {
 
 #[cfg(test)]
 mod tests {
-    use super::Graph;
+    use super::{Graph, MAX_EDGE_MULTIPLICITY};
 
     #[test]
     fn add_and_remove_change_one_copy() {
@@ -154,15 +162,21 @@ mod tests {
     }
 
     #[test]
-    fn graph_supports_arbitrary_multiplicity() {
+    fn multiplicity_is_capped_at_five() {
         let mut graph = Graph::new(2);
 
         graph.set_edge(0, 1, 12);
 
-        assert_eq!(graph.weight(0, 1), 12);
+        assert_eq!(graph.weight(0, 1), MAX_EDGE_MULTIPLICITY);
+        assert_eq!(graph.weight(1, 0), MAX_EDGE_MULTIPLICITY);
 
         graph.add_edge(0, 1);
-        assert_eq!(graph.weight(0, 1), 13);
+        assert_eq!(graph.weight(0, 1), MAX_EDGE_MULTIPLICITY);
+
+        graph.remove_edge(0, 1);
+        assert_eq!(graph.weight(0, 1), MAX_EDGE_MULTIPLICITY - 1);
+        graph.add_edge(0, 1);
+        assert_eq!(graph.weight(0, 1), MAX_EDGE_MULTIPLICITY);
     }
 
     #[test]
