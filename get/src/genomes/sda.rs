@@ -23,7 +23,7 @@ pub struct SdaGenome {
 const MAX_NUM_CHARS: usize = u8::MAX as usize + 1;
 /// Largest state count representable by [`SdaGenome`]'s `u16`-valued transitions.
 const MAX_NUM_STATES: usize = u16::MAX as usize + 1;
-/// 4% chance per [`Genome::mutate`] call of mutating the initial character
+/// Chance per [`Genome::mutate`] call of mutating the initial character
 /// instead of a transition or response.
 const INIT_CHAR_MUTATION_RATE: f64 = 0.04;
 
@@ -197,10 +197,10 @@ impl Genome for SdaGenome {
         }
     }
 
-    /// Apply one mutation: a 4% chance of redrawing the initial character,
-    /// otherwise an even chance of redrawing one transition's target state
-    /// or one transition's response. Callers that want more disruption per
-    /// generation call this multiple times.
+    /// Apply one mutation: redraw the initial character with probability
+    /// [`INIT_CHAR_MUTATION_RATE`], otherwise an even chance of redrawing
+    /// one transition's target state or one transition's response. Callers
+    /// that want more disruption per generation call this multiple times.
     fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R) {
         let num_states = self.transitions.len();
         let num_chars = self.transitions.first().map_or(0, |row| row.len());
@@ -231,9 +231,9 @@ impl Genome for SdaGenome {
     }
 
     /// Dump `init_char` followed by one line per `state + char -> target
-    /// [ response ]`, mirroring the C++ SDA's `print(ostream&)`. `initState`
-    /// isn't included since it lives on `SdaContext`, not the genome, and
-    /// `print` has no context parameter to read it from.
+    /// [ response ]`. `init_state` isn't included since it lives on
+    /// `SdaContext`, not the genome, and `print` has no context parameter to
+    /// read it from.
     fn print(&self) -> String {
         use std::fmt::Write as _;
 
