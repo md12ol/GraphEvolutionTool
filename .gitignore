@@ -1,1 +1,8 @@
 .idea/
+.claude/
+target/
+Graph.cpp
+Graph.h
+SDA.cpp
+SDA.h
+handoff_transfer_from_c++.md
