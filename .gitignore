@@ -1,6 +1,7 @@
 .idea/
 .claude/
 target/
+.vscode/
 Graph.cpp
 Graph.h
 SDA.cpp
