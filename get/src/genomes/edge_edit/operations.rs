@@ -1,4 +1,4 @@
-use crate::graph::{Graph, MAX_EDGE_MULTIPLICITY};
+use crate::graph::Graph;
 
 /// The nine operations encoded by an edge-edit gene.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,7 +55,7 @@ impl GraphOperation {
 
         match graph.weight(u, v) {
             0 => graph.add_edge(u, v),
-            MAX_EDGE_MULTIPLICITY => graph.remove_edge(u, v),
+            weight if weight == graph.max_edge_multiplicity() => graph.remove_edge(u, v),
             _ if direction.is_multiple_of(2) => graph.remove_edge(u, v),
             _ => graph.add_edge(u, v),
         }
@@ -145,7 +145,7 @@ impl GraphOperation {
             return;
         };
 
-        if graph.weight(start, endpoint) == MAX_EDGE_MULTIPLICITY {
+        if graph.weight(start, endpoint) == graph.max_edge_multiplicity() {
             return;
         }
 
@@ -201,9 +201,16 @@ impl GraphOperation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::MAX_EDGE_MULTIPLICITY;
 
     fn graph_with_edges(num_nodes: usize, edges: &[(usize, usize, u32)]) -> Graph {
         let mut graph = Graph::new(num_nodes);
+        graph.set_edges(edges);
+        graph
+    }
+
+    fn unweighted_graph_with_edges(num_nodes: usize, edges: &[(usize, usize, u32)]) -> Graph {
+        let mut graph = Graph::unweighted(num_nodes);
         graph.set_edges(edges);
         graph
     }
@@ -235,6 +242,26 @@ mod tests {
         GraphOperation::Add.apply(&mut graph, 1, 1, 0, 0);
         GraphOperation::Delete.apply(&mut graph, 3, 0, 0, 0);
         assert_eq!(graph, before);
+    }
+
+    #[test]
+    fn direct_operations_preserve_unweighted_graph_semantics() {
+        let mut graph = unweighted_graph_with_edges(3, &[(0, 1, 1)]);
+
+        GraphOperation::Add.apply(&mut graph, 0, 1, 0, 0);
+        assert_eq!(graph.weight(0, 1), 1);
+
+        GraphOperation::Toggle.apply(&mut graph, 0, 1, 1, 0);
+        assert_eq!(graph.weight(0, 1), 0);
+
+        GraphOperation::Toggle.apply(&mut graph, 0, 2, 0, 0);
+        assert_eq!(graph.weight(0, 2), 1);
+        assert!(
+            graph
+                .get_edge_list()
+                .iter()
+                .all(|(_, _, weight)| *weight == 1)
+        );
     }
 
     #[test]
@@ -295,6 +322,27 @@ mod tests {
 
         assert_eq!(graph.weight(0, 1), 1);
         assert_eq!(graph.weight(0, 2), 3);
+    }
+
+    #[test]
+    fn hop_respects_an_unweighted_graph_cap() {
+        let mut graph = unweighted_graph_with_edges(3, &[(0, 1, 1), (1, 2, 1)]);
+
+        GraphOperation::Hop.apply(&mut graph, 0, 0, 1, 0);
+
+        assert_eq!(graph.weight(0, 1), 0);
+        assert_eq!(graph.weight(0, 2), 1);
+        assert!(
+            graph
+                .get_edge_list()
+                .iter()
+                .all(|(_, _, weight)| *weight == 1)
+        );
+
+        let mut saturated = unweighted_graph_with_edges(3, &[(0, 1, 1), (1, 2, 1), (0, 2, 1)]);
+        let before = saturated.clone();
+        GraphOperation::Hop.apply(&mut saturated, 0, 0, 1, 0);
+        assert_eq!(saturated, before);
     }
 
     #[test]
