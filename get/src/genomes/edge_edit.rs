@@ -352,6 +352,22 @@ mod tests {
     }
 
     #[test]
+    fn express_preserves_an_unweighted_base_graph_cap() {
+        let base_graph = Graph::unweighted(3);
+        let context = EdgeEditContext { base_graph };
+        let genome = EdgeEditGenome::new(vec![
+            encode_gene(2, [0, 1, 0, 0], 3),
+            encode_gene(2, [0, 1, 0, 0], 3),
+        ]);
+
+        let expressed = genome.express(&context);
+
+        assert_eq!(expressed.max_edge_multiplicity(), 1);
+        assert_eq!(expressed.get_edge_list(), vec![(0, 1, 1)]);
+        assert!(context.base_graph.get_edge_list().is_empty());
+    }
+
+    #[test]
     fn mixed_radix_decode_uses_all_four_vertices() {
         let gene = encode_gene(4, [4, 3, 2, 1], 5);
         assert_eq!(EdgeEditGenome::decode_vertices(gene, 5), [4, 3, 2, 1]);

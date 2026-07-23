@@ -143,10 +143,12 @@ impl Genome for SdaGenome {
     /// and fold the output into a graph: output index `i` maps onto the
     /// `i`-th pair in the same row-major order as [`Graph::get_edge_list`]
     /// (`(0,1), (0,2), ..., (0,n-1), (1,2), ...`), and each character's raw
-    /// value becomes that edge's weight. [`Graph::set_edge`] already clamps
-    /// to `MAX_EDGE_MULTIPLICITY`, so no separate threshold logic is needed.
+    /// value becomes that edge's weight. [`Graph::set_edge`] clamps the value
+    /// to the cap selected by `SdaContext`, so the same representation can
+    /// express unweighted or bounded-multiplicity graphs.
     fn express(&self, context: &Self::Context) -> Graph {
-        let mut graph = Graph::new(context.num_nodes);
+        let mut graph =
+            Graph::with_edge_multiplicity_cap(context.num_nodes, context.edge_multiplicity_cap());
         if context.num_nodes < 2 {
             return graph;
         }
@@ -292,10 +294,7 @@ mod tests {
     #[test]
     fn express_folds_the_run_into_the_upper_triangle_in_row_major_order() {
         let genome = small_genome();
-        let context = SdaContext {
-            num_nodes: 3,
-            init_state: 0,
-        };
+        let context = SdaContext::new(3, 0);
 
         let graph = genome.express(&context);
 
@@ -310,10 +309,7 @@ mod tests {
         let genome = small_genome();
 
         for num_nodes in [0, 1] {
-            let context = SdaContext {
-                num_nodes,
-                init_state: 0,
-            };
+            let context = SdaContext::new(num_nodes, 0);
             assert_eq!(genome.express(&context), Graph::new(num_nodes));
         }
     }
@@ -329,14 +325,39 @@ mod tests {
             responses: vec![vec![vec![0]; 9]],
             max_resp_len: 1,
         };
-        let context = SdaContext {
-            num_nodes: 2,
-            init_state: 0,
-        };
+        let context = SdaContext::new(2, 0);
 
         let graph = genome.express(&context);
 
         assert_eq!(graph.weight(0, 1), MAX_EDGE_MULTIPLICITY);
+    }
+
+    #[test]
+    fn unweighted_context_clamps_every_present_edge_to_one() {
+        let genome = SdaGenome {
+            init_char: 8,
+            transitions: vec![vec![0; 9]],
+            responses: vec![vec![vec![8]; 9]],
+            max_resp_len: 1,
+        };
+        let context = SdaContext::unweighted(3, 0);
+
+        let graph = genome.express(&context);
+
+        assert_eq!(context.max_edge_multiplicity(), 1);
+        assert_eq!(graph.max_edge_multiplicity(), 1);
+        assert_eq!(graph.get_edge_list(), vec![(0, 1, 1), (0, 2, 1), (1, 2, 1)]);
+    }
+
+    #[test]
+    fn sda_context_validates_an_explicit_multiplicity_cap() {
+        assert_eq!(
+            SdaContext::with_max_edge_multiplicity(3, 0, 0),
+            Err("edge multiplicity cap must be between 1 and 5")
+        );
+
+        let context = SdaContext::with_max_edge_multiplicity(3, 0, 3).unwrap();
+        assert_eq!(context.max_edge_multiplicity(), 3);
     }
 
     #[test]
@@ -437,7 +458,11 @@ mod tests {
         assert_eq!(genome.max_resp_len, before.max_resp_len);
         for state_transitions in &genome.transitions {
             assert_eq!(state_transitions.len(), 3);
-            assert!(state_transitions.iter().all(|&target| (target as usize) < 10));
+            assert!(
+                state_transitions
+                    .iter()
+                    .all(|&target| (target as usize) < 10)
+            );
         }
         for state_responses in &genome.responses {
             assert_eq!(state_responses.len(), 3);
@@ -552,9 +577,17 @@ mod tests {
             // proving they swap together rather than independently.
             for state in 0..num_states {
                 let left_marker = left.transitions[state][0];
-                assert!(left.responses[state].iter().all(|r| r[0] as u16 == left_marker));
+                assert!(
+                    left.responses[state]
+                        .iter()
+                        .all(|r| r[0] as u16 == left_marker)
+                );
                 let right_marker = right.transitions[state][0];
-                assert!(right.responses[state].iter().all(|r| r[0] as u16 == right_marker));
+                assert!(
+                    right.responses[state]
+                        .iter()
+                        .all(|r| r[0] as u16 == right_marker)
+                );
             }
             for state in (0..num_states).filter(|s| !swapped.contains(s)) {
                 assert!(left.transitions[state].iter().all(|&t| t < 200));
