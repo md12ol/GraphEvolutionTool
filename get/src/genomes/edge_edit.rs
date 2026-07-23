@@ -332,7 +332,7 @@ mod tests {
 
     #[test]
     fn express_decodes_and_applies_genes_in_order_without_changing_base() {
-        let mut base_graph = Graph::new(4);
+        let mut base_graph = Graph::new(4, 5);
         base_graph.set_edge(0, 1, 2);
         let original = base_graph.clone();
         let context = EdgeEditContext { base_graph };
@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     fn express_preserves_an_unweighted_base_graph_cap() {
-        let base_graph = Graph::unweighted(3);
+        let base_graph = Graph::new(3, 1);
         let context = EdgeEditContext { base_graph };
         let genome = EdgeEditGenome::new(vec![
             encode_gene(2, [0, 1, 0, 0], 3),
@@ -362,7 +362,7 @@ mod tests {
 
         let expressed = genome.express(&context);
 
-        assert_eq!(expressed.max_edge_multiplicity(), 1);
+        assert_eq!(expressed.max_edge_multiplicity, 1);
         assert_eq!(expressed.get_edge_list(), vec![(0, 1, 1)]);
         assert!(context.base_graph.get_edge_list().is_empty());
     }
@@ -388,18 +388,24 @@ mod tests {
     #[test]
     fn empty_one_node_and_invalid_opcode_expressions_are_noops() {
         let empty_context = EdgeEditContext {
-            base_graph: Graph::new(0),
+            base_graph: Graph::new(0, 5),
         };
         let invalid = EdgeEditGenome::new(vec![15]);
-        assert_eq!(invalid.express(&empty_context), Graph::new(0));
+        assert_eq!(
+            invalid.express(&empty_context),
+            Graph::new(0, 5)
+        );
 
         let one_node_context = EdgeEditContext {
-            base_graph: Graph::new(1),
+            base_graph: Graph::new(1, 5),
         };
         let add_self = EdgeEditGenome::new(vec![encode_gene(2, [0, 0, 0, 0], 1)]);
-        assert_eq!(add_self.express(&one_node_context), Graph::new(1));
+        assert_eq!(
+            add_self.express(&one_node_context),
+            Graph::new(1, 5)
+        );
 
-        let mut base_graph = Graph::new(2);
+        let mut base_graph = Graph::new(2, 5);
         base_graph.add_edge(0, 1);
         let context = EdgeEditContext {
             base_graph: base_graph.clone(),

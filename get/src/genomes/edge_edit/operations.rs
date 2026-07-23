@@ -54,10 +54,10 @@ impl GraphOperation {
         }
 
         match graph.weight(u, v) {
-            0 => graph.add_edge(u, v),
-            weight if weight == graph.max_edge_multiplicity() => graph.remove_edge(u, v),
+            0 => _ = graph.add_edge(u, v),
+            weight if weight == graph.max_edge_multiplicity => graph.remove_edge(u, v),
             _ if direction.is_multiple_of(2) => graph.remove_edge(u, v),
-            _ => graph.add_edge(u, v),
+            _ => _ = graph.add_edge(u, v),
         }
     }
 
@@ -145,12 +145,10 @@ impl GraphOperation {
             return;
         };
 
-        if graph.weight(start, endpoint) == graph.max_edge_multiplicity() {
+        if !graph.add_edge(start, endpoint) {
             return;
         }
-
         graph.remove_edge(start, first_neighbor);
-        graph.add_edge(start, endpoint);
     }
 
     fn swap(
@@ -201,16 +199,15 @@ impl GraphOperation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::MAX_EDGE_MULTIPLICITY;
 
     fn graph_with_edges(num_nodes: usize, edges: &[(usize, usize, u32)]) -> Graph {
-        let mut graph = Graph::new(num_nodes);
+        let mut graph = Graph::new(num_nodes, 5);
         graph.set_edges(edges);
         graph
     }
 
     fn unweighted_graph_with_edges(num_nodes: usize, edges: &[(usize, usize, u32)]) -> Graph {
-        let mut graph = Graph::unweighted(num_nodes);
+        let mut graph = Graph::new(num_nodes, 1);
         graph.set_edges(edges);
         graph
     }
@@ -274,9 +271,9 @@ mod tests {
         GraphOperation::Toggle.apply(&mut graph, 0, 1, 0, 0);
         assert_eq!(graph.weight(0, 1), 2);
 
-        graph.set_edge(0, 1, MAX_EDGE_MULTIPLICITY);
+        graph.set_edge(0, 1, 5);
         GraphOperation::Toggle.apply(&mut graph, 0, 1, 1, 0);
-        assert_eq!(graph.weight(0, 1), MAX_EDGE_MULTIPLICITY - 1);
+        assert_eq!(graph.weight(0, 1), 4);
 
         graph.clear_edge(0, 1);
         GraphOperation::Toggle.apply(&mut graph, 0, 1, 0, 0);
@@ -347,7 +344,7 @@ mod tests {
 
     #[test]
     fn hop_is_a_noop_when_target_multiplicity_is_saturated() {
-        let mut graph = graph_with_edges(3, &[(0, 1, 2), (1, 2, 1), (0, 2, MAX_EDGE_MULTIPLICITY)]);
+        let mut graph = graph_with_edges(3, &[(0, 1, 2), (1, 2, 1), (0, 2, 5)]);
         let before = graph.clone();
 
         GraphOperation::Hop.apply(&mut graph, 0, 0, 1, 0);

@@ -93,6 +93,20 @@ impl SdaGenome {
         })
     }
 
+    /// Build a genome sized for graphs expressed under `edge_multiplicity_cap`:
+    /// the alphabet is fixed at `edge_multiplicity_cap + 1` characters (`0..=cap`),
+    /// so every character value doubles as a legal edge weight and nothing is
+    /// clamped by [`Graph::set_edge`] when the same cap is used to build the
+    /// [`SdaContext`] this genome is later expressed against.
+    pub fn random_with_edge_multiplicity_cap<R: Rng + ?Sized>(
+        num_states: usize,
+        edge_multiplicity_cap: u32,
+        max_resp_len: usize,
+        rng: &mut R,
+    ) -> Result<Self, &'static str> {
+        Self::random(num_states, edge_multiplicity_cap as usize + 1, max_resp_len, rng)
+    }
+
     /// Re-roll the initial character and every transition/response in place,
     /// keeping the current number of states, characters, and `max_resp_len`.
     pub fn randomize<R: Rng + ?Sized>(&mut self, rng: &mut R) -> Result<(), &'static str> {
@@ -147,8 +161,7 @@ impl Genome for SdaGenome {
     /// to the cap selected by `SdaContext`, so the same representation can
     /// express unweighted or bounded-multiplicity graphs.
     fn express(&self, context: &Self::Context) -> Graph {
-        let mut graph =
-            Graph::with_edge_multiplicity_cap(context.num_nodes, context.edge_multiplicity_cap());
+        let mut graph = Graph::new(context.num_nodes, context.max_edge_multiplicity);
         if context.num_nodes < 2 {
             return graph;
         }
@@ -262,7 +275,6 @@ mod tests {
     use rand::rngs::StdRng;
 
     use super::*;
-    use crate::graph::MAX_EDGE_MULTIPLICITY;
 
     /// A hand-built 2-state, 2-char genome used to hand-verify `run`/`express`
     /// without relying on RNG output:
@@ -294,7 +306,11 @@ mod tests {
     #[test]
     fn express_folds_the_run_into_the_upper_triangle_in_row_major_order() {
         let genome = small_genome();
-        let context = SdaContext::new(3, 0);
+        let context = SdaContext {
+            num_nodes: 3,
+            init_state: 0,
+            max_edge_multiplicity: 5,
+        };
 
         let graph = genome.express(&context);
 
@@ -309,8 +325,15 @@ mod tests {
         let genome = small_genome();
 
         for num_nodes in [0, 1] {
-            let context = SdaContext::new(num_nodes, 0);
-            assert_eq!(genome.express(&context), Graph::new(num_nodes));
+            let context = SdaContext {
+                num_nodes,
+                init_state: 0,
+                max_edge_multiplicity: 5,
+            };
+            assert_eq!(
+                genome.express(&context),
+                Graph::new(num_nodes, 5)
+            );
         }
     }
 
@@ -325,11 +348,15 @@ mod tests {
             responses: vec![vec![vec![0]; 9]],
             max_resp_len: 1,
         };
-        let context = SdaContext::new(2, 0);
+        let context = SdaContext {
+            num_nodes: 2,
+            init_state: 0,
+            max_edge_multiplicity: 5,
+        };
 
         let graph = genome.express(&context);
 
-        assert_eq!(graph.weight(0, 1), MAX_EDGE_MULTIPLICITY);
+        assert_eq!(graph.weight(0, 1), 5);
     }
 
     #[test]
@@ -340,24 +367,16 @@ mod tests {
             responses: vec![vec![vec![8]; 9]],
             max_resp_len: 1,
         };
-        let context = SdaContext::unweighted(3, 0);
+        let context = SdaContext {
+            num_nodes: 3,
+            init_state: 0,
+            max_edge_multiplicity: 1,
+        };
 
         let graph = genome.express(&context);
 
-        assert_eq!(context.max_edge_multiplicity(), 1);
-        assert_eq!(graph.max_edge_multiplicity(), 1);
+        assert_eq!(graph.max_edge_multiplicity, 1);
         assert_eq!(graph.get_edge_list(), vec![(0, 1, 1), (0, 2, 1), (1, 2, 1)]);
-    }
-
-    #[test]
-    fn sda_context_validates_an_explicit_multiplicity_cap() {
-        assert_eq!(
-            SdaContext::with_max_edge_multiplicity(3, 0, 0),
-            Err("edge multiplicity cap must be between 1 and 5")
-        );
-
-        let context = SdaContext::with_max_edge_multiplicity(3, 0, 3).unwrap();
-        assert_eq!(context.max_edge_multiplicity(), 3);
     }
 
     #[test]
@@ -443,6 +462,17 @@ mod tests {
             SdaGenome::random(10, 3, 0, &mut rng).unwrap_err(),
             "max_resp_len must be at least 1"
         );
+    }
+
+    #[test]
+    fn random_with_edge_multiplicity_cap_derives_num_chars_from_the_cap() {
+        let mut rng = StdRng::seed_from_u64(5);
+        let cap = 3;
+        let genome = SdaGenome::random_with_edge_multiplicity_cap(10, cap, 4, &mut rng).unwrap();
+
+        let num_chars = cap as usize + 1;
+        assert_eq!(genome.transitions[0].len(), num_chars);
+        assert_eq!(genome.responses[0].len(), num_chars);
     }
 
     #[test]
