@@ -8,7 +8,12 @@ use crate::graph::Graph;
 /// population across worker threads.
 pub trait Genome: Clone + Send + Sync {
     /// Run-level configuration required to express this genome.
-    type Context;
+    ///
+    /// `Send + Sync` is required because `evolver::common::evaluate` expresses a
+    /// whole population in parallel over rayon, sharing one `&Self::Context`
+    /// across worker threads. Without the bound that parallel expression does
+    /// not compile.
+    type Context: Send + Sync;
 
     /// Express this genome as a graph using shared run-level configuration.
     fn express(&self, context: &Self::Context) -> Graph;
@@ -19,8 +24,6 @@ pub trait Genome: Clone + Send + Sync {
 
     /// Mutate this genome in place.
     fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R);
-
-    fn copy(&self) -> Self;
 
     /// Return a human-readable description of the genome.
     fn print(&self) -> String;

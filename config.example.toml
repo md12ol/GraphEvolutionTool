@@ -1,0 +1,83 @@
+# Example configuration for the Graph Evolution Tool (GET).
+#
+# Copy to `config.toml` and adjust. Fields map onto `get::config::Config`.
+# Commented blocks show the alternative choices for each tagged section.
+
+# --- Shared evolution settings ------------------------------------------------
+
+population_size = 200        # number of individuals per generation
+network_size    = 100        # number of nodes in every expressed graph
+
+# Edge-weight cap. 1 = unweighted (the default if this line is omitted);
+# values up to 5 allow parallel edges / multigraphs.
+max_edge_multiplicity = 1
+
+crossover_rate = 0.9         # probability a selected pair is recombined
+mutation_rate  = 0.2         # probability a child is mutated
+
+# --- Evolution strategy -------------------------------------------------------
+# Generational: replace the whole population each generation, keeping elites.
+
+[evolution]
+type            = "generational"
+num_generations = 500
+elite_count     = 1          # best individuals carried forward (default 1)
+
+# Steady-state alternative: one mate-and-replace event at a time.
+# [evolution]
+# type              = "steady_state"
+# num_mating_events = 100000
+
+# --- Parent selection ---------------------------------------------------------
+
+[selection]
+type            = "tournament"
+tournament_size = 5          # larger = stronger selection pressure
+
+# --- Genome representation ----------------------------------------------------
+# Edge-edit: an edit script applied to a base graph.
+
+[genome]
+type        = "edge_edit"
+gene_length = 256            # number of edit operations per genome
+
+# Relative probability of drawing each edit operation, used when generating and
+# mutating genes. Weights are relative, not percentages: all-equal is the same
+# distribution whether every value is 1.0 or 10.0. Omit the table to leave every
+# operation at 1.0, omit individual lines to leave just those at 1.0, or set an
+# operation to 0.0 to disable it outright. At least one must be positive.
+# [genome.operation_weights]
+# toggle       = 1.0
+# hop          = 1.0
+# add          = 1.0
+# delete       = 1.0
+# swap         = 1.0
+# local_toggle = 1.0
+# local_add    = 1.0
+# local_delete = 1.0
+# null         = 0.0        # e.g. drop the no-op so every gene does something
+
+# SDA alternative: a self-driving automaton that generates a graph from scratch.
+# [genome]
+# type         = "sda"
+# num_states   = 12
+# num_chars    = 2           # for unweighted graphs use max_edge_multiplicity + 1
+# max_resp_len = 4
+# init_state   = 0           # starting state; must be < num_states (default 0)
+
+# --- Fitness objective --------------------------------------------------------
+# SIR epidemic simulation over the expressed graph (native Rust, parallel).
+
+[fitness]
+type           = "sir"
+infection_rate = 0.05        # per-edge transmission probability per timestep
+seed           = 42          # seeds the stochastic simulation
+# patient_zero = 0           # optional: pin the seed node; omit for a random one
+
+# Python fitness alternative: select "python" here, then call
+# `evolver.set_fitness_function(callable)` from Python before `run()`.
+# The callable receives a batch and returns one float per graph (lower = better):
+#   def fitness(batch):  # batch: list[(num_nodes, list[(u, v, weight)])]
+#       return [score(n, edges) for (n, edges) in batch]
+# [fitness]
+# type = "python"
