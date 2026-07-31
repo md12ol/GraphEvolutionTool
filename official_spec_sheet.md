@@ -168,12 +168,15 @@ automaton's first transition.
 
 **Crossover** is gated by `crossover_rate`, rolled once per pair. Both children are kept.
 
-Each genome currently offers **one** crossover operator, fixed: two-point over genes for edge-edit,
-two-point over states for SDA (§3). This is a known planned extension, not a settled limit —
-additional operators per representation, and a config field selecting between them, are tracked as
-open issues. `Selection` is already an enum for exactly this reason, and crossover should follow
-the same shape when it lands: one new variant plus one match arm, mapping onto a `config.toml`
-field. Until then the spec describes one operator per genome because that is what exists.
+Each genome offers **one** crossover operator, fixed: two-point over genes for edge-edit,
+two-point over states for SDA (§3).
+
+**Additional operators are out of scope until everything else in this sheet is implemented.** This
+is a sequencing decision, not a design limit: more operators per representation, and a config field
+selecting between them, are wanted — they come *after* the sheet is delivered, not alongside it.
+Until then there is nothing to select between, so no enum, no config field and no dispatch is built
+for crossover. When it does land it follows `Selection`: one new variant plus one match arm,
+mapping onto a `config.toml` field.
 
 **Mutation is two independent rolls, both owned by the engine, never by the genome:**
 
