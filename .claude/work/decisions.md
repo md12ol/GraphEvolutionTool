@@ -17,7 +17,6 @@ Only log what a cold reader could not re-derive from the code. Skip the obvious.
 **Affects:** `path:line`, or the area it constrains.
 **Supersedes:** <date + title of the earlier decision>   (only if applicable)
 
----
 
 ## 2026-07-31 — Cargo.lock stays tracked
 **Chose:** Keep `Cargo.lock` under version control. Dropped the `Cargo.lock` ignore line that
@@ -32,7 +31,6 @@ entry that has no effect misleads the next reader.
 **Affects:** `.gitignore`, `Cargo.lock`. This overrides a PR author's stated intent, so revisit it
 with them rather than silently re-flipping.
 
----
 
 ## 2026-07-31 — `Genome::copy` removed from the trait
 **Chose:** Accepted PR #11's removal of `fn copy(&self) -> Self` from the `Genome` trait, and the
@@ -46,7 +44,6 @@ method. The notes predate the trait actually existing; the duplication is not wo
 **Affects:** `get/src/genomes/genome.rs:9`. Note this is a deliberate departure from
 `Planning Notes.md` — update the notes rather than re-adding the method.
 
----
 
 ## 2026-07-31 — Steady-state uses tournament-local replacement
 **Chose:** One tournament of distinct individuals per mating event. Its two best breed; the two
@@ -168,7 +165,7 @@ conflict-free, but it rewrites all five skills for a problem two people don't ha
 
 ## 2026-07-31 — Michael — `work/archive/` is tracked; `hotfixes.md` entries name an owner
 **Chose:** Un-ignored `.claude/work/archive/`. Added `Owner:` and `Machine:` to every `hotfixes.md`
-entry. Renamed `meeting_james.md` to `collab.md`.
+entry. Renamed `collab.md` to `collab.md`.
 **Why:** Three consequences of the same fact — the docs are now read by two people.
 An archived task is *history*, and ignoring it stranded every `/done` on one laptop. A hotfix is
 uncommitted code in *one* working tree, so unowned it reads as though it were in yours. And a file
@@ -379,3 +376,28 @@ too. Duplicating them would have had one of us do the work twice.
 about. Rather than silently leaving the gap, §4 now records crossover as one fixed operator per
 genome today with selectable operators as a planned extension, following `Selection`'s enum shape.
 **Affects:** the GitHub tracker; `official_spec_sheet.md` §4; `.claude/work/issues.md`.
+
+## 2026-07-31 23:32 — Michael — Multiple crossover operators wait until the spec is delivered
+**Chose:** No additional crossover operators, no crossover enum, no operator config field, until
+everything else in `/official_spec_sheet.md` is implemented. One fixed operator per genome stands:
+two-point over genes for edge-edit, two-point over states for SDA. `official_spec_sheet.md` §4
+rewritten to say so; GitHub #7, #8 and #9 closed as *not planned*.
+**Why:** Sequencing, not design. More operators are wanted and the shape is already agreed — follow
+`Selection`, one variant plus one match arm — but nothing selects between operators until a second
+one exists, so building the enum now would mean a config field with one legal value and a dispatch
+with one arm. The sheet has a large amount of unbuilt surface (fitness, the Python layer,
+`Config::validate`, generational); an extension point competes with delivering it.
+**Rejected:** (a) Building the one-variant enum now to pin the shape — `Selection` is precedent, but
+it earns its enum by mapping onto a config field users set today. (b) Leaving #7, #8 and #9 open —
+they had empty bodies predating the sheet, and §4 carries the intent better than three stubs did.
+**Affects:** `official_spec_sheet.md` §4; `get/src/genomes/genome.rs` `crossover` stays a plain
+trait method with the logic inline per genome; GitHub #7, #8, #9.
+**Note:** This predates the spec-sheet meeting and was settled by the repo owner, so it did not go
+through `collab.md`. **From 2026-07-31 23:32 the meeting rule in `CLAUDE.md` governs: no further
+change to the sheet without a joint meeting.**
+
+## Task complete: steady-state-evolver — 2026-07-31
+Archived to `.claude/work/archive/2026-07_steady-state-evolver/`. Entries below this line belong to
+later tasks. The evolver shipped: `evolver/common.rs`, `evolver/steady_state.rs` and `fitness.rs`
+have no `todo!()`s, 97 tests pass on `main`, merged via PR #12 and `b466e4e`.
+

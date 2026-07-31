@@ -16,6 +16,20 @@ and validation, the Python interface, and the non-goals. Agreed by both owners o
 - **Changing it is a `decisions.md` entry too.** The sheet says *what*; `decisions.md` says
   *why* and keeps the reversal trail.
 
+**The sheet is only changed at a joint meeting.** Not by one owner mid-task, not by an agent, not
+because the code turned out to be easier a different way. The route is fixed:
+
+1. Something needs to change → raise it in `collab.md` under **Open**, with the ask.
+2. Both owners discuss it. Until then, **build to the sheet as written**, or stop and ask.
+3. Agreed at a meeting → amend the sheet, append a dated `decisions.md` entry stamped with both
+   names, and move the `collab.md` item to **Agreed**.
+
+This is what keeps the sheet worth trusting: if any session could edit it, it would drift into
+being a description of whatever was most recently implemented, which is the exact failure the
+sheet replaced (`IMPLEMENTATION.md` mixed design with build order and rotted every time the order
+changed). An agent that finds the sheet wrong writes a `collab.md` item — it does not fix the
+sheet.
+
 ## Working docs
 
 Session state lives in `.claude/`:
@@ -37,7 +51,7 @@ Session state lives in `.claude/`:
 | `issues.md` | staged for the tracker, for other people |
 | `hotfixes.md` | temporary code in the tree, each with a `Remove when:` and an **`Owner:`** — a hotfix lives in one person's working tree, so it needs a name on it |
 | `traps.md` | permanent gotchas about this workspace — the things that bite every session |
-| `collab.md` | running agenda for checkpoints between the repo's two owners — anything on one side that conflicts with or overrides the other's work. Mark **Agreed** with a date; never delete |
+| `collab.md` | **questions and overrides between the owners.** Post a question for the other to answer, or flag a decision on your side that conflicts with theirs. Answers are appended *inside* the item, stamped. Settled items move to **Settled** and compress to a one-line disposition once their reasoning lives in `decisions.md` or the spec — never edit someone else's words, and never drop the only copy of a reason |
 
 Finished tasks land in `.claude/work/archive/<YYYY-MM>_<slug>/` — **tracked**, so a finished
 task's record reaches the other owner. Only `work/current/` is per-person.
@@ -81,9 +95,35 @@ distinct text merge correctly and only lose the blank line between them, but lin
 **byte-identical** on both sides are deduplicated and the two entries interleave into one block
 that reads as coherent and is not. So:
 
-- Every new entry's heading or stamp carries `— <author>`: `## 2026-07-31 — Michael — <title>`,
-  or `*Raised 2026-07-31 — Michael.*` in `collab.md`. Keep the body distinctive too — a real
-  `**Affects:** path` line is what stops two entries deduplicating into each other.
+### Formatting for union merge
+
+An entry's **first and last lines are the ones a merge treats as shared context**, so those are
+what must be unique. Four rules, all load-bearing:
+
+1. **The heading is unique** and carries the author and a time:
+   `## 2026-07-31 15:42 — Michael — <title>`, or `### 7. <the item>` in `collab.md`.
+2. **The closing stamp repeats that identity and carries a time** —
+   `*#7 · raised 2026-07-31 15:42 — Michael.*`. Two independent guards: the item number, and the
+   `HH:MM`, which makes a byte-identical stamp essentially impossible even for two entries by the
+   same author on the same day. Never a bare `*Raised 2026-07-31 — Michael.*` — that collides the
+   moment one person raises two items in a day, and it was live in `collab.md` until 2026-07-31,
+   **nine times over**. Entries written before this rule keep their date-only stamps; times were
+   not recorded and are not to be invented.
+3. **Never close an entry with a bare `---`.** Headings delimit entries; a repeated horizontal rule
+   is exactly the identical boundary line rule 1 warns about.
+4. **No bare structural labels.** Write `- **Body:** <first sentence>`, not `- **Body:**` alone —
+   a label with nothing after it is byte-identical in every entry that uses it. Same for
+   `- **Added:** <date>`: append the entry's slug.
+
+Audit any of these files with:
+
+```bash
+grep -vE '^\s*$' .claude/work/<file>.md | sort | uniq -d
+```
+
+Anything it prints is a line two entries could collapse onto. All five files were clean on
+2026-07-31.
+
 - After a merge that touched these files, **read the tail** — `git diff HEAD~1 -- .claude/work/`.
   Fix interleaves by hand; the merge won't have told you.
 - Editing or deleting *someone else's* entry is a `collab.md` item, not a silent rewrite.

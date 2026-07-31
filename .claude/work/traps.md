@@ -28,7 +28,7 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   `steady_state.rs` were formatted as part of editing them.
 - **The real fix** is one tree-wide `cargo fmt` commit, agreed with James — `collab.md` #7.
   Until that happens, this trap stands.
-- **Added:** 2026-07-31
+- **Added:** 2026-07-31 — running-bare-cargo-fmt-rewrites-files-you-di
 
 ### A `-0.0` fitness would make the selection tests disagree with the code
 - **Bites when:** a fitness function returns `-0.0` alongside `0.0`, and a selection test fails in
@@ -40,7 +40,7 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   them as equal, so it would predict a tie where the code picks a winner. The oracle is deliberately
   written differently from the implementation so it is an independent check of the tie-break rule;
   that independence is exactly what creates this gap. No current test data contains `-0.0`.
-- **Added:** 2026-07-31
+- **Added:** 2026-07-31 — a-0-0-fitness-would-make-the-selection-tests
 
 ### The `.claude/` docs split across branches, but `work/current/` does not
 - **Bites when:** you switch branches mid-task, then write to `decisions.md`, `traps.md`,
@@ -54,7 +54,7 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
 - **Why:** `.gitignore` excludes only `.claude/work/current/` and tracks everything else under
   `.claude/`. So `plan.md` and `history.md` follow you across branches while `decisions.md` does
   not — the two halves of the docs system behave differently.
-- **Added:** 2026-07-31
+- **Added:** 2026-07-31 — the-claude-docs-split-across-branches-but-wo
 - **Amended 2026-07-31:** `work/archive/` was un-ignored when James joined the repo, so archived
   task records now split across branches too. `merge=union` (below) makes the *merge* safe; it does
   nothing about writing to the wrong branch in the first place, so this trap stands unchanged.
@@ -79,7 +79,7 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   append-only, both owners write to the tail, and without it every concurrent session ended in a
   conflict. Union merge trades "conflicts constantly" for "never conflicts", and the second failure
   mode is quieter than the first. That is the trade, not an accident.
-- **Added:** 2026-07-31
+- **Added:** 2026-07-31 — merge-union-on-the-claude-work-md-docs-means
 - **Amended 2026-07-31 — Michael:** the attribute is a **glob**, `.claude/work/*.md`, not a list of
   five filenames. **Any new `.md` dropped into `.claude/work/` silently inherits union merge**,
   including documents that are edited in place rather than appended to — which is the dangerous
@@ -102,4 +102,4 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   the destination. The template treats hooks as machinery it owns, but ships them with
   "EDIT THE PATH PATTERN BELOW BEFORE ENABLING" — so any project that follows that instruction has
   local edits `--update` will destroy. Reported for the template; not yet fixed there.
-- **Added:** 2026-07-31
+- **Added:** 2026-07-31 — install-sh-update-overwrites-this-project-s-

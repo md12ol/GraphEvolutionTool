@@ -305,6 +305,21 @@ durable left in it is on a timer.
 under a separate "then, in priority order" heading — so the next session cannot mistake the queue
 for the instruction.
 
+## Union-merge safety — check before you finish
+
+If the repo is shared and `.gitattributes` sets `merge=union` on `.claude/work/*.md`, a byte-identical
+line in two entries is folded together on merge and the entries interleave — silently. Every entry
+you appended this save must have a **unique first and last line**: a heading carrying the author,
+and a closing stamp carrying a time, e.g. `*#7 · raised <YYYY-MM-DD> <HH:MM> — <name>.*`
+
+Run this on every file you touched, and fix anything it prints:
+
+```bash
+grep -vE '^\s*$' .claude/work/<file>.md | sort | uniq -d
+```
+
+Bare labels are the usual culprit — `- **Body:**`, `- **Added:** <date>`, a trailing `---`.
+
 ## Conventions
 
 - **Absolute dates only** — convert "today" / "tomorrow" / "last session" to real dates.
