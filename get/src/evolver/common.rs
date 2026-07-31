@@ -23,12 +23,12 @@ pub enum Selection {
     Tournament { tournament_size: usize },
 }
 
-/// Order two individuals: lower cost first, ties broken by lower index.
+/// Order two individuals, better first, ties broken by lower index.
 ///
-/// The index tie-break makes a tournament's outcome depend only on which
-/// indices were drawn, not the order the RNG produced them. `total_cmp` is used
-/// simply because sorting needs a total order; `NaN` cannot reach here, as
-/// `Direction::to_cost` rejects it on the way in.
+/// Fitnesses are already oriented so lower is better. The index tie-break makes
+/// a tournament's outcome depend only on which indices were drawn, not the
+/// order the RNG produced them. `total_cmp` is used simply because sorting
+/// needs a total order; `Direction::orient` rejects `NaN` before it gets here.
 fn rank(fitnesses: &[f64], a: usize, b: usize) -> Ordering {
     fitnesses[a].total_cmp(&fitnesses[b]).then(a.cmp(&b))
 }
