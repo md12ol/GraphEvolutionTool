@@ -38,14 +38,23 @@ picks anything else, the same seed means different things per strategy and runs
 stop being comparable. **Pick one and both use it.**
 *Raised 2026-07-31.*
 
-### 5. Logging cadence for steady-state
+### 5. Logging cadence for steady-state, and an iteration-0 row
 `GenerationStats.iteration` is documented in `mod.rs:67` as counting mating events
 for steady-state. Logging every event gives a 100k-row history on a long run, so
 steady-state logs one row per `population_size` events — a "generation
 equivalent", which also makes the two strategies' logs directly comparable.
 **Confirm** that reading of `iteration`, since it is now sampled rather than
 per-event.
-*Raised 2026-07-31.*
+
+Steady-state also logs the **starting population as iteration 0**, before any
+breeding. Without it a log cannot show where a run began, and a run shorter than
+one interval produced no rows at all. So
+`history.len() == num_mating_events / population_size + 1`.
+
+**Generational should do the same** — log the initial population as generation 0
+— or the two strategies' logs are off by one row and cannot be plotted on the
+same axes.
+*Raised 2026-07-31; iteration-0 row added the same day.*
 
 ### 6. With or without replacement — **your call for generational**
 `Selection` now has two draw methods, and they sample differently:
