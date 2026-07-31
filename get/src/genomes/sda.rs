@@ -239,10 +239,6 @@ impl Genome for SdaGenome {
         }
     }
 
-    fn copy(&self) -> Self {
-        self.clone()
-    }
-
     /// Dump `init_char` followed by one line per `state + char -> target
     /// [ response ]`. `init_state` isn't included since it lives on
     /// `SdaContext`, not the genome, and `print` has no context parameter to
@@ -396,7 +392,6 @@ mod tests {
     #[test]
     fn equality_compares_every_field() {
         let base = small_genome();
-        assert_eq!(base.copy(), base);
 
         let mut different_init_char = base.clone();
         different_init_char.init_char = 1;

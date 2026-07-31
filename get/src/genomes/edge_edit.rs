@@ -1,6 +1,9 @@
+use std::sync::{Arc, OnceLock};
+
 use rand::Rng;
 use rand::distr::Distribution;
 use rand::distr::weighted::WeightedIndex;
+use serde::Deserialize;
 
 use super::genome::{EdgeEditContext, Genome};
 use crate::graph::Graph;
@@ -15,10 +18,14 @@ const OPCODE_MASK: u64 = 0xF;
 
 /// Relative probabilities for generating each edge-edit operation.
 ///
-/// The default gives all nine operations equal probability. These values are
-/// kept with the genome because the shared [`Genome::mutate`] interface only
-/// supplies a random-number generator.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// The default gives all nine operations equal probability. Set via
+/// `[genome.operation_weights]` in `config.toml`; any field omitted there falls
+/// back to that default, and a weight of `0.0` disables its operation outright.
+///
+/// Validated and compiled into a sampler by [`EdgeEditOperators`], which the
+/// population then shares.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct EdgeEditOperationWeights {
     pub toggle: f64,
     pub hop: f64,
@@ -60,10 +67,6 @@ impl EdgeEditOperationWeights {
             self.null,
         ]
     }
-
-    fn distribution(&self) -> WeightedIndex<f64> {
-        WeightedIndex::new(self.values()).expect("edge-edit weights are validated at construction")
-    }
 }
 
 impl Default for EdgeEditOperationWeights {
@@ -82,6 +85,47 @@ impl Default for EdgeEditOperationWeights {
     }
 }
 
+/// A validated operation mix together with its prebuilt sampler.
+///
+/// Built once per run and shared across the whole population behind an `Arc`:
+/// the [`WeightedIndex`] is constructed once rather than on every mutation, and
+/// each individual carries a pointer instead of its own copy of the weights.
+///
+/// `weights` is retained alongside the sampler purely so the type stays
+/// readable in `Debug` output and comparable in tests; nothing samples from it.
+#[derive(Debug, PartialEq)]
+pub struct EdgeEditOperators {
+    weights: EdgeEditOperationWeights,
+    distribution: WeightedIndex<f64>,
+}
+
+impl EdgeEditOperators {
+    /// Validate `weights` and compile them into a sampler, so weight errors
+    /// surface here — at startup, from config — rather than mid-run.
+    pub fn new(weights: EdgeEditOperationWeights) -> Result<Arc<Self>, &'static str> {
+        weights.validate()?;
+        let distribution =
+            WeightedIndex::new(weights.values()).expect("weights are validated immediately above");
+        Ok(Arc::new(Self {
+            weights,
+            distribution,
+        }))
+    }
+
+    /// The mix that draws every operation with equal probability.
+    ///
+    /// Cached, so the weight-agnostic constructors ([`EdgeEditGenome::new`] and
+    /// [`EdgeEditGenome::random`]) share one instance rather than handing every
+    /// individual its own — which would reintroduce exactly the per-genome copy
+    /// this type exists to eliminate.
+    pub fn uniform() -> Arc<Self> {
+        static UNIFORM: OnceLock<Arc<EdgeEditOperators>> = OnceLock::new();
+        Arc::clone(UNIFORM.get_or_init(|| {
+            Self::new(EdgeEditOperationWeights::default()).expect("equal weights are valid")
+        }))
+    }
+}
+
 /// Edit-script genome: a list of encoded graph-edit operations.
 ///
 /// Each gene stores its opcode in the low four bits and a random 32-bit payload
@@ -90,56 +134,39 @@ impl Default for EdgeEditOperationWeights {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EdgeEditGenome {
     pub genes: Vec<u64>,
-    operation_weights: EdgeEditOperationWeights,
+    operators: Arc<EdgeEditOperators>,
 }
 
 impl EdgeEditGenome {
     /// Construct a genome from encoded genes using equal operation weights.
     pub fn new(genes: Vec<u64>) -> Self {
-        Self {
-            genes,
-            operation_weights: EdgeEditOperationWeights::default(),
-        }
+        Self::new_with_operators(genes, EdgeEditOperators::uniform())
     }
 
-    /// Construct a genome from encoded genes and validated operation weights.
-    pub fn new_with_operation_weights(
-        genes: Vec<u64>,
-        operation_weights: EdgeEditOperationWeights,
-    ) -> Result<Self, &'static str> {
-        operation_weights.validate()?;
-        Ok(Self {
-            genes,
-            operation_weights,
-        })
+    /// Construct a genome from encoded genes and a shared operation mix.
+    pub fn new_with_operators(genes: Vec<u64>, operators: Arc<EdgeEditOperators>) -> Self {
+        Self { genes, operators }
     }
 
     /// Generate a random genome using equal operation weights.
     pub fn random<R: Rng + ?Sized>(length: usize, rng: &mut R) -> Self {
-        Self::random_with_operation_weights(length, EdgeEditOperationWeights::default(), rng)
-            .expect("equal edge-edit weights are valid")
+        Self::random_with_operators(length, EdgeEditOperators::uniform(), rng)
     }
 
-    /// Generate a random genome using validated operation weights.
-    pub fn random_with_operation_weights<R: Rng + ?Sized>(
+    /// Generate a random genome drawing opcodes from a shared operation mix.
+    ///
+    /// Infallible: the mix was validated when [`EdgeEditOperators::new`] built
+    /// it, so a whole population can be minted without per-individual error
+    /// handling.
+    pub fn random_with_operators<R: Rng + ?Sized>(
         length: usize,
-        operation_weights: EdgeEditOperationWeights,
+        operators: Arc<EdgeEditOperators>,
         rng: &mut R,
-    ) -> Result<Self, &'static str> {
-        operation_weights.validate()?;
-        let distribution = operation_weights.distribution();
+    ) -> Self {
         let genes = (0..length)
-            .map(|_| Self::generate_gene(rng, &distribution))
+            .map(|_| Self::generate_gene(rng, &operators.distribution))
             .collect();
-        Ok(Self {
-            genes,
-            operation_weights,
-        })
-    }
-
-    /// Return the operation weights used by random generation and mutation.
-    pub fn operation_weights(&self) -> EdgeEditOperationWeights {
-        self.operation_weights
+        Self { genes, operators }
     }
 
     fn generate_gene<R: Rng + ?Sized>(rng: &mut R, distribution: &WeightedIndex<f64>) -> u64 {
@@ -202,20 +229,14 @@ impl Genome for EdgeEditGenome {
 
         let max_changes = self.genes.len().min(MAX_MUTATIONS);
         let change_count = rng.random_range(1..=max_changes);
-        let distribution = self.operation_weights.distribution();
 
-        // Partially shuffle the indices so every selected gene is unique.
-        let mut indices: Vec<usize> = (0..self.genes.len()).collect();
-        for selection in 0..change_count {
-            let swap_with = rng.random_range(selection..indices.len());
-            indices.swap(selection, swap_with);
-            let gene_index = indices[selection];
-            self.genes[gene_index] = Self::generate_gene(rng, &distribution);
+        // Indices are drawn independently, so the same gene can be selected
+        // twice; that is harmless, since each selection overwrites it with a
+        // fresh random gene either way.
+        for _ in 0..change_count {
+            let gene_index = rng.random_range(0..self.genes.len());
+            self.genes[gene_index] = Self::generate_gene(rng, &self.operators.distribution);
         }
-    }
-
-    fn copy(&self) -> Self {
-        self.clone()
     }
 
     fn print(&self) -> String {
@@ -307,21 +328,22 @@ mod tests {
     #[test]
     fn weighted_random_generation_can_force_an_opcode() {
         let mut rng = StdRng::seed_from_u64(7);
-        let genome =
-            EdgeEditGenome::random_with_operation_weights(32, weights_for_add(), &mut rng).unwrap();
+        let operators = EdgeEditOperators::new(weights_for_add()).unwrap();
+        let genome = EdgeEditGenome::random_with_operators(32, operators, &mut rng);
 
         assert!(genome.genes.iter().all(|gene| gene & OPCODE_MASK == 2));
-        assert_eq!(genome.operation_weights(), weights_for_add());
+        assert_eq!(genome.operators.weights, weights_for_add());
     }
 
     #[test]
     fn random_gene_packing_matches_graph_refiner_exactly() {
-        let distribution = EdgeEditOperationWeights::default().distribution();
+        let operators = EdgeEditOperators::uniform();
+        let distribution = &operators.distribution;
         let mut actual_rng = StdRng::seed_from_u64(29);
         let mut reference_rng = StdRng::seed_from_u64(29);
 
         for _ in 0..64 {
-            let actual = EdgeEditGenome::generate_gene(&mut actual_rng, &distribution);
+            let actual = EdgeEditGenome::generate_gene(&mut actual_rng, distribution);
             let opcode = distribution.sample(&mut reference_rng) as u64;
             let payload = reference_rng.random::<u32>() as u64;
             let expected = (payload << 4) | opcode;
@@ -391,19 +413,13 @@ mod tests {
             base_graph: Graph::new(0, 5),
         };
         let invalid = EdgeEditGenome::new(vec![15]);
-        assert_eq!(
-            invalid.express(&empty_context),
-            Graph::new(0, 5)
-        );
+        assert_eq!(invalid.express(&empty_context), Graph::new(0, 5));
 
         let one_node_context = EdgeEditContext {
             base_graph: Graph::new(1, 5),
         };
         let add_self = EdgeEditGenome::new(vec![encode_gene(2, [0, 0, 0, 0], 1)]);
-        assert_eq!(
-            add_self.express(&one_node_context),
-            Graph::new(1, 5)
-        );
+        assert_eq!(add_self.express(&one_node_context), Graph::new(1, 5));
 
         let mut base_graph = Graph::new(2, 5);
         base_graph.add_edge(0, 1);
@@ -417,12 +433,13 @@ mod tests {
     #[test]
     fn crossover_swaps_only_a_nonempty_shared_segment() {
         let mut left = EdgeEditGenome::new(vec![0, 1, 2, 3, 4]);
-        let mut right =
-            EdgeEditGenome::new_with_operation_weights(vec![10, 11, 12], weights_for_add())
-                .unwrap();
+        let mut right = EdgeEditGenome::new_with_operators(
+            vec![10, 11, 12],
+            EdgeEditOperators::new(weights_for_add()).unwrap(),
+        );
         let left_tail = left.genes[3..].to_vec();
-        let left_weights = left.operation_weights();
-        let right_weights = right.operation_weights();
+        let left_weights = left.operators.weights;
+        let right_weights = right.operators.weights;
         let mut rng = StdRng::seed_from_u64(11);
 
         left.crossover(&mut right, &mut rng);
@@ -441,14 +458,16 @@ mod tests {
                         && right.genes[index] == index as u64)
             );
         }
-        assert_eq!(left.operation_weights(), left_weights);
-        assert_eq!(right.operation_weights(), right_weights);
+        assert_eq!(left.operators.weights, left_weights);
+        assert_eq!(right.operators.weights, right_weights);
     }
 
     #[test]
-    fn mutation_replaces_between_one_and_four_unique_genes() {
-        let mut genome =
-            EdgeEditGenome::new_with_operation_weights(vec![8; 10], weights_for_delete()).unwrap();
+    fn mutation_replaces_at_most_four_genes_using_the_shared_mix() {
+        let mut genome = EdgeEditGenome::new_with_operators(
+            vec![8; 10],
+            EdgeEditOperators::new(weights_for_delete()).unwrap(),
+        );
         let mut rng = StdRng::seed_from_u64(19);
 
         genome.mutate(&mut rng);
@@ -469,9 +488,67 @@ mod tests {
     }
 
     #[test]
-    fn copy_and_print_include_the_complete_genome() {
+    fn operators_reject_weights_that_cannot_form_a_distribution() {
+        let all_zero = EdgeEditOperationWeights {
+            add: 0.0,
+            ..weights_for_add()
+        };
+        assert_eq!(
+            EdgeEditOperators::new(all_zero).unwrap_err(),
+            "at least one operation weight must be positive"
+        );
+
+        let not_finite = EdgeEditOperationWeights {
+            toggle: f64::NAN,
+            ..EdgeEditOperationWeights::default()
+        };
+        assert_eq!(
+            EdgeEditOperators::new(not_finite).unwrap_err(),
+            "operation weights must be finite and non-negative"
+        );
+    }
+
+    #[test]
+    fn the_uniform_mix_is_shared_rather_than_rebuilt_per_call() {
+        // `EdgeEditGenome::new`/`random` route through `uniform()`, so a
+        // per-call rebuild would hand every individual its own WeightedIndex.
+        assert!(Arc::ptr_eq(
+            &EdgeEditOperators::uniform(),
+            &EdgeEditOperators::uniform()
+        ));
+
+        let mut rng = StdRng::seed_from_u64(31);
+        let first = EdgeEditGenome::random(4, &mut rng);
+        let second = EdgeEditGenome::random(4, &mut rng);
+        assert!(Arc::ptr_eq(&first.operators, &second.operators));
+    }
+
+    #[test]
+    fn a_zero_weighted_operation_is_never_generated_or_mutated_in() {
+        // `weights_for_delete` leaves only opcode 3 with a positive weight.
+        let operators = EdgeEditOperators::new(weights_for_delete()).unwrap();
+        let mut rng = StdRng::seed_from_u64(37);
+
+        let mut genome = EdgeEditGenome::random_with_operators(64, operators, &mut rng);
+        assert!(genome.genes.iter().all(|gene| gene & OPCODE_MASK == 3));
+
+        for _ in 0..200 {
+            genome.mutate(&mut rng);
+        }
+        assert!(genome.genes.iter().all(|gene| gene & OPCODE_MASK == 3));
+    }
+
+    #[test]
+    fn the_genome_stays_shareable_across_evaluation_threads() {
+        // `Genome: Clone + Send + Sync` is what lets rayon score a population;
+        // the `Arc<EdgeEditOperators>` field must not break it.
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<EdgeEditGenome>();
+    }
+
+    #[test]
+    fn print_includes_the_complete_genome() {
         let genome = EdgeEditGenome::new(vec![1, 2, 3]);
-        assert_eq!(genome.copy(), genome);
         assert_eq!(genome.print(), "EdgeEditGenome(3 ops): [1, 2, 3]");
     }
 }
