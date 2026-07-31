@@ -30,7 +30,7 @@ pub enum Selection {
 /// a tournament's outcome depend only on which indices were drawn, not the
 /// order the RNG produced them. `total_cmp` is used simply because sorting
 /// needs a total order; `Direction::orient` rejects `NaN` before it gets here.
-fn rank(fitnesses: &[f64], a: usize, b: usize) -> Ordering {
+pub(super) fn rank(fitnesses: &[f64], a: usize, b: usize) -> Ordering {
     fitnesses[a].total_cmp(&fitnesses[b]).then(a.cmp(&b))
 }
 
