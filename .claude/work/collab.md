@@ -1,9 +1,20 @@
-# To discuss with James (shorinbonsai)
+# Collaboration agenda
 
-Running agenda for collaboration checkpoints. Add items as they come up; mark them
-**Agreed** with a date once settled, and don't delete — the trail is the point.
+Shared running agenda for checkpoints between the owners of this repo — Michael (md12ol) and
+James (shorinbonsai). Both of us read and write this file; it is not addressed at either one.
+
+An item belongs here when a decision on one side **conflicts with or overrides** work on the
+other. Add items as they come up; mark them **Agreed** with a date once settled, and don't
+delete — the trail is the point.
+
+Stamp every item with who raised it: `*Raised YYYY-MM-DD — <author>.*` This file is `merge=union`
+(see `/.gitattributes`), so two people appending in the same week merge cleanly, but only the
+stamp makes an accidental duplicate visible.
 
 Persistent: survives `/done`, because coordination outlives any one task.
+
+Renamed from `meeting_james.md` on 2026-07-31 — the old name was written from one side and read
+as self-referential on the other's machine.
 
 ---
 
@@ -13,7 +24,7 @@ Persistent: survives `/done`, because coordination outlives any one task.
 `Selection::select`, `evaluate`, and `generation_stats` are being filled in as part
 of the steady-state task — steady-state cannot run without all three. **Don't
 duplicate them.** Generational should call the same helpers unchanged.
-*Raised 2026-07-31.*
+*Raised 2026-07-31 — Michael.*
 
 ### 2. `mating_event` breeds two children, not one
 Your doc comment at `get/src/evolver/steady_state.rs:22` says "breed **a** child …
@@ -22,7 +33,7 @@ inherently produces **two** children, so discarding one wastes half of every
 crossover. Steady-state now breeds two and replaces the two worst **of the
 tournament they were drawn from**, not the two worst in the population. The
 comment needs updating — flagging rather than silently rewriting your words.
-*Raised 2026-07-31.*
+*Raised 2026-07-31 — Michael.*
 
 ### 3. Steady-state pays per-event FFI cost
 `Fitness::evaluate_population` exists so a Python-backed objective takes the GIL
@@ -30,13 +41,13 @@ once per generation. Steady-state scores incrementally — only the new children
 event — so it makes one FFI hop per mating event instead. Correct for native
 fitness, potentially bad for Python. Generational won't have this problem.
 **Decide:** accept it, or add a batched cohort mode later?
-*Raised 2026-07-31.*
+*Raised 2026-07-31 — Michael.*
 
 ### 4. RNG choice must match across strategies
 Steady-state seeds `ChaCha8Rng` from the `run(seed)` argument. If generational
 picks anything else, the same seed means different things per strategy and runs
 stop being comparable. **Pick one and both use it.**
-*Raised 2026-07-31.*
+*Raised 2026-07-31 — Michael.*
 
 ### 5. Logging cadence for steady-state, and an iteration-0 row
 `GenerationStats.iteration` is documented in `mod.rs:67` as counting mating events
@@ -54,7 +65,7 @@ one interval produced no rows at all. So
 **Generational should do the same** — log the initial population as generation 0
 — or the two strategies' logs are off by one row and cannot be plotted on the
 same axes.
-*Raised 2026-07-31; iteration-0 row added the same day.*
+*Raised 2026-07-31 — Michael; iteration-0 row added the same day.*
 
 ### 6. With or without replacement — **your call for generational**
 `Selection` now has two draw methods, and they sample differently:
@@ -91,7 +102,7 @@ are always different individuals, so self-mating is impossible there by
 construction. Generational still has the question — with replacement, two of its
 picks can be the same individual, and crossover between a genome and its own
 clone does nothing but mutate.
-*Raised 2026-07-31, rewritten the same day once the two methods diverged.*
+*Raised 2026-07-31 — Michael, rewritten the same day once the two methods diverged.*
 
 ### 9. `Fitness` gained a `direction()` — your trait, so flagging it
 Fitness functions can be either-better, so `Fitness` now carries:
@@ -135,7 +146,7 @@ the fix is in the objective, not the engine.
 **Decide:** happy with the assert, or would you rather it degraded gracefully?
 Also worth agreeing that direction belongs on the trait rather than in
 `config.toml` — config could contradict what the objective actually computes.
-*Raised 2026-07-31; contract-only approach revised to enforcement the same day.*
+*Raised 2026-07-31 — Michael; contract-only approach revised to enforcement the same day.*
 
 ### 10. `evaluate` now orients — reversing what your doc promised
 Your doc on `common::evaluate` said it "deliberately says nothing about which
@@ -151,14 +162,14 @@ design we rejected.
 Consequence for generational: `advance_generation` can compare the fitnesses
 `evaluate` returns directly, without consulting direction. Only the reporting
 boundary converts back — see #11.
-*Raised 2026-07-31.*
+*Raised 2026-07-31 — Michael.*
 
 ### 11. `generation_stats` needs a `direction` parameter
 To log in the objective's own units, `generation_stats` has to convert back, so
 its signature gains `direction`. Worth knowing the asymmetry: **`best_fitness`
 and `mean_fitness` flip sign, `std_dev` does not** — deviation is invariant
 under negation. It looks like a missed case; it is not.
-*Raised 2026-07-31.*
+*Raised 2026-07-31 — Michael.*
 
 ### 12. `config.rs` should reject `tournament_size < 4` for steady-state
 Tournament-local replacement needs four distinct individuals per event: two
@@ -172,7 +183,7 @@ tournament_size` — but that is a backstop, not the right home. **The config la
 is**, since it already knows both numbers and can report a bad file cleanly
 instead of panicking. Note the constraint is strategy-specific: generational has
 no such floor, so this cannot be a blanket validation on `tournament_size`.
-*Raised 2026-07-31.*
+*Raised 2026-07-31 — Michael.*
 
 ### 7. The tree is not `cargo fmt`-clean
 `get/src/evolver/generational.rs`, `steady_state.rs`, `fitness.rs` and
@@ -181,7 +192,7 @@ sweeps all four and hands the other person a pile of unrelated diff — it happe
 on this task and the changes had to be reverted by hand.
 **Decide:** run `cargo fmt` across the tree once, in its own commit, and keep it
 clean from then on.
-*Raised 2026-07-31.*
+*Raised 2026-07-31 — Michael.*
 
 ### 8. `Cargo.lock` stays tracked
 PR #11 added `Cargo.lock` to `.gitignore`; that line was dropped when merging.
@@ -189,7 +200,33 @@ The crate builds a pyo3 extension module — application-like, not a library —
 committed lockfile is what makes builds reproducible. The line was also inert on
 its own, since the file was already tracked. This overrides your stated intent, so
 it deserves a word. See `decisions.md`, 2026-07-31.
-*Raised 2026-07-31.*
+*Raised 2026-07-31 — Michael.*
+
+### 13. `.claude/` is now shared — read this before your first session
+You're picking up this workflow on your machine, so `.claude/` went from one
+person's notes to a shared, tracked directory. Five things changed for you:
+
+- **Don't run `/setup`.** It rewrites `CLAUDE.md` from the template's FILL IN
+  blocks and would destroy it. You're cloning an already-configured project —
+  start with `/load`.
+- **Stamp every entry with `— James`.** `decisions.md`, `traps.md`, `hotfixes.md`,
+  `issues.md` and this file merge with `merge=union` (`/.gitattributes`), so our
+  appends never conflict — but union merge never conflicts about *anything*,
+  including two edits to the same entry. The stamp is what makes a silent
+  duplicate visible. After any merge that touched them, read the tail.
+- **`hotfixes.md` entries carry `Owner:` and `Machine:`.** An uncommitted hotfix
+  of mine isn't in your tree. Check the owner before going to look for the code.
+- **`work/current/` is yours alone** (gitignored); `work/archive/` is now shared,
+  so finished tasks reach both of us. Personal settings →
+  `settings.local.json`, also gitignored.
+- **Hook and `settings.json` changes go through a PR, both ways.** Those files
+  execute on the other person's machine at session start, on their next pull,
+  without them reading the diff. Everything else in `.claude/` is just text; that
+  part isn't.
+
+Reasoning in `decisions.md`, 2026-07-31 (four entries). **Confirm** you're happy
+with the union-merge trade — it is the one choice here with a real downside.
+*Raised 2026-07-31 — Michael.*
 
 ---
 

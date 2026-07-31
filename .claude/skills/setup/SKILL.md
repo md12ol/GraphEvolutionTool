@@ -101,7 +101,8 @@ so the boundary is exact.
 |---|---|---|
 | Does the agent file issues for you, and where? | a git remote exists | the detected project · a different one · never files issues |
 | Which paths are off-limits or owned by someone else? | vendored dirs or multiple repos found | the detected paths · none · free-text |
-| Track `.claude/` in git? | `.claude/` is currently ignored | track the machinery, ignore `work/current` + `work/archive` **(Recommended)** · keep it all ignored |
+| Track `.claude/` in git? | `.claude/` is currently ignored | track the machinery, ignore only `work/current` **(Recommended)** · keep it all ignored |
+| Will anyone else use this `.claude/`? | a git remote exists | yes — add `merge=union` + keep the collab section **(Recommended if a remote has other contributors)** · no, solo |
 | Enable the optional hooks? | always | see step 4 — one question per hook that applies |
 
 **Ask about the tracker** only if a remote exists: does the agent file issues on their behalf, and
@@ -185,8 +186,28 @@ fix it is now, before there's history to lose:
 > ```gitignore
 > .claude/settings.local.json
 > .claude/work/current/
-> .claude/work/archive/
 > ```
+
+`work/current/` is the only per-person thing — two people cannot hold one live plan. **Do not
+ignore `work/archive/`**: a finished task's record is shared history, and ignoring it strands every
+`/done` on one laptop.
+
+### If more than one person will use this `.claude/`
+
+Then also offer to add to the repo root `.gitattributes`:
+
+> ```gitattributes
+> .claude/work/*.md merge=union
+> ```
+
+`decisions.md`, `traps.md`, `hotfixes.md`, `issues.md` and `collab.md` are append-only, so everyone
+writes to the tail of the same file — the most conflict-prone shape in git. Without this, every
+concurrent session ends in a merge conflict.
+
+State the trade when you offer it, because it is real: **union merge never conflicts**, so a genuine
+collision on the same entry merges silently and interleaved. The mitigation is an author stamp on
+every entry, which the "More than one person uses this `.claude/`" section of `CLAUDE.md` mandates —
+keep that section, and keep `work/collab.md`. If they say they work alone, delete both.
 
 **Ask before editing `.gitignore`** — it's a tracked file and this is their call. If they decline,
 leave the backup hooks enabled and say why they now matter more.

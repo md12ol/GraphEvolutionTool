@@ -35,6 +35,7 @@ work. Never archive them:
 | `issues.md` | **Churn list** | Work for other people, staged for the tracker. Entries leave only once filed. |
 | `hotfixes.md` | **Churn list** | Temporary / band-aid code in the tree. Entries leave only once reverted. |
 | `traps.md` | **Churn list** | Permanent workspace gotchas. Entries leave only when no longer true. |
+| `collab.md` | **Append-only** | Cross-owner decisions, when the repo is shared. Agreed items are marked, never deleted. Skip if the file doesn't exist. |
 
 ## 1. Gather state
 
@@ -159,7 +160,7 @@ reversed an earlier decision, write a NEW entry that names and supersedes it. Th
 the value.
 
 ```markdown
-## <YYYY-MM-DD> — <short title>
+## <YYYY-MM-DD> — <author> — <short title>
 **Chose:** what we're doing.
 **Why:** the reasoning, in the terms it was actually argued.
 **Rejected:** the alternatives considered, and what ruled them out.
@@ -168,6 +169,10 @@ the value.
 ```
 
 Only log decisions a cold reader couldn't re-derive from the code. Skip the obvious.
+
+Drop the `— <author>` field if you work alone. Keep it if anyone else uses this `.claude/`:
+the persistent docs merge with `merge=union`, which never reports a conflict, so the stamp is
+the only thing that makes an accidentally duplicated entry visible.
 
 ## 5. `issues.md` — stage work for other people
 
@@ -215,6 +220,9 @@ exit condition, or it lives forever:
 
 ```markdown
 ### <what was hacked>
+- **Owner:** who put it there and who removes it. Omit if you work alone.
+- **Machine:** `owner's working tree, uncommitted` · `committed — in every tree` · `branch <name>`.
+  Omit if you work alone; otherwise this is what tells a reader whether it is in *their* tree.
 - **Where:** `path` or symbol name — prefer function names over line numbers, they survive edits.
 - **What it does:** the mechanism, if not obvious from the title. Optional.
 - **Why it's a hotfix:** the problem it papers over, and why the proper fix wasn't done here.
@@ -304,6 +312,10 @@ for the instruction.
 - If tooling or output behavior changed, check the run instructions in `work/current/plan.md` and
   `work/current/history.md` still match, and fix them if not.
 - Never truncate or rewrite `work/current/history.md` or `decisions.md`.
+- **If anyone else uses this `.claude/`:** stamp every new entry in the persistent docs with an
+  author, and never silently rewrite someone else's entry — raise it in `collab.md` instead.
+  If this session merged, read the tail of the persistent docs before appending: `merge=union`
+  can interleave two entries without reporting a conflict.
 
 ## Memory — do not use it for this project
 

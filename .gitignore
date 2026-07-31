@@ -9,7 +9,9 @@ handoff_transfer_from_c++.md
 handoff_edge_multiplicity_cap_simplification.md
 **/target/
 
-# .claude machinery is tracked; personal settings and task-scoped work are not.
+# .claude machinery is tracked; personal settings and the LIVE task are not.
+# work/archive/ is deliberately tracked — a finished task's record is shared history, and ignoring
+# it left every /done stranded on one laptop. Only work/current/ stays per-person, because two
+# people must not fight over one live plan.
 .claude/settings.local.json
 .claude/work/current/
-.claude/work/archive/

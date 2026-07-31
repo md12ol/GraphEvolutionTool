@@ -19,11 +19,12 @@ Session state lives in `.claude/`:
 |---|---|
 | `decisions.md` | append-only: what was chosen and why |
 | `issues.md` | staged for the tracker, for other people |
-| `hotfixes.md` | temporary code in the tree, each with a `Remove when:` |
+| `hotfixes.md` | temporary code in the tree, each with a `Remove when:` and an **`Owner:`** — a hotfix lives in one person's working tree, so it needs a name on it |
 | `traps.md` | permanent gotchas about this workspace — the things that bite every session |
-| `meeting_james.md` | running agenda for collaborator checkpoints with James (shorinbonsai) — anything that conflicts with or overrides his work. Mark **Agreed** with a date; never delete |
+| `collab.md` | running agenda for checkpoints between the repo's two owners — anything on one side that conflicts with or overrides the other's work. Mark **Agreed** with a date; never delete |
 
-Finished tasks land in `.claude/work/archive/<YYYY-MM>_<slug>/`.
+Finished tasks land in `.claude/work/archive/<YYYY-MM>_<slug>/` — **tracked**, so a finished
+task's record reaches the other owner. Only `work/current/` is per-person.
 
 ### Keep `plan.md` small — it is a task list, not a record
 
@@ -46,6 +47,44 @@ each of those already has a file that owns it: what happened → `work/current/h
 *program*, not a task — split it, and let each section close on its own gate. The symptom of getting
 this wrong is an empty `archive/` next to a plan and history that no longer fit in context, so every
 session pays to re-read them before doing any work.
+
+## Two people, one `.claude/`
+
+This `.claude/` is checked into the repo and used by **both owners on their own machines** —
+Michael (md12ol) and James (shorinbonsai). Four rules follow from that, and all four are
+non-obvious.
+
+**1. The persistent docs merge by union — so stamp every entry with an author.**
+`decisions.md`, `traps.md`, `hotfixes.md`, `issues.md` and `collab.md` are append-only, which
+means both of us write to the tail of the same file and every concurrent session would otherwise
+end in a merge conflict. `/.gitattributes` sets `merge=union` on them: both sides' lines survive,
+no conflict markers.
+
+The catch is that union merge **never conflicts**. Measured 2026-07-31: two entries with
+distinct text merge correctly and only lose the blank line between them, but lines that are
+**byte-identical** on both sides are deduplicated and the two entries interleave into one block
+that reads as coherent and is not. So:
+
+- Every new entry's heading or stamp carries `— <author>`: `## 2026-07-31 — Michael — <title>`,
+  or `*Raised 2026-07-31 — Michael.*` in `collab.md`. Keep the body distinctive too — a real
+  `**Affects:** path` line is what stops two entries deduplicating into each other.
+- After a merge that touched these files, **read the tail** — `git diff HEAD~1 -- .claude/work/`.
+  Fix interleaves by hand; the merge won't have told you.
+- Editing or deleting *someone else's* entry is a `collab.md` item, not a silent rewrite.
+
+**2. Hook and settings changes go through a PR.** `settings.json` and everything in `hooks/` is
+executable code that runs on the other person's machine at session start, on their next pull,
+without them reading it. Never push a change to either straight to `main` — open a PR and say
+what it does. This is the one part of `.claude/` where "it's just docs" is false.
+
+**3. `/setup` runs once, ever — never on a clone.** It rewrites `CLAUDE.md` from the template's
+FILL IN blocks and would destroy this file. If you have just cloned the repo, `.claude/` is
+already set up; start with `/load`. Personal settings go in `settings.local.json`, which is
+gitignored and exists exactly for that.
+
+**4. Verification is per-machine.** `[x]` means *you* saw it verified, on your machine. Never
+promote someone else's `[~]` to `[x]` because their notes read as finished — re-run the
+`Verify by:` or leave it alone.
 
 ## Workflow
 

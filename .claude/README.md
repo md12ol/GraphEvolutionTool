@@ -57,8 +57,9 @@ You don't have to read the rest of this file to use it. The short version:
 |---|---|
 | `decisions.md` | append-only: what was chosen and why, including reversals |
 | `issues.md` | work belonging to other people, staged for the tracker |
-| `hotfixes.md` | temporary code in the tree, each with a `Remove when:` |
+| `hotfixes.md` | temporary code in the tree, each with a `Remove when:` and an `Owner:` |
 | `traps.md` | permanent workspace gotchas |
+| `collab.md` | cross-owner decisions between Michael and James |
 
 `CLAUDE.md` holds the rules themselves and is loaded into every session automatically.
 
@@ -83,6 +84,23 @@ naming what would prove it.
 - **One home per fact.** What happened → `history.md` · why → `decisions.md` · temporary code →
   `hotfixes.md` · someone else's problem → `issues.md` · workspace gotcha → `traps.md`. Duplication
   across files is how half of them go quietly wrong.
+
+## Two of us use this
+
+`.claude/` is tracked in the repo and used by both owners on their own machines. Full rules in
+`CLAUDE.md`, "Two people, one `.claude/`". The short version:
+
+- **Don't run `/setup`.** It rewrites `CLAUDE.md` from the template and would destroy it. On a
+  fresh clone, start with `/load`. Personal settings → `settings.local.json` (gitignored).
+- **Stamp every entry with an author.** The persistent docs merge with `merge=union`
+  (`/.gitattributes`), so our appends never conflict — but union merge never conflicts about
+  *anything*, including two edits to the same entry. The stamp is what makes a silent duplicate
+  visible. Read the tail of those files after a merge.
+- **Check `Owner:` in `hotfixes.md`.** An uncommitted hotfix of theirs is not in your tree.
+- **Hook and `settings.json` changes go through a PR, both ways.** They execute on the other
+  person's machine at session start, on their next pull, without them reading the diff.
+- **`work/current/` is yours alone; `work/archive/` is shared**, so finished tasks reach both.
+- **`[x]` is per-machine.** Never promote someone else's `[~]` because their notes read as done.
 
 ## Backups
 

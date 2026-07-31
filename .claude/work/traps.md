@@ -26,7 +26,7 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   `get/src/evolver/generational.rs` and `get/src/genomes/sda.rs` — `generational.rs` is James's
   live work, so sweeping it hands him a conflict. It was 4 files before `fitness.rs` and
   `steady_state.rs` were formatted as part of editing them.
-- **The real fix** is one tree-wide `cargo fmt` commit, agreed with James — `meeting_james.md` #7.
+- **The real fix** is one tree-wide `cargo fmt` commit, agreed with James — `collab.md` #7.
   Until that happens, this trap stands.
 - **Added:** 2026-07-31
 
@@ -44,15 +44,56 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
 
 ### The `.claude/` docs split across branches, but `work/current/` does not
 - **Bites when:** you switch branches mid-task, then write to `decisions.md`, `traps.md`,
-  `hotfixes.md` or `issues.md`. Those four are **tracked**, so each branch has its own version —
-  writing on the wrong branch appends to the wrong base and silently drops entries the other branch
-  had. It happened on 2026-07-31: a checkout to `main` mid-`/save` put seven new `decisions.md`
-  entries on a copy that was missing the two already committed on the feature branch.
+  `hotfixes.md`, `issues.md` or `collab.md`. Those are **tracked**, so each branch has its own
+  version — writing on the wrong branch appends to the wrong base and silently drops entries the
+  other branch had. It happened on 2026-07-31: a checkout to `main` mid-`/save` put seven new
+  `decisions.md` entries on a copy that was missing the two already committed on the feature branch.
 - **Do this instead:** run `git branch --show-current` before writing any `.claude/` doc, and again
   after any long gap. If you are on the wrong branch, rescue the new text to the scratchpad,
   `git restore` the file, switch, and re-append.
-- **Why:** `.gitignore` excludes `.claude/work/current/` and `.claude/work/archive/` but tracks
-  everything else under `.claude/`. So `plan.md` and `history.md` follow you across branches while
-  `decisions.md` does not — the two halves of the docs system behave differently.
+- **Why:** `.gitignore` excludes only `.claude/work/current/` and tracks everything else under
+  `.claude/`. So `plan.md` and `history.md` follow you across branches while `decisions.md` does
+  not — the two halves of the docs system behave differently.
+- **Added:** 2026-07-31
+- **Amended 2026-07-31:** `work/archive/` was un-ignored when James joined the repo, so archived
+  task records now split across branches too. `merge=union` (below) makes the *merge* safe; it does
+  nothing about writing to the wrong branch in the first place, so this trap stands unchanged.
+
+### `merge=union` on the `.claude/work/*.md` docs means a merge can never tell you it went wrong
+- **Bites when:** you and the other owner append to `decisions.md`, `traps.md`, `hotfixes.md`,
+  `issues.md` or `collab.md` on separate branches, then merge. There is no conflict, no marker and
+  no prompt — git keeps both sides' lines and calls it clean.
+- **Measured 2026-07-31**, two branches each appending one entry to `decisions.md`:
+  - Two entries with **distinct** text merge **correctly** — both survive whole and in order. The
+    only damage is the **blank line between them is eaten**, because it is a line common to both
+    sides. Cosmetic; re-insert it.
+  - Lines that are **byte-identical** on both sides are **deduplicated and the entries interleave**.
+    Two entries that share a boilerplate line collapse into one block that reads as a single
+    coherent entry and is not one. This is the dangerous case, and it is silent.
+- **Do this instead:** after any merge that touched `.claude/work/*.md`, **read the tail of the
+  changed files** before trusting them — `git diff HEAD~1 -- .claude/work/` is enough. Keep entries
+  textually distinctive: the `— <author>` stamp, the date and a real `**Affects:** path` line are
+  what stop two entries deduplicating into each other. Bare boilerplate (`reasoning`, `TODO`,
+  a lone `---`) is what makes them collide.
+- **Why:** `/.gitattributes` sets `merge=union` on those five files deliberately — they are
+  append-only, both owners write to the tail, and without it every concurrent session ended in a
+  conflict. Union merge trades "conflicts constantly" for "never conflicts", and the second failure
+  mode is quieter than the first. That is the trade, not an accident.
 - **Added:** 2026-07-31
 
+
+### `install.sh --update` overwrites this project's customized hooks
+- **Bites when:** you refresh the working-docs machinery from `~/.claude-template` with
+  `install.sh --update /home/mdube/GraphEvolutionTool` to pick up a skills change. It copies
+  **`skills/` and `hooks/`** — and both of this project's hooks are customized:
+  `block_env_commands.sh` carries the real BLOCK/WARN/ALLOW patterns, and `show_hotfixes.sh`
+  carries the co-owned-file pattern. `--update` replaces both with the template's examples, and
+  the security hook silently reverts to blocking nothing that matters.
+- **Do this instead:** sync skills only —
+  `cp -r ~/.claude-template/template/skills/. .claude/skills/` — then diff the hooks by hand:
+  `install.sh --diff /home/mdube/GraphEvolutionTool`.
+- **Why:** `MACHINERY_DIRS=(skills hooks)` in `install.sh`, and `update` does a plain `cp -r` over
+  the destination. The template treats hooks as machinery it owns, but ships them with
+  "EDIT THE PATH PATTERN BELOW BEFORE ENABLING" — so any project that follows that instruction has
+  local edits `--update` will destroy. Reported for the template; not yet fixed there.
+- **Added:** 2026-07-31

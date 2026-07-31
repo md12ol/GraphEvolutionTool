@@ -112,7 +112,7 @@ run that reproduces today might not after an upgrade — which defeats the entir
 `seed` argument. Test code still uses `StdRng`, where cross-version stability does not matter.
 **Rejected:** `StdRng`, which is what the existing genome tests use, on those grounds.
 **Affects:** `get/src/evolver/steady_state.rs` `run`. **Generational must match**, or a seed means
-different things per strategy — `meeting_james.md` #4.
+different things per strategy — `collab.md` #4.
 
 ## 2026-07-31 — Steady-state logs iteration 0, then one row per population_size events
 **Chose:** `evolve` records the starting population as iteration 0 and thereafter one row per
@@ -124,7 +124,7 @@ interval produced no rows at all.
 **Rejected:** Logging every event (unusable size); no initial row (silent short runs); a
 configurable `log_interval` in `config.toml` (expands James's schema for a knob nobody asked for).
 **Affects:** `get/src/evolver/steady_state.rs` `evolve`. **Generational should log generation 0**
-too, or the two logs are off by one row and cannot share an axis — `meeting_james.md` #5.
+too, or the two logs are off by one row and cannot share an axis — `collab.md` #5.
 
 ## 2026-07-31 — Minimum tournament size of 4, asserted at construction
 **Chose:** `SteadyStateEvolver::new` asserts `tournament_size >= 4` and
@@ -137,4 +137,52 @@ mid-run failure `Evolver::new`'s own doc promises to avoid.
 **Rejected:** Allowing 3 or 2; checking per event. Changing `Evolver::new` to return `Result` was
 also considered and left alone — it is James's trait signature and touches both evolvers.
 **Affects:** `get/src/evolver/steady_state.rs` `new`. The config layer is the proper home for both
-checks — `meeting_james.md` #12.
+checks — `collab.md` #12.
+
+## 2026-07-31 — Michael — Two owners share one `.claude/`, tracked in the repo
+**Chose:** James (shorinbonsai) uses this repo's `.claude/` on his own machine rather than keeping
+a private copy. The machinery, the skills and the persistent docs are tracked and shared; only
+`work/current/` and `settings.local.json` stay per-person.
+**Why:** A second copy diverges silently, and the docs that matter most across a collaboration —
+`decisions.md`, `traps.md`, `collab.md` — are exactly the ones that are worthless if each side has
+its own. `work/current/` is the one thing that must NOT be shared: two people cannot hold one live
+plan without fighting over it every session.
+**Rejected:** Namespacing to `work/<user>/current/` so live plans are shared too. It hardcodes into
+`session_brief.sh` and all five skills, and buys handoff-between-people that we don't need yet.
+Revisit if we ever pass a half-finished task across.
+**Affects:** `/.gitignore`, `/.gitattributes`, `.claude/CLAUDE.md` "Two people, one `.claude/`".
+
+## 2026-07-31 — Michael — `merge=union` on the persistent docs, paid for with author stamps
+**Chose:** `/.gitattributes` sets `merge=union` on `.claude/work/*.md`. Every entry in those files
+now carries `— <author>` in its heading or stamp.
+**Why:** They are append-only, so both owners write to the tail of the same file — the most
+conflict-prone shape in git. Without this, every concurrent session ended in a merge conflict on
+`decisions.md`. Union merge keeps both sides and never conflicts.
+**Cost, accepted deliberately:** never conflicting means a genuine simultaneous edit of the *same*
+entry silently yields both versions, interleaved. The author stamp is what makes that visible on
+sight; `traps.md` carries the "read the tail after a merge" rule. Trading a loud, constant failure
+for a quiet, rare one is the right side of that trade, but it is a real trade.
+**Rejected:** One-file-per-entry directories (`decisions/2026-07-31-elitism.md`) — genuinely
+conflict-free, but it rewrites all five skills for a problem two people don't have yet.
+**Affects:** `/.gitattributes`, `decisions.md`, `traps.md`, `hotfixes.md`, `issues.md`, `collab.md`.
+
+## 2026-07-31 — Michael — `work/archive/` is tracked; `hotfixes.md` entries name an owner
+**Chose:** Un-ignored `.claude/work/archive/`. Added `Owner:` and `Machine:` to every `hotfixes.md`
+entry. Renamed `meeting_james.md` to `collab.md`.
+**Why:** Three consequences of the same fact — the docs are now read by two people.
+An archived task is *history*, and ignoring it stranded every `/done` on one laptop. A hotfix is
+uncommitted code in *one* working tree, so unowned it reads as though it were in yours. And a file
+titled "To discuss with James" instructs James's agent to log conflicts with James.
+**Rejected:** Gitignoring `hotfixes.md` as per-machine state. The other owner's uncommitted hacks
+are precisely what you want to know about before merging their branch — the fix is a name on the
+entry, not hiding the file.
+**Affects:** `/.gitignore`, `.claude/work/hotfixes.md`, `.claude/work/collab.md`.
+
+## 2026-07-31 — Michael — `.claude/` hook and settings changes go through a PR
+**Chose:** `settings.json` and `hooks/*.sh` are never pushed straight to `main`.
+`show_hotfixes.sh` was given a real path pattern (the co-owned evolver surface) and now also fires
+when the machinery itself is edited.
+**Why:** Those files are executable code that runs on the other owner's machine at session start,
+on their next pull, without them reading the diff. It is the one part of `.claude/` where "it's
+just docs" is false, and the only part where a bad change is not self-correcting.
+**Affects:** `.claude/settings.json`, `.claude/hooks/show_hotfixes.sh`, `.claude/CLAUDE.md`.

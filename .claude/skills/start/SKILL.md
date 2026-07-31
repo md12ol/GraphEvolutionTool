@@ -45,6 +45,8 @@ writing anything:
   `/save` logs the supersession.
 - `.claude/work/hotfixes.md` — temporary code the plan may need to work around, or clean up.
 - `.claude/work/traps.md` — workspace gotchas that may invalidate a planned approach before you start.
+- `.claude/work/collab.md`, if it exists — open cross-owner items. Don't plan work that an open
+  item says belongs to, or is contested by, the other owner; settle it there first.
 
 ## 2. Agree the objective before listing tasks
 

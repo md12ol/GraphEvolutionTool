@@ -30,12 +30,20 @@ and report — then stop and wait. Do not start work as part of `/load`.
 5. `.claude/work/traps.md` — the workspace gotchas. Cheap to read, and each one is there because it
    already cost someone a session.
 6. `.claude/work/issues.md` — only to notice what's already logged, so you don't re-report it.
+7. `.claude/work/collab.md`, if it exists — the repo is shared. Read the **Open** items: each one
+   is a decision on one side that overrides work on the other, and acting against an open item is
+   how someone's work gets silently overwritten.
 
 `work/current/plan_superseded.md` is reference only. Don't read it on load, and never action anything in
 it — it holds the original wording of tasks that are already done.
 
 If `work/current/` is empty or has no `plan.md`, there is **no active task**. Say so and point at
 `/start`. Do not invent one.
+
+**If the repo is shared and this session follows a merge**, read the *tail* of the persistent docs
+before trusting them: they merge with `merge=union`, which never reports a conflict, so two people
+editing the same entry yields both versions interleaved. A doubled or self-contradicting entry is
+a merge artefact to fix, not a decision to follow.
 
 ## 2. Verify the handoff against reality
 

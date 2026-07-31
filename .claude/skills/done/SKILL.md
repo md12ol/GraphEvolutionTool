@@ -46,6 +46,7 @@ The test is: does the file describe **the work** or **the code**?
 | `hotfixes.md` | the band-aids are still **in the tree** after the task ends |
 | `issues.md` | unfiled work doesn't stop existing |
 | `traps.md` | the workspace still behaves that way |
+| `collab.md` | coordination outlives any one task; **Agreed** items are never deleted |
 
 | Archives with the task (`work/current/`) | Why |
 |---|---|
@@ -84,6 +85,8 @@ from the live conversation. Everything below assumes the docs are current.
   them; once the task is archived, nobody looks again. Include parked entries: ask whether each is
   still worth keeping or has been overtaken.
 - `traps.md` — drop any entry that is no longer true (the tool was fixed, the path changed).
+- `collab.md`, if it exists — move anything settled during this task into **Agreed** with its date,
+  and flag any Open item this task's outcome has now overtaken. Never delete an item.
 - `decisions.md` — append a `## Task complete: <slug> — <YYYY-MM-DD>` marker so later entries are
   attributable to the right task.
 

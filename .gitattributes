@@ -1,0 +1,14 @@
+# The persistent .claude/ working docs are append-only logs written by two people on separate
+# machines. Appending to the tail of the same file is the most conflict-prone shape in git, so
+# these use git's built-in `union` merge driver: both sides' lines are kept, no conflict markers.
+#
+# The cost is that union merge NEVER conflicts. Measured 2026-07-31: two entries with distinct
+# text merge correctly (only the blank line between them is eaten, since it is common to both
+# sides), but lines that are byte-IDENTICAL on both sides are deduplicated, and the two entries
+# interleave into one block that reads as coherent and is not. That is why every entry carries a
+# `— <author>` stamp and a real `Affects:` line — distinctive text is what stops the collapse.
+# See .claude/CLAUDE.md, "Two people, one .claude/", and the trap in .claude/work/traps.md.
+#
+# Deliberately NOT covered: work/current/ (gitignored, per-person) and work/archive/ (write-once
+# per task directory, so it cannot collide).
+.claude/work/*.md merge=union
