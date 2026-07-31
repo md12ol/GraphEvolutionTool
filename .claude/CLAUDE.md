@@ -21,6 +21,7 @@ Session state lives in `.claude/`:
 | `issues.md` | staged for the tracker, for other people |
 | `hotfixes.md` | temporary code in the tree, each with a `Remove when:` |
 | `traps.md` | permanent gotchas about this workspace — the things that bite every session |
+| `meeting_james.md` | running agenda for collaborator checkpoints with James (shorinbonsai) — anything that conflicts with or overrides his work. Mark **Agreed** with a date; never delete |
 
 Finished tasks land in `.claude/work/archive/<YYYY-MM>_<slug>/`.
 
