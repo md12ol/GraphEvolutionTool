@@ -35,11 +35,11 @@ Kept briefly for the trail; delete once the reasoning is no longer live anywhere
 `total_cmp` is still used in `Selection::tournament_winner` and
 `Selection::tournament_indices`, but it is no longer a shield. `sort_by` needs a total order
 regardless, so `total_cmp` is simply the right comparator. `NaN` can no longer reach either
-site — `Direction::to_cost` rejects it first.
+site — `Direction::orient` rejects it first.
 
 ### ~~`NaN` is forbidden by contract, not prevented by code~~ — resolved 2026-07-31
-Replaced by enforcement the same day it was written. `Direction::to_cost` asserts on `NaN` and
+Replaced by enforcement the same day it was written. `Direction::orient` asserts on `NaN` and
 is the single gate every objective value passes through on its way into the engine. Covered by
-`to_cost_rejects_nan_when_minimizing` / `..._when_maximizing`. The reason the assert exists is
+`orient_rejects_nan_when_minimizing` / `..._when_maximizing`. The reason the assert exists is
 preserved by `an_unchecked_negated_nan_would_have_sorted_best`, which shows that a `NaN` slipping
 through under `Maximize` would sort **best**, not worst.

@@ -105,9 +105,9 @@ than it looks: `total_cmp` puts `NaN` beyond `+inf`, so under minimization it is
 worst, which is safe. Under `Maximize` we negate — and `-NaN` sorts *below*
 `-inf`, making it the **best** individual in every tournament. One `NaN` from a
 maximizing objective silently fills the population with whatever genome made it.
-Verified in `fitness::tests::a_negated_nan_sorts_best_...`.
+Verified in `fitness::tests::an_unchecked_negated_nan_would_have_sorted_best`.
 
-**It is enforced, not assumed.** `Direction::to_cost` asserts on `NaN` and is the
+**It is enforced, not assumed.** `Direction::orient` asserts on `NaN` and is the
 single gate every objective value passes through on its way into the engine, so
 a `NaN` fails loudly at the moment it is produced.
 
