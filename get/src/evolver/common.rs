@@ -7,6 +7,7 @@
 use std::cmp::Ordering;
 
 use rand::Rng;
+use rayon::prelude::*;
 
 use super::GenerationStats;
 use crate::fitness::Fitness;
@@ -125,6 +126,10 @@ impl Selection {
 /// returning the expressed graphs alongside their fitnesses. Index `i` of both
 /// vectors refers to `population[i]`.
 ///
+/// The returned fitnesses are **oriented**: lower is better, whatever the
+/// objective's own direction. This is the one place that conversion happens, so
+/// everything downstream can compare without knowing the direction.
+///
 /// Defers to [`Fitness::evaluate_population`] so native objectives parallelize
 /// over rayon and Python-backed ones batch across the FFI boundary.
 ///
@@ -133,16 +138,26 @@ impl Selection {
 /// the winner to fill [`super::EvolutionOutcome::best_graph`]. Callers that only
 /// need scores can ignore the first element and let it drop.
 ///
-/// Deliberately says nothing about which fitness is *best* — the
-/// lower-is-better convention lives with the caller, so this stays a plain
-/// express-and-score pass.
+/// # Panics
+///
+/// If the objective returns `NaN` for any individual — see
+/// [`crate::fitness::Direction::orient`].
 pub fn evaluate<G, F>(population: &[G], context: &G::Context, fitness: &F) -> (Vec<Graph>, Vec<f64>)
 where
     G: Genome,
     F: Fitness,
 {
-    let _ = (population, context, fitness);
-    todo!("express each genome, score the batch, and return both")
+    // Expression is parallel; `Genome::Context: Send + Sync` exists for this.
+    let graphs: Vec<Graph> = population.par_iter().map(|g| g.express(context)).collect();
+
+    let direction = fitness.direction();
+    let fitnesses = fitness
+        .evaluate_population(&graphs)
+        .into_iter()
+        .map(|score| direction.orient(score))
+        .collect();
+
+    (graphs, fitnesses)
 }
 
 /// Summarize a scored population into one evolution-log row.
@@ -158,6 +173,22 @@ mod tests {
     use rand::SeedableRng;
     use rand::rngs::StdRng;
 
+    use crate::fitness::Direction;
+
+    /// Scores a graph by its node count, which `IndexGenome` sets from its own
+    /// index — so a fitness identifies the genome it came from.
+    struct NodeCount(Direction);
+
+    impl Fitness for NodeCount {
+        fn evaluate(&self, graph: &Graph) -> f64 {
+            graph.num_nodes as f64
+        }
+
+        fn direction(&self) -> Direction {
+            self.0
+        }
+    }
+
     /// A genome that is just its index, so a winner reports its own slot.
     #[derive(Clone, Debug, PartialEq, Eq)]
     struct IndexGenome(usize);
@@ -165,8 +196,10 @@ mod tests {
     impl Genome for IndexGenome {
         type Context = ();
 
+        // Node count encodes the index, so an expressed graph is traceable
+        // back to the genome it came from.
         fn express(&self, _context: &Self::Context) -> Graph {
-            Graph::new(1, 1)
+            Graph::new(self.0 + 1, 1)
         }
 
         fn crossover<R: Rng + ?Sized>(&mut self, _other: &mut Self, _rng: &mut R) {}
@@ -193,6 +226,55 @@ mod tests {
             }
         }
         winner
+    }
+
+    #[test]
+    fn evaluate_expresses_every_genome_and_keeps_the_order() {
+        let population = population(5);
+        let (graphs, fitnesses) = evaluate(&population, &(), &NodeCount(Direction::Minimize));
+
+        assert_eq!(graphs.len(), 5);
+        assert_eq!(fitnesses.len(), 5);
+        for (i, graph) in graphs.iter().enumerate() {
+            // Would fail if graphs came back defaulted or reordered by rayon.
+            assert_eq!(graph.num_nodes, i + 1, "graph {i} is not genome {i}'s");
+            assert_eq!(fitnesses[i], (i + 1) as f64);
+        }
+    }
+
+    #[test]
+    fn evaluate_orients_scores_so_lower_is_always_better() {
+        let population = population(4);
+
+        let (_, minimized) = evaluate(&population, &(), &NodeCount(Direction::Minimize));
+        let (_, maximized) = evaluate(&population, &(), &NodeCount(Direction::Maximize));
+
+        assert_eq!(minimized, vec![1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(maximized, vec![-1.0, -2.0, -3.0, -4.0]);
+
+        // Under Maximize the biggest graph is best, so it must sort lowest.
+        let best = maximized.iter().cloned().fold(f64::INFINITY, f64::min);
+        assert_eq!(best, -4.0);
+    }
+
+    #[test]
+    fn evaluate_of_an_empty_population_yields_empty_vectors() {
+        let (graphs, fitnesses) =
+            evaluate::<IndexGenome, _>(&[], &(), &NodeCount(Direction::Minimize));
+        assert!(graphs.is_empty());
+        assert!(fitnesses.is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "returned NaN")]
+    fn evaluate_rejects_an_objective_that_returns_nan() {
+        struct Poisoned;
+        impl Fitness for Poisoned {
+            fn evaluate(&self, _graph: &Graph) -> f64 {
+                f64::NAN
+            }
+        }
+        evaluate(&population(3), &(), &Poisoned);
     }
 
     #[test]

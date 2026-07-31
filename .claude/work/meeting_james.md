@@ -127,6 +127,29 @@ Also worth agreeing that direction belongs on the trait rather than in
 `config.toml` — config could contradict what the objective actually computes.
 *Raised 2026-07-31; contract-only approach revised to enforcement the same day.*
 
+### 10. `evaluate` now orients — reversing what your doc promised
+Your doc on `common::evaluate` said it "deliberately says nothing about which
+fitness is *best* — the lower-is-better convention lives with the caller". That
+is now false, on purpose: `evaluate` applies `Direction::orient`, so the
+fitnesses it returns are always lower-is-better regardless of the objective.
+
+The reason is that it is the single place the whole population is scored, so it
+is the only spot where the conversion can happen exactly once. Leaving it to
+callers would mean every comparison site needing the direction, which is the
+design we rejected.
+
+Consequence for generational: `advance_generation` can compare the fitnesses
+`evaluate` returns directly, without consulting direction. Only the reporting
+boundary converts back — see #11.
+*Raised 2026-07-31.*
+
+### 11. `generation_stats` needs a `direction` parameter
+To log in the objective's own units, `generation_stats` has to convert back, so
+its signature gains `direction`. Worth knowing the asymmetry: **`best_fitness`
+and `mean_fitness` flip sign, `std_dev` does not** — deviation is invariant
+under negation. It looks like a missed case; it is not.
+*Raised 2026-07-31.*
+
 ### 7. The tree is not `cargo fmt`-clean
 `get/src/evolver/generational.rs`, `steady_state.rs`, `fitness.rs` and
 `genomes/sda.rs` all differ from `cargo fmt` output. Anyone who runs `cargo fmt`
