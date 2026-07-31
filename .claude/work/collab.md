@@ -243,3 +243,32 @@ PR #11 removed it. Verified it documented `Graph::unweighted()`,
 `Graph::with_max_edge_multiplicity()`, and `SdaContext::new/unweighted/...`, none
 of which exist — commit 520500b replaced them with the two-arg `Graph::new` and
 left the README stale. The deletion was a fix.
+
+### Spec-sheet call — items 2, 3, 4, 5, 6, 9, 10, 12 settled (2026-07-31)
+Both owners on a call, working through `IMPLEMENTATION.md` against the code and writing
+`/official_spec_sheet.md`. Dispositions, by the item numbers under **Open** above:
+
+- **#2 two children per mating event** — agreed as built. The stale doc comment at
+  `steady_state.rs:22` is superseded by the spec, §6.3.
+- **#3 steady-state per-event FFI cost** — accepted, not fixed. Recorded in the spec as a known
+  limitation with a recommendation to prefer generational for stochastic or Python objectives.
+- **#4 RNG must match across strategies** — agreed, `ChaCha8Rng` in both.
+- **#5 logging cadence and an iteration-0 row** — agreed; generational logs generation 0 too.
+- **#6 with or without replacement** — **James's call, made: `select` stays with replacement.**
+  The ~2% divergence in expected distinct entrants is documented in the spec rather than removed.
+- **#9 `Fitness::direction()`** — agreed, and extended: direction is fixed per objective and never
+  a config field. The `NaN` assert stays; `±inf` is explicitly allowed as the "invalid individual"
+  idiom.
+- **#10 `evaluate` orients** — agreed, and the function is renamed `express_and_score` and made the
+  engine's sole scoring entry.
+- **#12 config-layer validation** — agreed, and widened into a single `Config::validate` that both
+  the TOML and Python front ends call.
+
+**#11 is reversed, not agreed.** That item asked for a `direction` parameter on
+`generation_stats`. The spec instead keeps the whole engine in one orientation and converts only at
+the Python boundary, so `generation_stats` **loses** the parameter and the `std_dev` asymmetry it
+described disappears. See `decisions.md`, "The engine is oriented internally".
+
+**#7 `cargo fmt`** — still open, now staged in `issues.md` as a batched formatting + readability
+pass owned by Michael, to land when James's tree is clean.
+*Raised 2026-07-31 — Michael, from the joint spec call.*

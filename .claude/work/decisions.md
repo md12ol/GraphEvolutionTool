@@ -186,3 +186,179 @@ when the machinery itself is edited.
 on their next pull, without them reading the diff. It is the one part of `.claude/` where "it's
 just docs" is false, and the only part where a bad change is not self-correcting.
 **Affects:** `.claude/settings.json`, `.claude/hooks/show_hotfixes.sh`, `.claude/CLAUDE.md`.
+
+## 2026-07-31 — Michael & James — `official_spec_sheet.md` is the design authority
+**Chose:** A new root-level `official_spec_sheet.md` describing the system's design, agreed on a
+joint call. It supersedes `IMPLEMENTATION.md`, which had gone stale on fitness direction,
+steady-state replacement and mutation. `.claude/CLAUDE.md` now instructs every session to read it
+before touching `get/src/`, and states that **where the sheet and the code disagree the sheet is
+the intent** — deliberately inverting the "the repo wins" rule, because parts of the sheet were
+agreed before being implemented.
+**Why:** `IMPLEMENTATION.md` mixed design with a build order, so the design rotted every time the
+plan moved. Separating them means the design document has no reason to go stale. It was also
+untracked and had never reached James.
+**Rejected:** Putting it under `.claude/`. `/.gitattributes` applies `merge=union` to
+`.claude/work/*.md` **by glob**, so any new `.md` there inherits a merge strategy built for
+append-only files. A spec sheet is rewritten in place, which is exactly the silent-interleave case.
+Also rejected keeping sequencing in the sheet — that gets its own document, not yet written.
+**Affects:** `/official_spec_sheet.md`, `.claude/CLAUDE.md`, `/IMPLEMENTATION.md` (now superseded).
+
+## 2026-07-31 — Michael & James — `Genome::mutate` applies exactly one mutation
+**Chose:** A trait-level contract: `mutate` performs one atomic mutation. The engine owns both
+dice rolls — `mutation_rate` (whether) and a new top-level `max_mutations` (how many, uniform
+`1..=max`, default 1) — in one shared helper called by both strategies.
+**Why:** The two genomes silently disagreed. `SdaGenome::mutate` already applied exactly one and
+its doc said "callers that want more disruption call this multiple times"; `EdgeEditGenome::mutate`
+rolled `1..=4` internally against a hardcoded `MAX_MUTATIONS`. The trait doc said only "mutate this
+genome in place", which is how they drifted. A genome that rolls its own count makes
+`max_mutations` meaningless for that representation and nothing reports it.
+**Rejected:** Making `max_mutations` per-genome — one gene of 256 and one state of 12 are different
+perturbations, but splitting the two rolls across two config tables is worse than the uneven
+magnitude. Rejected default 4 (a magic number for every genome) and a required field.
+**Consequences:** edge-edit mutates less at the default than it does today; SDA becomes more
+disruptive above 1; every seeded run changes output because the draw order moves.
+**Affects:** `get/src/genomes/genome.rs:26`, `edge_edit.rs` (`MAX_MUTATIONS` deleted),
+`evolver/common.rs`, `evolver/steady_state.rs:58`, `config.rs`. Spec §4. **Not yet implemented.**
+
+## 2026-07-31 — Michael & James — SDA alphabet is derived from the edge cap
+**Chose:** `num_chars` leaves `config.toml` entirely; the alphabet is `max_edge_multiplicity + 1`,
+so characters are exactly `0..=cap`. Dispatch uses the constructor that already exists for this,
+`SdaGenome::random_with_edge_multiplicity_cap`.
+**Why:** Every character is then a legal edge weight and nothing is ever clamped. The two values
+could previously disagree in two silent ways: an alphabet larger than the cap biases the graph
+toward the cap as surplus characters clamp onto it, and a smaller one makes the upper weights
+unreachable, exploring less space than configured. `config.example.toml` already carried the advice
+as a comment; this promotes it into the type system.
+**Rejected:** Keeping `num_chars` free and warning on mismatch — a warning nobody reads is not a fix.
+**Affects:** `get/src/config.rs` `GenomeConfig::Sda`, `config.example.toml`, dispatch. Introduces a
+required check: `1 <= max_edge_multiplicity <= 255`. Spec §3.2. **Not yet implemented.**
+
+## 2026-07-31 — Michael & James — Direction is fixed per objective, never configurable
+**Chose:** One fitness function is always maximized or always minimized; it is a property of what
+the function computes. `epi_spread` and `epi_length` maximize, `epi_prof_match` minimizes. A Python
+objective declares its direction **when the callable is registered**, since nothing can infer it.
+No `direction` or `maximize` field in `config.toml`.
+**Why:** Config that could contradict what the objective actually computes buys nothing and creates
+a way to run backwards. The question was genuinely open — `epi_spread` looked either-directional
+depending on the experiment — and was settled by deciding the objective, not the run, owns it.
+**Rejected:** Splitting into `epi_spread_max` / `epi_spread_min`; a `maximize` config field.
+**Affects:** `get/src/fitness.rs`, `config.rs` `FitnessConfig`, the Python registration surface.
+Spec §5, §7.
+
+## 2026-07-31 — Michael & James — The engine is oriented internally; convert only at the boundary
+**Chose:** `common::evaluate` is renamed `common::express_and_score` and is the **sole** path from a
+population to fitnesses — the engine never calls `Fitness::evaluate` or `evaluate_population`
+directly. It orients once, inward. Everything inside the engine (fitness arrays, `GenerationStats`,
+`EvolutionOutcome`) stays in engine orientation, lower-is-better, and **nothing in the middle
+converts**. The Python boundary converts once, outward.
+**Why:** Fixes the double flip, where `generation_stats` and the outcome each converted straight
+back. Three consequences: two conversions per run instead of one per stats row; `generation_stats`
+loses its `direction` parameter; and **the `std_dev` special case disappears** — it existed only
+because a converting function had to deliberately not convert one field. The sole-entry rule makes
+orientation and `NaN` rejection structural: a direct call bypasses both silently.
+**Rejected:** A direction-aware comparator (needs direction at every comparison site, where a
+missed one fails silently) and a `Cost` newtype (ceremony, already rejected 2026-07-31).
+**Affects:** `get/src/evolver/common.rs`, `steady_state.rs`, `fitness.rs`. Spec §5.1.
+**Supersedes:** the `generation_stats` half of "Fitness declares a direction; the engine minimizes"
+(2026-07-31) — that entry has `generation_stats` converting back, which is now wrong.
+
+## 2026-07-31 — Michael & James — One SIR simulator, three objectives
+**Chose:** `sir_sim(graph, params, rng) -> SirRun { length, spread, profile }`, with three thin
+objectives over it: `epi_spread` (maximize), `epi_length` (maximize), `epi_prof_match` (minimize,
+**RMSE** against a user-supplied target). `profile[t]` is **newly infected** at step `t`. A dud
+outbreak is `length = 0`, `spread = 1`. `num_epidemics` is a user parameter — one SIR draw is noisy
+enough that selection would chase the dice instead of the graph.
+**Why:** The expensive part is the simulation and all three objectives want the same one, so
+computing all three outputs from one run costs nothing and a future multi-objective mode gets them
+free. Settles the "what does `evaluate` return" question left open by `IMPLEMENTATION.md` §6.
+**Affects:** `get/src/fitness.rs`, `config.rs` `FitnessConfig`. Spec §5.2. **Not yet implemented.**
+
+## 2026-07-31 — Michael & James — Epidemic dice: shared within a batch, fresh across batches
+**Chose:** The objective holds a run seed plus an **atomic evaluation counter**. Each batch
+increments it once and derives that batch's epidemic seed from `(run_seed, counter)`. Every graph
+in a batch is simulated from that one seed; the next batch gets a different one. The counter is
+**per-run state** — each run owns its own objective instance.
+**Why:** Two requirements pull opposite ways. Within one evaluation, all individuals must face the
+same draws (common random numbers) so fitness differences reflect the graph and not the dice.
+Across evaluations, the same network must not keep getting the same epidemic, or the run optimizes
+against one frozen sample of the disease. The trait forces the mechanism: `evaluate` takes `&self`
+and `Fitness: Sync`, so no mutable RNG can be held.
+**Rejected:** Deriving the seed from the graph's contents or index — satisfies neither requirement,
+and freezes each network's epidemic forever. A counter shared across concurrent runs — thread
+scheduling would decide which run sees which seed.
+**Consequence, accepted:** steady-state scores incrementally, so its stored fitnesses were computed
+under different dice than the children compared against them, and a lucky individual keeps its
+inflated score. Inherent to incremental scoring plus a stochastic objective; the alternatives trade
+it for a different distortion. **Prefer generational when the objective is stochastic.**
+**Affects:** `get/src/fitness.rs`. Spec §5.2. **Not yet implemented.**
+
+## 2026-07-31 — Michael & James — One master seed, supplied to the Python `run` call
+**Chose:** No seed anywhere in `config.toml`. One master seed is passed to `run`, and everything
+derives from it: starting population, evolution loop, epidemics, and the per-replicate seed stream.
+Replicate count and `max_cores` are likewise `run` parameters — they describe *this invocation*,
+while config describes the experiment.
+**Why:** A separately configured `[fitness] seed` meant replicates at different evolution seeds
+still faced identical epidemic draws, which defeats the purpose of replicates. Per-run seeds come
+from a stream drawn off the master, so **a run's seed does not depend on how many runs were
+requested** — asking for 50 reproduces the first 30 exactly, and extending an experiment never
+invalidates existing replicates.
+**Rejected:** Asking the user for N seeds. `master ^ i` as the derivation — nearby masters collide
+across run indices.
+**Affects:** `config.rs` `FitnessConfig` (drops `seed`), the Python entry point. Spec §8.1.
+
+## 2026-07-31 — Michael & James — Replicates parallelise only under a native Rust objective
+**Chose:** The engine picks the mode from the fitness type: native Rust → replicates in parallel,
+`python` → sequential. Not a user setting. The user's only knob is `max_cores` on the `run` call,
+governing one **locally built** rayon pool. Results are collected in run order, never completion
+order.
+**Why:** `n` concurrent runs calling into Python is `n` threads contending for one GIL — slower
+than sequential *and* contended. Exposing the mode as a setting only creates a way to choose wrong,
+since the fitness type already determines the right answer. The pool must be local because rayon's
+global pool configures once per process, and this is a module imported once per Python session: a
+global pool would make `max_cores` a property of whichever `run` call happened first, and the
+second call with a different cap would fail outright.
+**Note:** sequential *replicates* still express their population in parallel — expression is pure
+Rust and GIL-free; only the scoring call is serialized.
+**Affects:** the Python entry point. Spec §8.1.
+
+## 2026-07-31 — Michael & James — Python builds TOML; Rust parses it once
+**Chose:** Python config objects **serialize to TOML**, and that TOML is what Rust parses. Python
+is a builder for the config format, not a second parser of it. `run` returns a result object
+(best fitness, best edge list, best genome string, log rows); there is no `best_fitness()` accessor.
+Validation is an explicit `Config::validate` that runs **before anything else** and returns an error
+naming the offending field — never a panic across the FFI boundary.
+**Why:** The two front ends converge before parsing, so there is one parser and one validator and
+no way for the Python path to accept what TOML rejects. The generated TOML doubles as re-runnable
+provenance. Returning results rather than caching them removes a wart: a cached accessor must answer
+something before any run, and infinity converts back into a suspiciously excellent score under a
+maximizing objective.
+**Rejected:** Two independent construction paths — serde currently *is* the validation, so a Python
+path bypassing it would silently accept bad configs on the path users actually take.
+**Affects:** `get/src/lib.rs`, `config.rs`. Spec §7, §8. **Not yet implemented.**
+
+## 2026-07-31 — Michael & James — Generational details settled
+**Chose:** `ChaCha8Rng` seeded from `run`'s seed (matching steady-state); log the initial population
+as generation 0 (matching steady-state, so the two logs share an axis); `select` keeps sampling
+**with** replacement; an odd `population_size - elite_count` means the last pair contributes **one**
+child; elites are rescored every generation like everyone else.
+**Why:** RNG and generation-0 logging both exist so a seed and a log row mean the same thing in
+either strategy. Rescoring elites is correct under a stochastic objective — the new number is a
+fresh sample of the same individual, and freezing the old one would let a lucky draw persist.
+**Rejected:** Rewriting `select` to sample without replacement for consistency with
+`tournament_indices`. The divergence is ~2% in expected distinct entrants at realistic sizes, which
+is noise against a stochastic run; each method keeps the convention standard for its purpose.
+Documented rather than removed. **Settles `collab.md` #6.**
+**Affects:** `get/src/evolver/generational.rs`, `common.rs`. Spec §6.1, §6.2. **Not yet implemented.**
+
+## 2026-07-31 — Michael & James — Run output schema
+**Chose:** Per logged iteration: `iteration`, `best_fitness`, `mean_fitness`, `std_dev`
+(**population**, divides by `n`), `ci_95` (half-width `1.96·s/√n` using the **sample** deviation,
+`n-1`), plus the seed and run index on every row. Per run: the best genome via `Genome::print`, its
+expressed network as a weighted edge list, and its fitness.
+**Why:** The deviation/CI denominators differ deliberately — `std_dev` describes the population as
+the complete thing it is, while a confidence interval is inherently a sampling statistic and needs
+the sampling denominator to mean anything. `ci_95` is the **within-population** band; the
+across-runs band is the user's to compute when aggregating, which the run index makes possible.
+Seed and run index on every row let 30 replicate logs concatenate into one file and stay separable.
+**Affects:** `get/src/evolver/mod.rs` `GenerationStats`, `lib.rs` `save_logs`/`save_results`.
+Spec §6.4. **Not yet implemented.**

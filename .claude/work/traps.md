@@ -80,6 +80,12 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   conflict. Union merge trades "conflicts constantly" for "never conflicts", and the second failure
   mode is quieter than the first. That is the trade, not an accident.
 - **Added:** 2026-07-31
+- **Amended 2026-07-31 — Michael:** the attribute is a **glob**, `.claude/work/*.md`, not a list of
+  five filenames. **Any new `.md` dropped into `.claude/work/` silently inherits union merge**,
+  including documents that are edited in place rather than appended to — which is the dangerous
+  shape, since two rewrites of the same section merge into one block with no conflict. This is why
+  `official_spec_sheet.md` lives at the repo root and not under `.claude/`. Before adding a document
+  there, ask whether it is append-only; if it is not, it does not belong in that directory.
 
 
 ### `install.sh --update` overwrites this project's customized hooks

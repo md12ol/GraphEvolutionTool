@@ -1,5 +1,21 @@
 # GraphEvolutionTool (GET) — working rules
 
+## The design lives in `/official_spec_sheet.md` — read it first
+
+`official_spec_sheet.md` at the repo root is **the authority on how this system is designed**:
+the graph, both genomes, the mutation contract, fitness and orientation, both evolvers, config
+and validation, the Python interface, and the non-goals. Agreed by both owners on 2026-07-31.
+
+- **Read it before changing anything in `get/src/`.** It answers most "why is it like this"
+  questions without archaeology, and it records decisions the code does not yet reflect.
+- **It is design only.** No build order, no task list — sequencing lives in its own document.
+- **Where the sheet and the code disagree, the sheet is the intent.** This inverts the usual
+  "the repo wins" rule below, and it is deliberate: parts of the sheet were agreed before being
+  implemented. Fix the code, or write a dated entry superseding the sheet — never silently
+  follow the code.
+- **Changing it is a `decisions.md` entry too.** The sheet says *what*; `decisions.md` says
+  *why* and keeps the reversal trail.
+
 ## Working docs
 
 Session state lives in `.claude/`:
