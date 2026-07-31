@@ -10,7 +10,7 @@ use rand::Rng;
 use rayon::prelude::*;
 
 use super::GenerationStats;
-use crate::fitness::Fitness;
+use crate::fitness::{Direction, Fitness};
 use crate::genomes::Genome;
 use crate::graph::Graph;
 
@@ -161,9 +161,42 @@ where
 }
 
 /// Summarize a scored population into one evolution-log row.
-pub fn generation_stats(iteration: usize, fitnesses: &[f64]) -> GenerationStats {
-    let _ = (iteration, fitnesses);
-    todo!("compute best, mean, and standard deviation of `fitnesses`")
+///
+/// Takes the oriented fitnesses the engine compares and reports in the
+/// objective's own units, so a log is readable without knowing the direction.
+///
+/// `best` and `mean` are converted back; **`std_dev` is not**, because standard
+/// deviation is unchanged by negation. That asymmetry is intentional — it looks
+/// like a missed case and is not.
+///
+/// `std_dev` is the population deviation (divides by `n`), not the sample
+/// deviation: these are all the individuals there are, not a sample of a larger
+/// group. A single individual therefore has a deviation of zero.
+pub fn generation_stats(
+    iteration: usize,
+    fitnesses: &[f64],
+    direction: Direction,
+) -> GenerationStats {
+    assert!(
+        !fitnesses.is_empty(),
+        "cannot summarize an empty population",
+    );
+
+    let n = fitnesses.len() as f64;
+    let best = fitnesses
+        .iter()
+        .copied()
+        .reduce(f64::min)
+        .expect("population is not empty");
+    let mean = fitnesses.iter().sum::<f64>() / n;
+    let variance = fitnesses.iter().map(|f| (f - mean).powi(2)).sum::<f64>() / n;
+
+    GenerationStats {
+        iteration,
+        best_fitness: direction.orient(best),
+        mean_fitness: direction.orient(mean),
+        std_dev: variance.sqrt(),
+    }
 }
 
 #[cfg(test)]
@@ -172,8 +205,6 @@ mod tests {
 
     use rand::SeedableRng;
     use rand::rngs::StdRng;
-
-    use crate::fitness::Direction;
 
     /// Scores a graph by its node count, which `IndexGenome` sets from its own
     /// index — so a fitness identifies the genome it came from.
@@ -226,6 +257,48 @@ mod tests {
             }
         }
         winner
+    }
+
+    #[test]
+    fn generation_stats_computes_best_mean_and_population_deviation() {
+        // mean 5, deviations -3,-1,1,3 -> variance (9+1+1+9)/4 = 5
+        let stats = generation_stats(7, &[2.0, 4.0, 6.0, 8.0], Direction::Minimize);
+
+        assert_eq!(stats.iteration, 7);
+        assert_eq!(stats.best_fitness, 2.0);
+        assert_eq!(stats.mean_fitness, 5.0);
+        assert!((stats.std_dev - 5.0_f64.sqrt()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_single_individual_has_zero_deviation() {
+        let stats = generation_stats(0, &[3.5], Direction::Minimize);
+        assert_eq!(stats.best_fitness, 3.5);
+        assert_eq!(stats.mean_fitness, 3.5);
+        assert_eq!(stats.std_dev, 0.0);
+    }
+
+    #[test]
+    fn maximizing_reports_in_the_objectives_units_but_leaves_deviation_alone() {
+        // Oriented fitnesses for natural scores 2, 4, 6, 8 under Maximize.
+        let oriented = [-2.0, -4.0, -6.0, -8.0];
+        let stats = generation_stats(1, &oriented, Direction::Maximize);
+
+        // Best oriented is -8.0, i.e. natural 8.0 — the largest score wins.
+        assert_eq!(stats.best_fitness, 8.0);
+        assert_eq!(stats.mean_fitness, 5.0);
+
+        // The asymmetry: deviation is invariant under negation, so it must
+        // match the minimizing case exactly rather than being flipped.
+        let minimized = generation_stats(1, &[2.0, 4.0, 6.0, 8.0], Direction::Minimize);
+        assert_eq!(stats.std_dev, minimized.std_dev);
+        assert!(stats.std_dev > 0.0, "a negated deviation would be negative");
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot summarize an empty population")]
+    fn generation_stats_rejects_an_empty_population() {
+        generation_stats(0, &[], Direction::Minimize);
     }
 
     #[test]
