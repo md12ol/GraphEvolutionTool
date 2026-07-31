@@ -34,7 +34,9 @@ same session; this file must not become a private fork of it.
 ### Format the tree and do a readability pass over the source
 - **For:** Michael (md12ol)
 - **Project:** `md12ol/GraphEvolutionTool`
-- **Filed:** not yet
+- **Filed:** https://github.com/md12ol/GraphEvolutionTool/issues/22 — 2026-07-31.
+  **The tracker is now the source of truth for this item.** Do not edit the text below as though it
+  were live; change the issue instead. Kept here only until the issue closes.
 - **Component:** whole tree; `get/src/evolver/generational.rs`, `get/src/genomes/sda.rs` are the
   currently unformatted files.
 - **Raised:** 2026-07-31 — Michael, agreed with James on the spec-sheet call.

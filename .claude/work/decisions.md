@@ -362,3 +362,20 @@ across-runs band is the user's to compute when aggregating, which the run index 
 Seed and run index on every row let 30 replicate logs concatenate into one file and stay separable.
 **Affects:** `get/src/evolver/mod.rs` `GenerationStats`, `lib.rs` `save_logs`/`save_results`.
 Spec §6.4. **Not yet implemented.**
+
+## 2026-07-31 — Michael — Implementation work is tracked in GitHub issues, not a sequencing doc
+**Chose:** The build order the spec sheet defers to lives in **GitHub issues**, not a markdown
+document. Filed 16 new issues (#14–#29) derived from the spec and the tree, each with a time
+estimate, and enriched three that already existed (#6, #10, #13) rather than duplicating them.
+Assigned by prior authorship: Michael takes `common.rs`, `sda.rs`, `steady_state.rs`, `fitness.rs`
+(~38h); James takes `edge_edit.rs`, `config.rs`, `generational.rs`, `lib.rs` (~36h).
+**Why:** A sequencing markdown file would be a third place work is described, after the spec and
+the tracker, and it would go stale the moment an issue moved. Assigning by prior authorship means
+each owner works in files they already know, which matters more than an exactly even hour split.
+**Rejected:** Filing everything fresh — #10 already described the mutation contract almost exactly
+("if we want more than one mutation the GA should call multiple times"), and #6 and #13 overlapped
+too. Duplicating them would have had one of us do the work twice.
+**Found while filing:** #7/#8/#9 want **configurable crossover types**, which the spec had nothing
+about. Rather than silently leaving the gap, §4 now records crossover as one fixed operator per
+genome today with selectable operators as a planned extension, following `Selection`'s enum shape.
+**Affects:** the GitHub tracker; `official_spec_sheet.md` §4; `.claude/work/issues.md`.
