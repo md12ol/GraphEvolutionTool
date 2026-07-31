@@ -19,8 +19,9 @@ duplicate them.** Generational should call the same helpers unchanged.
 Your doc comment at `get/src/evolver/steady_state.rs:22` says "breed **a** child …
 replace **the worst** individual". `Genome::crossover` recombines in place and
 inherently produces **two** children, so discarding one wastes half of every
-crossover. Steady-state now breeds two and replaces the two worst. The comment
-needs updating — flagging rather than silently rewriting your words.
+crossover. Steady-state now breeds two and replaces the two worst **of the
+tournament they were drawn from**, not the two worst in the population. The
+comment needs updating — flagging rather than silently rewriting your words.
 *Raised 2026-07-31.*
 
 ### 3. Steady-state pays per-event FFI cost
@@ -148,6 +149,20 @@ To log in the objective's own units, `generation_stats` has to convert back, so
 its signature gains `direction`. Worth knowing the asymmetry: **`best_fitness`
 and `mean_fitness` flip sign, `std_dev` does not** — deviation is invariant
 under negation. It looks like a missed case; it is not.
+*Raised 2026-07-31.*
+
+### 12. `config.rs` should reject `tournament_size < 4` for steady-state
+Tournament-local replacement needs four distinct individuals per event: two
+parents at the front of the tournament, two replaced at the back. Three still
+preserves the tournament's best but makes the second parent one of the replaced;
+two breaks the self-elitism guarantee outright, since both parents are replaced
+by their own children.
+
+`SteadyStateEvolver::new` asserts it, and also asserts `population_size >=
+tournament_size` — but that is a backstop, not the right home. **The config layer
+is**, since it already knows both numbers and can report a bad file cleanly
+instead of panicking. Note the constraint is strategy-specific: generational has
+no such floor, so this cannot be a blanket validation on `tournament_size`.
 *Raised 2026-07-31.*
 
 ### 7. The tree is not `cargo fmt`-clean
