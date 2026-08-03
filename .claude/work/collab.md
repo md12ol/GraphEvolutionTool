@@ -44,8 +44,44 @@ Persistent: survives `/done`, because coordination outlives any one task.
 
 ## Open
 
-*Nothing open. Add an item here when you need an answer from the other owner before building on
-something, or when a decision on your side overrides theirs.*
+### 14. Starting issue #10 — it edits the two files issues #14 and #15 also edit
+
+**FYI, and Confirm if you are about to start #14 or #15.** Not blocking: I am proceeding now
+rather than waiting, so this is a heads-up you can act on, not a gate.
+
+*(Numbering note: this is `collab.md` item 14, which is unrelated to GitHub issue #14. The
+collision is coincidental — collab items are numbered one higher than the last, independently of
+the tracker. Below, "#10/#14/#15" always mean tracker issues.)*
+
+I have picked up **#10 — remove maximum mutations from genome to make configurable**. Per spec §4
+it moves both mutation dice rolls into one shared helper, so it necessarily touches:
+
+- `get/src/genomes/genome.rs` — the `mutate` contract, the load-bearing edit
+- `get/src/genomes/edge_edit.rs` — delete `MAX_MUTATIONS`, reduce `mutate` to one gene reroll
+- **`get/src/evolver/common.rs`** — the new shared helper
+- **`get/src/evolver/mod.rs`** — `SharedEvolutionContext` gains `max_mutations`
+- **`get/src/evolver/steady_state.rs`** — lines 58-62, the inline mutation loop
+- `get/src/config.rs` and `config.example.toml` — the `max_mutations` field
+
+The bolded three are the overlap. Your **#14** (rename `evaluate` to `express_and_score`) and
+**#15** (convert direction only at the boundary) list `common.rs`, `mod.rs` and `steady_state.rs`
+as their change sets too. These are source files, so `merge=union` does not apply and a genuine
+conflict is possible if we work them in parallel.
+
+What I am doing about it: my changes to `steady_state.rs` are confined to the mutation rolls in
+`mating_event`, and I am not renaming or re-signaturing anything you own — my helper calls
+`common::evaluate` under its current name so your rename sweeps it cleanly. If you would rather
+land #14/#15 first, say so and I will rebase onto them instead; the reverse order also works and
+costs me a rename.
+
+Two things I am deliberately **not** touching, so you know they are still yours: the
+`express_and_score` rename, and `generation_stats` losing its `direction` parameter.
+
+One overlap worth naming: **#24 also specifies the top-level `max_mutations` config field.** I am
+implementing that field under #10, because #10 cannot be verified without it. #24 keeps the rest of
+the schema. Flagging it so it does not read as me having done half of #24 badly.
+
+*#14 · raised 2026-08-03 16:40 — James.*
 
 ## Settled
 
