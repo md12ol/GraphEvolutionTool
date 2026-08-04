@@ -541,3 +541,154 @@ Archived to `.claude/work/archive/2026-08_sir-sim/`. Entries below this line bel
 `sir_sim` shipped: `get/src/sir.rs` is on `main` via PR #31, GitHub #16 closed, 110 tests green.
 Carried forward, not resolved: three unfiled entries in `issues.md`, and `collab.md` #15, #16, #17
 and #19 awaiting the joint meeting.
+
+## 2026-08-04 17:40 — Michael & James — Epidemic length counts the burnout step; profile carries a trailing zero
+**Chose:** Spec §5.2 now matches `legacy/Graph.cpp`. A lone patient zero gives `length = 1`,
+`spread = 1`, `profile = [1, 0]`. `length` counts every timestep the epidemic occupied, including
+the final one in which the last infectious node recovers without transmitting, and `profile` ends
+in a terminating zero.
+**Why:** the legacy C++ is the intended behaviour, and it is what every historical result was
+produced under. `Graph::SIR` increments `epiLen` on the burnout pass and writes
+`epiProfile[epiLen] = 0`; matching it keeps our numbers comparable with the archive.
+**Rejected:** keeping the sheet's original `length = 0` convention, which `get/src/sir.rs` was
+built to. It is arguably tidier — `length` would equal `profile.len() - 1` — but tidiness does not
+outweigh comparability with existing results.
+**Consequences:** `spread` is unaffected; the C++ `totInf` already agreed with it, which narrowed
+this decision to two values rather than three. `epi_length` scores shift by exactly one, a constant
+offset that cannot change selection. `epi_prof_match` is **not** neutral — RMSE now runs against a
+profile one element longer. `get/src/sir.rs` currently implements the old convention and is
+corrected under its own issue.
+**Affects:** `official_spec_sheet.md` §5.2; `get/src/sir.rs:149-153` and its seven tests; blocks
+GitHub #17. Supersedes the §5.2 wording agreed 2026-07-31. Settles `collab.md` #15.
+
+## 2026-08-04 17:41 — Michael & James — Epidemics within one evaluation run sequentially
+**Chose:** the `num_epidemics` simulations behind one fitness evaluation are serial. Parallelism
+comes only from replicates and from the population (§8.1).
+**Why:** those two levels already yield far more independent work than any core count — 30
+replicates × 200 individuals is 6,000 units before the epidemic loop is reached — so a third
+nesting level buys nothing and costs scheduling overhead. Serial epidemics also make each
+population-level task substantially larger, which improves amortization of the levels that do run
+in parallel.
+**Rejected:** parallelizing the epidemic loop. It is deterministically parallelizable in principle,
+since common random numbers make epidemic *i*'s seed derive from `(batch_seed, i)` independently of
+the graph — so this was rejected on value, not feasibility. Note it could not have helped the case
+that appears to need it: under a Python objective replicates go sequential, but a Python objective
+runs no epidemics at all.
+**Affects:** `official_spec_sheet.md` §5.2; GitHub #17 and #18.
+
+## 2026-08-04 17:42 — Michael & James — Fitness dispatch erases to `Box<dyn Fitness>` (option B)
+**Chose:** the config's fitness variant becomes one `Box<dyn Fitness>` before the evolver is
+instantiated, so dispatch is strategy × genome rather than strategy × genome × objective. A new
+objective is one arm in the erasing match and never touches dispatch.
+**Why:** the two axes are not symmetric and this had not been noticed. `Genome` cannot be a trait
+object for four independent reasons — `mutate` and `crossover` are generic over the RNG,
+`crossover` takes `&mut Self`, `Clone` requires `Sized`, and `Context` is an associated type that
+differs per representation — so that axis must stay a match. `Fitness` has none of those problems;
+object-safety and `Send + Sync` on `dyn Fitness` were verified by compilation, not inferred. The
+arm count falls from 16 to 8 places today, and adding a fifth objective costs one line instead of
+four arms.
+**Rejected:** the nested three-axis match previously specified. Its stated justification — that
+`Evolver::run<F>` is generic so `Box<dyn Evolver>` is not viable — is correct but concerns the
+*evolver* axis; it was never an argument about the objective axis, which is the collapsible one.
+**Three requirements, each of which fails silently:** the forwarding impl must live beside the
+trait (orphan rule); every method must be forwarded including the defaulted `direction` and
+`evaluate_population`, or a maximizing objective runs backwards and a Python objective falls back
+to the per-individual rayon fan-out §8 forbids; and the erasing match must be a factory re-run per
+replicate, since §8.1 requires per-run objective instances.
+**Cost accepted:** one virtual call per `evaluate`, behind `num_epidemics` complete epidemics.
+**Affects:** `official_spec_sheet.md` §1 and §8; `get/src/fitness.rs`; GitHub #26, #19.
+Settles `collab.md` #16.
+
+## 2026-08-04 17:43 — Michael & James — Network size, population size and replicate count multiply into memory
+**Chose:** record in §8.1 that peak memory is about
+`network_size² × 4 × population_size × min(max_cores, n_replicates)`, with a worked table, and
+require the Python layer to document it on `run` beside `max_cores`.
+**Why:** the three parameters interact rather than add, and nothing said so. Expression materializes
+the whole population as `Vec<Graph>` before scoring, and `Graph` is a dense `n × n` matrix however
+sparse the graph is (§2), so the cost is quadratic in network size and then multiplied by every
+concurrently-executing replicate. The failure mode is unintuitive: a user whose configuration ran
+fine raises `max_cores` to exploit a bigger machine and multiplies peak memory by the same factor.
+**Also recorded:** replicate-level concurrency is preferred over population-level, because every
+generation is a barrier and evaluation times vary widely under a stochastic objective. Steady-state
+has no choice — it scores two children per mating event, so its population-level parallelism is
+two-way regardless of `max_cores`, which is the same conclusion §6.3 reaches from the FFI side.
+**Affects:** `official_spec_sheet.md` §8.1; GitHub #20; the Python interface work in #29.
+
+## 2026-08-04 17:52 — Michael & James — Short epidemics are re-rolled, and both constants are config fields
+**Chose:** port the `legacy/main.cpp` re-roll. An outbreak shorter than `min_epidemic_length` is
+discarded and re-simulated, up to `max_epidemic_retries` attempts, keeping the final attempt
+whatever it produces. Both are config fields under `[fitness]`, defaulting to the C++ constants —
+`min_epidemic_length = 3` (`mepl`) and `max_epidemic_retries = 5` (`rse`).
+**Why:** a fizzled outbreak says the dice went badly, not that the network is poor. Without the
+re-roll a large share of evaluations return near-nothing and selection chases the dice rather than
+graph structure. The C++ has always done this and every historical result was produced under it, so
+matching the defaults keeps our numbers comparable.
+**Exposed rather than hardcoded** because it is a **biased resample, not variance reduction** — it
+shifts expected fitness upward by an amount that depends on how often a given graph fizzles. That
+makes it categorically different from raising `num_epidemics`, and a user who wants the unbiased
+behaviour must be able to turn it off. `min_epidemic_length = 1` disables it, since every epidemic
+has `length >= 1` under the §5.2 convention.
+**Rejected:** (a) dropping the mechanism as statistically unclean — the fizzle problem it solves is
+real and would return. (b) Hardcoding the constants as the C++ did, which would make the bias
+unavoidable and invisible.
+**Affects:** `official_spec_sheet.md` §5.2 and §7 (schema, example, and the `>= 1` validation
+checks); GitHub #17 and #24. Settles `collab.md` #17.
+
+## 2026-08-04 18:07 — Michael & James — Epidemics are seeded by position, reusing the §8.1 replicate scheme
+**Chose:** the batch seed seeds a generator whose output stream *is* the epidemic seed list, and
+epidemic `i` attempt `a` takes draw `i × max_epidemic_retries + a`. Explicitly the same mechanism as
+§8.1's replicate seeding, not a second one — §5.2 now points at §8.1 rather than restating it.
+**Why:** the re-roll agreed earlier today is conditional on a graph's own outcome, so a graph that
+retries consumes extra draws. Drawn sequentially from one stream, that offsets **every subsequent
+epidemic** in the evaluation relative to graphs that did not retry, and the desynchronisation runs
+to the end of the batch. Position-indexed seeds resynchronise at the next epidemic index — the same
+property §8.1 already relies on, where asking for 50 replicates leaves the first 30 untouched.
+**The framing matters and was corrected mid-discussion.** This is not "the re-roll breaks CRN".
+Every graph draws from an *identical* pool of dice; what differs is which of those common draws it
+stops on, and that is what a retry is. The randomness stays common; the stopping rule is
+outcome-dependent by design.
+**Rejected:** (a) drawing epidemic seeds sequentially from a per-graph RNG — the cascade above.
+(b) Hashing the `(batch, i, a)` tuple with a bespoke mix, which was the first suggestion here and
+was wrong to propose: §8.1 had already settled this shape, and a second description of one scheme
+drifts. Drawing from a stream also sidesteps the collision hazard §8.1 warns about with `master ^ i`.
+**Also:** position-indexing makes scoring order-independent, so a population evaluated across rayon
+workers reproduces regardless of which worker reaches which graph first.
+**Affects:** `official_spec_sheet.md` §5.2 (pointing at §8.1); GitHub #17 and #18. Builds on the
+re-roll decision of 2026-08-04 17:52.
+
+## 2026-08-04 18:13 — Michael & James — `epi_prof_match` RMSE is fixed by the target's length
+**Chose:** iterate `0 .. target.len()`; where the run is shorter treat its value as `0`; where the
+run is longer ignore the surplus; divide by `target.len()` and take the square root. Matches
+`legacy/main.cpp:545-553`.
+**Why:** comparability with the historical C++ results, consistent with adopting the C++ conventions
+for `length` and `profile` earlier the same day. It also closes a question #17 had carried as
+explicitly undecided since it was filed.
+**Consequence worth stating, because it is asymmetric:** a run that burns out early is penalised by
+the entire remaining target, while a run that outlasts the target is not penalised for the
+overshoot at all. So the objective rewards *matching or exceeding* the target's tail rather than
+matching it exactly. Inherited deliberately rather than corrected — changing it would make our
+scores incomparable with the archive, which is the whole reason the C++ conventions were adopted.
+**Rejected:** normalising by the longer of the two lengths, or penalising overshoot symmetrically.
+Both are defensible statistically and both break comparability.
+**Affects:** `official_spec_sheet.md` §5.2; GitHub #17.
+## 2026-08-04 18:25 — Michael & James — Union merge narrows to the two append-only docs; in-place amendment must be announced
+**Chose:** `merge=union` now applies to `decisions.md` and `collab.md` only. `issues.md`,
+`hotfixes.md` and `traps.md` take git's normal 3-way merge. Separately, announcing an in-place
+amendment to a shared doc in `collab.md` first is a **rule**, not a courtesy. And `CLAUDE.md`'s
+"an agent never merges a PR at all" is reworded to "never merges *unprompted*".
+**Why the narrowing:** the three removed files are **churn lists** — deleting an entry is a normal
+operation there, and union merge cannot express a deletion. Measured 2026-08-04: a one-sided delete
+survives, but a delete racing with any edit to the same region is silently discarded and the entry
+returns. Worst case is `hotfixes.md` — you remove an entry because you reverted the code, the other
+owner adds a `Last checked:` line, and the merge resurrects an entry claiming a hotfix is in the
+tree that is not. The trade taken is a conflict on concurrent appends to those three: loud and
+occasional beats silent and wrong.
+**Why the announcement is a rule:** it is the only mechanism that prevents the concurrent-edit case,
+because git will not warn you — two people editing the same existing line makes union keep both
+versions, reported as one insertion with no conflict, measured the same day on a 250-line file.
+**Why the merge rule was reworded:** the absolute form was overridden twice within hours of being
+written, both times correctly. A rule that correct behaviour keeps violating is stated wrong.
+**Rejected:** dropping `merge=union` entirely — it still does its job for the append-only case,
+which is the overwhelming majority, and without it every concurrent session ends in a conflict.
+**Affects:** `/.gitattributes`; `.claude/CLAUDE.md` ("Pull requests", union-formatting rule 5);
+`.claude/work/traps.md`. Settles `collab.md` #18 and #19.

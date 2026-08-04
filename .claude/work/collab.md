@@ -375,3 +375,25 @@ was a fix, not a regression.
 
 *Settled block compressed 2026-07-31 23:20 — Michael, after the spec-sheet call;
 items 7, 8 and 13 closed out 2026-07-31 23:45 leaving Open empty.*
+
+### Settled at the joint meeting of 2026-08-04
+
+Items 14, 15 and 16 are resolved. Their full text stays where it is under **Open** rather than
+being relocated — moving an entry is an in-place edit of a shared file, which is the concurrent-edit
+hazard item 19 documents. This block is the disposition; read it alongside the originals.
+
+| # | Disposition agreed 2026-08-04 | Reasoning now lives in |
+|---|---|---|
+| 14 | Closed — GitHub #10 landed via PR #30, so the file-overlap warning is spent | GitHub #10, PR #30 |
+| 15 | **C++ convention adopted.** `length` counts the burnout step, `profile` carries a trailing zero, `spread` unchanged. Spec §5.2 amended; an issue goes to Michael to correct `get/src/sir.rs` | `decisions.md` 2026-08-04 17:40; spec §5.2 |
+| 16 | **Option B adopted.** The objective erases to `Box<dyn Fitness>` before dispatch, collapsing it to strategy × genome. Spec §1 and §8 amended | `decisions.md` 2026-08-04 17:42; spec §1, §8 |
+| 18 | Closed — the trace served its purpose; no action was ever required | this table |
+| 19 | **Both halves settled.** Routing: code via branch+PR, `.claude/work/*.md` direct. In-place amendment: **announcing it here first is a rule, not a courtesy.** `merge=union` narrowed to `decisions.md` and `collab.md` only | `decisions.md` 2026-08-04 18:25; `CLAUDE.md`; `/.gitattributes` |
+| — | **New:** `CLAUDE.md`'s "an agent never merges a PR at all" reworded to "never merges **unprompted**" — overridden twice in one day, both times correctly | `CLAUDE.md`, "Pull requests" |
+| 17 | **Re-roll ported from the C++, both constants exposed** as `min_epidemic_length` (default 3) and `max_epidemic_retries` (default 5). Spec §5.2 and §7 amended | `decisions.md` 2026-08-04 17:52; spec §5.2, §7 |
+| — | **New, not previously an item:** epidemics within one evaluation run sequentially | `decisions.md` 2026-08-04 17:41; spec §5.2 |
+| — | **New, not previously an item:** network size × population size × replicates multiply into memory; the Python layer must document it | `decisions.md` 2026-08-04 17:43; spec §8.1 |
+
+**Nothing is left Open after this meeting.** Items 14 through 19 are all dispositioned above.
+
+*Meeting block · 2026-08-04 17:45 — Michael & James.*

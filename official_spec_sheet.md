@@ -37,6 +37,14 @@ engine. The engine is **statically generic** over the genome: `Evolver::run<F>` 
 method, so `Box<dyn Evolver>` is not viable and runtime choice is resolved by a dispatch `match`
 that instantiates concrete types (§8).
 
+**The two dispatch axes are not symmetric, and only one of them is a match.** `Genome` cannot be a
+trait object — `mutate` and `crossover` are generic over the RNG, `crossover` takes `&mut Self`,
+`Clone` requires `Sized`, and `Context` is an associated type that differs per representation. So
+strategy × genome stays a `match`. `Fitness` has none of those problems: no generic methods, no
+`Self` in argument position, and `dyn Fitness` is `Send + Sync` through its supertrait. The
+objective is therefore **erased to `Box<dyn Fitness>` before the evolver is instantiated** (§8),
+which collapses dispatch from strategy × genome × objective to strategy × genome.
+
 **Three bounds make the pipeline parallel, and each is load-bearing.** An implementor who sees
 them undocumented will try to remove one.
 
@@ -364,8 +372,77 @@ spends the *following* step infectious — transmitting to each still-susceptibl
 probability `infection_rate` per edge — then becomes recovered and never infects again. A single
 `patient_zero` seeds the outbreak, which runs until no infected nodes remain.
 
-`profile[t]` is the count of **newly infected** nodes at timestep `t`. An outbreak that infects
-nobody beyond patient zero has `length = 0` and `spread = 1`.
+`profile[t]` is the count of **newly infected** nodes at timestep `t`, with `profile[0] = 1` for
+patient zero and a **terminating zero** as its last element. `length` counts every timestep the
+epidemic occupied, including the final one in which the last infectious node recovers without
+transmitting. So an outbreak that infects nobody beyond patient zero has `length = 1`,
+`spread = 1`, and `profile = [1, 0]`; a 6-node path burning through at `infection_rate = 1.0` has
+`length = 6`, `spread = 6`, and `profile = [1, 1, 1, 1, 1, 1, 0]`.
+
+> **Amended 2026-08-04 — Michael & James.** This previously read `length = 0` for a lone patient
+> zero and specified no trailing zero. It now matches `legacy/Graph.cpp`, which is the intended
+> behaviour: `Graph::SIR` increments `epiLen` on the burnout pass and writes `epiProfile[epiLen] = 0`.
+> `spread` is unchanged — the C++ `totInf` already agreed with it. Consequently `length` is one
+> higher than `profile.len() - 1` under the old convention, and `epi_prof_match` compares against a
+> profile one element longer. `get/src/sir.rs` was built to the old wording and is corrected by its
+> own issue.
+
+**Short epidemics are re-rolled.** Agreed 2026-08-04, porting `legacy/main.cpp`. An outbreak that
+burns out in fewer than `min_epidemic_length` timesteps is discarded and re-simulated, up to
+`max_epidemic_retries` attempts; whatever the final attempt produces is kept regardless. Both are
+config fields, defaulting to the C++ constants — `max_epidemic_retries = 5` (`rse`) and
+`min_epidemic_length = 3` (`mepl`).
+
+```
+attempts = 0
+repeat
+    run = sir_sim(graph, params, rng);  attempts += 1
+until run.length >= min_epidemic_length or attempts >= max_epidemic_retries
+```
+
+**Why it exists:** a fizzled outbreak carries no information about the graph. It reports that the
+dice went badly, not that the network is poor, and without the re-roll a large share of evaluations
+return near-nothing and selection chases the dice instead of structure.
+
+**Be clear about what it is: a biased resample, not variance reduction.** It shifts expected
+fitness upward, by an amount that depends on how often a given graph fizzles — so it is *not*
+interchangeable with raising `num_epidemics`, and the two do different jobs. This is accepted
+deliberately, for comparability with the historical C++ results, and is why both values are
+exposed rather than hardcoded.
+
+**Disabling it** is `min_epidemic_length = 1`: every epidemic has `length >= 1` under the
+convention above, so nothing is ever re-rolled. `max_epidemic_retries = 1` gives one attempt and is
+equivalent. Both must be at least 1 (§7).
+
+**Seed epidemics by position, using the same scheme as replicate seeding (§8.1).** The batch seed
+seeds a generator whose output stream *is* the epidemic seed list, and epidemic `i` attempt `a`
+takes draw `i × max_epidemic_retries + a`. Not a second mechanism — the identical one, applied to a
+different index, and it inherits §8.1's reasoning wholesale, including why the index must not be
+folded in with `xor`.
+
+**This is what keeps the re-roll compatible with common random numbers**, and drawing the epidemics
+sequentially from one stream instead would not. Whether a graph re-rolls depends on its own
+outcome, so a graph that retries consumes extra draws — and under sequential drawing every
+subsequent epidemic in that evaluation is then offset from the graphs that did not retry, for the
+rest of the batch. Position-indexed seeds resynchronise at the next epidemic index, exactly as
+asking for 50 replicates leaves the first 30 unchanged.
+
+The property this preserves is worth stating precisely, because "the re-roll breaks CRN" is the
+easy misreading. **Every graph in the batch draws from an identical pool of dice** —
+`h(batch, i, 1) … h(batch, i, max_epidemic_retries)` are the same for all of them, and none is
+graph-specific. What differs between graphs is only *which* of those common draws each one stops
+on, and that is what a retry **is**. The randomness is common; the stopping rule is
+outcome-dependent, deliberately.
+
+Position-indexing is also what makes scoring order-independent, so a population evaluated across
+rayon workers reproduces exactly regardless of which worker reaches which graph first.
+
+**The `num_epidemics` simulations for one evaluation run sequentially**, never concurrently.
+Parallelism comes from the two levels above — replicates and the population (§8.1) — which
+together already provide far more independent work than any core count, and a third nesting level
+would add scheduling overhead for nothing. Keeping the epidemics serial also makes each
+population-level task substantially larger, which improves the amortization of the two levels that
+do run in parallel.
 
 | Objective | Reads | Direction |
 |---|---|---|
@@ -374,6 +451,20 @@ nobody beyond patient zero has `length = 0` and `spread = 1`.
 | `epi_prof_match` | **RMSE** between `profile` and the target | **Minimize** |
 
 Each direction is fixed by the objective and is never configurable — see §5.
+
+**`epi_prof_match` RMSE when the lengths differ.** Agreed 2026-08-04, matching `legacy/main.cpp`.
+The target and the run will usually be different lengths, and the rule is fixed by the **target**:
+
+- iterate `0 .. target.len()`, never the run's length;
+- where the run is shorter, treat its value as `0` — the epidemic had ended, so nobody was newly
+  infected that day;
+- where the run is **longer, the surplus is ignored**;
+- divide by `target.len()` always, then take the square root.
+
+So a run that burns out early is penalised by the whole remaining target, and a run that outlasts
+the target is not penalised for the overshoot at all. That asymmetry is inherited deliberately from
+the C++ (`main.cpp:545-553`) for comparability, and it is worth knowing when reading a score: this
+objective rewards *matching or exceeding* the target's tail, not matching it exactly.
 
 **`num_epidemics`** — how many independent epidemics one evaluation averages over, set by the
 user. It is not a tuning nicety: a single SIR draw is very noisy, and selection will happily chase
@@ -609,6 +700,8 @@ type           = "epi_spread"
 infection_rate = 0.05
 num_epidemics  = 30           # epidemics averaged per evaluation
 # patient_zero = 0            optional; omit for a random node per epidemic
+# min_epidemic_length = 3     re-roll outbreaks shorter than this; 1 disables
+# max_epidemic_retries = 5    attempts before keeping whatever came out
 ```
 
 **No seed appears in the config.** One master seed is supplied to the Python `run` call and
@@ -637,6 +730,8 @@ Everything belongs there, not scattered through dispatch:
 - operation weights finite, non-negative, at least one positive
 - `patient_zero < network_size` when pinned — a node index that isn't in the network
 - `num_epidemics >= 1`
+- `min_epidemic_length >= 1` and `max_epidemic_retries >= 1` — both default to the C++ constants
+  (3 and 5); `min_epidemic_length = 1` disables the re-roll rather than being an error (§5.2)
 - `elite_count < population_size` — equal means no breeding happens and the run is a fixed point
 - base graph node count and cap narrowing (§8)
 
@@ -683,6 +778,30 @@ Two consequences to design around. Error messages will reference a TOML document
 wrote, so field errors need mapping back to the Python attribute that produced them or they are
 useless. And anything large or awkward in TOML — a long target profile, a base graph — is better
 delivered through a setter than serialized into the document (see below).
+
+**The objective is erased before dispatch; the genome is not.** Agreed 2026-08-04. The config's
+fitness variant is turned into one `Box<dyn Fitness>` *first*, in a match that touches neither
+strategy nor genome, and the dispatch below then instantiates only strategy × genome. A new
+objective is one arm in that first match and never touches dispatch at all — where a
+three-axis match would have cost one arm per strategy × genome combination.
+
+Three things this requires, each of which fails silently if missed:
+
+- **A forwarding `impl Fitness for Box<dyn Fitness>`**, which must live beside the trait — the
+  orphan rule rejects it anywhere else. It exists because `Evolver::run<F>` needs `F: Fitness`, and
+  a `Box` holding a `Fitness` is not itself one until said so.
+- **Every method forwarded, including the defaulted ones.** `direction` and `evaluate_population`
+  both have defaults, so omitting either compiles and is wrong: a maximizing objective would
+  silently run backwards, and a Python objective would fall back to the per-individual rayon
+  fan-out that §8 exists to prevent.
+- **A factory, not a value.** Replicates need per-run objective instances (§8.1), so the erasing
+  match must be re-run once per replicate rather than producing one shared box — a single boxed
+  objective handed to `n` concurrent runs is exactly the shared-counter bug §8.1 warns about.
+
+The cost is one virtual call per `evaluate`, which for an SIR objective sits behind
+`num_epidemics` complete epidemics and is not measurable. The parallelism story is unaffected:
+`dyn Fitness` is `Send + Sync`, and `PyFitness`'s `evaluate_population` override is still reached
+through the box.
 
 **The entry point cannot be generic.** `#[pyclass]` types cannot carry a type parameter, but
 `EvolutionOutcome<G>` does. So each dispatch arm must **erase the genome type before it returns**,
@@ -742,6 +861,42 @@ bounded no matter how the two nest.
 > process. This crate is a Python extension module imported once per session, so a global
 > configuration would make `max_cores` a property of whichever `run` call happened first — and the
 > second call with a different cap would fail outright.
+
+**`max_cores` is a memory knob as much as a CPU one, and the three sizes multiply.** Agreed
+2026-08-04. Expression materializes the whole population as `Vec<Graph>` before scoring, and
+`Graph` is a **dense** `network_size × network_size` matrix however sparse the graph actually is
+(§2). Peak memory is therefore roughly
+
+```
+network_size² × 4 bytes × population_size × min(max_cores, n_replicates)
+```
+
+because each concurrently-executing replicate holds its own expressed population. The three
+parameters interact rather than adding, so raising any one of them scales the whole product:
+
+| `network_size` | one graph | population of 200 | × 8 concurrent replicates |
+|---|---|---|---|
+| 100 | 40 KB | 8 MB | 64 MB |
+| 500 | 1 MB | 200 MB | 1.6 GB |
+| 1000 | 4 MB | 800 MB | 6.4 GB |
+
+The failure mode is unintuitive and worth stating plainly: a user who has run a configuration
+successfully and then raises `max_cores` to use a bigger machine multiplies peak memory by the same
+factor, and can exhaust it on hardware that handled the smaller setting comfortably. **The Python
+layer must surface this** — documented on `run`, beside `max_cores` and the run count, not left for
+the user to derive from the Rust internals.
+
+**Where the parallelism actually comes from, which is not symmetric across strategies.** Replicates
+are embarrassingly parallel — independent, long-running, no synchronization. Population-level work
+is not: every generation is a barrier, so a generation costs as long as its slowest individual, and
+under a stochastic objective evaluation times vary widely (a fizzled outbreak returns almost
+immediately; one that burns through the graph does not). Prefer replicate-level concurrency where
+there is a choice.
+
+Steady-state has no choice: it scores only the two new children per mating event (§6.3), so its
+population-level parallelism is **two-way regardless of `max_cores`**. A single steady-state run on
+a large machine will leave most of it idle, and replicates are the only way to use it. This is the
+same conclusion §6.3 reaches from the FFI-cost side.
 
 Two further constraints make parallel replicates correct rather than merely fast:
 
