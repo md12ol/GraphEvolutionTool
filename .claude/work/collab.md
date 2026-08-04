@@ -96,28 +96,7 @@ exactly what this item asks for) and `27c863a` (which relocates items 14–19 in
 `git pull` that followed union-merged your relocation against my copy, which still had 14–19 under
 **Open**. Result, with no conflict and no warning:
 
-- `### 20. PR #37 self-merged — the one-line spec status tidy
-
-**FYI, no action needed — this is the trace `CLAUDE.md` requires for an unreviewed merge.**
-
-PR #37 dropped a single caveat from the `sir_sim` row of the spec status table. The row had read
-"corrected by GitHub #34"; #34 closed when PR #36 merged, so the sheet was citing a closed issue as
-pending work. One line, `official_spec_sheet.md` only, no `.claude/work/*.md`, so union merge was
-not involved.
-
-Michael merged it himself at 2026-08-04 19:52 rather than waiting, because it was blocking the
-`/done` gate on the sir-conventions task and the change is a strict deletion of text that had become
-false. Reviewed by nobody, which is the reason this entry exists.
-
-**Worth noting against the rule as written:** the exception in `CLAUDE.md` is "the other owner is
-unavailable", and James was demonstrably available — he had merged #35 and #36 six minutes earlier.
-So this is a self-merge of convenience, not of necessity. Recording it honestly rather than dressing
-it as the documented case. If that reads as the rule being too tight for one-line doc corrections,
-that is worth deciding rather than repeating.
-
-*#20 · raised 2026-08-04 19:52 — Michael.*
-
-## Settled` and the whole 2026-08-04 meeting block appeared **twice** — your revised wording near
+- `## Settled` and the whole 2026-08-04 meeting block appeared **twice** — your revised wording near
   the top, my stale copy of the pre-relocation wording at the tail.
 - **This item was swallowed.** It landed inside your "Items 14–19, moved from Open" block, between
   item 19 and the duplicate `## Settled` — an *open* item filed under settled ones, which is the
@@ -150,6 +129,43 @@ the surrounding point stands.
 push it directly if you would rather not bother. Say nothing and I will leave it to you.
 
 *#20 · narrowed 2026-08-04 15:45 — James.*
+
+### 20. PR #37 self-merged — the one-line spec status tidy
+
+**FYI, no action needed — this is the trace `CLAUDE.md` requires for an unreviewed merge.**
+
+PR #37 dropped a single caveat from the `sir_sim` row of the spec status table. The row had read
+"corrected by GitHub #34"; #34 closed when PR #36 merged, so the sheet was citing a closed issue as
+pending work. One line, `official_spec_sheet.md` only, no `.claude/work/*.md`, so union merge was
+not involved.
+
+Michael merged it himself at 2026-08-04 19:52 rather than waiting, because it was blocking the
+`/done` gate on the sir-conventions task and the change is a strict deletion of text that had become
+false. Reviewed by nobody, which is the reason this entry exists.
+
+**Worth noting against the rule as written:** the exception in `CLAUDE.md` is "the other owner is
+unavailable", and James was demonstrably available — he had merged #35 and #36 six minutes earlier.
+So this is a self-merge of convenience, not of necessity. Recording it honestly rather than dressing
+it as the documented case. If that reads as the rule being too tight for one-line doc corrections,
+that is worth deciding rather than repeating.
+
+*#20 · raised 2026-08-04 19:52 — Michael.*
+
+**Merge-repair note, 2026-08-04 16:31 — James. This item was spliced into the middle of my
+item 20 and I have lifted it back out.** Union merge concatenated your entry into the first
+bullet of my merge-repair note, so your heading lost its line and my sentence was torn in half.
+Neither entry was readable and yours was not a top-level item at all. Your text and stamp are
+reproduced here **exactly**; only the position changed, placed by your 19:52 stamp so it sits
+between my item 20 and your item 21.
+
+**The `uniq -d` audit did not catch this** — the splice duplicated no line, so the documented
+check came back clean on a corrupted file. That is new, and it is in `traps.md`.
+
+**We both numbered an item 20.** I have not renumbered yours, since renumbering your entry is
+your call — but the two need distinguishing, and mine is the earlier stamp (15:28 against your
+19:52). Say which you want and I will do it.
+
+*#20-collision · repair note 2026-08-04 16:31 — James.*
 
 ### 21. Do users supply their own Rust objective as a drop-in file? The sheet says no; Michael says yes
 
