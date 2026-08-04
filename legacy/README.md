@@ -4,14 +4,19 @@ The original implementation this project is a port of. It is **tracked deliberat
 cites it ("ported from `Graph::SIR`"), decisions get argued against it, and while it was ignored at
 the repo root those citations pointed at a file only one of us had.
 
-**Nothing here is built, tested, or run by this repo.** It is not wired into Cargo and it will not
-compile as it stands — `main.cpp` includes `../BitSprayer/Bitsprayer.h` and `Graph.h`, neither of
-which is in this repo. Read it; do not try to make it green.
+**Nothing here is built, tested, or run by this repo.** It is not wired into Cargo, and `main.cpp`
+cannot compile as it stands: it includes `../BitSprayer/Bitsprayer.h`, `setu.h`, `stat.h` and
+`filesystem.hpp`, none of which are here. `Graph.cpp` needs Bitsprayer too. Read it; do not try to
+make it green.
 
-| File | |
-|---|---|
-| `Graph.cpp` | the graph type and `Graph::SIR`, the epidemic model. Ported to `get/src/sir.rs` |
-| `main.cpp` | the driver: the evolution loop, and `fitnessBit` — how fitness is *actually* computed |
+| File | | Ported to |
+|---|---|---|
+| `Graph.cpp` / `Graph.h` | the graph type and `Graph::SIR`, the epidemic model | `get/src/sir.rs`, `get/src/graph.rs` |
+| `SDA.cpp` / `SDA.h` | the self-driving automaton genome — the only file here that compiles standalone | `get/src/genomes/sda.rs` |
+| `main.cpp` | the driver: the evolution loop, and `fitnessBit` — how fitness is *actually* computed | `get/src/evolver/`, and #17 |
+
+Note `main.cpp` evolves **Bitsprayers**, not `SDA` — the SDA class is carried here because the Rust
+genome is a port of it, not because this driver uses it.
 
 ## Where the Rust deliberately differs
 
