@@ -13,11 +13,12 @@ fitness direction, steady-state replacement, and mutation. Started 2026-07-31.
 | Component | Status |
 |---|---|
 | `Graph` | built |
-| `EdgeEditGenome`, `SdaGenome` | built (mutation contract pending, §4) |
+| `EdgeEditGenome`, `SdaGenome` | built — mutation contract landed 2026-08-04 (§4) |
 | `Selection`, population scoring, logging stats | built |
 | `SteadyStateEvolver` | built |
 | `GenerationalEvolver` | designed, not built |
-| `sir_sim` + the three objectives | designed, not built |
+| `sir_sim` | built — **but predates the 2026-08-04 §5.2 amendment**; its `length` and `profile` still use the old convention, corrected by GitHub #34 |
+| the three SIR objectives | designed, not built |
 | `Config` parsing | partly built; validation not built |
 | Python interface | designed, not built |
 
