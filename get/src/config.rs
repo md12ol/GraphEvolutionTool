@@ -30,8 +30,15 @@ pub struct Config {
     pub max_edge_multiplicity: u32,
     /// Probability that a selected pair is recombined.
     pub crossover_rate: f64,
-    /// Probability that a child is mutated.
+    /// Probability that a child is mutated at all.
     pub mutation_rate: f64,
+    /// How many mutations a mutating child takes, drawn uniformly from
+    /// `1..=max_mutations`. Defaults to 1.
+    ///
+    /// Adjacent to `mutation_rate` because the two are one conceptual knob:
+    /// whether a child mutates, then how many mutations it takes.
+    #[serde(default = "default_max_mutations")]
+    pub max_mutations: usize,
     /// Parent-selection strategy.
     pub selection: SelectionConfig,
     /// Genome representation and its dimensions.
@@ -106,6 +113,10 @@ fn default_max_edge_multiplicity() -> u32 {
 }
 
 fn default_elite_count() -> usize {
+    1
+}
+
+fn default_max_mutations() -> usize {
     1
 }
 
@@ -279,6 +290,25 @@ seed           = 42
             }
             other => panic!("expected an sda genome, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn an_omitted_max_mutations_defaults_to_one() {
+        let config = Config::from_toml_str(&config_text("")).expect("config should parse");
+
+        // The default has to be 1, not 0: `mutate_child` asserts on a zero, and
+        // an omitted field must give the pre-`max_mutations` behaviour of one
+        // mutation per mutating child.
+        assert_eq!(config.max_mutations, 1);
+    }
+
+    #[test]
+    fn an_explicit_max_mutations_round_trips() {
+        // Prepended, so it lands in the top-level table ahead of `[evolution]`.
+        let config = Config::from_toml_str(&format!("max_mutations = 4\n{}", config_text("")))
+            .expect("config should parse");
+
+        assert_eq!(config.max_mutations, 4);
     }
 
     #[test]

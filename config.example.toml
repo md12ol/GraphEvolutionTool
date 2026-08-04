@@ -15,6 +15,13 @@ max_edge_multiplicity = 1
 crossover_rate = 0.9         # probability a selected pair is recombined
 mutation_rate  = 0.2         # probability a child is mutated
 
+# How many mutations a mutating child takes, drawn uniformly from 1..=max_mutations
+# (the default if this line is omitted is 1). `mutation_rate` decides whether a
+# child mutates at all; this decides how many mutations it then takes. Must be at
+# least 1. Note that one mutation is one gene for edge-edit and one transition for
+# SDA, so the same count is not the same disruption across representations.
+max_mutations = 1
+
 # --- Evolution strategy -------------------------------------------------------
 # Generational: replace the whole population each generation, keeping elites.
 

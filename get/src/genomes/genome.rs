@@ -22,7 +22,26 @@ pub trait Genome: Clone + Send + Sync {
     /// `self` and `other`.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R);
 
-    /// Mutate this genome in place.
+    /// Apply **exactly one** mutation to this genome, in place.
+    ///
+    /// This is a contract, not a suggestion. A representation that rolls its own
+    /// mutation count internally makes the engine's `max_mutations` meaningless
+    /// for that representation, and nothing would report the disagreement — which
+    /// is precisely how the two genomes here drifted apart before it was written
+    /// down.
+    ///
+    /// **The engine owns both dice rolls**, in one shared helper
+    /// ([`crate::evolver::common::mutate_child`]): `mutation_rate` decides whether
+    /// a child mutates at all, then `max_mutations` decides how many times this
+    /// method is called. Callers wanting more disruption call it repeatedly.
+    ///
+    /// What *one mutation* means belongs to the representation, and the
+    /// magnitudes are deliberately not equalized — one gene of 256 is a far
+    /// smaller perturbation than one transition of 24. A shared `max_mutations`
+    /// buys equal mutation **count**, not equal **strength**.
+    ///
+    /// A genome with nothing to mutate (an empty gene list, a zero-state
+    /// automaton) leaves itself unchanged rather than panicking.
     fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R);
 
     /// Return a human-readable description of the genome.

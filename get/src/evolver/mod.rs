@@ -41,8 +41,18 @@ pub struct SharedEvolutionContext<G: Genome> {
     pub genome_context: G::Context,
     /// Probability that a selected pair is recombined.
     pub crossover_rate: f64,
-    /// Probability that a child is mutated.
+    /// Probability that a child is mutated at all.
+    ///
+    /// One half of a single conceptual knob, with `max_mutations` — whether a
+    /// child mutates, then how many mutations it takes. Both are rolled by
+    /// [`common::mutate_child`], never by the genome.
     pub mutation_rate: f64,
+    /// Upper bound on how many mutations a mutating child takes, drawn uniformly
+    /// from `1..=max_mutations`. Defaults to 1 in `config.toml`.
+    ///
+    /// Shared across representations by count, not by strength: one edge-edit
+    /// gene of 256 is a far smaller perturbation than one SDA transition of 24.
+    pub max_mutations: usize,
     /// Parent-selection strategy used by both evolution strategies.
     pub selection: Selection,
 }
