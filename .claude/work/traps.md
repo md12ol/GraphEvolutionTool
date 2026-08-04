@@ -117,3 +117,44 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   `Closes #N` only at merge time. Editing the PR body afterwards links the issue but leaves it open,
   and the PR reads as though it closed it. Check the issue's actual state, never the PR's body.
 - **Added:** 2026-08-04 — a-pr-can-merge-mid-session-and-save-manifest
+
+### GitHub's web merge ignores `merge=union`, so merging a `.claude/` PR on the website conflicts
+- **Bites when:** you click Merge on a PR that touches `.claude/work/*.md`. GitHub reports a
+  conflict and offers its web resolution editor — where you would hand-resolve an append-only log
+  in a textarea, which is how one side's entries get dropped.
+- **Do this instead:** merge locally, where `.gitattributes` is read.
+  `git checkout main && git pull && git merge --no-ff origin/<branch> && git push origin main`,
+  then read the tail: `git diff HEAD~1 -- .claude/work/`.
+- **Why:** `.gitattributes` merge drivers are applied by *your* git, not by GitHub's servers. This
+  is true even for `union`, which is built into git rather than custom.
+- **Measured 2026-08-04 on PR #30**, three ways: locally with `.gitattributes` present →
+  `Auto-merging`, 0 conflicts. Locally with it removed → `CONFLICT (content) in decisions.md`.
+  GitHub's API → `mergeable=false, mergeable_state=dirty`. GitHub reproduces the no-driver case
+  exactly.
+- **Added:** 2026-08-04 — githubs-web-merge-ignores-merge-union
+
+### Union merge silently DUPLICATES a line when both sides edit the same one
+- **Bites when:** two people edit the *same existing line* of a `.claude/work/*.md` file on separate
+  branches — typically both closing out the same task, one striking a status and one superseding it.
+  Union keeps **both** versions, one after the other, and reports `1 file changed, 1 insertion(+)`.
+  No conflict, no marker, no prompt.
+- **Measured 2026-08-04** on a 250-line file, so it is not a small-file artifact:
+
+      **Affects:** foo.rs. ~~**Not yet implemented.**~~ **Superseded — Michael.**
+      **Affects:** foo.rs. ~~**Not yet implemented.**~~ **Implemented — James.**
+
+  The entry now claims to be both superseded and implemented, and reads as deliberate.
+- **Do this instead:** append; do not edit in place. If an existing entry genuinely must change,
+  **announce it in `collab.md` first** — the announcement is the only mechanism that prevents the
+  concurrent case, because git will not warn you. Then audit after merging:
+  `grep -vE '^\s*$' .claude/work/<file>.md | sort | uniq -d` prints the duplicated line.
+- **Why:** union resolves a conflicting hunk by concatenating both sides of it. It has no idea who
+  wrote a line, so **authorship is irrelevant to safety** — editing "your own" entry is fine
+  socially and buys nothing mechanically. What matters is whether both sides touched the region.
+- **Note this is the opposite failure from the existing dedup trap above.** Byte-identical lines are
+  *removed*; concurrently-edited lines are *doubled*. Same driver, both silent, opposite symptoms.
+- **Small files are worse.** In a 5-line file a *lone* in-place edit also scrambled — the original
+  line survived unedited while the edit was orphaned onto the end of an unrelated entry. That
+  disappears once there is enough surrounding context for git to localize the hunk, so short files
+  like `hotfixes.md` and `issues.md` are more fragile than `decisions.md`.
+- **Added:** 2026-08-04 — union-merge-silently-duplicates-a-line

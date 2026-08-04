@@ -114,6 +114,15 @@ what must be unique. Four rules, all load-bearing:
 4. **No bare structural labels.** Write `- **Body:** <first sentence>`, not `- **Body:**` alone —
    a label with nothing after it is byte-identical in every entry that uses it. Same for
    `- **Added:** <date>`: append the entry's slug.
+5. **Append; do not edit an existing entry in place.** Rules 1–4 protect against byte-identical
+   lines being *deduplicated*. The opposite failure also exists: if two people edit the **same
+   existing line** on separate branches, union keeps **both** versions one after the other and
+   reports `1 file changed, 1 insertion(+)`. Measured 2026-08-04 on a 250-line file, so it is not a
+   small-file artifact. **Authorship is irrelevant** — union does not know who wrote a line, so
+   editing "your own" entry is fine socially and buys nothing mechanically. What matters is whether
+   both sides touched the region. If an entry genuinely must be amended, raise it in `collab.md`
+   *first*: the announcement is the only thing that prevents the concurrent case, because git will
+   not warn you.
 
 Audit any of these files with:
 
@@ -148,6 +157,27 @@ promote someone else's `[~]` to `[x]` because their notes read as finished — r
 Opening it, pushing to it and asking for review are yours; clicking merge is not. An agent never
 merges a PR at all — it opens one and stops.
 
+### What must go through a branch and a PR, and what may not
+
+**Added 2026-08-04 15:55 — Michael.** The line is **code versus working docs**, and it is drawn
+where review actually buys something:
+
+| Change | Route |
+|---|---|
+| Anything under `get/src/`, `Cargo.toml`, `config.example.toml` — code that solves an issue | **Feature branch + PR.** Never a direct push to `main`, no matter how small |
+| `settings.json`, `hooks/` | **Feature branch + PR** — these execute on the other person's machine at session start (see rule 2 above) |
+| `/official_spec_sheet.md` | **PR, and only after a joint meeting** — see the top of this file |
+| `.claude/work/*.md` — `decisions.md`, `traps.md`, `issues.md`, `hotfixes.md`, `collab.md` | Direct push to `main` is fine. They are append-only observations, union-merged, and a trap that is not on `main` protects nobody |
+| `.claude/CLAUDE.md` | Direct push is permitted, but **prefer a PR when the change binds the other owner's practice** rather than recording a fact |
+
+The reason code is absolute: a defect in `get/src/` is invisible until something downstream reads a
+wrong number, and the current issue set has several files claimed by two workstreams at once. The
+reason docs are not: they carry no behaviour, and the one thing review would catch in them — a
+union-merge interleave — has its own audit command, which is cheaper to run than a review is to
+request.
+
+Branch naming: `<owner>_<short-description>`, e.g. `mdube_sir_sim`, `jsargant_mutation_contract`.
+
 This is not ceremony, because three things in this repo fail *silently* and a second reader is the
 only thing that catches them:
 
@@ -163,6 +193,20 @@ only thing that catches them:
 Self-merging is allowed in exactly one case: the other owner is unavailable and the change is
 blocking. Say so in the PR, and say it in `collab.md` too — an unreviewed merge should leave a
 trace, not a gap.
+
+**Merge locally whenever the PR touches `.claude/work/*.md` — never with the GitHub button.**
+Measured 2026-08-04: `.gitattributes` merge drivers are applied by *your* git, not by GitHub's
+servers, so `merge=union` does not run on the website. The same PR merges clean locally and reports
+`mergeable=false, dirty` on GitHub, which then offers to resolve an append-only log in a textarea.
+
+```bash
+git checkout main && git pull && git merge --no-ff origin/<branch>
+git diff HEAD~1 -- .claude/work/    # union never reports a problem; read the tail yourself
+git push origin main
+```
+
+This is not a footnote to the rule above — the rule sends people to the merge button, and that is
+exactly where the driver is absent. Full mechanism in `traps.md`.
 
 ## Workflow
 

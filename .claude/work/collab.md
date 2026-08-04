@@ -294,6 +294,56 @@ after the merge and GitHub applies closing keywords only at merge time. Recorded
 
 *#18 · raised 2026-08-04 15:27 — Michael.*
 
+### 19. Union merge has a second silent failure, and the GitHub merge button disables it entirely
+
+**Decide, at the next meeting — two findings, both measured 2026-08-04, both affecting how we merge
+every day.** Recorded in `traps.md` and `CLAUDE.md` already; this item is for agreeing the working
+practice, not for reporting the mechanism.
+
+**Finding 1 — GitHub's web merge does not apply `merge=union`.** `.gitattributes` merge drivers are
+run by your git, not by GitHub's servers, and this holds even for `union`, which is built into git
+rather than custom. Verified three ways against PR #30: locally with `.gitattributes` present,
+`Auto-merging`, zero conflicts; locally with it removed, `CONFLICT (content) in decisions.md`;
+GitHub's API, `mergeable=false, mergeable_state=dirty`. GitHub reproduces the no-driver case
+exactly. The consequence is that clicking Merge on any PR touching `.claude/work/*.md` drops you
+into the web resolution editor, hand-resolving an append-only log in a textarea — which is precisely
+how one side's entries get lost. **This interacts badly with the new PR rule**, which sends us both
+to that button.
+
+**Finding 2 — union silently *duplicates* a line when both sides edit the same one.** The dedup
+failure we already knew about removes byte-identical lines. This is its inverse: two branches
+editing the same existing line keeps **both**, one after the other, reported as
+`1 file changed, 1 insertion(+)`. On a 250-line file, so not a small-file artifact. The realistic
+trigger is two people closing out the same task, one striking a status and one superseding it.
+**Authorship turns out to be irrelevant** — union does not know who wrote a line, so "editing your
+own entry" is safe socially and buys nothing mechanically. What matters is whether both sides
+touched the region.
+
+**What I have already written down, and what I think needs agreeing:**
+
+- `traps.md` gains both entries, `CLAUDE.md`'s "Pull requests" section gains "merge locally when the
+  PR touches `.claude/work/*.md`", and the union-formatting rules gain a fifth: append, do not edit
+  in place; if an entry must be amended, raise it here first.
+- **For the meeting:** whether "raise it in `collab.md` before amending an entry" is a rule or a
+  courtesy. It is currently the only mechanism preventing the concurrent-edit case, since git will
+  not warn us — but it is also friction on a common, usually-harmless action.
+
+**Related, and not a criticism:** James's PR #30 amends the jointly-stamped 2026-07-31 `decisions.md`
+entry in place, striking its status. **That edit was safe** — nobody was editing the same line — and
+I said as much after checking. I had earlier called it lucky; that was wrong and this item corrects
+it. It is the concurrent case that is dangerous, not the in-place edit by itself.
+
+*#19 · raised 2026-08-04 15:53 — Michael.*
+
+**Michael, 2026-08-04 15:55 — partly settled on my side, one part still for the meeting.** The
+route question is answered: **all code solving an issue goes through a feature branch and a PR** —
+`get/src/`, `Cargo.toml`, `config.example.toml`, plus `settings.json` and `hooks/` as before, and
+the spec sheet only after a joint meeting. `.claude/work/*.md` may be pushed to `main` directly,
+because a trap that is not on `main` protects nobody and the one thing review catches in them has
+its own audit command. Written into `CLAUDE.md` under "Pull requests"; push back there or here if
+you want it drawn elsewhere. **Still open for the meeting:** whether announcing an in-place
+amendment here is a rule or a courtesy. *(Reply inside #19 · 2026-08-04 15:55 — Michael.)*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
