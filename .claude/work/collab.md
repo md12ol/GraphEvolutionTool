@@ -179,6 +179,62 @@ call — I have not touched the sheet or the code.
 
 *#16 · raised 2026-08-04 11:13 — Michael.*
 
+### 17. The C++ re-rolls short epidemics, and neither the sheet nor any issue mentions it
+
+**Decide, at the next meeting — this changes fitness values.** Found 2026-08-04 while checking
+`sir_sim` against `main.cpp`, which is the legacy driver. It is not in `official_spec_sheet.md`
+§5.2 and it is not in issues #16, #17 or #18, so right now it would simply be lost.
+
+**What the C++ actually does.** Every fitness draw, under both objectives, is a *rejection-resampled*
+epidemic rather than a plain one (`main.cpp:520-531` for epidemic length, `537-542` for profile
+matching):
+
+    cnt = 0;
+    do {
+        profile = G.SIR(alpha, patient0);
+        cnt++;
+    } while (profile.size() - 1 < mepl && cnt < rse);
+
+with `mepl = 3` (minimum epidemic length) and `rse = 5` (re-tries), both at `main.cpp:39-40`. So an
+outbreak that burns out in under 3 steps is thrown away and re-rolled, up to five attempts; the
+fifth is kept whatever it looks like.
+
+**Why it is there, and why it is not the same as averaging.** A fizzled outbreak carries no
+information about graph structure — it says the dice went badly, not that the network is poor. Left
+in, a large share of evaluations return near-zero and selection chases the dice. But this is a
+*biased* resample, not a variance reduction: it shifts the expected fitness upward, and by an amount
+that depends on how often a given graph fizzles. Averaging more epidemics (`num_epidemics`, §5.2)
+does **not** substitute for it — the two do different jobs and the C++ does both.
+
+**Three ways to go, and the choice is yours as much as mine:**
+
+- **Port it as-is**, with `mepl` and `rse` as config fields. Reproduces historical behaviour;
+  carries the bias forward as a deliberate, documented choice.
+- **Drop it** and rely on `num_epidemics` alone. Cleaner and unbiased, but the fizzle problem it
+  was solving is real and will come back — and our numbers will not be comparable to old runs.
+- **Replace it** with something unbiased that solves the same problem, e.g. requiring a patient zero
+  with non-zero degree, or reporting the fizzle rate so it is visible rather than silently corrected.
+
+**Where it would live.** Not in `sir_sim`. That function is one epidemic by contract (#16) and I
+think it should stay that way — the retry is a *scoring policy* wrapping the simulator, so it
+belongs with the objectives in #17. If we adopt it, #17 gains a requirement rather than #16
+re-opening.
+
+**Two more things `main.cpp` settles, worth capturing while we are here.**
+
+1. **#17 has an open question the C++ already answers.** #17 asks how RMSE handles a target and a
+   run of different lengths. `main.cpp:545-553` iterates over the *target* length `PL + 1`, treats
+   the run as zero beyond its end, and always divides by `PL + 1`. That is a real answer to a
+   question currently marked undecided.
+2. **A legacy bug not to replicate.** In the profile-matching branch, `main.cpp:559` divides by
+   `NSE` even when `finalTest` ran `FTL = 50` epidemics — the length branch gets this right at
+   `main.cpp:535` by dividing by `tests`. So final-test profile scores in the old code are inflated
+   by a factor of `FTL / NSE`. Worth knowing before anyone compares our numbers to archived results.
+
+I have not touched the sheet, the code or the issues over any of this.
+
+*#17 · raised 2026-08-04 11:17 — Michael.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in

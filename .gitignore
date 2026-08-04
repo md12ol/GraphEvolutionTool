@@ -5,6 +5,7 @@ Graph.cpp
 Graph.h
 SDA.cpp
 SDA.h
+main.cpp
 handoff_transfer_from_c++.md
 handoff_edge_multiplicity_cap_simplification.md
 **/target/
