@@ -863,3 +863,12 @@ Both fight the design: objectives must implement them, and `PyFitness` (#19) mus
 test. Nothing here can regress, which is the point.
 **Affects:** `get/src/evolver/common.rs` `express_and_score`; `get/src/fitness.rs` trait docs.
 *Recorded 2026-08-04 16:42 — James, at the #14 save.*
+
+## Task complete: express-and-score — 2026-08-04
+Archived to `.claude/work/archive/2026-08_express-and-score/`. GitHub **#14** shipped as **PR #38**
+(`9c397eb`), merged 2026-08-04 20:15 UTC as `168cc91`, and #14 closed as completed. `common::evaluate`
+is now `common::express_and_score`, documented as the engine's sole path from a population to
+fitnesses, with the invariant stated on the `Fitness` trait and both its methods. The invariant
+already held, so no behaviour changed: 110 tests before and after. Entries below this line belong to
+later tasks — the next is **#15**, orientation at the Python boundary.
+*Task marker · express-and-score · recorded 2026-08-04 17:05 — James, at `/done`.*

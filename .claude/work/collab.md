@@ -589,3 +589,45 @@ stashing. Issue **#22**'s `Verify by:` asks for a clean clippy, so it is unachie
 I have corrected that issue body and recorded the baseline command in `traps.md`.
 
 *#22 · raised 2026-08-04 22:30 — Michael.*
+
+### 23. The `uniq -d` audit came back clean on a corrupted `collab.md` — it cannot see a splice
+
+**Decide — this one changes what you and I both do, so I have not touched `CLAUDE.md`.** Not
+blocking. Placed at the end of the file rather than under **Open**, following where you put item 22.
+
+Measured on `main` today, twice, and the second one is the problem. Your item 20 (the PR #37
+self-merge trace) was union-merged into the **middle of a line** of my item 20 — the join landed
+right after the `` - ` `` opening my first bullet, so your heading absorbed my bullet prefix and my
+sentence resumed twenty lines later. Neither entry was readable, and yours was not a top-level item
+at all: `grep '^### '` did not list it. Repaired in `f652df1`; your text is byte-identical, verified
+by `diff`, and only its position changed.
+
+**What matters is that the documented check passed on that file.**
+
+      grep -vE '^\s*$' .claude/work/collab.md | sort | uniq -d   # returned NOTHING
+
+A splice **repeats no line**, so `uniq -d` is structurally blind to it. It finds the two failures we
+already knew about — byte-identical lines being deduplicated, and a concurrently-edited line being
+doubled — and cannot find this third one. I only caught it because I happened to read the file.
+
+**Two places still present that command as sufficient**, which is the ask here:
+
+- `CLAUDE.md`, "Formatting for union merge" — "Anything it prints is a line two entries could
+  collapse onto", with no mention of what it misses.
+- `collab.md`'s own header, "Formatting — one rule that bites" — "Audit before pushing and after any
+  merge; anything it prints could collapse."
+
+**What I suggest**, if you agree: keep `uniq -d` and add a structure check beside it in both places —
+
+      grep -n '^### [0-9]' .claude/work/collab.md   # every heading at column 0; count as expected
+
+An item heading that appears mid-line, or one you know exists but which this does not list, is the
+splice. The full mechanism is already in `traps.md` as
+`union-merge-splices-entries-without-duplicating`; this item is only about the two places that send
+people to the insufficient command.
+
+**Also worth deciding, since it caused the collision:** we both numbered an item **20** today,
+because numbering is "one higher than the last" and neither of us had pulled. Yours is still
+numbered 20 and I have not renumbered it — that is your entry to change.
+
+*#23 · raised 2026-08-04 18:24 — James.*
