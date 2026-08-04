@@ -84,11 +84,17 @@ This `.claude/` is checked into the repo and used by **both owners on their own 
 Michael (md12ol) and James (shorinbonsai). Four rules follow from that, and all four are
 non-obvious.
 
-**1. The persistent docs merge by union — so stamp every entry with an author.**
-`decisions.md`, `traps.md`, `hotfixes.md`, `issues.md` and `collab.md` are append-only, which
-means both of us write to the tail of the same file and every concurrent session would otherwise
-end in a merge conflict. `/.gitattributes` sets `merge=union` on them: both sides' lines survive,
-no conflict markers.
+**1. The two append-only docs merge by union — so stamp every entry with an author.**
+`decisions.md` and `collab.md` are append-only, which means both of us write to the tail of the
+same file and every concurrent session would otherwise end in a merge conflict. `/.gitattributes`
+sets `merge=union` on those two: both sides' lines survive, no conflict markers.
+
+**`traps.md`, `issues.md` and `hotfixes.md` are NOT union-merged** — narrowed 2026-08-04. They are
+**churn lists**, where deleting an entry is a normal operation, and union merge cannot express a
+deletion: a delete that races with any edit to the same region is silently discarded and the entry
+comes back. Those three take git's normal 3-way merge, so a concurrent append **conflicts** and is
+resolved by hand. That is deliberate — loud and occasional beats silent and wrong. Full reasoning
+in `decisions.md` 2026-08-04 18:25 and `/.gitattributes`.
 
 The catch is that union merge **never conflicts**. Measured 2026-07-31: two entries with
 distinct text merge correctly and only lose the blank line between them, but lines that are
@@ -174,7 +180,7 @@ where review actually buys something:
 | Anything under `get/src/`, `Cargo.toml`, `config.example.toml` — code that solves an issue | **Feature branch + PR.** Never a direct push to `main`, no matter how small |
 | `settings.json`, `hooks/` | **Feature branch + PR** — these execute on the other person's machine at session start (see rule 2 above) |
 | `/official_spec_sheet.md` | **PR, and only after a joint meeting** — see the top of this file |
-| `.claude/work/*.md` — `decisions.md`, `traps.md`, `issues.md`, `hotfixes.md`, `collab.md` | Direct push to `main` is fine. They are append-only observations, union-merged, and a trap that is not on `main` protects nobody |
+| `.claude/work/*.md` — `decisions.md`, `traps.md`, `issues.md`, `hotfixes.md`, `collab.md` | Direct push to `main` is fine. They carry no behaviour, and a trap that is not on `main` protects nobody. Note only `decisions.md` and `collab.md` are union-merged (rule 1 above) |
 | `.claude/CLAUDE.md` | Direct push is permitted, but **prefer a PR when the change binds the other owner's practice** rather than recording a fact |
 
 The reason code is absolute: a defect in `get/src/` is invisible until something downstream reads a

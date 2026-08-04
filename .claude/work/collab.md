@@ -25,7 +25,8 @@ every stamp. Agreed items are never deleted — the trail is what stops the same
 
 ## Formatting — one rule that bites
 
-`/.gitattributes` sets `merge=union` on `.claude/work/*.md`, so concurrent appends merge without
+`/.gitattributes` sets `merge=union` on this file and `decisions.md` (narrowed 2026-08-04 — the
+other three working docs no longer use it), so concurrent appends merge without
 conflict markers — and **never conflict**, which means byte-identical lines on both sides fold
 together and interleave two entries into one. So **close every item with its own number and a
 time**: `*#7 · raised 2026-07-31 15:42 — Michael.*` — never a bare `*Raised <date> — <name>.*`.
