@@ -214,3 +214,34 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   and check your branch adds nothing new. Say so explicitly in the PR — "fails identically to
   `main`" is a reviewable claim, "clippy passes" would be false.
 - **Added:** 2026-08-04 — cargo-clippy-d-warnings-cannot-pass-on-main
+
+### Union merge can SPLICE two entries together without duplicating a line, so `uniq -d` says clean
+- **Bites when:** you and the other owner each append a new item to `collab.md` (or `decisions.md`)
+  on separate branches and the appends land near the same region. Union concatenates the two
+  conflicting hunks, and the join can fall **inside a line of yours** — the other person's entire
+  entry ends up embedded mid-sentence in yours.
+- **Measured 2026-08-04, twice in one session, both on `main`.** The second was the bad one: my
+  item 20's first bullet began `` - `## Settled` and the whole ... ``, and Michael's new item was
+  spliced in immediately after the `` - ` ``. His heading absorbed my bullet prefix, so
+  `grep '^### '` did not list his item at all — it was not a top-level entry — and my sentence
+  resumed twenty lines later. Both entries read as corrupt; neither was recoverable by skimming.
+- **The documented audit does not catch it.** `grep -vE '^\s*$' <file> | sort | uniq -d` returned
+  **nothing** on the corrupted file, because a splice **repeats no line**. That check finds the
+  dedup/duplicate failures; it is blind to this one. Do not treat a clean `uniq -d` as proof the
+  file is intact.
+- **Do this instead:** after any merge or pull touching these files, check the *structure*, not just
+  for duplicates — every item heading is at column 0 and the count matches what you expect:
+
+      grep -n '^### [0-9]' .claude/work/collab.md    # every item, none indented or prefixed
+      git diff HEAD~1 -- .claude/work/               # and actually read it
+
+  A heading that appears mid-line, or an item you know exists but which the grep does not list, is
+  this trap.
+- **Also collide on item numbers.** Both of us raised an item **20** the same day, because numbering
+  is "one higher than the last" and neither had pulled. Check the other side's tail before choosing
+  a number.
+- **Why:** union resolves a conflicting hunk by concatenating both sides of it, at whatever
+  granularity the diff produced. It has no notion of an "entry", so nothing stops a join landing
+  mid-sentence. This is the same driver as the dedup and duplicate traps above — third distinct
+  symptom, same cause, all three silent.
+- **Added:** 2026-08-04 — union-merge-splices-entries-without-duplicating

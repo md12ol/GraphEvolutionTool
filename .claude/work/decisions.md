@@ -824,3 +824,42 @@ not yet research-usable.
 **Rejected:** implementing the counter inside #17 anyway, since it is small. It is #18's whole
 content, and folding it in would leave #18 empty and the PR harder to review.
 **Affects:** `get/src/fitness.rs` `EpidemicScorer::batch_seed`; `hotfixes.md`; issue #18.
+
+## 2026-08-04 16:40 — James — #14 and #15 are two tasks, not one, because one is mechanical and one is semantic
+**Chose:** Build GitHub #14 (`evaluate` → `express_and_score`) and #15 (stop converting direction
+inside the engine) as **separate tasks with separate PRs**, #14 first. #15 waits for #38 to merge and
+branches off `main` rather than stacking on `jsargant_express_and_score`.
+**Why:** they touch the same three files, which first argued for combining them — but that argument
+is about *concurrent* work and was left over from when #14/#15 were Michael's and #10 was mine.
+Sequentially, by one person, the overlap costs nothing. What does cost something is mixing a
+**mechanical rename that touches every call site and test name** with a **semantic change to what
+numbers come out**: in one diff, the rename noise is exactly what hides the behaviour change from a
+reviewer, and Michael reviews these. Each issue also has its own `Verify by:` and closes its own
+gate, which `CLAUDE.md`'s "keep one task per task" asks for.
+**Rejected:** (a) One combined task — the review hazard above, and a plan that closes on two issues
+at once. (b) Stacking #15's branch on #14's so it could start immediately — rejected by James on
+2026-08-04; a stacked branch means review changes on #38 land under #15 too, and the queue is not
+urgent enough to pay that.
+**Consequences:** #14 churns call sites that #15 then edits again — a few lines, deliberately
+accepted. #15 is blocked on Michael merging #38, and that is the only thing blocking it.
+**Affects:** GitHub #14 (PR #38), #15; `get/src/evolver/common.rs`, `mod.rs`, `steady_state.rs`.
+*Recorded 2026-08-04 16:40 — James, at the #14 save.*
+
+## 2026-08-04 16:42 — James — The sole-entry invariant already held, so #14 is documentation not repair
+**Chose:** Implement #14 as a rename plus doc comments, and say so plainly in the PR body rather
+than implying a fix. Verified before starting: the only `evaluate_population` call in `get/src/` was
+already inside the function being renamed, and the only `.evaluate(` call is `fitness.rs`'s own
+default impl.
+**Why:** what the issue asks for is an invariant — the engine never calls `Fitness::evaluate` or
+`evaluate_population` directly — and an invariant that already holds is worth *documenting at the
+two places someone would break it*, because both failure modes are silent: a direct call skips the
+`Direction` conversion, so under `Maximize` every comparison runs backwards, and it skips the `NaN`
+rejection, where a negated `NaN` sorts below `-inf` and wins every tournament. A reviewer told this
+is a bug fix would look for the bug and find nothing.
+**Rejected:** enforcing it mechanically — sealing the trait methods or making them `#[doc(hidden)]`.
+Both fight the design: objectives must implement them, and `PyFitness` (#19) must override
+`evaluate_population`. Not worth it while the engine is small enough that one grep checks the rule.
+**Consequences:** the verification for #14 is "110 tests, unchanged", not a new failing-then-passing
+test. Nothing here can regress, which is the point.
+**Affects:** `get/src/evolver/common.rs` `express_and_score`; `get/src/fitness.rs` trait docs.
+*Recorded 2026-08-04 16:42 — James, at the #14 save.*
