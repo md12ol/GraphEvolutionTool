@@ -2,14 +2,16 @@
 //!
 //! Ported from `Graph::SIR` in `legacy/Graph.cpp`, which is the model this
 //! project has always simulated. That source is tracked and readable alongside
-//! this file; `legacy/README.md` says what it is and where the Rust departs
-//! from it.
+//! this file; `legacy/README.md` says what it is and how the two now line up.
 //!
 //! The mechanics are unchanged from the port: an adjacency scan accumulates
 //! each susceptible node's total exposure, and one combined Bernoulli draw per
-//! node decides infection. Only the reporting differs — see [`SirRun`] — and
-//! the RNG is passed in rather than taken from a global, which is what lets one
-//! seed drive a whole batch (spec §5.2).
+//! node decides infection. **The reporting matches it too** — `length` counts
+//! the burnout step and `profile` carries a terminating zero, as of the §5.2
+//! amendment of 2026-08-04. Two things are genuinely ours: the draw is written
+//! `1 - (1 - rate)^k` rather than `1 - exp(k · ln(1 - alpha))`, which avoids a
+//! `ln(0)` at `infection_rate = 1.0`, and the RNG is passed in rather than
+//! taken from a global, which is what lets one seed drive a whole batch.
 //!
 //! The model is SIR with a **one-timestep infectious period**. A node infected
 //! during a step spends the *following* step infectious, transmitting to each
@@ -80,6 +82,13 @@ enum State {
 /// `patient_zero` is assumed to be a valid node; a config-driven run has
 /// already checked that, and an out-of-range value here yields an outbreak that
 /// infects nobody rather than a panic.
+///
+/// **A graph with no nodes returns `length == 0` with an empty profile, and
+/// that is deliberate — do not "fix" it to `1` for consistency.** Since the
+/// §5.2 amendment every real epidemic has `length >= 1`, because a lone patient
+/// zero still occupies the burnout step. Zero therefore means *no epidemic
+/// existed to measure*, which is a different statement from *nobody was
+/// infected*, and only a nodeless graph can make it. Agreed 2026-08-04.
 pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) -> SirRun {
     let num_nodes = graph.num_nodes;
     if num_nodes == 0 {
@@ -348,6 +357,9 @@ mod tests {
         );
     }
 
+    /// Zero here means *no epidemic existed*, not *nobody was infected* — since
+    /// the §5.2 amendment a lone patient zero is `length == 1`, so only a
+    /// nodeless graph can produce `0`. Deliberate; see `sir_sim`'s doc comment.
     #[test]
     fn an_empty_graph_produces_no_epidemic() {
         let graph = Graph::new(0, 1);
