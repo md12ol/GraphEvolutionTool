@@ -15,6 +15,10 @@ How issues get filed — tool, confirmation rule, target project — lives in `C
 *Reset 2026-07-31 23:35 — Michael: the one filed entry was removed once #22 existed, per the sync
 obligation in `CLAUDE.md`.*
 
+*Folded in 2026-08-04 19:00 — Michael: the two PR #30 review findings moved into **#25**, whose
+implementer touches both `generational.rs` and the `common.rs` test module. Neither warranted a
+standalone chore.*
+
 *Synced 2026-08-04 18:55 — Michael: "Align sir_sim's length and profile" removed once it was filed
 as **#34** (assigned to md12ol), same obligation. Open count refreshed from the tracker.*
 
@@ -38,32 +42,4 @@ as **#34** (assigned to md12ol), same obligation. Open count refreshed from the 
 - **Body:** <open with a sentence on this line — a bare label is identical in every entry, which
   is what union merge folds together. See CLAUDE.md, "Formatting for union merge".>
   What's wrong, the mechanism with `path:line`, evidence, how to reproduce, candidate fixes.
-
-### Point generational.rs's mutation doc at common::mutate_child before #25 is built
-- **For (generational-mutation-doc):** whoever takes #25; found by Michael reviewing PR #30
-- **Project (generational-mutation-doc):** `md12ol/GraphEvolutionTool`
-- **Filed (generational-mutation-doc):** not yet — trivial, and best folded into #25 rather than
-  filed as a standalone chore
-- **Component (generational-mutation-doc):** `get/src/evolver/generational.rs:24`
-- **Body (generational-mutation-doc):** the doc comment on `GenerationalEvolver` still says the
-  evolver mutates "children by `mutation_rate`", with no mention of `max_mutations` or the shared
-  helper that now owns both rolls.
-  No bug today — `advance_generation` is still `todo!()`. But #25's implementer reads that doc, and
-  re-rolling the dice inline is **precisely the drift PR #30 existed to eliminate**: spec §4 requires
-  both rolls to live in `common::mutate_child` so the two strategies cannot disagree. Steady-state
-  already routes through it (`steady_state.rs:59`). One line of doc, pointing at
-  `crate::evolver::common::mutate_child`, closes the gap before it opens.
-
-### Give IndexGenome a separate mutation counter instead of overloading its index
-- **For (index-genome-counter):** unassigned; found by Michael reviewing PR #30
-- **Project (index-genome-counter):** `md12ol/GraphEvolutionTool`
-- **Filed (index-genome-counter):** not yet — test-only, no user impact
-- **Component (index-genome-counter):** `get/src/evolver/common.rs`, `IndexGenome` in `mod tests`
-- **Body (index-genome-counter):** the test stub's single field is both the slot index (so a winner
-  reports its own slot) and the mutation counter (`mutate` increments it, which is how the
-  `mutate_child` tests observe the count).
-  Correct today, and James documented the hazard honestly on the type. It breaks quietly the first
-  time someone writes a selection test whose individuals pass through a mutation path — the index
-  no longer identifies the slot, and the failure looks like a selection bug. A second field costs
-  nothing and removes the coupling.
 
