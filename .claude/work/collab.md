@@ -151,6 +151,39 @@ push it directly if you would rather not bother. Say nothing and I will leave it
 
 *#20 · narrowed 2026-08-04 15:45 — James.*
 
+### 21. Do users supply their own Rust objective as a drop-in file? The sheet says no; Michael says yes
+
+**Decide at the next meeting — it changes #26 far more than it changes #17.** Raised while planning
+#17, when Michael said the intended model is that "people provide a Rust file for their own fitness
+functions if they want to add one". I could not find that anywhere in the sheet, so this item is to
+settle which of the two is the real intent before #26 is built to the wrong one.
+
+**What the sheet actually says.** The only user-extension route described for fitness is the
+**Python** adapter — §5's "a user-supplied Python objective declares its direction when the callable
+is registered", and §8's adapter, tracked as issue #19. §5.2 closes with *"keep hot objectives native
+in Rust. The Python adapter is for prototyping"*, which reads as guidance to **us** about where to
+implement the objectives we ship, not as a documented extension point for users. §10's non-goals do
+not mention drop-in objectives either way, so this is a genuine silence rather than a stated no.
+
+**Why it is not a cosmetic question.** Issue #26 erases the objective to `Box<dyn Fitness>` via a
+closed `match config.fitness` with one arm per objective — the amendment agreed at the 2026-08-04
+meeting, and the thing that took dispatch from 16 arms to 4. A closed match over a config enum
+cannot name a type that is not in the crate. So a user-supplied Rust objective means forking and
+recompiling, and at that point adding the match arm is the smaller edit — which makes the drop-in
+file mechanism buy nothing unless something more is intended, such as a registration API or a
+build-time hook. **If the drop-in model is real, #26's step 1 is designed wrong**, and it is far
+cheaper to know that before it is built than after.
+
+**Worth noting the Python adapter may already be the answer.** It is the documented route, it needs
+no recompilation, and §5.2's own guidance concedes it is slower — so the honest question may be
+whether "hot objective, no fork" is a real user need or a hypothetical one.
+
+**Not blocking #17.** I am building the three SIR objectives to the sheet as written: they go in
+`get/src/fitness.rs` beside the trait, which is also what a drop-in example would want to look like,
+so neither answer wastes the work.
+
+*#21 · raised 2026-08-04 22:00 — Michael.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
