@@ -25,7 +25,8 @@ every stamp. Agreed items are never deleted — the trail is what stops the same
 
 ## Formatting — one rule that bites
 
-`/.gitattributes` sets `merge=union` on `.claude/work/*.md`, so concurrent appends merge without
+`/.gitattributes` sets `merge=union` on this file and `decisions.md` (narrowed 2026-08-04 — the
+other three working docs no longer use it), so concurrent appends merge without
 conflict markers — and **never conflict**, which means byte-identical lines on both sides fold
 together and interleave two entries into one. So **close every item with its own number and a
 time**: `*#7 · raised 2026-07-31 15:42 — Michael.*` — never a bare `*Raised <date> — <name>.*`.
@@ -43,6 +44,73 @@ Persistent: survives `/done`, because coordination outlives any one task.
 ---
 
 ## Open
+
+*Nothing is open.* Items 1–19 are all dispositioned; 14–19 were settled at the joint meeting of
+2026-08-04 and moved into **Settled** below with every stamp intact. Append the next item here as
+**20**, numbering continuing across both sections.
+
+## Settled
+
+Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
+`decisions.md` or `/official_spec_sheet.md`, so only the disposition is kept here. Nothing is
+deleted that is not recorded somewhere durable.
+
+| # | Item | Disposition | Reasoning lives in |
+|---|---|---|---|
+| 1 | `common.rs` implemented, not to be duplicated | generational calls the same helpers unchanged | spec §5–6 |
+| 2 | two children per mating event | agreed as built | spec §6.3 |
+| 3 | steady-state per-event FFI cost | accepted as a known limitation; prefer generational for stochastic or Python objectives | spec §6.3 |
+| 4 | RNG must match across strategies | `ChaCha8Rng` in both | `decisions.md` |
+| 5 | log cadence + iteration-0 row | agreed; generational logs generation 0 too | `decisions.md` |
+| 6 | with or without replacement | James's call: `select` stays with replacement | spec §5 |
+| 9 | `Fitness::direction()` | agreed and extended — fixed per objective, never a config field | `decisions.md` |
+| 10 | `evaluate` orients | agreed; renamed `express_and_score`, sole scoring entry | `decisions.md` |
+| 11 | `generation_stats` direction parameter | **reversed** — engine stays in one orientation, converts only at the Python boundary | `decisions.md` |
+| 12 | config-layer validation | widened into one `Config::validate` for both front ends | `decisions.md` |
+| 7 | tree is not `cargo fmt`-clean | superseded by tracker **#22**, which carries the sequencing ("land it when James's tree is clean") | GitHub #22 |
+| 8 | `Cargo.lock` stays tracked | done and merged via PR #12; a courtesy heads-up, not a question | `decisions.md` |
+| 13 | `merge=union` on the shared docs | not a code decision — `.gitattributes` scopes it to `.claude/work/*.md` only, so it never touches source. The interleaving risk is handled by the stamp-and-audit rules, not by sign-off | `CLAUDE.md`, "Formatting for union merge" |
+| — | `Genome::copy` removed from the trait | accepted; `Planning Notes.md` is the stale side | `decisions.md` |
+
+**README "Graph multiplicity" section deleted — correct (2026-07-31).** Kept in full because it is
+recorded nowhere else: PR #11 removed it, and the section documented `Graph::unweighted()`,
+`Graph::with_max_edge_multiplicity()` and `SdaContext::new/unweighted/...`, none of which exist —
+commit `520500b` replaced them with the two-arg `Graph::new` and left the README stale. The deletion
+was a fix, not a regression.
+
+*Settled block compressed 2026-07-31 23:20 — Michael, after the spec-sheet call;
+items 7, 8 and 13 closed out 2026-07-31 23:45 leaving Open empty.*
+
+### Settled at the joint meeting of 2026-08-04
+
+Items 14 through 19 are all resolved. This block is the disposition; the full original text of each
+follows below, relocated from **Open** on 2026-08-04 19:20 with every stamp intact.
+
+*(Relocating them was deliberately deferred at first — moving an entry is an in-place edit of a
+union-merged file, the concurrent-edit hazard item 19 documents. It was done once both owners were
+present at the meeting, which satisfies the announce-first rule that same item established.)*
+
+| # | Disposition agreed 2026-08-04 | Reasoning now lives in |
+|---|---|---|
+| 14 | Closed — GitHub #10 landed via PR #30, so the file-overlap warning is spent | GitHub #10, PR #30 |
+| 15 | **C++ convention adopted.** `length` counts the burnout step, `profile` carries a trailing zero, `spread` unchanged. Spec §5.2 amended; an issue goes to Michael to correct `get/src/sir.rs` | `decisions.md` 2026-08-04 17:40; spec §5.2 |
+| 16 | **Option B adopted.** The objective erases to `Box<dyn Fitness>` before dispatch, collapsing it to strategy × genome. Spec §1 and §8 amended | `decisions.md` 2026-08-04 17:42; spec §1, §8 |
+| 18 | Closed — the trace served its purpose; no action was ever required | this table |
+| 19 | **Both halves settled.** Routing: code via branch+PR, `.claude/work/*.md` direct. In-place amendment: **announcing it here first is a rule, not a courtesy.** `merge=union` narrowed to `decisions.md` and `collab.md` only | `decisions.md` 2026-08-04 18:25; `CLAUDE.md`; `/.gitattributes` |
+| — | **New:** `CLAUDE.md`'s "an agent never merges a PR at all" reworded to "never merges **unprompted**" — overridden twice in one day, both times correctly | `CLAUDE.md`, "Pull requests" |
+| 17 | **Re-roll ported from the C++, both constants exposed** as `min_epidemic_length` (default 3) and `max_epidemic_retries` (default 5). Spec §5.2 and §7 amended | `decisions.md` 2026-08-04 17:52; spec §5.2, §7 |
+| — | **New, not previously an item:** epidemics within one evaluation run sequentially | `decisions.md` 2026-08-04 17:41; spec §5.2 |
+| — | **New, not previously an item:** network size × population size × replicates multiply into memory; the Python layer must document it | `decisions.md` 2026-08-04 17:43; spec §8.1 |
+
+**Nothing is left Open after this meeting.** Items 14 through 19 are all dispositioned above.
+
+*Meeting block · 2026-08-04 17:45 — Michael & James.*
+
+
+### Items 14–19, moved from Open on 2026-08-04 19:20 — Michael
+
+Full text, relocated intact once the joint meeting settled all six. The disposition table above
+is the summary; these are the originals, every stamp preserved and nothing edited.
 
 ### 14. Starting issue #10 — it edits the two files issues #14 and #15 also edit
 

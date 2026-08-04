@@ -59,9 +59,12 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   task records now split across branches too. `merge=union` (below) makes the *merge* safe; it does
   nothing about writing to the wrong branch in the first place, so this trap stands unchanged.
 
-### `merge=union` on the `.claude/work/*.md` docs means a merge can never tell you it went wrong
-- **Bites when:** you and the other owner append to `decisions.md`, `traps.md`, `hotfixes.md`,
-  `issues.md` or `collab.md` on separate branches, then merge. There is no conflict, no marker and
+### `merge=union` on `decisions.md` and `collab.md` means a merge can never tell you it went wrong
+- **Scope narrowed 2026-08-04:** this applies to **`decisions.md` and `collab.md` only**. `traps.md`,
+  `issues.md` and `hotfixes.md` were removed from the union glob because they are churn lists and
+  union cannot express a deletion — they now take a normal 3-way merge and *do* conflict.
+- **Bites when:** you and the other owner append to `decisions.md` or `collab.md` on separate
+  branches, then merge. There is no conflict, no marker and
   no prompt — git keeps both sides' lines and calls it clean.
 - **Measured 2026-07-31**, two branches each appending one entry to `decisions.md`:
   - Two entries with **distinct** text merge **correctly** — both survive whole and in order. The
@@ -75,7 +78,7 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   textually distinctive: the `— <author>` stamp, the date and a real `**Affects:** path` line are
   what stop two entries deduplicating into each other. Bare boilerplate (`reasoning`, `TODO`,
   a lone `---`) is what makes them collide.
-- **Why:** `/.gitattributes` sets `merge=union` on those five files deliberately — they are
+- **Why:** `/.gitattributes` sets `merge=union` on those two files deliberately — they are
   append-only, both owners write to the tail, and without it every concurrent session ended in a
   conflict. Union merge trades "conflicts constantly" for "never conflicts", and the second failure
   mode is quieter than the first. That is the trade, not an accident.
