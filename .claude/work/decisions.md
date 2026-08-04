@@ -633,3 +633,25 @@ real and would return. (b) Hardcoding the constants as the C++ did, which would 
 unavoidable and invisible.
 **Affects:** `official_spec_sheet.md` §5.2 and §7 (schema, example, and the `>= 1` validation
 checks); GitHub #17 and #24. Settles `collab.md` #17.
+
+## 2026-08-04 18:07 — Michael & James — Epidemics are seeded by position, reusing the §8.1 replicate scheme
+**Chose:** the batch seed seeds a generator whose output stream *is* the epidemic seed list, and
+epidemic `i` attempt `a` takes draw `i × max_epidemic_retries + a`. Explicitly the same mechanism as
+§8.1's replicate seeding, not a second one — §5.2 now points at §8.1 rather than restating it.
+**Why:** the re-roll agreed earlier today is conditional on a graph's own outcome, so a graph that
+retries consumes extra draws. Drawn sequentially from one stream, that offsets **every subsequent
+epidemic** in the evaluation relative to graphs that did not retry, and the desynchronisation runs
+to the end of the batch. Position-indexed seeds resynchronise at the next epidemic index — the same
+property §8.1 already relies on, where asking for 50 replicates leaves the first 30 untouched.
+**The framing matters and was corrected mid-discussion.** This is not "the re-roll breaks CRN".
+Every graph draws from an *identical* pool of dice; what differs is which of those common draws it
+stops on, and that is what a retry is. The randomness stays common; the stopping rule is
+outcome-dependent by design.
+**Rejected:** (a) drawing epidemic seeds sequentially from a per-graph RNG — the cascade above.
+(b) Hashing the `(batch, i, a)` tuple with a bespoke mix, which was the first suggestion here and
+was wrong to propose: §8.1 had already settled this shape, and a second description of one scheme
+drifts. Drawing from a stream also sidesteps the collision hazard §8.1 warns about with `master ^ i`.
+**Also:** position-indexing makes scoring order-independent, so a population evaluated across rayon
+workers reproduces regardless of which worker reaches which graph first.
+**Affects:** `official_spec_sheet.md` §5.2 (pointing at §8.1); GitHub #17 and #18. Builds on the
+re-roll decision of 2026-08-04 17:52.

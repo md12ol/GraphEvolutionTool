@@ -414,6 +414,29 @@ exposed rather than hardcoded.
 convention above, so nothing is ever re-rolled. `max_epidemic_retries = 1` gives one attempt and is
 equivalent. Both must be at least 1 (§7).
 
+**Seed epidemics by position, using the same scheme as replicate seeding (§8.1).** The batch seed
+seeds a generator whose output stream *is* the epidemic seed list, and epidemic `i` attempt `a`
+takes draw `i × max_epidemic_retries + a`. Not a second mechanism — the identical one, applied to a
+different index, and it inherits §8.1's reasoning wholesale, including why the index must not be
+folded in with `xor`.
+
+**This is what keeps the re-roll compatible with common random numbers**, and drawing the epidemics
+sequentially from one stream instead would not. Whether a graph re-rolls depends on its own
+outcome, so a graph that retries consumes extra draws — and under sequential drawing every
+subsequent epidemic in that evaluation is then offset from the graphs that did not retry, for the
+rest of the batch. Position-indexed seeds resynchronise at the next epidemic index, exactly as
+asking for 50 replicates leaves the first 30 unchanged.
+
+The property this preserves is worth stating precisely, because "the re-roll breaks CRN" is the
+easy misreading. **Every graph in the batch draws from an identical pool of dice** —
+`h(batch, i, 1) … h(batch, i, max_epidemic_retries)` are the same for all of them, and none is
+graph-specific. What differs between graphs is only *which* of those common draws each one stops
+on, and that is what a retry **is**. The randomness is common; the stopping rule is
+outcome-dependent, deliberately.
+
+Position-indexing is also what makes scoring order-independent, so a population evaluated across
+rayon workers reproduces exactly regardless of which worker reaches which graph first.
+
 **The `num_epidemics` simulations for one evaluation run sequentially**, never concurrently.
 Parallelism comes from the two levels above — replicates and the population (§8.1) — which
 together already provide far more independent work than any core count, and a third nesting level
