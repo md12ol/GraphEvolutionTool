@@ -121,6 +121,23 @@ meeting and I have not changed the code. **Consequence worth stating plainly: un
 `sir_sim`'s `length` and `profile` are contested, so issue #16 should not be closed.** The
 simulator is otherwise complete. *(Reply inside #15 · 2026-08-04 11:22 — Michael.)*
 
+**Newer `Graph.cpp` checked, 2026-08-04 11:27 — Michael.** The updated graph class narrows this
+item rather than closing it. Its `SIR` is now `int SIR(int p0, double alpha, vector<int> &epiProfile,
+int &totInf)` — it returns the length, fills the profile, and fills the total infected, which is the
+same three-reading shape as `SirRun`. Against `get/src/sir.rs`:
+
+- **`totInf` matches our `spread` exactly.** Seeded at 1 for patient zero and incremented by
+  `curInf` each step (`legacy/Graph.cpp:98-102, 148`). Lone patient zero gives 1; a 6-node path at
+  rate 1.0 gives 6. No disagreement on this reading at all.
+- **`length` and `profile` still differ, exactly as described above.** `epiLen` increments on the
+  final burnout pass and `epiProfile[epiLen] = 0` is written on it (`legacy/Graph.cpp:147-149`), so
+  `epiLen` equals our `profile.len()`, and the C++ profile is one longer than ours. Unchanged, but
+  now confirmed against the current C++ rather than the older copy.
+
+So the decision needed is narrower than it looked: only the length convention and the trailing zero
+are in question, and `spread` is agreed by both implementations. *(Reply inside #15 · 2026-08-04
+11:27 — Michael.)*
+
 ### 16. Before #26 is built: should the fitness axis be `dyn` rather than a match arm?
 
 **Decide, at the next meeting.** Nothing is blocked today and I am not proposing to change the

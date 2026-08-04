@@ -224,6 +224,16 @@ gh issue view <n> --json title,body -q '.title, .body'
 `gh issue list` is unaffected. This matters beyond convenience: the verify-after-filing rule above
 requires re-reading a filed issue to confirm its body survived, and the bare command cannot do it.
 
+**Amended 2026-08-04 11:30 — Michael: it is the whole default view, not one command.** `gh pr edit`
+fails the same way (`repository.pullRequest.projectCards`), so writes are affected too, not just
+reads. Assume any `gh` subcommand that fetches or updates a whole issue or PR is broken here, and
+reach for `--json` on reads and the REST API on writes:
+
+    gh api repos/md12ol/GraphEvolutionTool/pulls/<n> -X PATCH -F body=@body.md
+
+`-F body=@file` reads the body from a file, which also avoids fighting the shell over backticks and
+`§` in a long PR description.
+
 
 ## Conventions
 

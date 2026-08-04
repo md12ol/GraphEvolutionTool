@@ -18,6 +18,26 @@ make it green.
 Note `main.cpp` evolves **Bitsprayers**, not `SDA` — the SDA class is carried here because the Rust
 genome is a port of it, not because this driver uses it.
 
+## These files are from two different generations and do not fit together
+
+`Graph.cpp`/`Graph.h` are newer than `main.cpp`, and the two will not compile against each other.
+Worth knowing before reading them as one program:
+
+- **`SIR` changed shape.** It is now `int SIR(int p0, double alpha, vector<int> &epiProfile,
+  int &totInf)` — returns the length, fills the profile and the total infected. `main.cpp:523` still
+  calls the old `vector<int> SIR(double alpha, int p0)`.
+- **The first two arguments swapped.** Old was `(alpha, p0)`, new is `(p0, alpha)`. Both are
+  positional and one is a `double`, so a port done by eye will compile and be silently wrong.
+- **`hammy_distance` is gone** from the new `Graph`, but `main.cpp:561` still calls it for
+  `fitFun == 2`, the network-matching objective.
+- **`SIRwithVariants` is new** — a multi-variant model with immunity, variant DNA and severity
+  ordering. It is not in `official_spec_sheet.md` and no issue covers it. Noted here so it is not
+  mistaken for something the Rust is behind on.
+
+The Rust port in `get/src/sir.rs` predates the newer file but is unaffected: the state machine,
+the exposure accumulation and the `1 - (1 - alpha)^n` draw are identical across both generations.
+Only the return shape and who owns the profile buffer changed.
+
 ## Where the Rust deliberately differs
 
 Both differences are open questions, not settled positions — `collab.md` #15 and #17 carry them.
