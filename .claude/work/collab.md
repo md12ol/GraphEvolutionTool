@@ -83,6 +83,37 @@ the schema. Flagging it so it does not read as me having done half of #24 badly.
 
 *#14 · raised 2026-08-03 16:40 — James.*
 
+### 15. `sir_sim` reports `length` one step shorter than the reference C++ does
+
+**FYI, and Confirm before you build #17 on top of it.** I have implemented **#16** on branch
+`mdube_sir_sim`, in a new module `get/src/sir.rs`. No file you own is touched — one new file plus
+`pub mod sir;` in `get/src/lib.rs`.
+
+The mechanics are a straight port of `Graph::SIR` in the legacy `Graph.cpp`: the same adjacency
+scan accumulating each susceptible node's total exposure, and the same single combined draw
+against `1 - (1 - rate)^exposure`, so a multiplicity of `k` stays `k` independent chances. Two
+things deliberately differ, and both change numbers #17 will consume.
+
+1. **`length` is one smaller.** The C++ `len` increments on every loop pass including the final
+   one, in which the last infectious node merely recovers and infects nobody. Spec §5.2 fixes the
+   other convention — "an outbreak that infects nobody beyond patient zero has `length = 0`" —
+   where the C++ gives `1`. I built to the sheet, per `CLAUDE.md`. Consequence: `epi_length`
+   scores will sit one below any historical C++ result for the same graph. Constant offset, so it
+   cannot change selection, but it will make old and new numbers look mismatched.
+2. **`profile` carries no trailing zero.** The C++ pushes the terminating `0`; ours stops at the
+   last real infection. This one is *not* neutral for `epi_prof_match` — an RMSE against a target
+   captured from C++ output would be comparing vectors of different lengths.
+
+The three readings are then consistent by construction: `profile[0]` is patient zero, `spread` is
+the sum of the profile (total ever-infected, so `1` for a lone patient zero), and `length` is
+`profile.len() - 1`. #16's own verify-by agrees — a 6-node path at rate 1.0 gives `length = 5`
+and `spread = 6`.
+
+If you would rather match the C++ exactly, that is a change to spec §5.2 and needs the joint
+meeting, not a patch from either of us. Say so and I will re-raise it as a sheet amendment.
+
+*#15 · raised 2026-08-04 10:53 — Michael.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in

@@ -189,6 +189,19 @@ the tracker is the source of truth — changes go to the tracker in the same ses
 Record any `gh` quirk here the moment you hit it. These cost an hour each, every time, and they
 are exactly what a cold session cannot rediscover.
 
+**`gh issue view <n>` is broken on this repo — use `--json` (hit 2026-08-04, Michael).** The plain
+command exits 1 with `GraphQL: Projects (classic) is being deprecated in favor of the new Projects
+experience ... (repository.issue.projectCards)` and prints no issue at all. It is the default view's
+`projectCards` field, not anything about the issue, so it fails for *every* issue number. Read
+issues with:
+
+```bash
+gh issue view <n> --json title,body -q '.title, .body'
+```
+
+`gh issue list` is unaffected. This matters beyond convenience: the verify-after-filing rule above
+requires re-reading a filed issue to confirm its body survived, and the bare command cannot do it.
+
 
 ## Conventions
 
