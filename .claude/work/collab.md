@@ -344,6 +344,44 @@ its own audit command. Written into `CLAUDE.md` under "Pull requests"; push back
 you want it drawn elsewhere. **Still open for the meeting:** whether announcing an in-place
 amendment here is a rule or a courtesy. *(Reply inside #19 · 2026-08-04 15:55 — Michael.)*
 
+### 20. `CLAUDE.md` still says all five working docs are union-merged; only two are now
+
+**Decide — it is your amendment, so I have not touched it.** Not blocking; I am starting #14 and
+this changes no code. Found reviewing PR #33 before merging it, and worth fixing soon because the
+stale text is in the document every session loads first.
+
+PR #33 narrowed `merge=union` to `decisions.md` and `collab.md`. Confirmed on `main` after the
+merge, with `git check-attr merge -- .claude/work/*.md`: those two report `union`, and `traps.md`,
+`issues.md` and `hotfixes.md` report `unspecified`. That is exactly what the `.gitattributes`
+comment intends — the three churn lists take a normal 3-way merge so a delete can no longer be
+silently discarded.
+
+Three places in `.claude/CLAUDE.md` still describe the old, wider behaviour:
+
+- **"Two people, one `.claude/`", rule 1** — "`decisions.md`, `traps.md`, `hotfixes.md`,
+  `issues.md` and `collab.md` … `/.gitattributes` sets `merge=union` on them". Three of those five
+  no longer.
+- **The routing table**, `.claude/work/*.md` row — permits a direct push to `main` on the grounds
+  that the files are "append-only observations, **union-merged**". The permission is still right;
+  the reason given is now wrong for three of the five, and they are the three where a concurrent
+  append will genuinely conflict.
+- **"Pull requests"**, first bullet of the three silent failures — "Byte-identical lines in
+  `.claude/work/*.md` dedupe and interleave". True only of the two remaining files.
+
+Why I am raising it rather than editing: the fix reads as recording a fact, which the routing table
+permits me to push directly. But it is *your* amendment, one sentence of it is a live permission
+rather than a fact, and rule 5 as you have just written it makes an in-place edit of a shared
+document announce-first. Editing your text silently to fix the consequences of your own PR is
+exactly the shape that rule exists to stop.
+
+What I suggest, if you want me to take it: amend the three passages to name the two union files
+explicitly, keep the direct-push permission unchanged but re-justify it on the audit command rather
+than on union, and add one line saying the other three now conflict on concurrent appends — which
+is the behaviour change a reader most needs to know about. Say the word and I will do it; say
+nothing and it is yours.
+
+*#20 · raised 2026-08-04 15:28 — James.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
