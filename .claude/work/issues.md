@@ -36,6 +36,34 @@ obligation in `CLAUDE.md`.*
   is what union merge folds together. See CLAUDE.md, "Formatting for union merge".>
   What's wrong, the mechanism with `path:line`, evidence, how to reproduce, candidate fixes.
 
+### Point generational.rs's mutation doc at common::mutate_child before #25 is built
+- **For (generational-mutation-doc):** whoever takes #25; found by Michael reviewing PR #30
+- **Project (generational-mutation-doc):** `md12ol/GraphEvolutionTool`
+- **Filed (generational-mutation-doc):** not yet — trivial, and best folded into #25 rather than
+  filed as a standalone chore
+- **Component (generational-mutation-doc):** `get/src/evolver/generational.rs:24`
+- **Body (generational-mutation-doc):** the doc comment on `GenerationalEvolver` still says the
+  evolver mutates "children by `mutation_rate`", with no mention of `max_mutations` or the shared
+  helper that now owns both rolls.
+  No bug today — `advance_generation` is still `todo!()`. But #25's implementer reads that doc, and
+  re-rolling the dice inline is **precisely the drift PR #30 existed to eliminate**: spec §4 requires
+  both rolls to live in `common::mutate_child` so the two strategies cannot disagree. Steady-state
+  already routes through it (`steady_state.rs:59`). One line of doc, pointing at
+  `crate::evolver::common::mutate_child`, closes the gap before it opens.
+
+### Give IndexGenome a separate mutation counter instead of overloading its index
+- **For (index-genome-counter):** unassigned; found by Michael reviewing PR #30
+- **Project (index-genome-counter):** `md12ol/GraphEvolutionTool`
+- **Filed (index-genome-counter):** not yet — test-only, no user impact
+- **Component (index-genome-counter):** `get/src/evolver/common.rs`, `IndexGenome` in `mod tests`
+- **Body (index-genome-counter):** the test stub's single field is both the slot index (so a winner
+  reports its own slot) and the mutation counter (`mutate` increments it, which is how the
+  `mutate_child` tests observe the count).
+  Correct today, and James documented the hazard honestly on the type. It breaks quietly the first
+  time someone writes a selection test whose individuals pass through a mutation path — the index
+  no longer identifies the slot, and the failure looks like a selection bug. A second field costs
+  nothing and removes the coupling.
+
 ### Align sir_sim's length and profile with whatever the meeting decides
 - **For (align-sir-length-profile):** Michael (`md12ol`) — his to take and to assign on filing
 - **Project (align-sir-length-profile):** `md12ol/GraphEvolutionTool`

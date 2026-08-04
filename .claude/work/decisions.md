@@ -535,3 +535,9 @@ joint entry was "luck as much as care". Authorship is irrelevant to union safety
 overwhelming majority, and without it every concurrent session ends in a conflict.
 **Affects:** `.claude/work/traps.md` (two entries); `.claude/CLAUDE.md` union-formatting rule 5 and
 the "Pull requests" section; `collab.md` #19.
+
+## Task complete: sir-sim — 2026-08-04
+Archived to `.claude/work/archive/2026-08_sir-sim/`. Entries below this line belong to later tasks.
+`sir_sim` shipped: `get/src/sir.rs` is on `main` via PR #31, GitHub #16 closed, 110 tests green.
+Carried forward, not resolved: three unfiled entries in `issues.md`, and `collab.md` #15, #16, #17
+and #19 awaiting the joint meeting.
