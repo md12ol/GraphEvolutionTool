@@ -266,6 +266,34 @@ sheet does not mention is a §5.2 amendment either way. Note the paths in this i
 is now tracked at `legacy/main.cpp` and `legacy/Graph.cpp`, with `legacy/README.md` recording what
 it is; the line numbers cited above are unchanged. *(Reply inside #17 · 2026-08-04 11:22 — Michael.)*
 
+### 18. PR #32 was self-merged unreviewed, under the exception in the rule it is delivering
+
+**FYI, no action needed — this is the trace the rule asks for, not a request.** Recorded because
+`CLAUDE.md`'s new "Pull requests" section says an unreviewed merge must leave one.
+
+**What happened.** PR #32 carries two documentation commits that were pushed to `mdube_sir_sim`
+*after* PR #31 had already merged, so they never reached `main`: four `decisions.md` entries and one
+`traps.md` entry. It is `.claude/work/` only — no code, no `settings.json`, no `hooks/`. Michael
+merged it himself on 2026-08-04 15:27 UTC, invoking the rule's own exception: James had merged #31
+and moved on, and the stranded entries include the decision record for #31 itself, which is the
+thing a reader of `main` would go looking for first.
+
+**The irony is deliberate and worth naming**, because it is the honest version of what happened:
+the rule forbidding self-merges was itself delivered by #31, and the first PR after it was
+self-merged. That is the exception working as designed rather than the rule being ignored — but it
+is exactly the pattern that becomes a habit if it is not written down, which is why this entry
+exists.
+
+**Not a precedent for code.** The exception was taken on a docs-only change where the review value
+is the union-merge interleave check, and that was run by hand: the audit
+`grep -vE '^\s*$' .claude/work/<file>.md | sort | uniq -d` was clean on `collab.md`, `decisions.md`,
+`issues.md`, `traps.md` and `hotfixes.md` before merging. A PR touching `get/src/` would not qualify.
+
+**Also still open after #31:** issue #16 remains open, because `Closes #16` was added to the PR body
+after the merge and GitHub applies closing keywords only at merge time. Recorded in `traps.md`.
+
+*#18 · raised 2026-08-04 15:27 — Michael.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
