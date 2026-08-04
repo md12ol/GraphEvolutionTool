@@ -401,3 +401,66 @@ Archived to `.claude/work/archive/2026-07_steady-state-evolver/`. Entries below 
 later tasks. The evolver shipped: `evolver/common.rs`, `evolver/steady_state.rs` and `fitness.rs`
 have no `todo!()`s, 97 tests pass on `main`, merged via PR #12 and `b466e4e`.
 
+
+## 2026-08-04 11:35 — Michael — `sir_sim` lands as its own module, porting the C++ mechanics but the sheet's reporting
+**Chose:** `get/src/sir.rs` as a top-level module holding `SirParams`, `SirRun` and `sir_sim`. The
+state machine, exposure accumulation and combined infection draw are ported from
+`legacy/Graph.cpp` `Graph::SIR` unchanged. Two things deliberately differ: the draw is written
+`1 - (1 - rate)^k` rather than `1 - exp(k·ln(1-alpha))`, and the RNG is a parameter rather than a
+global. Reporting follows spec §5.2 — `length` excludes the burnout step, `profile` has no trailing
+zero — with the divergence raised rather than silently chosen.
+**Why:** The two formulations of the draw are algebraically identical, but the direct form has no
+`ln(0)` at `infection_rate = 1.0`, which is a case the tests actually exercise. The RNG parameter is
+what #18's common-random-numbers scheme needs — a global cannot be seeded per batch. §5.2's
+reporting was followed because `CLAUDE.md` makes the sheet the intent where sheet and code disagree.
+**Rejected:** (a) `fitness/sir.rs` as a submodule, which matches the `genomes/edge_edit/` idiom and
+the spec's own nesting better — rejected because turning `fitness.rs` into a directory is a file
+*move*, and #17 and #19 both rewrite that file heavily, so it would hand the next person a conflict
+for no functional gain. Revisit when #17 lands. (b) Deleting the `SirFitness` stub — it is #17's to
+replace with three objectives, and removing it now would delete the `todo!()`s that signal the work
+is outstanding.
+**Affects:** `get/src/sir.rs`; `get/src/lib.rs:6`; `get/src/fitness.rs:96-107` doc only.
+
+## 2026-08-04 11:36 — Michael — Merge the simulator now and correct its conventions in a follow-up
+**Chose:** PR #31 merges as-is with `Closes #16`, carrying spec §5.2's `length` and `profile`
+conventions, and the correction is staged in `issues.md` as a follow-up assigned to Michael, to be
+filed once the meeting settles `collab.md` #15.
+**Why:** Michael's call, made with the trade stated. The alternative was recommended and declined,
+which is recorded here because the risk is real and someone should be able to see it was taken
+knowingly rather than missed.
+**Rejected:** Holding the branch until the meeting — recommended on the grounds that the change is
+~15 lines (push the terminating zero, return `profile.len()`, update seven tests), so waiting is
+cheap, while merging first opens a window in which #17 could build on a convention about to be
+reversed. Overruled in favour of not letting the branch go stale.
+**Risk carried:** if the staged follow-up is never filed, the correction is lost and `epi_length`
+and `epi_prof_match` are silently built on the wrong convention. The plan's final open task exists
+solely to prevent that.
+**Affects:** PR #31; `get/src/sir.rs:149-153`; `.claude/work/issues.md`; blocks the start of #17.
+
+## 2026-08-04 11:37 — Michael — The legacy C++ is tracked in `legacy/`, not gitignored
+**Chose:** `Graph.cpp`, `Graph.h`, `SDA.cpp`, `SDA.h` and `main.cpp` move to `legacy/` and are
+tracked, with a `legacy/README.md` mapping each to what ports it. The root-level ignore entries are
+removed.
+**Why:** They were ignored, so the implementation the Rust is a port of existed on one laptop only —
+and `sir.rs`'s own module doc cited a file no one else could open. A reference that only one owner
+can read cannot settle an argument about intent, which is exactly what it kept being used for.
+**Rejected:** Leaving them ignored and describing the model in prose in `sir.rs` — the C++ is the
+tiebreaker for §5.2 questions and paraphrase is not.
+**Also recorded in the README:** `Graph.cpp/.h` and `main.cpp` are from **different generations and
+will not compile together** — `SIR` changed shape, its first two arguments swapped from
+`(alpha, p0)` to `(p0, alpha)`, which compiles and is silently wrong if ported by eye, and
+`hammy_distance` is gone while `main.cpp:561` still calls it. `SIRwithVariants` is new and no issue
+covers it.
+**Affects:** `legacy/`; `.gitignore`; `get/src/sir.rs` module doc.
+
+## 2026-08-04 11:38 — Michael — Every PR is merged by the other owner
+**Chose:** Nobody merges their own PR — James merges Michael's, Michael merges James's. Agents open
+PRs and stop. Self-merge is allowed only when the other owner is unavailable and the change blocks,
+and it must leave a note in `collab.md`.
+**Why:** Three things in this repo fail *silently* and a second reader is the only detector:
+`merge=union` never conflicts, so an interleaved doc entry has no automated check; `collab.md` #14
+has three source files claimed by two workstreams at once; and hooks/settings execute on the other
+person's machine at session start without them reading the diff.
+**Rejected:** Leaving the existing rule scoped to `settings.json` and `hooks/` — that made the
+riskiest case an exception rather than an instance, which is an edge the rule can fall off.
+**Affects:** `.claude/CLAUDE.md`, new "Pull requests" section; PR #31 is itself subject to it.

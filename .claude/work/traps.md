@@ -103,3 +103,17 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   "EDIT THE PATH PATTERN BELOW BEFORE ENABLING" — so any project that follows that instruction has
   local edits `--update` will destroy. Reported for the template; not yet fixed there.
 - **Added:** 2026-07-31 — install-sh-update-overwrites-this-project-s-
+
+### A PR can merge mid-session, and `/save`'s git manifest will not notice
+- **Bites when:** you open a PR, keep working, then run `/save`. The manifest is built from local
+  state — `git status`, `git log` — none of which changes when the other owner merges on GitHub. It
+  happened 2026-08-04: PR #31 was merged at 12:38 UTC and the save written at ~15:05 UTC described
+  it as open, in `plan.md`, `history.md` and `handoff.md` at once.
+- **Do this instead:** `git fetch` and read the PR state from the remote before writing any doc that
+  mentions it — `gh api repos/md12ol/GraphEvolutionTool/pulls/<n> --jq '.state, .merged'`.
+- **Why:** two owners, and merges happen on the server. Nothing local is stale in a way git reports;
+  `git status` says "up to date with origin/<branch>" whether or not that branch has been merged.
+- **The expensive corollary — a closing keyword added after the merge never fires.** GitHub applies
+  `Closes #N` only at merge time. Editing the PR body afterwards links the issue but leaves it open,
+  and the PR reads as though it closed it. Check the issue's actual state, never the PR's body.
+- **Added:** 2026-08-04 — a-pr-can-merge-mid-session-and-save-manifest
