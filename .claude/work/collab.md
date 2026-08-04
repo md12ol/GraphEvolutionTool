@@ -45,9 +45,90 @@ Persistent: survives `/done`, because coordination outlives any one task.
 
 ## Open
 
-*Nothing is open.* Items 1–19 are all dispositioned; 14–19 were settled at the joint meeting of
-2026-08-04 and moved into **Settled** below with every stamp intact. Append the next item here as
-**20**, numbering continuing across both sections.
+Items 1–19 are all dispositioned; 14–19 were settled at the joint meeting of 2026-08-04 and moved
+into **Settled** below with every stamp intact. Item **20** was raised the same evening and is the
+only thing open. Append the next item here as **21**, numbering continuing across both sections.
+
+*(The "Nothing is open" line that stood here was written before item 20 landed, and is corrected
+rather than removed — see the merge-repair note in item 20's tail.)*
+
+### 20. `CLAUDE.md` still says all five working docs are union-merged; only two are now
+
+**Decide — it is your amendment, so I have not touched it.** Not blocking; I am starting #14 and
+this changes no code. Found reviewing PR #33 before merging it, and worth fixing soon because the
+stale text is in the document every session loads first.
+
+PR #33 narrowed `merge=union` to `decisions.md` and `collab.md`. Confirmed on `main` after the
+merge, with `git check-attr merge -- .claude/work/*.md`: those two report `union`, and `traps.md`,
+`issues.md` and `hotfixes.md` report `unspecified`. That is exactly what the `.gitattributes`
+comment intends — the three churn lists take a normal 3-way merge so a delete can no longer be
+silently discarded.
+
+Three places in `.claude/CLAUDE.md` still describe the old, wider behaviour:
+
+- **"Two people, one `.claude/`", rule 1** — "`decisions.md`, `traps.md`, `hotfixes.md`,
+  `issues.md` and `collab.md` … `/.gitattributes` sets `merge=union` on them". Three of those five
+  no longer.
+- **The routing table**, `.claude/work/*.md` row — permits a direct push to `main` on the grounds
+  that the files are "append-only observations, **union-merged**". The permission is still right;
+  the reason given is now wrong for three of the five, and they are the three where a concurrent
+  append will genuinely conflict.
+- **"Pull requests"**, first bullet of the three silent failures — "Byte-identical lines in
+  `.claude/work/*.md` dedupe and interleave". True only of the two remaining files.
+
+Why I am raising it rather than editing: the fix reads as recording a fact, which the routing table
+permits me to push directly. But it is *your* amendment, one sentence of it is a live permission
+rather than a fact, and rule 5 as you have just written it makes an in-place edit of a shared
+document announce-first. Editing your text silently to fix the consequences of your own PR is
+exactly the shape that rule exists to stop.
+
+What I suggest, if you want me to take it: amend the three passages to name the two union files
+explicitly, keep the direct-push permission unchanged but re-justify it on the audit command rather
+than on union, and add one line saying the other three now conflict on concurrent appends — which
+is the behaviour change a reader most needs to know about. Say the word and I will do it; say
+nothing and it is yours.
+
+*#20 · raised 2026-08-04 15:28 — James.*
+
+**Merge repair, 2026-08-04 15:40 — James. This item is itself a worked example of item 19.** I
+raised it and pushed; the push was rejected because you had meanwhile pushed `7efdd79` (which fixes
+exactly what this item asks for) and `27c863a` (which relocates items 14–19 into **Settled**). The
+`git pull` that followed union-merged your relocation against my copy, which still had 14–19 under
+**Open**. Result, with no conflict and no warning:
+
+- `## Settled` and the whole 2026-08-04 meeting block appeared **twice** — your revised wording near
+  the top, my stale copy of the pre-relocation wording at the tail.
+- **This item was swallowed.** It landed inside your "Items 14–19, moved from Open" block, between
+  item 19 and the duplicate `## Settled` — an *open* item filed under settled ones, which is the
+  version a reader would have believed.
+
+The item bodies themselves were each intact and unduplicated; the damage was confined to the
+structural headings and the block you had edited in place. Repaired by hand: deleted the duplicate
+tail section, kept your wording, and moved this item back under **Open**. The `uniq -d` audit is
+clean, verified before pushing. The pre-repair file is kept out-of-tree in this session's scratchpad.
+
+**Nothing of yours was lost** — your wording is the copy that survived, and your "Nothing is open"
+placeholder was corrected rather than deleted, since item 20 makes it untrue. If you would rather it
+read differently, it is yours to reword.
+
+*#20 · merge repair 2026-08-04 15:40 — James.*
+
+**Mostly overtaken by your own fix, 2026-08-04 15:45 — James. Two of the three are already done.**
+Checked `.claude/CLAUDE.md` on `main` after the merge: `7efdd79` rewrote rule 1 to "The two
+append-only docs merge by union" and added the paragraph saying the other three are **not**, and it
+re-justified the routing-table row while keeping the direct-push permission. Both are exactly what
+this item asked for, and you had written them before I raised it — we found the same thing
+independently within the hour.
+
+**One line is still stale**, `CLAUDE.md` line 197 in the "Pull requests" section: "**`merge=union`
+never conflicts.** Byte-identical lines in `.claude/work/*.md` dedupe and interleave" — the glob
+still names all five, where only `decisions.md` and `collab.md` behave that way now. Trivial, and
+the surrounding point stands.
+
+**Narrowed ask:** just that one line, and it is a fact rather than a permission, so I am happy to
+push it directly if you would rather not bother. Say nothing and I will leave it to you.
+
+*#20 · narrowed 2026-08-04 15:45 — James.*
 
 ## Settled
 
@@ -411,95 +492,3 @@ because a trap that is not on `main` protects nobody and the one thing review ca
 its own audit command. Written into `CLAUDE.md` under "Pull requests"; push back there or here if
 you want it drawn elsewhere. **Still open for the meeting:** whether announcing an in-place
 amendment here is a rule or a courtesy. *(Reply inside #19 · 2026-08-04 15:55 — Michael.)*
-
-### 20. `CLAUDE.md` still says all five working docs are union-merged; only two are now
-
-**Decide — it is your amendment, so I have not touched it.** Not blocking; I am starting #14 and
-this changes no code. Found reviewing PR #33 before merging it, and worth fixing soon because the
-stale text is in the document every session loads first.
-
-PR #33 narrowed `merge=union` to `decisions.md` and `collab.md`. Confirmed on `main` after the
-merge, with `git check-attr merge -- .claude/work/*.md`: those two report `union`, and `traps.md`,
-`issues.md` and `hotfixes.md` report `unspecified`. That is exactly what the `.gitattributes`
-comment intends — the three churn lists take a normal 3-way merge so a delete can no longer be
-silently discarded.
-
-Three places in `.claude/CLAUDE.md` still describe the old, wider behaviour:
-
-- **"Two people, one `.claude/`", rule 1** — "`decisions.md`, `traps.md`, `hotfixes.md`,
-  `issues.md` and `collab.md` … `/.gitattributes` sets `merge=union` on them". Three of those five
-  no longer.
-- **The routing table**, `.claude/work/*.md` row — permits a direct push to `main` on the grounds
-  that the files are "append-only observations, **union-merged**". The permission is still right;
-  the reason given is now wrong for three of the five, and they are the three where a concurrent
-  append will genuinely conflict.
-- **"Pull requests"**, first bullet of the three silent failures — "Byte-identical lines in
-  `.claude/work/*.md` dedupe and interleave". True only of the two remaining files.
-
-Why I am raising it rather than editing: the fix reads as recording a fact, which the routing table
-permits me to push directly. But it is *your* amendment, one sentence of it is a live permission
-rather than a fact, and rule 5 as you have just written it makes an in-place edit of a shared
-document announce-first. Editing your text silently to fix the consequences of your own PR is
-exactly the shape that rule exists to stop.
-
-What I suggest, if you want me to take it: amend the three passages to name the two union files
-explicitly, keep the direct-push permission unchanged but re-justify it on the audit command rather
-than on union, and add one line saying the other three now conflict on concurrent appends — which
-is the behaviour change a reader most needs to know about. Say the word and I will do it; say
-nothing and it is yours.
-
-*#20 · raised 2026-08-04 15:28 — James.*
-
-## Settled
-
-Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
-`decisions.md` or `/official_spec_sheet.md`, so only the disposition is kept here. Nothing is
-deleted that is not recorded somewhere durable.
-
-| # | Item | Disposition | Reasoning lives in |
-|---|---|---|---|
-| 1 | `common.rs` implemented, not to be duplicated | generational calls the same helpers unchanged | spec §5–6 |
-| 2 | two children per mating event | agreed as built | spec §6.3 |
-| 3 | steady-state per-event FFI cost | accepted as a known limitation; prefer generational for stochastic or Python objectives | spec §6.3 |
-| 4 | RNG must match across strategies | `ChaCha8Rng` in both | `decisions.md` |
-| 5 | log cadence + iteration-0 row | agreed; generational logs generation 0 too | `decisions.md` |
-| 6 | with or without replacement | James's call: `select` stays with replacement | spec §5 |
-| 9 | `Fitness::direction()` | agreed and extended — fixed per objective, never a config field | `decisions.md` |
-| 10 | `evaluate` orients | agreed; renamed `express_and_score`, sole scoring entry | `decisions.md` |
-| 11 | `generation_stats` direction parameter | **reversed** — engine stays in one orientation, converts only at the Python boundary | `decisions.md` |
-| 12 | config-layer validation | widened into one `Config::validate` for both front ends | `decisions.md` |
-| 7 | tree is not `cargo fmt`-clean | superseded by tracker **#22**, which carries the sequencing ("land it when James's tree is clean") | GitHub #22 |
-| 8 | `Cargo.lock` stays tracked | done and merged via PR #12; a courtesy heads-up, not a question | `decisions.md` |
-| 13 | `merge=union` on the shared docs | not a code decision — `.gitattributes` scopes it to `.claude/work/*.md` only, so it never touches source. The interleaving risk is handled by the stamp-and-audit rules, not by sign-off | `CLAUDE.md`, "Formatting for union merge" |
-| — | `Genome::copy` removed from the trait | accepted; `Planning Notes.md` is the stale side | `decisions.md` |
-
-**README "Graph multiplicity" section deleted — correct (2026-07-31).** Kept in full because it is
-recorded nowhere else: PR #11 removed it, and the section documented `Graph::unweighted()`,
-`Graph::with_max_edge_multiplicity()` and `SdaContext::new/unweighted/...`, none of which exist —
-commit `520500b` replaced them with the two-arg `Graph::new` and left the README stale. The deletion
-was a fix, not a regression.
-
-*Settled block compressed 2026-07-31 23:20 — Michael, after the spec-sheet call;
-items 7, 8 and 13 closed out 2026-07-31 23:45 leaving Open empty.*
-
-### Settled at the joint meeting of 2026-08-04
-
-Items 14, 15 and 16 are resolved. Their full text stays where it is under **Open** rather than
-being relocated — moving an entry is an in-place edit of a shared file, which is the concurrent-edit
-hazard item 19 documents. This block is the disposition; read it alongside the originals.
-
-| # | Disposition agreed 2026-08-04 | Reasoning now lives in |
-|---|---|---|
-| 14 | Closed — GitHub #10 landed via PR #30, so the file-overlap warning is spent | GitHub #10, PR #30 |
-| 15 | **C++ convention adopted.** `length` counts the burnout step, `profile` carries a trailing zero, `spread` unchanged. Spec §5.2 amended; an issue goes to Michael to correct `get/src/sir.rs` | `decisions.md` 2026-08-04 17:40; spec §5.2 |
-| 16 | **Option B adopted.** The objective erases to `Box<dyn Fitness>` before dispatch, collapsing it to strategy × genome. Spec §1 and §8 amended | `decisions.md` 2026-08-04 17:42; spec §1, §8 |
-| 18 | Closed — the trace served its purpose; no action was ever required | this table |
-| 19 | **Both halves settled.** Routing: code via branch+PR, `.claude/work/*.md` direct. In-place amendment: **announcing it here first is a rule, not a courtesy.** `merge=union` narrowed to `decisions.md` and `collab.md` only | `decisions.md` 2026-08-04 18:25; `CLAUDE.md`; `/.gitattributes` |
-| — | **New:** `CLAUDE.md`'s "an agent never merges a PR at all" reworded to "never merges **unprompted**" — overridden twice in one day, both times correctly | `CLAUDE.md`, "Pull requests" |
-| 17 | **Re-roll ported from the C++, both constants exposed** as `min_epidemic_length` (default 3) and `max_epidemic_retries` (default 5). Spec §5.2 and §7 amended | `decisions.md` 2026-08-04 17:52; spec §5.2, §7 |
-| — | **New, not previously an item:** epidemics within one evaluation run sequentially | `decisions.md` 2026-08-04 17:41; spec §5.2 |
-| — | **New, not previously an item:** network size × population size × replicates multiply into memory; the Python layer must document it | `decisions.md` 2026-08-04 17:43; spec §8.1 |
-
-**Nothing is left Open after this meeting.** Items 14 through 19 are all dispositioned above.
-
-*Meeting block · 2026-08-04 17:45 — Michael & James.*
