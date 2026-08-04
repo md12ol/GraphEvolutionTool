@@ -749,3 +749,21 @@ wording of this marker said the merge was carried forward, and it has since happ
 `Genome::mutate` now means exactly one mutation, `common::mutate_child` owns both dice rolls,
 `MAX_MUTATIONS` is deleted, and `Config::max_mutations` defaults to 1. 103 tests green, up from 97.
 *Task marker · mutation-contract · recorded 2026-08-04 19:05 — James.*
+
+## 2026-08-04 19:39 — Michael & James — A nodeless graph keeps `length = 0`; it is not an inconsistency
+**Chose:** `sir_sim` returns `length: 0` with an empty profile for a graph with no nodes, and that
+stays. Recorded on the function's doc comment and on `an_empty_graph_produces_no_epidemic`, both
+saying explicitly not to "fix" it to 1.
+**Why:** after the §5.2 amendment of the same day, every *real* epidemic has `length >= 1`, because
+even a lone patient zero occupies the burnout step. So zero stopped meaning "no transmission" and
+started meaning **"no epidemic existed to measure"** — a statement only a nodeless graph can make.
+The two are different claims and the type should be able to express both.
+**Rejected:** returning `length = 1` for consistency, so every call satisfies `length >= 1`. It is a
+simpler invariant to state and to validate against `min_epidemic_length`, and it was rejected because
+it asserts that a timestep elapsed in a graph where nothing could happen. Cheap consistency bought
+with a false statement.
+**Why it is written into the code and not only here:** the tidy-up is obvious and the test passes
+either way, so nothing would stop a future reader from making it. The doc comment is the only thing
+between that reader and a silent semantic change.
+**Affects:** `get/src/sir.rs` `sir_sim` early return and its doc; the empty-graph test. Arises from
+the amendment recorded 2026-08-04 17:40.
