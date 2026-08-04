@@ -95,15 +95,15 @@ pub trait Fitness: Send + Sync {
 
 /// Native fitness driven by an epidemic simulation over the expressed graph.
 ///
-/// The model is SIR with a one-timestep infectious period. When a susceptible
-/// node is infected during a step, it spends the *following* step in the
-/// infected state — that is when it can transmit to each of its still-
-/// susceptible neighbors, with probability [`SirFitness::infection_rate`] per
-/// edge — and it then moves to recovered/removed and never infects again. So
-/// each node is infectious for exactly one step, one step after it is infected.
-/// A single node seeds the outbreak, which runs until no infected nodes remain.
-/// Quantities such as epidemic length or total infected are measured from that
-/// completed run.
+/// The model lives in [`crate::sir`], which owns the description of it — one
+/// epidemic reporting length, spread and profile together. Do not restate the
+/// model here; two copies of it will drift.
+///
+/// **This is a placeholder and does not match the design.** Spec §5.2 replaces
+/// it with three objectives over one simulator, and the `seed` field below is
+/// specifically ruled out — one master seed drives the whole run, so a fitness
+/// seed of its own would leave replicates facing identical epidemics. Both are
+/// tracked: the objectives in issue #17, the config schema in #24.
 pub struct SirFitness {
     /// Per-contact probability of transmission along an edge in one timestep.
     pub infection_rate: f64,

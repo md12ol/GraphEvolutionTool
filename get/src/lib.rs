@@ -3,6 +3,7 @@ pub mod evolver;
 pub mod fitness;
 pub mod genomes;
 pub mod graph;
+pub mod sir;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
