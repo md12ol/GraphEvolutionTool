@@ -655,3 +655,19 @@ drifts. Drawing from a stream also sidesteps the collision hazard §8.1 warns ab
 workers reproduces regardless of which worker reaches which graph first.
 **Affects:** `official_spec_sheet.md` §5.2 (pointing at §8.1); GitHub #17 and #18. Builds on the
 re-roll decision of 2026-08-04 17:52.
+
+## 2026-08-04 18:13 — Michael & James — `epi_prof_match` RMSE is fixed by the target's length
+**Chose:** iterate `0 .. target.len()`; where the run is shorter treat its value as `0`; where the
+run is longer ignore the surplus; divide by `target.len()` and take the square root. Matches
+`legacy/main.cpp:545-553`.
+**Why:** comparability with the historical C++ results, consistent with adopting the C++ conventions
+for `length` and `profile` earlier the same day. It also closes a question #17 had carried as
+explicitly undecided since it was filed.
+**Consequence worth stating, because it is asymmetric:** a run that burns out early is penalised by
+the entire remaining target, while a run that outlasts the target is not penalised for the
+overshoot at all. So the objective rewards *matching or exceeding* the target's tail rather than
+matching it exactly. Inherited deliberately rather than corrected — changing it would make our
+scores incomparable with the archive, which is the whole reason the C++ conventions were adopted.
+**Rejected:** normalising by the longer of the two lengths, or penalising overshoot symmetrically.
+Both are defensible statistically and both break comparability.
+**Affects:** `official_spec_sheet.md` §5.2; GitHub #17.

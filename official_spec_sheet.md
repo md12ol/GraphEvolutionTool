@@ -452,6 +452,20 @@ do run in parallel.
 
 Each direction is fixed by the objective and is never configurable — see §5.
 
+**`epi_prof_match` RMSE when the lengths differ.** Agreed 2026-08-04, matching `legacy/main.cpp`.
+The target and the run will usually be different lengths, and the rule is fixed by the **target**:
+
+- iterate `0 .. target.len()`, never the run's length;
+- where the run is shorter, treat its value as `0` — the epidemic had ended, so nobody was newly
+  infected that day;
+- where the run is **longer, the surplus is ignored**;
+- divide by `target.len()` always, then take the square root.
+
+So a run that burns out early is penalised by the whole remaining target, and a run that outlasts
+the target is not penalised for the overshoot at all. That asymmetry is inherited deliberately from
+the C++ (`main.cpp:545-553`) for comparability, and it is worth knowing when reading a score: this
+objective rewards *matching or exceeding* the target's tail, not matching it exactly.
+
 **`num_epidemics`** — how many independent epidemics one evaluation averages over, set by the
 user. It is not a tuning nicety: a single SIR draw is very noisy, and selection will happily chase
 that noise instead of graph structure. It also dominates run time, since everything else in an
