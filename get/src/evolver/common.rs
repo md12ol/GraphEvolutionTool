@@ -181,6 +181,31 @@ where
 /// objective's own direction. This is the one place that conversion happens, so
 /// everything downstream can compare without knowing the direction.
 ///
+/// # This is the engine's sole scoring entry
+///
+/// **The engine never calls [`Fitness::evaluate`] or
+/// [`Fitness::evaluate_population`] directly.** Every path from a population to a
+/// set of fitnesses goes through here — generational scoring, steady-state child
+/// scoring, the final outcome, all of it. Those two trait methods exist to be
+/// *implemented* by an objective and *called by this function*.
+///
+/// The rule is worth stating because breaking it fails **silently**, twice over:
+///
+/// - **Orientation is bypassed.** A direct call returns the objective's own
+///   units, so under [`Direction::Maximize`] every comparison runs backwards. A
+///   run optimizing away from the goal looks exactly like one that is merely not
+///   converging.
+/// - **The `NaN` gate is bypassed.** [`Direction::orient`] is what rejects `NaN`,
+///   and under `Maximize` an unchecked `-NaN` sorts *below* `-inf` — so it wins
+///   every tournament it enters and fills the population with whatever produced
+///   it, leaving a run that looks converged.
+///
+/// Both doors are the same door by design. This is also why the alternative — a
+/// direction-aware comparator — was rejected: it needs the direction at every
+/// comparison site, and a missed one is invisible. Scoring the whole population
+/// in one place is what lets "exactly once" be *guaranteed* rather than
+/// remembered. Spec §5.1.
+///
 /// Defers to [`Fitness::evaluate_population`] so native objectives parallelize
 /// over rayon and Python-backed ones batch across the FFI boundary.
 ///
@@ -193,7 +218,11 @@ where
 ///
 /// If the objective returns `NaN` for any individual — see
 /// [`crate::fitness::Direction::orient`].
-pub fn evaluate<G, F>(population: &[G], context: &G::Context, fitness: &F) -> (Vec<Graph>, Vec<f64>)
+pub fn express_and_score<G, F>(
+    population: &[G],
+    context: &G::Context,
+    fitness: &F,
+) -> (Vec<Graph>, Vec<f64>)
 where
     G: Genome,
     F: Fitness,
@@ -363,9 +392,10 @@ mod tests {
     }
 
     #[test]
-    fn evaluate_expresses_every_genome_and_keeps_the_order() {
+    fn express_and_score_expresses_every_genome_and_keeps_the_order() {
         let population = population(5);
-        let (graphs, fitnesses) = evaluate(&population, &(), &NodeCount(Direction::Minimize));
+        let (graphs, fitnesses) =
+            express_and_score(&population, &(), &NodeCount(Direction::Minimize));
 
         assert_eq!(graphs.len(), 5);
         assert_eq!(fitnesses.len(), 5);
@@ -377,11 +407,11 @@ mod tests {
     }
 
     #[test]
-    fn evaluate_orients_scores_so_lower_is_always_better() {
+    fn express_and_score_orients_scores_so_lower_is_always_better() {
         let population = population(4);
 
-        let (_, minimized) = evaluate(&population, &(), &NodeCount(Direction::Minimize));
-        let (_, maximized) = evaluate(&population, &(), &NodeCount(Direction::Maximize));
+        let (_, minimized) = express_and_score(&population, &(), &NodeCount(Direction::Minimize));
+        let (_, maximized) = express_and_score(&population, &(), &NodeCount(Direction::Maximize));
 
         assert_eq!(minimized, vec![1.0, 2.0, 3.0, 4.0]);
         assert_eq!(maximized, vec![-1.0, -2.0, -3.0, -4.0]);
@@ -392,23 +422,23 @@ mod tests {
     }
 
     #[test]
-    fn evaluate_of_an_empty_population_yields_empty_vectors() {
+    fn express_and_score_of_an_empty_population_yields_empty_vectors() {
         let (graphs, fitnesses) =
-            evaluate::<IndexGenome, _>(&[], &(), &NodeCount(Direction::Minimize));
+            express_and_score::<IndexGenome, _>(&[], &(), &NodeCount(Direction::Minimize));
         assert!(graphs.is_empty());
         assert!(fitnesses.is_empty());
     }
 
     #[test]
     #[should_panic(expected = "returned NaN")]
-    fn evaluate_rejects_an_objective_that_returns_nan() {
+    fn express_and_score_rejects_an_objective_that_returns_nan() {
         struct Poisoned;
         impl Fitness for Poisoned {
             fn evaluate(&self, _graph: &Graph) -> f64 {
                 f64::NAN
             }
         }
-        evaluate(&population(3), &(), &Poisoned);
+        express_and_score(&population(3), &(), &Poisoned);
     }
 
     #[test]

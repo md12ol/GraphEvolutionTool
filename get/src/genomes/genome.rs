@@ -9,8 +9,8 @@ use crate::graph::Graph;
 pub trait Genome: Clone + Send + Sync {
     /// Run-level configuration required to express this genome.
     ///
-    /// `Send + Sync` is required because `evolver::common::evaluate` expresses a
-    /// whole population in parallel over rayon, sharing one `&Self::Context`
+    /// `Send + Sync` is required because `evolver::common::express_and_score`
+    /// expresses a whole population in parallel over rayon, sharing one `&Self::Context`
     /// across worker threads. Without the bound that parallel expression does
     /// not compile.
     type Context: Send + Sync;

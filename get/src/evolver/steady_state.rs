@@ -5,7 +5,7 @@
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use super::common::{Selection, evaluate, generation_stats, mutate_child, rank};
+use super::common::{Selection, express_and_score, generation_stats, mutate_child, rank};
 use super::{
     EvolutionOutcome, Evolver, GenerationStats, SharedEvolutionContext, SteadyStateContext,
 };
@@ -69,7 +69,7 @@ impl<G: Genome> SteadyStateEvolver<G> {
         // Scoring both children in one batch rather than individually halves the
         // FFI hops a Python-backed objective pays per event.
         let children = [first, second];
-        let (_, scores) = evaluate(&children, &self.shared.genome_context, fitness);
+        let (_, scores) = express_and_score(&children, &self.shared.genome_context, fitness);
 
         let worst = [
             tournament[tournament.len() - 1],
@@ -181,7 +181,8 @@ impl<G: Genome> Evolver<G> for SteadyStateEvolver<G> {
         // this `seed` argument exists to provide.
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
 
-        let (_, mut fitnesses) = evaluate(&self.population, &self.shared.genome_context, fitness);
+        let (_, mut fitnesses) =
+            express_and_score(&self.population, &self.shared.genome_context, fitness);
         self.evolve(fitness, &mut fitnesses, &mut rng);
         self.outcome(&fitnesses, fitness.direction())
     }
@@ -194,7 +195,7 @@ mod tests {
     use rand::SeedableRng;
     use rand::rngs::StdRng;
 
-    use crate::evolver::common::evaluate;
+    use crate::evolver::common::express_and_score;
     use crate::graph::Graph;
 
     /// A genome whose single value drives both its identity and its fitness, so
@@ -278,7 +279,7 @@ mod tests {
         mutation_rate: f64,
     ) -> (SteadyStateEvolver<Val>, Vec<f64>) {
         let population: Vec<Val> = (0..size).map(Val).collect();
-        let (_, fitnesses) = evaluate(&population, &(), &NodeCount);
+        let (_, fitnesses) = express_and_score(&population, &(), &NodeCount);
 
         let shared = SharedEvolutionContext {
             genome_context: (),
@@ -359,7 +360,7 @@ mod tests {
         for _ in 0..25 {
             evolver.mating_event(&NodeCount, &mut fitnesses, &mut rng);
 
-            let (_, recomputed) = evaluate(&evolver.population, &(), &NodeCount);
+            let (_, recomputed) = express_and_score(&evolver.population, &(), &NodeCount);
             assert_eq!(
                 fitnesses, recomputed,
                 "the fitness array drifted out of step with the population",
@@ -534,7 +535,7 @@ mod tests {
         let outcome = evolver.run(&NodeCount, 31);
 
         // Nothing in the final population may beat the reported best.
-        let (_, finals) = evaluate(&evolver.population, &(), &NodeCount);
+        let (_, finals) = express_and_score(&evolver.population, &(), &NodeCount);
         let best = finals.iter().copied().reduce(f64::min).unwrap();
         assert_eq!(outcome.best_fitness, best);
 
@@ -548,13 +549,13 @@ mod tests {
         // The point of the whole thing. Without this, an `evolve` that never
         // breeds still satisfies almost every other test here.
         let mut evolver = walk_evolver(10, 500);
-        let (_, before) = evaluate(&evolver.population, &(), &NodeCount);
+        let (_, before) = express_and_score(&evolver.population, &(), &NodeCount);
         let best_before = before.iter().copied().reduce(f64::min).unwrap();
         let mean_before = before.iter().sum::<f64>() / before.len() as f64;
 
         let outcome = evolver.run(&NodeCount, 2024);
 
-        let (_, after) = evaluate(&evolver.population, &(), &NodeCount);
+        let (_, after) = express_and_score(&evolver.population, &(), &NodeCount);
         let mean_after = after.iter().sum::<f64>() / after.len() as f64;
 
         assert!(
