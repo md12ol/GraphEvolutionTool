@@ -179,3 +179,21 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   they disagree with `official_spec_sheet.md`, the sheet governs and they are simply stale.
 - **Machine:** James's working tree only, uncommitted — Michael will not see these files.
 - **Added:** 2026-08-03 — untracked-pre-spec-sheet-docs-git-add-all
+
+### GitHub's PR object lags the branch, so a merge can strand a commit you already pushed
+- **Bites when:** you push to a branch that has an open PR, and the other owner merges within the
+  next minute or so. GitHub snapshots the PR's `head.sha` and refreshes it asynchronously — merging
+  uses the **cached** head, so any commit pushed in that window is silently left out of `main` while
+  `git status` cheerfully reports "up to date with origin/<branch>".
+- **Measured 2026-08-04 on PR #36.** `git rev-parse origin/<branch>` and
+  `gh api .../branches/<branch> --jq .commit.sha` both returned `3c794b6`, while
+  `gh api .../pulls/36 --jq .head.sha` still returned `0fec0d8`. James merged in that gap; the merge
+  commit contains `0fec0d8` and the `decisions.md` entry in `3c794b6` never reached `main`.
+- **Do this instead:** after pushing to a branch with an open PR, confirm GitHub has caught up
+  before anyone merges — `gh api repos/md12ol/GraphEvolutionTool/pulls/<n> --jq .head.sha` must
+  match `git rev-parse HEAD`. If a merge already happened, check with
+  `git merge-base --is-ancestor <sha> main` and recover by cherry-picking onto `main`.
+- **Why this is not the same as the mid-session-merge trap above:** that one is about *your* view of
+  the world going stale. This is about *GitHub's* view going stale, and it loses work rather than
+  just misreporting it.
+- **Added:** 2026-08-04 — githubs-pr-object-lags-the-branch

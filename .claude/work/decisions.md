@@ -767,3 +767,9 @@ either way, so nothing would stop a future reader from making it. The doc commen
 between that reader and a silent semantic change.
 **Affects:** `get/src/sir.rs` `sir_sim` early return and its doc; the empty-graph test. Arises from
 the amendment recorded 2026-08-04 17:40.
+
+## Task complete: sir-conventions — 2026-08-04
+Archived to `.claude/work/archive/2026-08_sir-conventions/`. Entries below this line belong to later
+tasks. GitHub #34 closed: `sir_sim` now counts the burnout step and emits the terminating zero, on
+`main` via PR #36, 110 tests green. Carried forward, not resolved: **PR #37**, the one-line spec
+status-row tidy, still open.

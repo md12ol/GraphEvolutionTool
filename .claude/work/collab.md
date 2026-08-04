@@ -96,7 +96,28 @@ exactly what this item asks for) and `27c863a` (which relocates items 14–19 in
 `git pull` that followed union-merged your relocation against my copy, which still had 14–19 under
 **Open**. Result, with no conflict and no warning:
 
-- `## Settled` and the whole 2026-08-04 meeting block appeared **twice** — your revised wording near
+- `### 20. PR #37 self-merged — the one-line spec status tidy
+
+**FYI, no action needed — this is the trace `CLAUDE.md` requires for an unreviewed merge.**
+
+PR #37 dropped a single caveat from the `sir_sim` row of the spec status table. The row had read
+"corrected by GitHub #34"; #34 closed when PR #36 merged, so the sheet was citing a closed issue as
+pending work. One line, `official_spec_sheet.md` only, no `.claude/work/*.md`, so union merge was
+not involved.
+
+Michael merged it himself at 2026-08-04 19:52 rather than waiting, because it was blocking the
+`/done` gate on the sir-conventions task and the change is a strict deletion of text that had become
+false. Reviewed by nobody, which is the reason this entry exists.
+
+**Worth noting against the rule as written:** the exception in `CLAUDE.md` is "the other owner is
+unavailable", and James was demonstrably available — he had merged #35 and #36 six minutes earlier.
+So this is a self-merge of convenience, not of necessity. Recording it honestly rather than dressing
+it as the documented case. If that reads as the rule being too tight for one-line doc corrections,
+that is worth deciding rather than repeating.
+
+*#20 · raised 2026-08-04 19:52 — Michael.*
+
+## Settled` and the whole 2026-08-04 meeting block appeared **twice** — your revised wording near
   the top, my stale copy of the pre-relocation wording at the tail.
 - **This item was swallowed.** It landed inside your "Items 14–19, moved from Open" block, between
   item 19 and the duplicate `## Settled` — an *open* item filed under settled ones, which is the
