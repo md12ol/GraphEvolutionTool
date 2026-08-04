@@ -671,3 +671,24 @@ scores incomparable with the archive, which is the whole reason the C++ conventi
 **Rejected:** normalising by the longer of the two lengths, or penalising overshoot symmetrically.
 Both are defensible statistically and both break comparability.
 **Affects:** `official_spec_sheet.md` §5.2; GitHub #17.
+## 2026-08-04 18:25 — Michael & James — Union merge narrows to the two append-only docs; in-place amendment must be announced
+**Chose:** `merge=union` now applies to `decisions.md` and `collab.md` only. `issues.md`,
+`hotfixes.md` and `traps.md` take git's normal 3-way merge. Separately, announcing an in-place
+amendment to a shared doc in `collab.md` first is a **rule**, not a courtesy. And `CLAUDE.md`'s
+"an agent never merges a PR at all" is reworded to "never merges *unprompted*".
+**Why the narrowing:** the three removed files are **churn lists** — deleting an entry is a normal
+operation there, and union merge cannot express a deletion. Measured 2026-08-04: a one-sided delete
+survives, but a delete racing with any edit to the same region is silently discarded and the entry
+returns. Worst case is `hotfixes.md` — you remove an entry because you reverted the code, the other
+owner adds a `Last checked:` line, and the merge resurrects an entry claiming a hotfix is in the
+tree that is not. The trade taken is a conflict on concurrent appends to those three: loud and
+occasional beats silent and wrong.
+**Why the announcement is a rule:** it is the only mechanism that prevents the concurrent-edit case,
+because git will not warn you — two people editing the same existing line makes union keep both
+versions, reported as one insertion with no conflict, measured the same day on a 250-line file.
+**Why the merge rule was reworded:** the absolute form was overridden twice within hours of being
+written, both times correctly. A rule that correct behaviour keeps violating is stated wrong.
+**Rejected:** dropping `merge=union` entirely — it still does its job for the append-only case,
+which is the overwhelming majority, and without it every concurrent session ends in a conflict.
+**Affects:** `/.gitattributes`; `.claude/CLAUDE.md` ("Pull requests", union-formatting rule 5);
+`.claude/work/traps.md`. Settles `collab.md` #18 and #19.

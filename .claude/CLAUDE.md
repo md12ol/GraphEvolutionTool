@@ -114,7 +114,11 @@ what must be unique. Four rules, all load-bearing:
 4. **No bare structural labels.** Write `- **Body:** <first sentence>`, not `- **Body:**` alone —
    a label with nothing after it is byte-identical in every entry that uses it. Same for
    `- **Added:** <date>`: append the entry's slug.
-5. **Append; do not edit an existing entry in place.** Rules 1–4 protect against byte-identical
+5. **Append; do not edit an existing entry in place — and if you must, say so in `collab.md`
+   first. This is a rule, not a courtesy** (agreed 2026-08-04). The announcement is the *only*
+   mechanism that prevents the concurrent case, because git will not warn you: two people editing
+   the same existing line makes union keep **both** versions silently. Rules 1–4 protect against
+   byte-identical
    lines being *deduplicated*. The opposite failure also exists: if two people edit the **same
    existing line** on separate branches, union keeps **both** versions one after the other and
    reports `1 file changed, 1 insertion(+)`. Measured 2026-08-04 on a 250-line file, so it is not a
@@ -154,8 +158,11 @@ promote someone else's `[~]` to `[x]` because their notes read as finished — r
 ## Pull requests — the other owner merges yours
 
 **Added 2026-08-04 — nobody merges their own PR.** James merges Michael's; Michael merges James's.
-Opening it, pushing to it and asking for review are yours; clicking merge is not. An agent never
-merges a PR at all — it opens one and stops.
+Opening it, pushing to it and asking for review are yours; clicking merge is not. ~~An agent never
+merges a PR at all — it opens one and stops.~~ **Amended 2026-08-04 18:25 — an agent never merges
+*unprompted*.** It opens a PR and stops; told to merge, it merges. The original absolute wording was
+overridden twice within hours of being written, both times correctly, which is the definition of a
+rule that is stated wrong rather than one being broken.
 
 ### What must go through a branch and a PR, and what may not
 

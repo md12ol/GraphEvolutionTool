@@ -1,14 +1,29 @@
-# The persistent .claude/ working docs are append-only logs written by two people on separate
-# machines. Appending to the tail of the same file is the most conflict-prone shape in git, so
-# these use git's built-in `union` merge driver: both sides' lines are kept, no conflict markers.
+# Union merge applies to the APPEND-ONLY docs only. Two people write to the tail of the same file
+# from separate machines, which is the most conflict-prone shape in git, so `decisions.md` and
+# `collab.md` use git's built-in `union` driver: both sides' lines are kept, no conflict markers.
 #
-# The cost is that union merge NEVER conflicts. Measured 2026-07-31: two entries with distinct
-# text merge correctly (only the blank line between them is eaten, since it is common to both
-# sides), but lines that are byte-IDENTICAL on both sides are deduplicated, and the two entries
-# interleave into one block that reads as coherent and is not. That is why every entry carries a
-# `— <author>` stamp and a real `Affects:` line — distinctive text is what stops the collapse.
-# See .claude/CLAUDE.md, "Two people, one .claude/", and the trap in .claude/work/traps.md.
+# NARROWED 2026-08-04. This previously covered all five persistent docs, `.claude/work/*.md`.
+# Three of them — issues.md, hotfixes.md, traps.md — are CHURN lists, where deleting an entry is a
+# normal operation ("an entry leaves the moment it is filed"; "remove entries whose hotfix is gone
+# from the tree"). Union merge cannot express a deletion. A one-sided delete survives, but a delete
+# that races with any edit to the same region is silently DISCARDED and the entry comes back —
+# measured 2026-08-04. The worst case is hotfixes.md: you remove an entry because you reverted the
+# code, the other owner adds a `Last checked:` line to it, and the merge resurrects an entry
+# claiming a hotfix is in the tree that is not. Those three now take git's normal 3-way merge, so a
+# concurrent append CONFLICTS and is resolved by hand. That is the trade: loud and occasional,
+# rather than silent and wrong.
+#
+# The cost of union, on the two files that keep it: it NEVER conflicts. Measured 2026-07-31, two
+# entries with distinct text merge correctly (only the blank line between them is eaten, being
+# common to both sides), but lines that are byte-IDENTICAL on both sides are deduplicated and the
+# two entries interleave into one block that reads as coherent and is not. Measured again
+# 2026-08-04, the inverse: two people editing the SAME existing line makes union keep BOTH
+# versions, reported as one insertion, no conflict. So every entry carries a `— <author>` stamp and
+# a time, entries are appended rather than edited, and an in-place amendment is announced in
+# collab.md first. See .claude/CLAUDE.md, "Formatting for union merge", and .claude/work/traps.md.
 #
 # Deliberately NOT covered: work/current/ (gitignored, per-person) and work/archive/ (write-once
-# per task directory, so it cannot collide).
-.claude/work/*.md merge=union
+# per task directory, so it cannot collide). Note gitattributes globs do not cross `/`, so
+# `.claude/work/*.md` reaches only files directly in work/ — confirm with `git check-attr merge -- <path>`.
+.claude/work/decisions.md merge=union
+.claude/work/collab.md merge=union
