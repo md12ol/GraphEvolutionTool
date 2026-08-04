@@ -2,14 +2,16 @@
 //!
 //! Ported from `Graph::SIR` in `legacy/Graph.cpp`, which is the model this
 //! project has always simulated. That source is tracked and readable alongside
-//! this file; `legacy/README.md` says what it is and where the Rust departs
-//! from it.
+//! this file; `legacy/README.md` says what it is and how the two now line up.
 //!
 //! The mechanics are unchanged from the port: an adjacency scan accumulates
 //! each susceptible node's total exposure, and one combined Bernoulli draw per
-//! node decides infection. Only the reporting differs — see [`SirRun`] — and
-//! the RNG is passed in rather than taken from a global, which is what lets one
-//! seed drive a whole batch (spec §5.2).
+//! node decides infection. **The reporting matches it too** — `length` counts
+//! the burnout step and `profile` carries a terminating zero, as of the §5.2
+//! amendment of 2026-08-04. Two things are genuinely ours: the draw is written
+//! `1 - (1 - rate)^k` rather than `1 - exp(k · ln(1 - alpha))`, which avoids a
+//! `ln(0)` at `infection_rate = 1.0`, and the RNG is passed in rather than
+//! taken from a global, which is what lets one seed drive a whole batch.
 //!
 //! The model is SIR with a **one-timestep infectious period**. A node infected
 //! during a step spends the *following* step infectious, transmitting to each
@@ -39,19 +41,25 @@ pub struct SirParams {
 /// The epidemic is the expensive part and all three objectives want the same
 /// one, so a single run reports all three readings (spec §5.2).
 ///
-/// The three are consistent by construction: `profile[0]` is patient zero, so
-/// `spread` is the sum of the profile and `length` is one less than its length.
-/// An outbreak that infects nobody beyond patient zero has `length == 0` and
-/// `spread == 1`.
+/// The three are consistent by construction: `profile[0]` is patient zero and
+/// the profile ends in a terminating zero, so `spread` is the sum of the
+/// profile — the zero contributes nothing — and `length` is one less than its
+/// length. An outbreak that infects nobody beyond patient zero has
+/// `length == 1`, `spread == 1` and `profile == [1, 0]`.
+///
+/// These conventions match `legacy/Graph.cpp` deliberately, so scores stay
+/// comparable with the archived C++ results. See `decisions.md` 2026-08-04
+/// 17:40; the sheet previously specified the other convention.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SirRun {
-    /// Timesteps to burn out — that is, transmission steps, not counting the
-    /// final step in which the last infectious node simply recovers.
+    /// Timesteps the epidemic occupied, **including** the final one in which
+    /// the last infectious node recovers without transmitting.
     pub length: usize,
-    /// Total ever-infected, including patient zero.
+    /// Total ever-infected, including patient zero. Unaffected by the trailing
+    /// zero, and the one reading the C++ and the sheet never disagreed on.
     pub spread: usize,
-    /// Count of **newly infected** nodes at each timestep, `profile[0] == 1`
-    /// being patient zero. Carries no trailing zero.
+    /// Count of **newly infected** nodes at each timestep. `profile[0] == 1` is
+    /// patient zero, and the last element is the terminating zero.
     pub profile: Vec<usize>,
 }
 
@@ -74,6 +82,13 @@ enum State {
 /// `patient_zero` is assumed to be a valid node; a config-driven run has
 /// already checked that, and an out-of-range value here yields an outbreak that
 /// infects nobody rather than a panic.
+///
+/// **A graph with no nodes returns `length == 0` with an empty profile, and
+/// that is deliberate — do not "fix" it to `1` for consistency.** Since the
+/// §5.2 amendment every real epidemic has `length >= 1`, because a lone patient
+/// zero still occupies the burnout step. Zero therefore means *no epidemic
+/// existed to measure*, which is a different statement from *nobody was
+/// infected*, and only a nodeless graph can make it. Agreed 2026-08-04.
 pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) -> SirRun {
     let num_nodes = graph.num_nodes;
     if num_nodes == 0 {
@@ -142,12 +157,12 @@ pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) 
             }
         }
 
-        // The final pass carries no new infections; recording its zero would
-        // pad every profile with a trailing entry and put `length` one step
-        // past the last transmission.
-        if currently_infectious > 0 {
-            profile.push(currently_infectious);
-        }
+        // The final pass carries no new infections, and its zero is recorded
+        // rather than suppressed: §5.2 counts that burnout step in `length`,
+        // and `profile` terminates with it. `length` needs no adjustment for
+        // this — the profile grows by one element, so `profile.len() - 1`
+        // becomes the burnout-inclusive count on its own.
+        profile.push(currently_infectious);
     }
 
     SirRun {
@@ -197,8 +212,11 @@ mod tests {
 
         let run = sir_sim(&graph, &params, &mut rng());
 
-        assert_eq!(run.profile, vec![1, 1, 1, 1, 1, 1]);
-        assert_eq!(run.length, 5, "one step per edge of the path");
+        assert_eq!(run.profile, vec![1, 1, 1, 1, 1, 1, 0]);
+        assert_eq!(
+            run.length, 6,
+            "one step per edge of the path, plus the burnout step",
+        );
         assert_eq!(run.spread, 6, "every node is reached");
     }
 
@@ -212,9 +230,12 @@ mod tests {
 
         let run = sir_sim(&graph, &params, &mut rng());
 
-        assert_eq!(run.length, 0, "spec 5.2: no transmission is length 0");
+        assert_eq!(
+            run.length, 1,
+            "spec 5.2: the burnout step counts, so no transmission is length 1",
+        );
         assert_eq!(run.spread, 1, "patient zero alone");
-        assert_eq!(run.profile, vec![1]);
+        assert_eq!(run.profile, vec![1, 0]);
     }
 
     #[test]
@@ -227,9 +248,9 @@ mod tests {
 
         let run = sir_sim(&graph, &params, &mut rng());
 
-        assert_eq!(run.length, 0);
+        assert_eq!(run.length, 1, "same shape as an isolated patient zero");
         assert_eq!(run.spread, 1);
-        assert_eq!(run.profile, vec![1]);
+        assert_eq!(run.profile, vec![1, 0]);
     }
 
     #[test]
@@ -247,8 +268,12 @@ mod tests {
         let run = sir_sim(&graph, &params, &mut rng());
 
         assert_eq!(run.spread, 3, "the far triangle is unreachable");
-        assert_eq!(run.profile, vec![1, 2], "both neighbours infected at once");
-        assert_eq!(run.length, 1);
+        assert_eq!(
+            run.profile,
+            vec![1, 2, 0],
+            "both neighbours infected at once, then burnout",
+        );
+        assert_eq!(run.length, 2);
     }
 
     #[test]
@@ -332,6 +357,9 @@ mod tests {
         );
     }
 
+    /// Zero here means *no epidemic existed*, not *nobody was infected* — since
+    /// the §5.2 amendment a lone patient zero is `length == 1`, so only a
+    /// nodeless graph can produce `0`. Deliberate; see `sir_sim`'s doc comment.
     #[test]
     fn an_empty_graph_produces_no_epidemic() {
         let graph = Graph::new(0, 1);
