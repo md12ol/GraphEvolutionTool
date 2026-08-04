@@ -122,6 +122,57 @@ impl Selection {
     }
 }
 
+/// Apply the engine's two mutation dice rolls to one child.
+///
+/// 1. `mutation_rate` — whether this child mutates at all.
+/// 2. `max_mutations` — if it does, how many mutations it takes, drawn uniformly
+///    from `1..=max_mutations`.
+///
+/// Both rolls live here, in one helper both evolution strategies call, so they
+/// cannot drift apart on mutation semantics the way they did on selection
+/// sampling. Neither roll belongs to the genome: [`Genome::mutate`] applies
+/// exactly one mutation per call, and a representation that rolled its own count
+/// would make `max_mutations` mean nothing for that representation with nothing
+/// to report it.
+///
+/// The rolls happen in a fixed order — rate first, then count — so a seeded run
+/// reproduces exactly.
+///
+/// **A seeded run does not reproduce what the pre-`max_mutations` engine
+/// produced, even at `max_mutations = 1`.** The count roll is unconditional once
+/// the rate roll passes, and `random_range(1..=1)` still consumes RNG state
+/// despite having only one possible outcome (measured 2026-08-03). Skipping the
+/// draw at 1 would restore the old sequence, and is deliberately not done: a
+/// special case that changes the RNG stream based on a config value is a worse
+/// thing to own than a one-time change in seeded output, which was accepted when
+/// this was designed.
+///
+/// # Panics
+///
+/// If `max_mutations` is zero: `1..=0` is an empty range with no meaningful
+/// draw. A backstop only — the config layer rejects it first, but the evolvers
+/// are constructible directly, so this checks rather than trusting its caller.
+pub fn mutate_child<G, R>(child: &mut G, mutation_rate: f64, max_mutations: usize, rng: &mut R)
+where
+    G: Genome,
+    R: Rng + ?Sized,
+{
+    assert!(
+        max_mutations >= 1,
+        "max_mutations must be at least 1, got 0: a child that mutates takes \
+         between 1 and max_mutations mutations, which is an empty range at 0",
+    );
+
+    if !rng.random_bool(mutation_rate) {
+        return;
+    }
+
+    let count = rng.random_range(1..=max_mutations);
+    for _ in 0..count {
+        child.mutate(rng);
+    }
+}
+
 /// Express every genome against the shared context and score the whole batch,
 /// returning the expressed graphs alongside their fitnesses. Index `i` of both
 /// vectors refers to `population[i]`.
@@ -221,6 +272,12 @@ mod tests {
     }
 
     /// A genome that is just its index, so a winner reports its own slot.
+    ///
+    /// The index doubles as a **mutation counter**: `mutate` increments it, so
+    /// the `mutate_child` tests read the number of mutations applied instead of
+    /// inferring it. A test that relies on the index identifying a slot must
+    /// therefore not run its individuals through a mutation path — none do
+    /// today, and `mutate` is called nowhere but inside `mutate_child`.
     #[derive(Clone, Debug, PartialEq, Eq)]
     struct IndexGenome(usize);
 
@@ -235,7 +292,11 @@ mod tests {
 
         fn crossover<R: Rng + ?Sized>(&mut self, _other: &mut Self, _rng: &mut R) {}
 
-        fn mutate<R: Rng + ?Sized>(&mut self, _rng: &mut R) {}
+        // One mutation is one increment, which is what makes the count
+        // observable — see the type's doc comment.
+        fn mutate<R: Rng + ?Sized>(&mut self, _rng: &mut R) {
+            self.0 += 1;
+        }
 
         fn print(&self) -> String {
             format!("IndexGenome({})", self.0)
@@ -544,5 +605,64 @@ mod tests {
         let selection = Selection::Tournament { tournament_size: 0 };
         let mut rng = StdRng::seed_from_u64(1);
         selection.select(&population(4), &[0.0; 4], 1, &mut rng);
+    }
+
+    #[test]
+    fn a_zero_mutation_rate_never_mutates() {
+        let mut rng = StdRng::seed_from_u64(1);
+        let mut child = IndexGenome(0);
+
+        // Over enough trials that a rate misread as a per-mutation probability,
+        // or an unconditional count roll, would show up.
+        for _ in 0..1_000 {
+            mutate_child(&mut child, 0.0, 4, &mut rng);
+        }
+
+        assert_eq!(child.0, 0, "rate 0.0 must not mutate at all");
+    }
+
+    #[test]
+    fn a_certain_mutation_at_max_one_applies_exactly_one() {
+        let mut rng = StdRng::seed_from_u64(2);
+
+        for _ in 0..100 {
+            let mut child = IndexGenome(0);
+            mutate_child(&mut child, 1.0, 1, &mut rng);
+
+            // The contract this task exists to enforce: one call, one mutation.
+            assert_eq!(child.0, 1, "max_mutations 1 must apply exactly one");
+        }
+    }
+
+    #[test]
+    fn the_mutation_count_covers_one_to_max_and_never_exceeds_it() {
+        let mut rng = StdRng::seed_from_u64(3);
+        let mut seen = [false; 5];
+
+        for _ in 0..500 {
+            let mut child = IndexGenome(0);
+            mutate_child(&mut child, 1.0, 4, &mut rng);
+
+            assert!(
+                (1..=4).contains(&child.0),
+                "{} mutations applied, max_mutations was 4",
+                child.0,
+            );
+            seen[child.0] = true;
+        }
+
+        // An inclusive range drawn uniformly: a `1..max` off-by-one would never
+        // produce 4, and a zero lower bound would eventually produce 0.
+        assert!(
+            seen[1..].iter().all(|&drawn| drawn),
+            "not every count in 1..=4 was drawn over 500 trials: {seen:?}",
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "max_mutations must be at least 1")]
+    fn a_zero_max_mutations_is_rejected() {
+        let mut rng = StdRng::seed_from_u64(4);
+        mutate_child(&mut IndexGenome(0), 1.0, 0, &mut rng);
     }
 }

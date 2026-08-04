@@ -215,7 +215,12 @@ magnitude. Rejected default 4 (a magic number for every genome) and a required f
 **Consequences:** edge-edit mutates less at the default than it does today; SDA becomes more
 disruptive above 1; every seeded run changes output because the draw order moves.
 **Affects:** `get/src/genomes/genome.rs:26`, `edge_edit.rs` (`MAX_MUTATIONS` deleted),
-`evolver/common.rs`, `evolver/steady_state.rs:58`, `config.rs`. Spec §4. **Not yet implemented.**
+`evolver/common.rs`, `evolver/steady_state.rs:58`, `config.rs`. Spec §4. ~~**Not yet implemented.**~~
+**Implemented 2026-08-03 — James**, closing GitHub #10 on branch `jsargant_mutation_contract`:
+`common::mutate_child` (`common.rs:155`) owns both rolls, `MAX_MUTATIONS` is deleted, both genomes
+apply exactly one mutation per call, and `Config::max_mutations` defaults to 1. 103 tests green.
+Steady-state is the only caller until the generational evolver (#25) exists — the "both strategies"
+above is the contract the helper was built to, not a second call site that exists today.
 
 ## 2026-07-31 — Michael & James — SDA alphabet is derived from the edge cap
 **Chose:** `num_chars` leaves `config.toml` entirely; the alphabet is `max_edge_multiplicity + 1`,
@@ -464,3 +469,35 @@ person's machine at session start without them reading the diff.
 **Rejected:** Leaving the existing rule scoped to `settings.json` and `hooks/` — that made the
 riskiest case an exception rather than an instance, which is an edge the rule can fall off.
 **Affects:** `.claude/CLAUDE.md`, new "Pull requests" section; PR #31 is itself subject to it.
+## 2026-08-03 18:45 — James — The `max_mutations` count roll is unconditional; no special case at 1
+**Chose:** `common::mutate_child` always draws `rng.random_range(1..=max_mutations)` once the
+`mutation_rate` roll passes, including when `max_mutations == 1` and the draw has exactly one
+possible outcome. A standalone free function, not a method on `Selection`, matching `evaluate` and
+`generation_stats`.
+**Why:** measured 2026-08-03 — `random_range(1..=1)` **consumes RNG state** despite being
+deterministic, so every seeded run's output moves relative to the pre-`max_mutations` engine even at
+the default. Skipping the draw at 1 would restore the old stream, and was rejected: a special case
+that changes the RNG sequence depending on a config value is a worse thing to own than a one-time
+change in seeded output, and the latter was already accepted when this was designed.
+**Rejected:** `if max_mutations > 1 { ... }` around the draw, for the reason above. Also rejected
+folding both rolls into `Genome::mutate` — that is the exact drift this task removes.
+**Consequences:** seeded runs before and after this change are not comparable. The existing
+reproducibility tests survive because they assert self-consistency, not specific values; anything
+that ever hardcodes a fitness from a seed will not.
+**Affects:** `get/src/evolver/common.rs` `mutate_child`, `get/src/evolver/steady_state.rs`
+`mating_event`. Spec §4; implements GitHub #10.
+*Recorded 2026-08-03 18:45 — James, during #10 implementation.*
+
+## 2026-08-03 18:46 — James — Commits and PRs authored by James carry no agent co-attribution
+**Chose:** No `Co-Authored-By: Claude ...` trailer on commits and no "Generated with Claude Code"
+footer on PR bodies, for work authored under James's git identity. Recorded in `~/.claude/CLAUDE.md`
+(global, James's machine only), deliberately **not** in this repo's `.claude/CLAUDE.md`.
+**Why:** attribution on the permanent record is the author's to decide, and a co-author line adds a
+party who cannot answer questions about the change. Kept out of the project file because it is a
+personal preference about James's own commits, and the shared `CLAUDE.md` is not the place to bind
+the other owner's practice.
+**Rejected:** putting it in the project `CLAUDE.md` — would silently impose it on Michael. Also
+rejected leaving it unrecorded here: "why do these commits have no trailer when the tool default
+adds one" is exactly the question a future session would waste time on.
+**Affects:** every commit and PR James makes in this repo; `~/.claude/CLAUDE.md`.
+*Recorded 2026-08-03 18:46 — James, after the /start coordination call.*

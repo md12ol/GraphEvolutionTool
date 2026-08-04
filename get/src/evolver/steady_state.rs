@@ -5,7 +5,7 @@
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use super::common::{Selection, evaluate, generation_stats, rank};
+use super::common::{Selection, evaluate, generation_stats, mutate_child, rank};
 use super::{
     EvolutionOutcome, Evolver, GenerationStats, SharedEvolutionContext, SteadyStateContext,
 };
@@ -50,15 +50,20 @@ impl<G: Genome> SteadyStateEvolver<G> {
         let mut first = self.population[tournament[0]].clone();
         let mut second = self.population[tournament[1]].clone();
 
-        // One roll for the pair, then one per child, in a fixed order so a
-        // seeded run reproduces exactly.
+        // One crossover roll for the pair, then the mutation rolls per child, in
+        // a fixed order so a seeded run reproduces exactly. Mutation goes through
+        // the shared helper so this strategy and generational cannot disagree
+        // about what `mutation_rate` and `max_mutations` mean.
         if rng.random_bool(self.shared.crossover_rate) {
             first.crossover(&mut second, rng);
         }
         for child in [&mut first, &mut second] {
-            if rng.random_bool(self.shared.mutation_rate) {
-                child.mutate(rng);
-            }
+            mutate_child(
+                child,
+                self.shared.mutation_rate,
+                self.shared.max_mutations,
+                rng,
+            );
         }
 
         // Scoring both children in one batch rather than individually halves the
@@ -279,6 +284,7 @@ mod tests {
             genome_context: (),
             crossover_rate,
             mutation_rate,
+            max_mutations: 1,
             selection: selection(),
         };
         let context = SteadyStateContext {
@@ -410,6 +416,7 @@ mod tests {
             genome_context: (),
             crossover_rate: 0.5,
             mutation_rate: 0.5,
+            max_mutations: 1,
             selection: Selection::Tournament { tournament_size: 3 },
         };
         let context = SteadyStateContext {
@@ -425,6 +432,7 @@ mod tests {
             genome_context: (),
             crossover_rate: 0.5,
             mutation_rate: 0.5,
+            max_mutations: 1,
             selection: selection(),
         };
         let context = SteadyStateContext {
@@ -438,6 +446,7 @@ mod tests {
             genome_context: (),
             crossover_rate: 0.7,
             mutation_rate: 0.7,
+            max_mutations: 1,
             selection: selection(),
         };
         let context = SteadyStateContext {

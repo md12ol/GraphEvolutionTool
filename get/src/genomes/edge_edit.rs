@@ -13,7 +13,6 @@ mod operations;
 use operations::GraphOperation;
 
 const OPERATION_COUNT: usize = 9;
-const MAX_MUTATIONS: usize = 4;
 const OPCODE_MASK: u64 = 0xF;
 
 /// Relative probabilities for generating each edge-edit operation.
@@ -222,21 +221,18 @@ impl Genome for EdgeEditGenome {
         }
     }
 
+    /// Reroll one gene, its opcode drawn from the operation mix.
+    ///
+    /// Exactly one, per the [`Genome::mutate`] contract. This previously rolled
+    /// `1..=4` against a hardcoded `MAX_MUTATIONS`, which made the engine's
+    /// `max_mutations` mean nothing here; the count is the engine's to decide.
     fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R) {
         if self.genes.is_empty() {
             return;
         }
 
-        let max_changes = self.genes.len().min(MAX_MUTATIONS);
-        let change_count = rng.random_range(1..=max_changes);
-
-        // Indices are drawn independently, so the same gene can be selected
-        // twice; that is harmless, since each selection overwrites it with a
-        // fresh random gene either way.
-        for _ in 0..change_count {
-            let gene_index = rng.random_range(0..self.genes.len());
-            self.genes[gene_index] = Self::generate_gene(rng, &self.operators.distribution);
-        }
+        let gene_index = rng.random_range(0..self.genes.len());
+        self.genes[gene_index] = Self::generate_gene(rng, &self.operators.distribution);
     }
 
     fn print(&self) -> String {
@@ -463,18 +459,29 @@ mod tests {
     }
 
     #[test]
-    fn mutation_replaces_at_most_four_genes_using_the_shared_mix() {
-        let mut genome = EdgeEditGenome::new_with_operators(
-            vec![8; 10],
-            EdgeEditOperators::new(weights_for_delete()).unwrap(),
-        );
-        let mut rng = StdRng::seed_from_u64(19);
+    fn mutation_replaces_exactly_one_gene_using_the_shared_mix() {
+        // Swept over seeds rather than run once: a single seed cannot tell
+        // "always one" from "one this time". The genes are sentinel value 8
+        // (opcode 8) and `weights_for_delete` forces every generated gene to
+        // opcode 3, so a reroll can never coincidentally reproduce the sentinel
+        // and read as unchanged.
+        for seed in 0..64 {
+            let mut genome = EdgeEditGenome::new_with_operators(
+                vec![8; 10],
+                EdgeEditOperators::new(weights_for_delete()).unwrap(),
+            );
+            let mut rng = StdRng::seed_from_u64(seed);
 
-        genome.mutate(&mut rng);
+            genome.mutate(&mut rng);
 
-        let changed: Vec<_> = genome.genes.iter().filter(|gene| **gene != 8).collect();
-        assert!((1..=4).contains(&changed.len()));
-        assert!(changed.iter().all(|gene| **gene & OPCODE_MASK == 3));
+            let changed: Vec<_> = genome.genes.iter().filter(|gene| **gene != 8).collect();
+            assert_eq!(
+                changed.len(),
+                1,
+                "one call to mutate must change exactly one gene, seed {seed}",
+            );
+            assert!(changed.iter().all(|gene| **gene & OPCODE_MASK == 3));
+        }
     }
 
     #[test]
