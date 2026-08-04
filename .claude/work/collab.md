@@ -114,6 +114,71 @@ meeting, not a patch from either of us. Say so and I will re-raise it as a sheet
 
 *#15 · raised 2026-08-04 10:53 — Michael.*
 
+### 16. Before #26 is built: should the fitness axis be `dyn` rather than a match arm?
+
+**Decide, at the next meeting.** Nothing is blocked today and I am not proposing to change the
+sheet unilaterally — but this gets expensive the moment #26 exists, so it is worth ten minutes now.
+
+**The trigger.** Adding a native Rust objective currently means editing three files: `fitness.rs`
+for the `impl Fitness`, `config.rs:95` for a new `FitnessConfig` variant, and the dispatch in
+`GraphEvolver::run`. #26 specifies that dispatch as a nested match over 2 strategies × 2 genomes ×
+4 fitnesses, so a fifth objective adds **four** arms, not one.
+
+**The fact that makes a choice available.** The two dispatch axes are not symmetric, and I think
+this has not been noticed:
+
+- `Genome` declares `fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R)` — a generic method, so
+  `Genome` is **not** object-safe. The genome axis has to stay a match. This is not negotiable.
+- `Fitness` has no generic methods. Probed on 2026-08-04: `Box<dyn Fitness>` constructs and
+  dispatches, and `dyn Fitness` is `Send + Sync` through the supertrait, so rayon is unaffected.
+
+#26's own text has a section headed "Why a match and not `dyn`", and its reason is that
+`Evolver::run<F>` is generic so `Box<dyn Evolver>` is not viable. That is correct — and it is about
+the **evolver** axis. It does not address the fitness axis, so the question may simply never have
+been put. That is why I am asking rather than treating it as settled.
+
+#### Option A — keep the match exactly as #26 specifies
+
+Dispatch stays 2 × 2 × 4 = 16 arms, every combination naming its concrete fitness type.
+
+- **Adding an objective:** `fitness.rs` + `config.rs` + 4 new dispatch arms across 3 files.
+- **Performance:** static dispatch throughout; `evaluate` can inline into the rayon closure.
+- **In its favour:** it is what the sheet says, it needs no new trait machinery, and the concrete
+  type is visible at every call site, which is easier to read when debugging a specific run.
+- **Against:** the arm count grows multiplicatively, and #26 already anticipates the problem —
+  it suggests "a macro over the arms is the next step if it gets unwieldy". A macro over 16 arms is
+  harder to read than either option here.
+
+#### Option B — erase the fitness to `Box<dyn Fitness>` before instantiating the evolver
+
+Each arm builds its objective, boxes it, and hands one type to the evolver. Dispatch collapses to
+2 × 2 × 1 = 4 arms. Needs one small `impl Fitness for Box<dyn Fitness>` in `fitness.rs`, which must
+live inside the crate — the orphan rule rejects it from a test or another crate, which I confirmed
+by trying.
+
+- **Adding an objective:** `fitness.rs` + `config.rs`. **Dispatch is never touched.**
+- **Performance:** one virtual call per `evaluate`. For an SIR objective that call has an entire
+  epidemic behind it, so the vtable cost is noise; `evaluate_population` is one virtual call per
+  *batch*. If we ever add an objective cheap enough for the indirection to matter, that objective
+  can still be dispatched statically as a special case.
+- **In its favour:** it also makes the `PyFitness` adapter (#19) an ordinary objective rather than
+  a shape the matrix has to accommodate, since it is already the case that only the boxed value
+  differs.
+- **Against:** the concrete objective type is no longer visible at the call site, and it is a
+  departure from what the sheet currently records.
+
+**What does not change under either option.** `config.rs` still needs a variant per objective, so
+two files is the floor regardless. That is deliberate and I am not proposing to touch it: #13 and
+#23 make "serde *is* the validation" load-bearing, and a string-keyed registry would move
+validation out of serde, which is the precise failure those two issues exist to prevent.
+
+**Why the timing matters.** Both options cost about the same to build today. Once the 16-arm match
+exists, moving to B is a rewrite of the whole dispatch layer rather than a different way of writing
+it the first time. My preference is **B**, but it is a sheet change (§6, §8) and therefore a joint
+call — I have not touched the sheet or the code.
+
+*#16 · raised 2026-08-04 11:13 — Michael.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
