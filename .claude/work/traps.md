@@ -158,3 +158,21 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   disappears once there is enough surrounding context for git to localize the hunk, so short files
   like `hotfixes.md` and `issues.md` are more fragile than `decisions.md`.
 - **Added:** 2026-08-04 — union-merge-silently-duplicates-a-line
+
+### Untracked pre-spec-sheet docs sit in the tree and `git add -A` will commit them
+- **Bites when:** you stage with a bare `git add -A` or `git add .`. Four untracked files are in
+  James's working tree — `docs/IMPLEMENTATION.md`, `docs/COMPLEXITY_REVIEW_HANDOFF.md`,
+  `docs/PR_DRAFT.md` (all 2026-07-29) and `GET GA planning session.md` (2026-07-26). Verified
+  2026-08-03: `git ls-files` returns none of them and `git check-ignore` matches none of them, so
+  they are eligible for staging and nothing stops it.
+- **Do this instead:** stage explicit paths — `git add -A -- <path> <path>` — or check
+  `git status --short` for `??` lines before committing. This is how `a8cbf27` was staged.
+- **Why they must not be committed:** `docs/IMPLEMENTATION.md` is the document
+  `official_spec_sheet.md` **replaced**. `.claude/CLAUDE.md` records that it "mixed design with
+  build order and rotted every time the order changed", which is the exact failure the sheet exists
+  to prevent. Its own opening paragraph describes the `feature/ga-engine` stub era, when every body
+  was a `todo!()`. Committing it would restore a second, contradictory design authority.
+- **Do not read them as current.** They predate the 2026-07-31 spec sheet and the tracker. Where
+  they disagree with `official_spec_sheet.md`, the sheet governs and they are simply stale.
+- **Machine:** James's working tree only, uncommitted — Michael will not see these files.
+- **Added:** 2026-08-03 — untracked-pre-spec-sheet-docs-git-add-all

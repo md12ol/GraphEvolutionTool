@@ -692,3 +692,60 @@ written, both times correctly. A rule that correct behaviour keeps violating is 
 which is the overwhelming majority, and without it every concurrent session ends in a conflict.
 **Affects:** `/.gitattributes`; `.claude/CLAUDE.md` ("Pull requests", union-formatting rule 5);
 `.claude/work/traps.md`. Settles `collab.md` #18 and #19.
+
+## 2026-08-04 19:05 — James — Three mutation-contract entries land after the meeting block, out of date order
+**Chose:** The two entries below were written 2026-08-03 during GitHub #10 and were never committed
+— they sat unstaged on `jsargant_mutation_contract` while `main` moved on. They are appended here,
+at the tail, rather than inserted at their chronological position among the 2026-08-03 entries.
+**Why:** inserting them mid-file is an in-place edit of a shared union-merged document, which the
+2026-08-04 18:25 decision makes an announce-first operation. Appending out of order costs a reader
+one confusing timestamp; inserting costs a silent duplicate if Michael is editing the same region.
+The cheap failure is the right one to take.
+**Affects:** the reading order of `decisions.md` only — no code. Recovered during `/start` on
+2026-08-04, after PR #30 and PR #33 had both merged.
+*Recorded 2026-08-04 19:05 — James, recovering the uncommitted #10 close-out.*
+
+## 2026-08-03 21:10 — James — The `mutate_child` tests count mutations on the existing `IndexGenome` stub
+**Chose:** `IndexGenome::mutate` in `common.rs`'s test module increments the index instead of being
+a no-op, so the index doubles as a mutation counter and the four `mutate_child` tests read the count
+directly. No second stub type was added.
+**Why:** the helper's whole job is deciding *how many times* `Genome::mutate` is called, and the
+existing stub's `mutate` was empty, so there was nothing to assert on. Checked before changing it:
+the only `mutate` call anywhere in `common.rs` is inside `mutate_child` itself, so no selection test
+runs an individual through a mutation path and the change is inert for all of them — 97 pre-existing
+tests stayed green.
+**Rejected:** (a) A separate `CountingGenome` stub — twenty lines of trait boilerplate to do what
+one line on the existing stub does. Proposed first and rejected by James as overengineered, which it
+was. (b) Inferring the count from a real `EdgeEditGenome` — a reroll can land on the value the gene
+already held, so an applied mutation becomes invisible and the count-bound test would silently
+undercount while still passing. That is the failure this task exists to prevent, so the test must
+not share it.
+**Consequences:** `IndexGenome` now serves two test suites, and a future selection test that mutates
+its individuals would see their identities shift. The type's doc comment says so at
+`common.rs:274` area.
+**Affects:** `get/src/evolver/common.rs` test module. Implements the verification half of GitHub #10.
+*Recorded 2026-08-03 21:10 — James, during #10 verification.*
+
+## 2026-08-03 21:12 — James — Verification tests are fault-injected before an item is ticked `[x]`
+**Chose:** Every test written to verify #10 was checked by breaking the code it guards and
+confirming the test fails, then reverting. Three injections: an exclusive `1..max` count range (fails
+the count-bound test), an extra `0..=count` loop pass (fails the exactly-one and count-bound tests),
+and `default_max_mutations` returning 2 (fails the config default test). Each revert was verified by
+reading the diff, not by assuming.
+**Why:** a passing test proves nothing about whether it would catch the regression it was written
+for, and `CLAUDE.md` makes `[x]` mean *seen verified*. A test that passes because it asserts
+something trivially true is exactly how a false `[x]` gets recorded, which that file names as the
+most expensive failure mode here. The injection is what turned two `[~]` items into `[x]`.
+**Rejected:** ticking on "97 → 103 tests, all green" alone — that shows the tests run, not that they
+bite.
+**Affects:** the `[x]` claims on the `mutate_child` and config items in this task's `plan.md`;
+evidence recorded in `work/current/history.md`.
+*Recorded 2026-08-03 21:12 — James, at the #10 save.*
+
+## Task complete: mutation-contract — 2026-08-03, recorded 2026-08-04 19:05
+Archived to `.claude/work/archive/2026-08_mutation-contract/`. GitHub #10 shipped as **PR #30**
+(`a8cbf27`), which **merged 2026-08-04 15:58 UTC as `79f7948`** and closed #10 — the original
+wording of this marker said the merge was carried forward, and it has since happened.
+`Genome::mutate` now means exactly one mutation, `common::mutate_child` owns both dice rolls,
+`MAX_MUTATIONS` is deleted, and `Config::max_mutations` defaults to 1. 103 tests green, up from 97.
+*Task marker · mutation-contract · recorded 2026-08-04 19:05 — James.*
