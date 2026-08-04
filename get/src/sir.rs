@@ -1,9 +1,9 @@
 //! One SIR epidemic over an expressed graph.
 //!
-//! Ported from `Graph::SIR` in the project's legacy C++ implementation, which
-//! is the model this project has always simulated. **That source is gitignored
-//! (`.gitignore:4`) and is not in this repo**, so this module — not a comment
-//! pointing elsewhere — is the authoritative statement of the model.
+//! Ported from `Graph::SIR` in `legacy/Graph.cpp`, which is the model this
+//! project has always simulated. That source is tracked and readable alongside
+//! this file; `legacy/README.md` says what it is and where the Rust departs
+//! from it.
 //!
 //! The mechanics are unchanged from the port: an adjacency scan accumulates
 //! each susceptible node's total exposure, and one combined Bernoulli draw per

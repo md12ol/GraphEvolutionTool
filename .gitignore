@@ -1,11 +1,9 @@
 .idea/
 target/
 .vscode/
-Graph.cpp
-Graph.h
-SDA.cpp
-SDA.h
-main.cpp
+# The legacy C++ is TRACKED, in legacy/. It used to be ignored at the repo root, which meant the
+# implementation the Rust is ported from lived on one laptop — and a doc comment citing it pointed
+# at a file nobody else had. It is reference, not a build target; see legacy/README.md.
 handoff_transfer_from_c++.md
 handoff_edge_multiplicity_cap_simplification.md
 **/target/

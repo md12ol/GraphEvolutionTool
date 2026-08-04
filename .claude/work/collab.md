@@ -114,6 +114,13 @@ meeting, not a patch from either of us. Say so and I will re-raise it as a sheet
 
 *#15 · raised 2026-08-04 10:53 — Michael.*
 
+**Michael's position, 2026-08-04 11:22:** the intended behaviour is what `legacy/main.cpp` does, so
+my leaning is to match the C++ rather than the sheet — `length` gains the burnout step and `profile`
+regains its trailing zero. That is a §5.2 amendment, so it stands as a discussion item for the
+meeting and I have not changed the code. **Consequence worth stating plainly: until this is settled,
+`sir_sim`'s `length` and `profile` are contested, so issue #16 should not be closed.** The
+simulator is otherwise complete. *(Reply inside #15 · 2026-08-04 11:22 — Michael.)*
+
 ### 16. Before #26 is built: should the fitness axis be `dyn` rather than a match arm?
 
 **Decide, at the next meeting.** Nothing is blocked today and I am not proposing to change the
@@ -234,6 +241,13 @@ re-opening.
 I have not touched the sheet, the code or the issues over any of this.
 
 *#17 · raised 2026-08-04 11:17 — Michael.*
+
+**Michael's position, 2026-08-04 11:22:** intended behaviour is what the C++ does, so my leaning is
+the first option — port the re-roll as-is, with `mepl` and `rse` as config fields rather than
+hardcoded. Raising it here as a discussion rather than acting on it, since adopting a mechanism the
+sheet does not mention is a §5.2 amendment either way. Note the paths in this item moved: the C++
+is now tracked at `legacy/main.cpp` and `legacy/Graph.cpp`, with `legacy/README.md` recording what
+it is; the line numbers cited above are unchanged. *(Reply inside #17 · 2026-08-04 11:22 — Michael.)*
 
 ## Settled
 
