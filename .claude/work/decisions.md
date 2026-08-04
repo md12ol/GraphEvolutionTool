@@ -501,3 +501,37 @@ rejected leaving it unrecorded here: "why do these commits have no trailer when 
 adds one" is exactly the question a future session would waste time on.
 **Affects:** every commit and PR James makes in this repo; `~/.claude/CLAUDE.md`.
 *Recorded 2026-08-03 18:46 — James, after the /start coordination call.*
+
+## 2026-08-04 15:55 — Michael — Code goes through a branch and a PR; working docs may be pushed direct
+**Chose:** Anything under `get/src/`, `Cargo.toml` or `config.example.toml` that solves an issue
+goes through a feature branch and a PR, named `<owner>_<description>`. `settings.json` and `hooks/`
+were already PR-only; the spec sheet needs a joint meeting on top. `.claude/work/*.md` may be pushed
+to `main` directly, and `.claude/CLAUDE.md` may be, though a PR is preferred when the change binds
+the other owner's practice rather than recording a fact.
+**Why:** review is worth requesting where it catches something. A defect in `get/src/` stays
+invisible until something downstream reads a wrong number, and the current issue set has several
+files claimed by two workstreams at once. The docs carry no behaviour, and the one thing review
+would catch in them — a union-merge interleave — has its own audit command that is cheaper to run
+than a review is to request. A trap that is not on `main` also protects nobody, which is an active
+argument for pushing them.
+**Rejected:** Routing everything through PRs — it made the traps land after the merge they existed
+to prevent. Also rejected leaving it implicit: three review bypasses happened in one day, each with
+a good reason, which is exactly how a pattern establishes itself unnoticed.
+**Affects:** `.claude/CLAUDE.md`, "Pull requests"; `collab.md` #19.
+
+## 2026-08-04 16:05 — Michael — Union merge duplicates concurrently-edited lines; GitHub disables it entirely
+**Chose:** Record both as traps and act on them: append rather than edit `.claude/work/*.md` in
+place, and merge any PR touching those files locally rather than with the GitHub button.
+**Why:** measured, not reasoned. GitHub reproduces the no-driver merge exactly — clean locally with
+`.gitattributes`, `CONFLICT` without it, `mergeable=false` on its API — because merge drivers run in
+your git, not on their servers, and this holds even for `union`, which is built in. Separately, two
+branches editing the same existing line makes union keep **both** versions, reported as
+`1 file changed, 1 insertion(+)` with no conflict; reproduced on a 250-line file, so it is not a
+small-file artifact.
+**Corrects:** an earlier claim in this session that James's in-place amendment of the 2026-07-31
+joint entry was "luck as much as care". Authorship is irrelevant to union safety — the hazard is
+*concurrent* edits to one line, and nobody was editing his, so it was safe by construction.
+**Rejected:** dropping `merge=union` — it still does its job for the append case, which is the
+overwhelming majority, and without it every concurrent session ends in a conflict.
+**Affects:** `.claude/work/traps.md` (two entries); `.claude/CLAUDE.md` union-formatting rule 5 and
+the "Pull requests" section; `collab.md` #19.
