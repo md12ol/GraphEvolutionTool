@@ -65,10 +65,25 @@ impl Direction {
 ///
 /// The `Send + Sync` bound lets [`Fitness::evaluate_population`] score a whole
 /// generation across rayon worker threads.
+///
+/// # These methods are implemented here and called by the engine in exactly one place
+///
+/// **Nothing in the engine calls [`Fitness::evaluate`] or
+/// [`Fitness::evaluate_population`] directly.** Both are reached only through
+/// `common::express_and_score`, which is the sole path from a population to a set
+/// of fitnesses. Implement them; do not call them.
+///
+/// A direct call compiles, returns plausible numbers, and is wrong in two ways
+/// that never announce themselves — it skips the [`Direction`] conversion, so
+/// under [`Direction::Maximize`] every comparison runs backwards, and it skips
+/// the `NaN` rejection that [`Direction::orient`] performs. Spec §5.1.
 pub trait Fitness: Send + Sync {
     /// Score a single expressed graph, in the objective's own units.
     ///
     /// Must not return `NaN`; the engine panics if it does.
+    ///
+    /// Implemented by an objective, called by `common::express_and_score` — see
+    /// the note on the trait. The engine does not call this.
     fn evaluate(&self, graph: &Graph) -> f64;
 
     /// Whether larger or smaller scores are better.
@@ -85,6 +100,11 @@ pub trait Fitness: Send + Sync {
     /// for native Rust objectives. A Python-backed adapter overrides this to
     /// acquire the GIL once per generation and vectorize the whole batch,
     /// instead of paying the FFI/GIL cost once per individual.
+    ///
+    /// Implemented or overridden by an objective, called by
+    /// `common::express_and_score` — see the note on the trait. The engine does
+    /// not call this. Note the scores it returns are in the objective's own
+    /// units and are **not** yet oriented; `express_and_score` converts them.
     fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
         graphs
             .par_iter()
