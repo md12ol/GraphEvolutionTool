@@ -197,3 +197,20 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   the world going stale. This is about *GitHub's* view going stale, and it loses work rather than
   just misreporting it.
 - **Added:** 2026-08-04 — githubs-pr-object-lags-the-branch
+
+### `cargo clippy -- -D warnings` cannot pass on `main`, so it is not a usable gate
+- **Bites when:** your task's `Verify by:` says "clippy passes" and you treat the failure as a
+  regression you introduced. Issue **#22**'s verify-by says exactly that, so this will bite whoever
+  picks it up.
+- **Measured 2026-08-04 22:05 by Michael**, on branch `mdube_sir_objectives` and again on `main`
+  with the branch stashed. Both produce the identical two errors, and nothing else:
+  `fields shared, context, population, and history are never read` and
+  `method advance_generation is never used`, both in `get/src/evolver/generational.rs`.
+- **Why:** `-D warnings` promotes `dead_code` to an error, and `GenerationalEvolver` is a built
+  shell whose `run` is still unimplemented — issue **#25**, James's. The dead code is the unbuilt
+  work, so this clears when #25 lands and not before.
+- **Do this instead:** compare against the baseline rather than expecting zero.
+  `git stash -u && cargo clippy --manifest-path get/Cargo.toml --all-targets -- -D warnings; git stash pop`
+  and check your branch adds nothing new. Say so explicitly in the PR — "fails identically to
+  `main`" is a reviewable claim, "clippy passes" would be false.
+- **Added:** 2026-08-04 — cargo-clippy-d-warnings-cannot-pass-on-main

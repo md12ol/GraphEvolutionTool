@@ -773,3 +773,54 @@ Archived to `.claude/work/archive/2026-08_sir-conventions/`. Entries below this 
 tasks. GitHub #34 closed: `sir_sim` now counts the burnout step and emits the terminating zero, on
 `main` via PR #36, 110 tests green. Carried forward, not resolved: **PR #37**, the one-line spec
 status-row tidy, still open.
+
+## 2026-08-04 22:10 — Michael — The SIR seam is "sample an epidemic" vs "read one", chosen for fork-ease
+**Chose:** `sir.rs` owns how epidemics are *sampled* — `SirBatchParams`, `epidemic_seeds`,
+`batch_epidemics`, including the short-epidemic re-roll and the position-indexed seeding.
+`fitness.rs` owns how one is *read* — `EpidemicScorer` plus the three objectives, each a thin
+reading over the shared batch. A fourth epidemic objective is a closure over
+`EpidemicScorer::mean`.
+**Why:** the standing constraint on this work is that someone should be able to fork the repo and
+add their own objective without deep Rust. The re-roll and the seeding are the only subtle parts,
+and both fail *silently* when reimplemented slightly wrong — a broken common-random-numbers scheme
+produces entirely plausible numbers and a run that selects on dice rather than graph structure.
+Putting them in one public function means a forker cannot get them wrong by copying, because there
+is nothing to copy.
+**Rejected:** a separate `sir_fitness.rs` module, to stay clear of James's #15/#19 edits to
+`fitness.rs` — that was merge-coordination reasoning dressed up as design, and not worth a
+permanent split in the codebase. Also rejected: giving each objective its own batch loop, which
+would hand a forker ~40 lines of seeding logic to get wrong.
+**Affects:** `get/src/sir.rs`, `get/src/fitness.rs`. Issue #17, PR #40.
+
+## 2026-08-04 22:12 — Michael — Prefer explicit loops to iterator chains in this codebase
+**Chose:** write plain `for` loops with an accumulator where an iterator chain would need a
+turbofish, a closure returning through an `Option`, or more than about two adapters. Keep comments
+terse and aimed at someone new to the code; point at `official_spec_sheet.md` rather than restating
+it. Applied across `batch_epidemics`, `epidemic_seeds`, `EpidemicScorer::mean` and
+`EpiProfMatch::rmse`; comments over the two files went from 347 lines to 290.
+**Why:** both owners have to be able to read every line of this repo, and one of us does not write
+Rust. `runs.iter().map(read).sum::<f64>() / runs.len() as f64` is idiomatic and stops a reader
+cold; the four-line loop does not. The cost is a few more lines, which is cheap next to a file one
+owner cannot review.
+**Rejected:** idiomatic-Rust-first, on the grounds that a reader can learn the idioms. True, and
+irrelevant — the constraint is what gets reviewed today, not what is learnable. Also rejected:
+leaving the comments long on the grounds that more explanation is safer, when most of the length
+was restating the spec sheet, which is the authority and drifts the moment it is copied.
+**Affects:** all of `get/src/`, and future sessions. Recorded in `CLAUDE.md` under Conventions.
+
+## 2026-08-04 22:14 — Michael — The #18 batch-seed stub is one method body, deliberately
+**Chose:** `EpidemicScorer::batch_seed` returns the run seed unchanged, and issue #18 replaces
+exactly that one method with the run seed plus an atomic evaluation counter. No caller moves, and
+no seed argument is threaded through the three objectives.
+**Why:** `Fitness::evaluate` takes `&self`, so #18's counter has to live on the objective as an
+`AtomicU64` — which means the seam belongs at the point where a batch seed is *produced*, not
+where it is consumed. Threading a `batch_seed` parameter through `evaluate` would have meant
+changing the trait, which is spec §5 and not #17's to change.
+**What this does and does not break, which is narrower than "seeding is unfinished":** common
+random numbers *within* a batch are already correct, because the seed does not vary with the
+graph. What is missing is variation *across* batches, so a run currently optimizes against one
+frozen sample of the disease. Relative fitness inside one evaluation is meaningful; a whole run is
+not yet research-usable.
+**Rejected:** implementing the counter inside #17 anyway, since it is small. It is #18's whole
+content, and folding it in would leave #18 empty and the PR harder to review.
+**Affects:** `get/src/fitness.rs` `EpidemicScorer::batch_seed`; `hotfixes.md`; issue #18.

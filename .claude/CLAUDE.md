@@ -294,6 +294,19 @@ reach for `--json` on reads and the REST API on writes:
 
 ## Conventions
 
+- **Approving a plan is never authorization to commit, push, or open a PR.** Added 2026-08-04
+  after PR #39 was opened unprompted and closed again. `/start` writes those outward actions into
+  `plan.md` as tasks, and agreeing the task list is agreement about *what the work is* — not a
+  standing go-ahead to perform it. Every commit, push and PR needs its own explicit instruction,
+  each time, no matter what the plan says. This is the same rule as "don't commit or push unless
+  asked" below; it is restated here because a plan step reading "open the PR" is exactly what makes
+  that rule look satisfied when it is not.
+- **Prefer explicit loops to iterator chains.** Both owners have to read every line here and one of
+  us does not write Rust, so a plain `for` with an accumulator beats a chain that needs a turbofish,
+  a closure returning through an `Option`, or more than about two adapters. Keep comments terse and
+  written for someone new to the code; link `official_spec_sheet.md` rather than restating it —
+  a copy of the sheet drifts, and the sheet is the authority. Agreed 2026-08-04; reasoning in
+  `decisions.md` 2026-08-04 22:12.
 - **Never mark work `[x]` that you have not seen verified.** If it only compiled, or only ran
   somewhere that doesn't count, it is `[~]`. Work that looks done and isn't is the most expensive
   failure mode this system has.
