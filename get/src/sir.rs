@@ -39,19 +39,25 @@ pub struct SirParams {
 /// The epidemic is the expensive part and all three objectives want the same
 /// one, so a single run reports all three readings (spec §5.2).
 ///
-/// The three are consistent by construction: `profile[0]` is patient zero, so
-/// `spread` is the sum of the profile and `length` is one less than its length.
-/// An outbreak that infects nobody beyond patient zero has `length == 0` and
-/// `spread == 1`.
+/// The three are consistent by construction: `profile[0]` is patient zero and
+/// the profile ends in a terminating zero, so `spread` is the sum of the
+/// profile — the zero contributes nothing — and `length` is one less than its
+/// length. An outbreak that infects nobody beyond patient zero has
+/// `length == 1`, `spread == 1` and `profile == [1, 0]`.
+///
+/// These conventions match `legacy/Graph.cpp` deliberately, so scores stay
+/// comparable with the archived C++ results. See `decisions.md` 2026-08-04
+/// 17:40; the sheet previously specified the other convention.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SirRun {
-    /// Timesteps to burn out — that is, transmission steps, not counting the
-    /// final step in which the last infectious node simply recovers.
+    /// Timesteps the epidemic occupied, **including** the final one in which
+    /// the last infectious node recovers without transmitting.
     pub length: usize,
-    /// Total ever-infected, including patient zero.
+    /// Total ever-infected, including patient zero. Unaffected by the trailing
+    /// zero, and the one reading the C++ and the sheet never disagreed on.
     pub spread: usize,
-    /// Count of **newly infected** nodes at each timestep, `profile[0] == 1`
-    /// being patient zero. Carries no trailing zero.
+    /// Count of **newly infected** nodes at each timestep. `profile[0] == 1` is
+    /// patient zero, and the last element is the terminating zero.
     pub profile: Vec<usize>,
 }
 
@@ -142,12 +148,12 @@ pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) 
             }
         }
 
-        // The final pass carries no new infections; recording its zero would
-        // pad every profile with a trailing entry and put `length` one step
-        // past the last transmission.
-        if currently_infectious > 0 {
-            profile.push(currently_infectious);
-        }
+        // The final pass carries no new infections, and its zero is recorded
+        // rather than suppressed: §5.2 counts that burnout step in `length`,
+        // and `profile` terminates with it. `length` needs no adjustment for
+        // this — the profile grows by one element, so `profile.len() - 1`
+        // becomes the burnout-inclusive count on its own.
+        profile.push(currently_infectious);
     }
 
     SirRun {
@@ -197,8 +203,11 @@ mod tests {
 
         let run = sir_sim(&graph, &params, &mut rng());
 
-        assert_eq!(run.profile, vec![1, 1, 1, 1, 1, 1]);
-        assert_eq!(run.length, 5, "one step per edge of the path");
+        assert_eq!(run.profile, vec![1, 1, 1, 1, 1, 1, 0]);
+        assert_eq!(
+            run.length, 6,
+            "one step per edge of the path, plus the burnout step",
+        );
         assert_eq!(run.spread, 6, "every node is reached");
     }
 
@@ -212,9 +221,12 @@ mod tests {
 
         let run = sir_sim(&graph, &params, &mut rng());
 
-        assert_eq!(run.length, 0, "spec 5.2: no transmission is length 0");
+        assert_eq!(
+            run.length, 1,
+            "spec 5.2: the burnout step counts, so no transmission is length 1",
+        );
         assert_eq!(run.spread, 1, "patient zero alone");
-        assert_eq!(run.profile, vec![1]);
+        assert_eq!(run.profile, vec![1, 0]);
     }
 
     #[test]
@@ -227,9 +239,9 @@ mod tests {
 
         let run = sir_sim(&graph, &params, &mut rng());
 
-        assert_eq!(run.length, 0);
+        assert_eq!(run.length, 1, "same shape as an isolated patient zero");
         assert_eq!(run.spread, 1);
-        assert_eq!(run.profile, vec![1]);
+        assert_eq!(run.profile, vec![1, 0]);
     }
 
     #[test]
@@ -247,8 +259,12 @@ mod tests {
         let run = sir_sim(&graph, &params, &mut rng());
 
         assert_eq!(run.spread, 3, "the far triangle is unreachable");
-        assert_eq!(run.profile, vec![1, 2], "both neighbours infected at once");
-        assert_eq!(run.length, 1);
+        assert_eq!(
+            run.profile,
+            vec![1, 2, 0],
+            "both neighbours infected at once, then burnout",
+        );
+        assert_eq!(run.length, 2);
     }
 
     #[test]

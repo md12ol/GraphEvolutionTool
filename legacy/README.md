@@ -38,17 +38,22 @@ The Rust port in `get/src/sir.rs` predates the newer file but is unaffected: the
 the exposure accumulation and the `1 - (1 - alpha)^n` draw are identical across both generations.
 Only the return shape and who owns the profile buffer changed.
 
-## Where the Rust deliberately differs
+## Where the Rust stands against this code
 
-Both differences are open questions, not settled positions — `collab.md` #15 and #17 carry them.
+Both questions below were open when this file was written; the joint meeting of 2026-08-04 settled
+both **in favour of the C++**, so the Rust now follows it rather than departing from it.
 
-- **`length`.** `Graph::SIR` pushes a trailing zero and `main.cpp` reads the epidemic length as
-  `profile.size() - 1`, which counts the final burnout step. Spec §5.2 fixes the other convention,
-  and `get/src/sir.rs` follows the sheet, so its `length` is one lower.
-- **Short-epidemic re-rolls.** Every fitness draw in `main.cpp` re-rolls an outbreak that burns out
-  in under `mepl = 3` steps, up to `rse = 5` attempts (`main.cpp:520-531`, `537-542`). Nothing in
-  the spec or the tracker records this. It is a biased resample, so averaging `num_epidemics` is
-  not a substitute for it.
+- **`length` and `profile` — settled, and now matching.** `Graph::SIR` pushes a trailing zero and
+  `main.cpp` reads the epidemic length as `profile.size() - 1`, counting the final burnout step.
+  Spec §5.2 originally fixed the opposite convention and `get/src/sir.rs` was built to it. §5.2 was
+  amended to match this code, and `sir_sim` was corrected under GitHub #34, so the two now agree.
+  `spread` never disagreed — `totInf` always matched.
+- **Short-epidemic re-rolls — settled, adopted, not yet built.** Every fitness draw in `main.cpp`
+  re-rolls an outbreak that burns out in under `mepl = 3` steps, up to `rse = 5` attempts
+  (`main.cpp:520-531`, `537-542`). Recorded in neither the spec nor the tracker until 2026-08-04;
+  now in §5.2 with both constants exposed as config fields defaulting to 3 and 5. It is a **biased
+  resample**, so averaging `num_epidemics` is not a substitute for it. Implementation belongs to
+  GitHub #17.
 
 ## Two things in here not to copy
 
