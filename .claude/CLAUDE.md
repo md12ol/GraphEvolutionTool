@@ -142,6 +142,28 @@ gitignored and exists exactly for that.
 promote someone else's `[~]` to `[x]` because their notes read as finished — re-run the
 `Verify by:` or leave it alone.
 
+## Pull requests — the other owner merges yours
+
+**Added 2026-08-04 — nobody merges their own PR.** James merges Michael's; Michael merges James's.
+Opening it, pushing to it and asking for review are yours; clicking merge is not. An agent never
+merges a PR at all — it opens one and stops.
+
+This is not ceremony, because three things in this repo fail *silently* and a second reader is the
+only thing that catches them:
+
+- **`merge=union` never conflicts.** Byte-identical lines in `.claude/work/*.md` dedupe and
+  interleave two entries into one block that reads as coherent and is not. Git will not tell you;
+  the reviewer might.
+- **Source files genuinely overlap.** `collab.md` #14 has three files claimed by #10 *and* #14/#15
+  at once. Review is where a conflicting edit gets noticed while it is still cheap.
+- **Rule 2 above is the strict case, not the exception.** `settings.json` and `hooks/` execute on
+  the other person's machine at session start, without them reading the diff. Those were already
+  PR-only; this generalizes the habit to everything so the rule has no edge to fall off.
+
+Self-merging is allowed in exactly one case: the other owner is unavailable and the change is
+blocking. Say so in the PR, and say it in `collab.md` too — an unreviewed merge should leave a
+trace, not a gap.
+
 ## Workflow
 
 **Start the task**
