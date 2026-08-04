@@ -2,23 +2,15 @@
 //!
 //! # Adding your own objective
 //!
-//! Three steps, and the three SIR objectives below are worked examples of all
-//! of them:
+//! 1. Implement [`Fitness`] on your type — [`Fitness::evaluate`] is the only
+//!    required method; add [`Fitness::direction`] if bigger is better.
+//! 2. Add a variant to `FitnessConfig` in [`crate::config`].
+//! 3. Add the matching arm in `GraphEvolver::run`.
 //!
-//! 1. Implement [`Fitness`] on your own type — one required method,
-//!    [`Fitness::evaluate`], plus [`Fitness::direction`] if bigger is better.
-//! 2. Add a variant to `FitnessConfig` in [`crate::config`], so a run can name
-//!    it in `config.toml`.
-//! 3. Add the matching arm to the objective match in `GraphEvolver::run`, which
-//!    boxes it as `Box<dyn Fitness>` before the evolver is instantiated.
-//!
-//! **If your objective is epidemic-based, do not re-implement the sampling.**
-//! Call [`crate::sir::batch_epidemics`], which owns the short-epidemic re-roll
-//! and the position-indexed seeding that keeps common random numbers intact.
-//! Both fail *silently* when reimplemented slightly wrong — a broken CRN scheme
-//! produces plausible numbers and a run that selects on dice rather than
-//! structure. [`EpidemicScorer`] wraps it with the batch mean, so a new reading
-//! of the same epidemics is a few lines.
+//! The three SIR objectives below are worked examples. If yours is
+//! epidemic-based, build it on [`EpidemicScorer`] rather than calling the
+//! simulator directly — it owns the seeding, which is easy to get subtly wrong
+//! and gives plausible-looking numbers when you do.
 
 use rayon::prelude::*;
 
@@ -116,16 +108,12 @@ pub trait Fitness: Send + Sync {
     }
 }
 
-/// The epidemic sampling every SIR objective shares.
+/// Runs the epidemics that every SIR objective scores.
 ///
-/// The expensive part of an evaluation is the epidemic, and all three
-/// objectives want the same one, so this owns *running* the batch and each
-/// objective supplies only the reading (spec §5.2). A fourth objective — peak
-/// height, time to peak, attack rate within a component — is then a closure
-/// over [`EpidemicScorer::mean`] and nothing else.
-///
-/// The model itself lives in [`crate::sir`], which owns the description of it.
-/// Do not restate it here; two copies will drift.
+/// One epidemic is the expensive part and all three objectives want the same
+/// one, so this runs the batch and each objective supplies only the reading
+/// (spec §5.2). A new epidemic-based objective needs nothing but a reading —
+/// see [`EpiSpread`] for the smallest possible example.
 pub struct EpidemicScorer {
     params: SirBatchParams,
     run_seed: u64,
@@ -134,23 +122,19 @@ pub struct EpidemicScorer {
 impl EpidemicScorer {
     /// Build a scorer for one run's epidemics.
     ///
-    /// `run_seed` is derived from the single master seed passed to `run`, never
-    /// configured separately — a fitness seed of its own would leave replicate
-    /// runs at different evolution seeds facing *identical* epidemic draws,
-    /// which is exactly what replicates exist to vary (§5.2).
+    /// `run_seed` comes from the single master seed passed to `run`; there is
+    /// deliberately no separate fitness seed (§5.2).
     pub fn new(params: SirBatchParams, run_seed: u64) -> Self {
         Self { params, run_seed }
     }
 
     /// The seed every graph in the current batch is simulated from.
     ///
-    /// **Stub — issue #18 replaces this.** The design is a run seed plus an
-    /// atomic evaluation counter, incremented once per batch, so every graph in
-    /// one batch faces the same dice and the next batch faces different ones
-    /// (§5.2). Only the second half is missing: within a batch this is already
-    /// correct, because it does not vary with the graph. What it does not yet
-    /// do is *change between batches*, so a run currently optimizes against one
-    /// frozen sample of the disease. Tracked in `hotfixes.md`.
+    /// **Stub — issue #18 replaces this method.** It should be the run seed
+    /// plus a counter that ticks once per batch, so each batch draws fresh
+    /// dice. Sharing one seed *within* a batch is already right; what is
+    /// missing is changing it *between* batches, so a run currently optimizes
+    /// against one frozen sample of the disease. See `hotfixes.md`.
     fn batch_seed(&self) -> u64 {
         self.run_seed
     }
@@ -160,17 +144,19 @@ impl EpidemicScorer {
         batch_epidemics(graph, &self.params, self.batch_seed())
     }
 
-    /// Mean of `read` across this evaluation's epidemics.
+    /// Average `read` across this evaluation's epidemics.
     ///
-    /// Averaging is not a tuning nicety: a single SIR draw is noisy enough that
-    /// selection would chase the dice instead of graph structure.
-    ///
-    /// Cannot divide by zero — [`crate::sir::batch_epidemics`] rejects a batch
-    /// of no epidemics, which is what keeps the `NaN` the [`Fitness`] contract
-    /// forbids out of the arithmetic.
+    /// Averaging matters: a single SIR draw is noisy enough that selection
+    /// would chase the dice instead of the graph. The division is safe because
+    /// [`batch_epidemics`] rejects an empty batch.
     pub fn mean(&self, graph: &Graph, read: impl Fn(&SirRun) -> f64) -> f64 {
         let runs = self.runs(graph);
-        runs.iter().map(read).sum::<f64>() / runs.len() as f64
+
+        let mut total = 0.0;
+        for run in &runs {
+            total += read(run);
+        }
+        total / runs.len() as f64
     }
 }
 
@@ -198,12 +184,10 @@ impl Fitness for EpiSpread {
     }
 }
 
-/// Timesteps to burn out, averaged over the evaluation's epidemics.
-/// **Maximized.**
+/// Timesteps to burn out, averaged over the epidemics. **Maximized.**
 ///
-/// `length` includes the final burnout step in which the last infectious node
-/// recovers without transmitting, per the §5.2 amendment of 2026-08-04 — so a
-/// lone patient zero reads 1, not 0.
+/// `length` counts the final burnout step, so a lone patient zero reads 1, not
+/// 0 (§5.2).
 pub struct EpiLength {
     scorer: EpidemicScorer,
 }
@@ -227,12 +211,11 @@ impl Fitness for EpiLength {
     }
 }
 
-/// RMSE between the epidemic profile and a user-supplied target. **Minimized.**
+/// RMSE between the epidemic profile and a target profile. **Minimized.**
 ///
-/// The target is a vector of newly-infected counts. Note that a run's profile
-/// has `profile[0] == 1` for patient zero and carries a **terminating zero**
-/// (§5.2, amended 2026-08-04), so a target captured from older output will not
-/// line up element for element.
+/// The target is a vector of newly-infected counts, one per timestep. A run's
+/// profile starts with patient zero and ends with a terminating zero (§5.2), so
+/// a target captured from older output will not line up element for element.
 pub struct EpiProfMatch {
     scorer: EpidemicScorer,
     target: Vec<f64>,
@@ -243,9 +226,8 @@ impl EpiProfMatch {
     ///
     /// # Errors
     ///
-    /// If `target` is empty — it is the divisor of every RMSE, so an empty one
-    /// yields the `NaN` the [`Fitness`] contract forbids — or if any element is
-    /// not finite, which would propagate into every score.
+    /// If `target` is empty or holds a non-finite value. Either would put a
+    /// `NaN` into every score, which the [`Fitness`] contract forbids.
     pub fn new(
         params: SirBatchParams,
         run_seed: u64,
@@ -265,28 +247,23 @@ impl EpiProfMatch {
 
     /// RMSE of one epidemic against the target.
     ///
-    /// **The target fixes the comparison, not the run** (spec §5.2, matching
-    /// `legacy/main.cpp:545-553`): iterate the target's indices, treat a missing
-    /// run value as `0` because the epidemic had ended and nobody was newly
-    /// infected that day, ignore any surplus where the run outlasts the target,
-    /// and divide by the target's length always.
-    ///
-    /// **The asymmetry is deliberate and worth knowing when reading a score.** A
-    /// run that burns out early is penalised by the entire remaining target; a
-    /// run that outlasts it is not penalised for the overshoot at all. So this
-    /// objective rewards *matching or exceeding* the target's tail, not matching
-    /// it exactly. Inherited from the C++ for comparability — see
-    /// `decisions.md` 2026-08-04 18:13 for the alternatives that were rejected.
+    /// **The target sets the comparison, not the run** (§5.2, matching
+    /// `legacy/main.cpp:545-553`). The consequence is asymmetric and worth
+    /// knowing when reading a score: a run that ends early is penalised for the
+    /// whole remaining target, while a run that outlasts the target is not
+    /// penalised at all. So this rewards *matching or exceeding* the target's
+    /// tail, not matching it exactly. See `decisions.md` 2026-08-04 18:13.
     fn rmse(&self, run: &SirRun) -> f64 {
-        let total: f64 = self
-            .target
-            .iter()
-            .enumerate()
-            .map(|(step, wanted)| {
-                let actual = run.profile.get(step).copied().unwrap_or(0) as f64;
-                (actual - wanted).powi(2)
-            })
-            .sum();
+        let mut total = 0.0;
+
+        for (step, wanted) in self.target.iter().enumerate() {
+            // Past the end of the run, nobody was newly infected: the epidemic
+            // had already finished. Any surplus run beyond the target is never
+            // visited, so overshoot costs nothing.
+            let actual = run.profile.get(step).copied().unwrap_or(0) as f64;
+            total += (actual - wanted).powi(2);
+        }
+
         (total / self.target.len() as f64).sqrt()
     }
 }
@@ -311,9 +288,8 @@ mod tests {
         graph
     }
 
-    /// Sampling that makes every epidemic identical and certain: rate 1.0 from a
-    /// pinned patient zero, so the batch mean is the single deterministic
-    /// reading and no test depends on the seed.
+    /// Rate 1.0 from a pinned patient zero, so every epidemic is identical and
+    /// no test depends on the seed.
     fn certain_batch(num_epidemics: usize) -> SirBatchParams {
         SirBatchParams {
             epidemic: SirParams {
@@ -372,8 +348,7 @@ mod tests {
         assert_eq!(objective.direction(), Direction::Minimize);
     }
 
-    /// A run that burns out early is penalised by the **whole** remaining
-    /// target — the missing days count as zero newly infected, not as absent.
+    /// The missing days count as zero newly infected, not as absent.
     #[test]
     fn a_run_shorter_than_the_target_is_penalised_for_the_remainder() {
         let objective = profile_match(vec![1.0, 2.0, 3.0, 4.0]);
@@ -387,8 +362,7 @@ mod tests {
         assert_eq!(objective.rmse(&run), 2.5);
     }
 
-    /// The deliberate asymmetry: overshoot is free. This objective rewards
-    /// matching *or exceeding* the target's tail — see `rmse`'s doc comment.
+    /// The deliberate asymmetry: overshoot is free — see `rmse`.
     #[test]
     fn a_run_longer_than_the_target_is_not_penalised_for_the_surplus() {
         let objective = profile_match(vec![1.0, 2.0]);
@@ -436,8 +410,7 @@ mod tests {
         assert!(EpiProfMatch::new(certain_batch(1), 0, vec![1.0, 2.0]).is_ok());
     }
 
-    /// Averaging is the objective's job, not the simulator's, so it is worth
-    /// pinning that more epidemics do not change a deterministic reading.
+    /// More epidemics must not change a deterministic reading.
     #[test]
     fn the_batch_mean_averages_the_epidemics() {
         let graph = path_graph(6);
