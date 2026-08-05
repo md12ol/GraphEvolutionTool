@@ -265,6 +265,24 @@ model than its author believes, since the master seed now comes from the `run` c
 
 *#25 · raised 2026-08-05 15:47 — James, during GitHub issue #24.*
 
+### 26. Pushed a `CLAUDE.md` convention straight to `main` — commit each verified feature-branch step separately
+
+**FYI, no action needed — this is the trace for a direct push per the routing table's own
+exception.** `CLAUDE.md` says prefer a PR when a change binds the other owner's practice; I judged
+this one not worth a branch and review cycle, so it went direct, same as the two conventions in
+item 22.
+
+**The rule:** commit each verified task-list step on a feature branch separately — a lint-policy
+decision, a formatting sweep, one file of a readability pass — rather than batching everything into
+one commit at PR time. Landed live on issue #22's branch this session: the `needless_return` lint
+decision and the tree-wide `cargo fmt` sweep are already two separate commits rather than one.
+
+**Why now:** working through #22 file-by-file with the user surfaced the question directly — small
+reviewable commits make each step independently bisectable and reviewable, rather than one large
+diff to audit at PR time. Push back here if you'd rather this weren't standard.
+
+*#26 · raised 2026-08-05 23:45 — Michael.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in

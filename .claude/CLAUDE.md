@@ -312,6 +312,11 @@ reach for `--json` on reads and the REST API on writes:
   failure mode this system has.
 - **Every task needs a `Verify by:`** — the command, the log line, the artifact to inspect. A task
   with no verification method is how `[~]` items become false `[x]`s later.
+- **Commit each verified step of a feature branch separately — don't batch a task's changes into
+  one commit at the end.** One commit per task-list item once its own `Verify by:` has passed: a
+  lint-policy decision, a formatting sweep, one file of a readability pass. Keeps every commit
+  independently reviewable and lets a reviewer, or a later `git bisect`, isolate exactly which step
+  introduced a problem, rather than auditing one large diff at PR time. Added 2026-08-05 — Michael.
 - Absolute dates only, never "today" or "last session".
 - Reference code as `path:line`.
 - Don't commit or push unless asked.
