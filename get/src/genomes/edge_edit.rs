@@ -20,6 +20,8 @@ const OPCODE_MASK: u64 = 0xF;
 /// The default gives all nine operations equal probability. Set via
 /// `[genome.operation_weights]` in `config.toml`; any field omitted there falls
 /// back to that default, and a weight of `0.0` disables its operation outright.
+/// An unrecognized key in `[genome.operation_weights]` is rejected at load
+/// time rather than silently ignored.
 ///
 /// Validated and compiled into a sampler by [`EdgeEditOperators`], which the
 /// population then shares.
@@ -118,6 +120,9 @@ impl EdgeEditOperators {
     /// individual its own — which would reintroduce exactly the per-genome copy
     /// this type exists to eliminate.
     pub fn uniform() -> Arc<Self> {
+        // A function-local `static` initialized once, on first call, and
+        // shared by every caller thereafter — Rust's version of a lazily-built
+        // singleton.
         static UNIFORM: OnceLock<Arc<EdgeEditOperators>> = OnceLock::new();
         Arc::clone(UNIFORM.get_or_init(|| {
             Self::new(EdgeEditOperationWeights::default()).expect("equal weights are valid")
@@ -179,6 +184,10 @@ impl EdgeEditGenome {
         let mut payload = gene >> 4;
         let radix = num_nodes as u64;
 
+        // Extract four vertex indices from `payload` by treating it as a
+        // number in base `num_nodes`: each iteration peels off one "digit"
+        // (payload % radix) then shifts the remaining digits down
+        // (payload /= radix).
         for vertex in &mut vertices {
             *vertex = (payload % radix) as usize;
             payload /= radix;
@@ -198,6 +207,9 @@ impl Genome for EdgeEditGenome {
         }
 
         for &gene in &self.genes {
+            // Unrecognized opcode (only opcodes 0-8 are defined; the 4-bit
+            // field can hold up to 15): skip this gene and move to the next
+            // one.
             let Some(operation) = GraphOperation::from_opcode((gene & OPCODE_MASK) as u8) else {
                 continue;
             };
@@ -215,6 +227,8 @@ impl Genome for EdgeEditGenome {
         }
 
         let start = rng.random_range(0..shared_length);
+        // end is inclusive (`..=`) so the swapped segment can reach
+        // shared_length - 1, the last shared index.
         let end = rng.random_range((start + 1)..=shared_length);
         for index in start..end {
             std::mem::swap(&mut self.genes[index], &mut other.genes[index]);
