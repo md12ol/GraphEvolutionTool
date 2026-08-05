@@ -50,6 +50,10 @@ impl Direction {
     /// would hide a bug in the objective, and letting it through is dangerous
     /// under [`Direction::Maximize`]: `-NaN` sorts below `-inf`, so it would win
     /// every tournament it entered and leave a run that looks converged.
+    ///
+    /// Unlike C/C++'s `assert()`, Rust's `assert!` is not compiled out in a
+    /// release build — this check always runs (the release-strippable
+    /// equivalent would be `debug_assert!`, not used here).
     pub fn orient(self, value: f64) -> f64 {
         assert!(
             !value.is_nan(),
@@ -169,6 +173,10 @@ impl EpidemicScorer {
     /// Averaging matters: a single SIR draw is noisy enough that selection
     /// would chase the dice instead of the graph. The division is safe because
     /// [`batch_epidemics`] rejects an empty batch.
+    ///
+    /// `read: impl Fn(&SirRun) -> f64` accepts any closure or function
+    /// matching that signature — like passing a Java `Function<SirRun,
+    /// Double>` or a Python callable.
     pub fn mean(&self, graph: &Graph, read: impl Fn(&SirRun) -> f64) -> f64 {
         let runs = self.runs(graph);
 
@@ -248,6 +256,9 @@ impl EpiProfMatch {
     ///
     /// If `target` is empty or holds a non-finite value. Either would put a
     /// `NaN` into every score, which the [`Fitness`] contract forbids.
+    ///
+    /// `&'static str`: a fixed string literal baked into the binary, used
+    /// here as a lightweight error type.
     pub fn new(
         params: SirBatchParams,
         run_seed: u64,
@@ -280,6 +291,9 @@ impl EpiProfMatch {
             // Past the end of the run, nobody was newly infected: the epidemic
             // had already finished. Any surplus run beyond the target is never
             // visited, so overshoot costs nothing.
+            // .get(step) is bounds-checked (None past the end, no panic);
+            // .copied() pulls the value out of the reference; .unwrap_or(0)
+            // supplies the zero explained above.
             let actual = run.profile.get(step).copied().unwrap_or(0) as f64;
             total += (actual - wanted).powi(2);
         }
@@ -302,6 +316,8 @@ mod tests {
     /// A path `0 - 1 - ... - (n-1)`, every edge at multiplicity 1.
     fn path_graph(num_nodes: usize) -> Graph {
         let mut graph = Graph::new(num_nodes, 1);
+        // saturating_sub: clamps at 0 instead of underflowing when num_nodes
+        // is 0 or 1 (usize can't go negative).
         for node in 0..num_nodes.saturating_sub(1) {
             graph.set_edge(node, node + 1, 1);
         }
@@ -496,6 +512,9 @@ mod tests {
     #[test]
     fn an_unchecked_negated_nan_would_have_sorted_best() {
         let mut scores = vec![-f64::NAN, -100.0, 0.0, 100.0];
+        // total_cmp: a total ordering for floats, unlike plain < where NaN is
+        // unordered — needed so NaN actually sorts (first, here) instead of
+        // being silently skipped.
         scores.sort_by(|a, b| a.total_cmp(b));
         assert!(
             scores[0].is_nan(),
