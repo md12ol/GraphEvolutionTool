@@ -337,6 +337,31 @@ exact stall `/done` exists to avoid.
 
 *#28 · raised 2026-08-06 — Michael.*
 
+### 30. New `SessionStart` hook: `pull_main.sh` fast-forwards `main` automatically — needs your review
+
+**Confirm — this runs on your machine too, at every session start.** Opened as a PR
+(`mdube_pull-main-hook`), not pushed direct, per the routing table's own rule that `settings.json`
+and `hooks/` changes always go through review.
+
+**What it does:** on `main` only, fetches and fast-forwards to `origin/main` if it can do so
+cleanly. On any other branch, or if `main` has diverged (local commits not on origin, or a dirty
+working tree the incoming commit would overwrite), it prints one line and touches nothing — no
+merge, no rebase, no discard. Verified all three paths in a scratch repo before opening the PR.
+
+**Why:** `.claude/work/*.md` and `CLAUDE.md` route around a PR by design, so a change one of us
+pushes direct only reaches the other's machine on their next `git pull main` — nothing was prompting
+that. That gap is exactly how the two independent `collab.md` item-**20**s happened (see
+#20-collision / #29-collision): both of us were reading our own stale copy when we each picked "the
+next number." This closes the stale-window case; it doesn't and can't close true same-minute
+concurrency.
+
+Full reasoning and rejected alternatives in `decisions.md` 2026-08-06, "`pull_main.sh`: a
+`SessionStart` hook fast-forwards `main` automatically." Please review the PR when you get a chance
+— it's the one place in this session's work that binds your session start, not just a doc you can
+skim later.
+
+*#30 · raised 2026-08-06 — Michael.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
