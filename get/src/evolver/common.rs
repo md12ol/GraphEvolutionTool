@@ -10,7 +10,7 @@ use rand::Rng;
 use rayon::prelude::*;
 
 use super::GenerationStats;
-use crate::fitness::{Direction, Fitness};
+use crate::fitness::Fitness;
 use crate::genomes::Genome;
 use crate::graph::Graph;
 
@@ -192,10 +192,11 @@ where
 /// The rule is worth stating because breaking it fails **silently**, twice over:
 ///
 /// - **Orientation is bypassed.** A direct call returns the objective's own
-///   units, so under [`Direction::Maximize`] every comparison runs backwards. A
-///   run optimizing away from the goal looks exactly like one that is merely not
-///   converging.
-/// - **The `NaN` gate is bypassed.** [`Direction::orient`] is what rejects `NaN`,
+///   units, so under [`crate::fitness::Direction::Maximize`] every comparison
+///   runs backwards. A run optimizing away from the goal looks exactly like one
+///   that is merely not converging.
+/// - **The `NaN` gate is bypassed.** [`crate::fitness::Direction::orient`] is
+///   what rejects `NaN`,
 ///   and under `Maximize` an unchecked `-NaN` sorts *below* `-inf` — so it wins
 ///   every tournament it enters and fills the population with whatever produced
 ///   it, leaving a run that looks converged.
@@ -242,21 +243,22 @@ where
 
 /// Summarize a scored population into one evolution-log row.
 ///
-/// Takes the oriented fitnesses the engine compares and reports in the
-/// objective's own units, so a log is readable without knowing the direction.
+/// Every field is in **engine orientation** — lower is better — because that is
+/// what the caller passes in and nothing here converts. Only the boundary
+/// converts, once, on the way out of a run; see [`express_and_score`] for the
+/// matching flip inward, and spec §5.1 for why there are exactly two.
 ///
-/// `best` and `mean` are converted back; **`std_dev` is not**, because standard
-/// deviation is unchanged by negation. That asymmetry is intentional — it looks
-/// like a missed case and is not.
+/// This function used to take a [`crate::fitness::Direction`] and convert
+/// `best` and `mean` back
+/// into the objective's units, which meant `std_dev` had to be deliberately
+/// *skipped* — deviation is unchanged by negation. That exception read as a
+/// missed case and needed a test to defend it. With nothing converting here,
+/// there is nothing to except.
 ///
 /// `std_dev` is the population deviation (divides by `n`), not the sample
 /// deviation: these are all the individuals there are, not a sample of a larger
 /// group. A single individual therefore has a deviation of zero.
-pub fn generation_stats(
-    iteration: usize,
-    fitnesses: &[f64],
-    direction: Direction,
-) -> GenerationStats {
+pub fn generation_stats(iteration: usize, fitnesses: &[f64]) -> GenerationStats {
     assert!(
         !fitnesses.is_empty(),
         "cannot summarize an empty population",
@@ -273,8 +275,8 @@ pub fn generation_stats(
 
     GenerationStats {
         iteration,
-        best_fitness: direction.orient(best),
-        mean_fitness: direction.orient(mean),
+        best_fitness: best,
+        mean_fitness: mean,
         std_dev: variance.sqrt(),
     }
 }
@@ -285,6 +287,8 @@ mod tests {
 
     use rand::SeedableRng;
     use rand::rngs::StdRng;
+
+    use crate::fitness::Direction;
 
     /// Scores a graph by its node count, which `IndexGenome` sets from its own
     /// index — so a fitness identifies the genome it came from.
@@ -352,7 +356,7 @@ mod tests {
     #[test]
     fn generation_stats_computes_best_mean_and_population_deviation() {
         // mean 5, deviations -3,-1,1,3 -> variance (9+1+1+9)/4 = 5
-        let stats = generation_stats(7, &[2.0, 4.0, 6.0, 8.0], Direction::Minimize);
+        let stats = generation_stats(7, &[2.0, 4.0, 6.0, 8.0]);
 
         assert_eq!(stats.iteration, 7);
         assert_eq!(stats.best_fitness, 2.0);
@@ -362,25 +366,31 @@ mod tests {
 
     #[test]
     fn a_single_individual_has_zero_deviation() {
-        let stats = generation_stats(0, &[3.5], Direction::Minimize);
+        let stats = generation_stats(0, &[3.5]);
         assert_eq!(stats.best_fitness, 3.5);
         assert_eq!(stats.mean_fitness, 3.5);
         assert_eq!(stats.std_dev, 0.0);
     }
 
+    /// Guards the rule that nothing inside the engine converts. These are the
+    /// oriented fitnesses a `Maximize` objective produces, and every field must
+    /// come back still oriented — reinstating a conversion here flips the signs
+    /// of the first two assertions and fails the test. Spec §5.1.
     #[test]
-    fn maximizing_reports_in_the_objectives_units_but_leaves_deviation_alone() {
-        // Oriented fitnesses for natural scores 2, 4, 6, 8 under Maximize.
+    fn generation_stats_stays_in_engine_orientation_under_maximize() {
+        // What `express_and_score` hands over for natural scores 2, 4, 6, 8
+        // under Maximize: negated, so the largest score is now the smallest.
         let oriented = [-2.0, -4.0, -6.0, -8.0];
-        let stats = generation_stats(1, &oriented, Direction::Maximize);
+        let stats = generation_stats(1, &oriented);
 
-        // Best oriented is -8.0, i.e. natural 8.0 — the largest score wins.
-        assert_eq!(stats.best_fitness, 8.0);
-        assert_eq!(stats.mean_fitness, 5.0);
+        // Engine orientation, not the objective's units: the natural best is
+        // 8.0 and it stays -8.0 here. The boundary is what turns it back.
+        assert_eq!(stats.best_fitness, -8.0);
+        assert_eq!(stats.mean_fitness, -5.0);
 
-        // The asymmetry: deviation is invariant under negation, so it must
-        // match the minimizing case exactly rather than being flipped.
-        let minimized = generation_stats(1, &[2.0, 4.0, 6.0, 8.0], Direction::Minimize);
+        // Deviation is unchanged by negation, so it matches the minimizing case
+        // — and now that is just true rather than a carve-out to defend.
+        let minimized = generation_stats(1, &[2.0, 4.0, 6.0, 8.0]);
         assert_eq!(stats.std_dev, minimized.std_dev);
         assert!(stats.std_dev > 0.0, "a negated deviation would be negative");
     }
@@ -388,7 +398,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "cannot summarize an empty population")]
     fn generation_stats_rejects_an_empty_population() {
-        generation_stats(0, &[], Direction::Minimize);
+        generation_stats(0, &[]);
     }
 
     #[test]
