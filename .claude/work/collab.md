@@ -130,7 +130,7 @@ push it directly if you would rather not bother. Say nothing and I will leave it
 
 *#20 · narrowed 2026-08-04 15:45 — James.*
 
-### 20. PR #37 self-merged — the one-line spec status tidy
+### 29. PR #37 self-merged — the one-line spec status tidy
 
 **FYI, no action needed — this is the trace `CLAUDE.md` requires for an unreviewed merge.**
 
@@ -149,7 +149,8 @@ So this is a self-merge of convenience, not of necessity. Recording it honestly 
 it as the documented case. If that reads as the rule being too tight for one-line doc corrections,
 that is worth deciding rather than repeating.
 
-*#20 · raised 2026-08-04 19:52 — Michael.*
+*#29 (renumbered from the duplicate 20 on 2026-08-06 — see resolution note below) · raised
+2026-08-04 19:52 — Michael.*
 
 **Merge-repair note, 2026-08-04 16:31 — James. This item was spliced into the middle of my
 item 20 and I have lifted it back out.** Union merge concatenated your entry into the first
@@ -166,6 +167,14 @@ your call — but the two need distinguishing, and mine is the earlier stamp (15
 19:52). Say which you want and I will do it.
 
 *#20-collision · repair note 2026-08-04 16:31 — James.*
+
+**Renumbering resolved, 2026-08-06 — Michael.** Took the call James left open above: my item (the
+PR #37 self-merge trace, 19:52 stamp) is now **#29**, the next free number, rather than reusing 20.
+James's item keeps its original **20** unchanged — his text and stamp above are untouched. This is a
+heading and closing-stamp change only, on my own entry, so no meeting or further announcement was
+needed beyond this note.
+
+*#29-collision · renumbering resolved 2026-08-06 — Michael.*
 
 ### 21. Do users supply their own Rust objective as a drop-in file? The sheet says no; Michael says yes
 
