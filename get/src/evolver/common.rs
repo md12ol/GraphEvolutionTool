@@ -115,10 +115,14 @@ impl Selection {
     where
         R: Rng + ?Sized,
     {
-        (0..tournament_size)
-            .map(|_| rng.random_range(0..fitnesses.len()))
-            .min_by(|&a, &b| rank(fitnesses, a, b))
-            .expect("tournament_size is at least 1")
+        let mut winner = rng.random_range(0..fitnesses.len());
+        for _ in 1..tournament_size {
+            let candidate = rng.random_range(0..fitnesses.len());
+            if rank(fitnesses, candidate, winner) == Ordering::Less {
+                winner = candidate;
+            }
+        }
+        winner
     }
 }
 
@@ -265,11 +269,12 @@ pub fn generation_stats(iteration: usize, fitnesses: &[f64]) -> GenerationStats 
     );
 
     let n = fitnesses.len() as f64;
-    let best = fitnesses
-        .iter()
-        .copied()
-        .reduce(f64::min)
-        .expect("population is not empty");
+    let mut best = fitnesses[0];
+    for &f in &fitnesses[1..] {
+        if f < best {
+            best = f;
+        }
+    }
     let mean = fitnesses.iter().sum::<f64>() / n;
     let variance = fitnesses.iter().map(|f| (f - mean).powi(2)).sum::<f64>() / n;
 
