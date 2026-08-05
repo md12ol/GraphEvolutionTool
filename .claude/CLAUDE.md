@@ -183,6 +183,14 @@ where review actually buys something:
 | `.claude/work/*.md` — `decisions.md`, `traps.md`, `issues.md`, `hotfixes.md`, `collab.md` | Direct push to `main` is fine. They carry no behaviour, and a trap that is not on `main` protects nobody. Note only `decisions.md` and `collab.md` are union-merged (rule 1 above) |
 | `.claude/CLAUDE.md` | Direct push is permitted, but **prefer a PR when the change binds the other owner's practice** rather than recording a fact |
 
+**This applies even while the task's own code PR is still open.** `/done`'s sweep — the task-complete
+marker in `decisions.md`, `hotfixes.md`'s `Last checked` stamps, `traps.md` updates, the archive
+itself — commits and pushes straight to `main` right then, not bundled into the code branch and not
+held until the other owner merges it. They are two independent tracks: the PR carries the code, the
+docs carry the record that the task is closed. Waiting would hold the task-closing record hostage to
+someone else's review schedule, which is exactly the kind of stall `/done` exists to avoid. Settled
+2026-08-06 doing exactly this for issue #22 while PR #43 was still open — `collab.md` #28.
+
 The reason code is absolute: a defect in `get/src/` is invisible until something downstream reads a
 wrong number, and the current issue set has several files claimed by two workstreams at once. The
 reason docs are not: they carry no behaviour, and the one thing review would catch in them — a

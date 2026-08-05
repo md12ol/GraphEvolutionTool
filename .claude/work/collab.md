@@ -310,6 +310,24 @@ or keep the current stricter `> 2` and drop a line into `decisions.md` saying so
 
 *#27 · raised 2026-08-06 00:09 — Michael, transcribed by Claude during a readability-pass session.*
 
+### 28. Documented: `/done`'s doc sweep pushes to `main` directly, decoupled from the task's own code PR
+
+**FYI, no action needed — clarifying an existing rule, not creating one.** Came up closing out #22:
+the `/done` sweep (task-complete marker in `decisions.md`, `hotfixes.md`'s `Last checked` stamps,
+`traps.md` updates, the archive itself) was written while PR #43, carrying #22's code, was still
+open and unmerged. The question was whether that meant committing to `main` directly or waiting for
+the PR — the routing table already answered "direct push is fine" for `.claude/work/*.md`, but not
+the *timing* relative to an open PR, so it kept needing re-deriving mid-session instead of being
+looked up.
+
+Added one paragraph to `CLAUDE.md`'s routing table, right after the `.claude/work/*.md` row: `/done`'s
+sweep goes to `main` immediately regardless of whether the task's own code PR has merged. The code PR
+and the doc close-out are two independent tracks — the PR carries the code, the docs carry the record
+that the task is closed — and holding the docs for someone else's review schedule would recreate the
+exact stall `/done` exists to avoid.
+
+*#28 · raised 2026-08-06 — Michael.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
