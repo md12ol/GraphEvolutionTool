@@ -20,6 +20,12 @@ pub trait Genome: Clone + Send + Sync {
 
     /// Recombine two parents in place, leaving the resulting children in
     /// `self` and `other`.
+    ///
+    /// `R: Rng + ?Sized` (rather than a plain `Rng` type) lets callers pass
+    /// either a concrete RNG or a trait object like `&mut dyn RngCore`
+    /// through the same parameter; `?Sized` opts out of Rust's default
+    /// requirement that generic types have a compile-time-known size, which
+    /// trait objects don't have. Same bound, same reason, on `mutate` below.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R);
 
     /// Apply **exactly one** mutation to this genome, in place.
