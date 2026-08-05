@@ -11,7 +11,7 @@ pub mod steady_state;
 pub use generational::GenerationalEvolver;
 pub use steady_state::SteadyStateEvolver;
 
-use crate::fitness::Fitness;
+use crate::fitness::{Direction, Fitness};
 use crate::genomes::Genome;
 use crate::graph::Graph;
 
@@ -76,6 +76,11 @@ pub struct SteadyStateContext {
 ///
 /// `iteration` counts generations for the generational strategy and mating
 /// events for the steady-state strategy.
+///
+/// `best_fitness` and `mean_fitness` are in **engine orientation** — lower is
+/// better — like everything else inside the engine. The boundary converts them
+/// when it writes the log, and leaves `std_dev` alone because a spread is
+/// identical under negation. Spec §5.1, §6.4.
 pub struct GenerationStats {
     pub iteration: usize,
     pub best_fitness: f64,
@@ -87,10 +92,27 @@ pub struct GenerationStats {
 ///
 /// Carries the best genome together with its expressed [`Graph`], so callers
 /// can inspect the genome and use the final network without re-expressing it.
+///
+/// # The numbers in here are engine-oriented, and `direction` is how you undo it
+///
+/// `best_fitness_engine` and every row of `history` are lower-is-better,
+/// whatever the objective actually computed — the engine converts once inward at
+/// [`common::express_and_score`] and never again. This struct is the far edge of
+/// that region, so it carries the [`Direction`] the run used and the boundary
+/// converts once outward: `direction.orient(outcome.best_fitness_engine)` is the
+/// value in the objective's own units.
+///
+/// The cost is stated plainly in spec §5.1: a Rust embedder reading this
+/// directly gets engine-oriented numbers. The field name says so rather than
+/// leaving it to be discovered.
 pub struct EvolutionOutcome<G: Genome> {
     pub best_genome: G,
     pub best_graph: Graph,
-    pub best_fitness: f64,
+    /// Best fitness in **engine orientation** (lower is better). Convert with
+    /// `direction.orient(..)` to get the objective's own units.
+    pub best_fitness_engine: f64,
+    /// The objective's direction, so the boundary can convert on the way out.
+    pub direction: Direction,
     pub history: Vec<GenerationStats>,
 }
 

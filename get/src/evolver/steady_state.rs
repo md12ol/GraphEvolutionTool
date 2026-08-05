@@ -97,20 +97,18 @@ impl<G: Genome> SteadyStateEvolver<G> {
         F: Fitness,
         R: Rng + ?Sized,
     {
-        let direction = fitness.direction();
         // Non-zero: `new` asserts the population is at least MIN_TOURNAMENT_SIZE,
         // and steady-state only ever replaces individuals, never removes them.
         let log_interval = self.population.len();
 
         self.history.clear();
-        self.history.push(generation_stats(0, fitnesses, direction));
+        self.history.push(generation_stats(0, fitnesses));
 
         for event in 1..=self.context.num_mating_events {
             self.mating_event(fitness, fitnesses, rng);
 
             if event % log_interval == 0 {
-                self.history
-                    .push(generation_stats(event, fitnesses, direction));
+                self.history.push(generation_stats(event, fitnesses));
             }
         }
     }
@@ -120,6 +118,9 @@ impl<G: Genome> SteadyStateEvolver<G> {
     /// Expresses the winner once here rather than tracking graphs through every
     /// event, which would mean keeping a `Graph` per individual alive for the
     /// whole run to save a single expression at the end.
+    ///
+    /// `direction` is stored, not applied: the outcome leaves here in engine
+    /// orientation and the boundary converts it once. Spec §5.1.
     fn outcome(&mut self, fitnesses: &[f64], direction: Direction) -> EvolutionOutcome<G> {
         let best = (0..fitnesses.len())
             .min_by(|&a, &b| rank(fitnesses, a, b))
@@ -128,7 +129,8 @@ impl<G: Genome> SteadyStateEvolver<G> {
 
         EvolutionOutcome {
             best_graph: best_genome.express(&self.shared.genome_context),
-            best_fitness: direction.orient(fitnesses[best]),
+            best_fitness_engine: fitnesses[best],
+            direction,
             best_genome,
             history: std::mem::take(&mut self.history),
         }
@@ -261,6 +263,21 @@ mod tests {
     impl Fitness for NodeCount {
         fn evaluate(&self, graph: &Graph) -> f64 {
             graph.num_nodes as f64
+        }
+    }
+
+    /// The same score under `Maximize`, so a test can tell an engine-oriented
+    /// outcome from a converted one — under `NodeCount` the two are identical,
+    /// because orienting a minimizing objective is the identity.
+    struct MostNodes;
+
+    impl Fitness for MostNodes {
+        fn evaluate(&self, graph: &Graph) -> f64 {
+            graph.num_nodes as f64
+        }
+
+        fn direction(&self) -> Direction {
+            Direction::Maximize
         }
     }
 
@@ -466,7 +483,7 @@ mod tests {
         let second = b.run(&NodeCount, 2026);
 
         assert_eq!(first.best_genome, second.best_genome);
-        assert_eq!(first.best_fitness, second.best_fitness);
+        assert_eq!(first.best_fitness_engine, second.best_fitness_engine);
         assert_eq!(first.best_graph, second.best_graph);
         assert_eq!(first.history.len(), second.history.len());
         for (x, y) in first.history.iter().zip(&second.history) {
@@ -537,7 +554,7 @@ mod tests {
         // Nothing in the final population may beat the reported best.
         let (_, finals) = express_and_score(&evolver.population, &(), &NodeCount);
         let best = finals.iter().copied().reduce(f64::min).unwrap();
-        assert_eq!(outcome.best_fitness, best);
+        assert_eq!(outcome.best_fitness_engine, best);
 
         // The graph must be the winner's expression, not a stale or default one.
         assert_eq!(outcome.best_graph, outcome.best_genome.express(&()));
@@ -559,9 +576,9 @@ mod tests {
         let mean_after = after.iter().sum::<f64>() / after.len() as f64;
 
         assert!(
-            outcome.best_fitness < best_before,
+            outcome.best_fitness_engine < best_before,
             "best did not improve: {best_before} -> {}",
-            outcome.best_fitness,
+            outcome.best_fitness_engine,
         );
         assert!(
             mean_after < mean_before,
@@ -577,12 +594,32 @@ mod tests {
 
         assert_eq!(evolver.population, before);
         // Walk(20) is the fittest starting individual; its graph has 21 nodes.
-        assert_eq!(outcome.best_fitness, 21.0);
+        assert_eq!(outcome.best_fitness_engine, 21.0);
 
         // Even with no events the starting state is logged, so a log is never
         // empty and always says where the run began.
         assert_eq!(outcome.history.len(), 1);
         assert_eq!(outcome.history[0].iteration, 0);
         assert_eq!(outcome.history[0].best_fitness, 21.0);
+    }
+
+    /// The outcome leaves the engine unconverted, and carries the direction the
+    /// boundary needs to convert it. Every other test here uses a minimizing
+    /// objective, where orientation is the identity and this is invisible.
+    ///
+    /// `Walk(20..=27)` is the starting population, so the best under `Maximize`
+    /// is 28 nodes — engine-oriented to -28.0. Reinstating a conversion in
+    /// `outcome` makes this 28.0 and fails. Spec §5.1.
+    #[test]
+    fn the_outcome_stays_engine_oriented_and_carries_the_direction() {
+        let mut evolver = walk_evolver(8, 0);
+        let outcome = evolver.run(&MostNodes, 3);
+
+        assert_eq!(outcome.best_fitness_engine, -28.0);
+        assert_eq!(outcome.history[0].best_fitness, -28.0);
+
+        // The direction is what makes the value recoverable at the boundary.
+        assert_eq!(outcome.direction, Direction::Maximize);
+        assert_eq!(outcome.direction.orient(outcome.best_fitness_engine), 28.0);
     }
 }
