@@ -872,3 +872,37 @@ fitnesses, with the invariant stated on the `Fitness` trait and both its methods
 already held, so no behaviour changed: 110 tests before and after. Entries below this line belong to
 later tasks — the next is **#15**, orientation at the Python boundary.
 *Task marker · express-and-score · recorded 2026-08-04 17:05 — James, at `/done`.*
+
+## 2026-08-04 22:07 — James — `best_fitness_engine`: the rename is the enforcement mechanism
+**Chose:** `EvolutionOutcome.best_fitness` becomes `best_fitness_engine`, and the struct gains
+`pub direction: Direction`. `GenerationStats.best_fitness` keeps its name.
+**Why:** The spec (§5.1) only asks that the field names "say the values are engine-oriented", and a
+doc comment would have satisfied that reading. The rename was chosen instead because it **breaks
+every existing reader at compile time**, and the reader that matters does not exist yet: #27 builds
+the Python boundary that consumes this value, and the one failure this whole issue exists to prevent
+is a boundary that forgets to convert. A doc comment is advisory to someone who may never read it; a
+changed field name is a compiler error they cannot skip. `GenerationStats` is left alone because it
+is a log column named in spec §6.4's table and does not itself cross the boundary — only the outcome
+does.
+**Rejected:** Keeping `best_fitness` with a doc note (invisible to the one caller who will get this
+wrong); `best_fitness_oriented` ("oriented" is ambiguous about *which* way, which is the exact
+confusion being removed).
+**Affects:** `get/src/evolver/mod.rs:96-118`, `steady_state.rs:132`. Consumed by GitHub #27.
+*#15 · recorded 2026-08-04 22:07 — James, at the implementation save.*
+
+## 2026-08-04 22:08 — James — A `Maximize` test harness for steady-state, because the existing one hides the bug
+**Chose:** Added `MostNodes` (a `Maximize` objective) and the test
+`the_outcome_stays_engine_oriented_and_carries_the_direction` to `get/src/evolver/steady_state.rs`,
+beyond what GitHub #15 asked for. Also verified both orientation guards by **reinstating** the
+conversions and confirming they fail.
+**Why:** Every pre-existing steady-state test uses `NodeCount`, which takes the default
+`Direction::Minimize` — and orienting a minimizing objective is the *identity*. So the whole
+conversion at `steady_state.rs:132` was invisible to the suite: removing it, or putting it back,
+changed no test outcome. A change nothing can detect is a change nothing protects, and this one
+sits directly on the path a wrong number would take to the user. The sabotage check is the same
+argument applied to the tests themselves — a guard that passes either way defends nothing, so it
+was run rather than assumed.
+**Rejected:** Changing `NodeCount` to `Maximize` (it would have silently rewritten the meaning of a
+dozen unrelated assertions); trusting `cargo test` green as evidence the guards work.
+**Affects:** `get/src/evolver/steady_state.rs` test module; `get/src/evolver/common.rs:381`.
+*#15 · recorded 2026-08-04 22:08 — James, at the implementation save.*

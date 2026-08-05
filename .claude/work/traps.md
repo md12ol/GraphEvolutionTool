@@ -245,3 +245,27 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   mid-sentence. This is the same driver as the dedup and duplicate traps above — third distinct
   symptom, same cause, all three silent.
 - **Added:** 2026-08-04 — union-merge-splices-entries-without-duplicating
+
+### Per-file `rustfmt` is not per-file on a `mod.rs` — it reformats every submodule that file declares
+- **Bites when:** you follow `CLAUDE.md`'s "never a bare `cargo fmt`, format the files you touched"
+  and one of those files is a `mod.rs`. rustfmt parses the module tree from the file you hand it and
+  descends into every `mod x;` it declares, so naming one file does **not** bound what it rewrites.
+- **Measured 2026-08-04 — James, during #15.** `rustfmt --edition 2024 get/src/evolver/mod.rs`
+  alone reformatted `get/src/evolver/generational.rs` (reordered a `use super::{...}` list). That
+  file is **issue #22, Michael's**, and one of the files `collab.md` #14 flags as claimed by two
+  workstreams. It reached `git diff` but not a commit; the only thing that caught it was reading
+  `git diff --stat` and noticing a fourth file in a three-file change.
+- **Do this instead:** pass the config option, and check the stat afterwards regardless.
+
+      rustfmt --edition 2024 --config skip_children=true get/src/evolver/mod.rs
+      git diff --stat        # confirm only the files you meant to touch appear
+
+  Reproduced both ways on 2026-08-04: without the flag `generational.rs` shows
+  `1 file changed, 1 insertion(+), 1 deletion(-)`; with it, untouched.
+- **`--skip-children` is NOT a CLI flag on this toolchain** — it exits `Unrecognized option`. It
+  moved into the config system, so it must be passed as `--config skip_children=true`. The stale
+  flag form is what most search results show.
+- **Why it matters here beyond tidiness:** the tree is not currently rustfmt-clean (that is exactly
+  what #22 exists to fix), so a stray descent produces *real* diff, not a no-op — and it lands in
+  whichever file the other owner has claimed.
+- **Added:** 2026-08-04 — rustfmt-descends-into-submodules-of-a-mod-rs
