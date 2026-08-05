@@ -283,6 +283,33 @@ diff to audit at PR time. Push back here if you'd rather this weren't standard.
 
 *#26 · raised 2026-08-05 23:45 — Michael.*
 
+### 27. `Swap`'s degree floor is `> 2` in the spec and code, but the original Java required only `>= 2`
+
+**Decide.** Found while explaining `operations.rs::swap` to Michael during the #22 readability pass —
+not blocking anything, but it's a real, checkable numeric discrepancy rather than a style question.
+
+**Where it's from.** `GraphEvolutionTool/src/Graph.java` and `GET.java`, a 2019-era Java
+predecessor kept locally in `OneDrive - University of Guelph/Coding Projects/Archive/`, not on
+GitHub. `swap(int a, int b, int k)` rejects when `nbr.get(v1).size() < k` — i.e. it requires
+**degree >= k** — and the only caller passes a named constant: `MIN_DEG_SWAP = 2`. So the original
+requirement was **degree >= 2**.
+
+**What we have now.** `official_spec_sheet.md` §3.1 says "two non-adjacent vertices of **degree >
+2**", and `get/src/genomes/edge_edit/operations.rs::swap` implements exactly that —
+`graph.degree(first_vertex) <= 2` rejects, i.e. requires **degree >= 3**. One higher than the
+original, on both vertices.
+
+**The other four checks match exactly**, verbatim in spirit — non-adjacent `v1,v2`, all four
+vertices distinct, and none of `v1-a2`, `v2-a1`, `a1-a2` already an edge. Only the degree floor
+differs, which is what makes it look deliberate rather than a slip — everything else was ported
+faithfully.
+
+**No comment in the Java explains why `2` was chosen**, so I can't tell if `> 2` here is an
+intentional tightening or an off-by-one from the port. Worth deciding: match the original (`>= 2`),
+or keep the current stricter `> 2` and drop a line into `decisions.md` saying so on purpose.
+
+*#27 · raised 2026-08-06 00:09 — Michael, transcribed by Claude during a readability-pass session.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
