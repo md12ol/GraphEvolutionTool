@@ -975,3 +975,30 @@ Carried forward, not resolved: `collab.md` #27 (`Swap`'s degree floor, `> 2` vs.
 `>= 2`), and the SIR-batch-seed hotfix (blocked on #18). Entries below this line belong to later
 tasks.
 *Task marker · mdube_format_and_readability · recorded 2026-08-06 — Michael, at `/done`.*
+
+## 2026-08-06 — Michael — `pull_main.sh`: a `SessionStart` hook fast-forwards `main` automatically
+**Chose:** A new hook, wired into `settings.json`'s `SessionStart` array ahead of `session_brief.sh`.
+It fast-forwards local `main` to `origin/main` when the current branch is `main` and the
+fast-forward is clean; on any other branch, or if `main` has diverged, it does nothing but print one
+line. Never merges, rebases, or discards anything — verified in a scratch repo across all three
+paths (clean fast-forward, local commits origin doesn't have, and a dirty working tree blocking the
+merge) before wiring it in.
+**Why:** `.claude/work/*.md` docs and `CLAUDE.md` itself route around a PR by design (routing table,
+above), so they only reach a second machine on that machine's next `git pull main` — which nothing
+was prompting anyone to run. That gap is what let `collab.md`'s two independent item-**20**s happen:
+both authors were looking at their own stale last-synced copy when they picked the next number
+(`collab.md` #20-collision, #29-collision). Pulling automatically at session start removes the stale
+window for the common case — two sessions on different days — though not true same-minute
+concurrency, which no sync-on-start scheme can close.
+**Rejected:** (a) A step added to `/load`'s instructions instead of a hook — doesn't fire if a
+session never runs `/load`, and the whole point is to close the gap unconditionally. (b) Auto-merging
+or rebasing on divergence — silently rewriting history at session start is exactly the kind of
+destructive-by-default behavior this project's hooks avoid elsewhere; warn-and-leave-untouched matches
+`block_env_commands.sh` and `show_hotfixes.sh`'s existing non-destructive posture. (c) Redesigning
+`collab.md`'s numbering scheme itself (e.g. composite `date-author` keys) to make collisions
+structurally impossible rather than just less likely — bigger change, binds James's practice the same
+way the numbering convention does, left as a possible future `collab.md` proposal rather than done
+unilaterally here.
+**Affects:** `.claude/hooks/pull_main.sh` (new); `.claude/settings.json` `SessionStart`;
+`.claude/hooks/README.md`. Per the routing table, this is the strict PR case — opened as PR, not
+pushed to `main` directly like the docs fixes earlier this session.

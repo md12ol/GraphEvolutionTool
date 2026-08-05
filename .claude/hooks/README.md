@@ -17,6 +17,7 @@ A malformed settings file disables **every** hook in it, silently.
 | `backup_docs.sh` | `Stop`, `SessionEnd` | no — **enabled by default** |
 | `block_env_commands.sh` | `PreToolUse(Bash)` | **yes**, exit 2 |
 | `show_hotfixes.sh` | `PreToolUse(Edit\|Write)` | no |
+| `pull_main.sh` | `SessionStart` | no — **enabled by default** |
 | `session_brief.sh` | `SessionStart` | no |
 
 Each is testable without a session:
@@ -63,7 +64,30 @@ because the rules are usually not uniform across files.
 ]
 ```
 
-## 3. `session_brief.sh` — orientation without `/load`
+## 3. `pull_main.sh` — fast-forward `main` before a stale session starts
+
+Fires first in `SessionStart`, before `session_brief.sh`, so the brief reflects anything the other
+owner pushed directly to `main` since your last pull — `.claude/work/*.md` docs most often, since
+those route around a PR by design.
+
+**Only ever fast-forwards, and only on `main`.** Any other branch (a feature branch mid-task) is
+left alone. If `main` can't cleanly fast-forward — local commits not on origin, or a working-tree
+change origin's version would overwrite — it prints one line and does nothing further. It never
+merges, rebases, or discards anything; a `git status` right after it runs shows exactly what it
+showed before, except on the clean fast-forward path. See `collab.md` #20-collision / #29-collision
+for why this exists — two people appended the same `collab.md` item number on the same day, because
+neither had pulled first.
+
+```json
+"SessionStart": [
+  { "hooks": [
+      { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/pull_main.sh\" 2>/dev/null || true", "timeout": 15 },
+      { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/session_brief.sh\"" }
+  ] }
+]
+```
+
+## 4. `session_brief.sh` — orientation without `/load`
 
 Prints the handoff's *Start here* plus counts of open `[ ]`, unverified `[~]`, unfiled issues and
 traps. No editing needed.
