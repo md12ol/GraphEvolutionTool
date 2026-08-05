@@ -64,26 +64,28 @@ impl SdaGenome {
 
         let init_char = rng.random_range(0..num_chars) as u8;
 
-        let transitions = (0..num_states)
-            .map(|_| {
-                (0..num_chars)
-                    .map(|_| rng.random_range(0..num_states) as u16)
-                    .collect()
-            })
-            .collect();
+        let mut transitions = Vec::with_capacity(num_states);
+        for _ in 0..num_states {
+            let mut state_transitions = Vec::with_capacity(num_chars);
+            for _ in 0..num_chars {
+                state_transitions.push(rng.random_range(0..num_states) as u16);
+            }
+            transitions.push(state_transitions);
+        }
 
-        let responses = (0..num_states)
-            .map(|_| {
-                (0..num_chars)
-                    .map(|_| {
-                        let resp_len = rng.random_range(1..=max_resp_len);
-                        (0..resp_len)
-                            .map(|_| rng.random_range(0..num_chars) as u8)
-                            .collect()
-                    })
-                    .collect()
-            })
-            .collect();
+        let mut responses = Vec::with_capacity(num_states);
+        for _ in 0..num_states {
+            let mut state_responses = Vec::with_capacity(num_chars);
+            for _ in 0..num_chars {
+                let resp_len = rng.random_range(1..=max_resp_len);
+                let mut response = Vec::with_capacity(resp_len);
+                for _ in 0..resp_len {
+                    response.push(rng.random_range(0..num_chars) as u8);
+                }
+                state_responses.push(response);
+            }
+            responses.push(state_responses);
+        }
 
         Ok(Self {
             init_char,
@@ -104,13 +106,19 @@ impl SdaGenome {
         max_resp_len: usize,
         rng: &mut R,
     ) -> Result<Self, &'static str> {
-        Self::random(num_states, edge_multiplicity_cap as usize + 1, max_resp_len, rng)
+        Self::random(
+            num_states,
+            edge_multiplicity_cap as usize + 1,
+            max_resp_len,
+            rng,
+        )
     }
 
     /// Re-roll the initial character and every transition/response in place,
     /// keeping the current number of states, characters, and `max_resp_len`.
     pub fn randomize<R: Rng + ?Sized>(&mut self, rng: &mut R) -> Result<(), &'static str> {
         let num_states = self.transitions.len();
+        // map_or: 0 if there are no states yet (transitions is empty), else the row width
         let num_chars = self.transitions.first().map_or(0, |row| row.len());
         *self = Self::random(num_states, num_chars, self.max_resp_len, rng)?;
         Ok(())
@@ -133,6 +141,9 @@ impl SdaGenome {
         output.push(self.init_char);
 
         let mut cur_state = init_state;
+        // Two cursors into the same growing buffer: tail_idx reads a
+        // character already produced; output.len() is where the next one
+        // gets written.
         let mut tail_idx = 0;
         while output.len() < output_len {
             let driver = output[tail_idx] as usize;
@@ -192,6 +203,8 @@ impl Genome for SdaGenome {
             return;
         }
 
+        // Rejection sampling for two distinct cut points. `loop` is itself an
+        // expression here — `break`'s argument becomes the value of (start, end).
         let (start, end) = loop {
             let a = rng.random_range(0..=states);
             let b = rng.random_range(0..=states);
@@ -216,6 +229,7 @@ impl Genome for SdaGenome {
     /// that want more disruption per generation call this multiple times.
     fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R) {
         let num_states = self.transitions.len();
+        // map_or: 0 if there are no states yet (transitions is empty), else the row width
         let num_chars = self.transitions.first().map_or(0, |row| row.len());
         if num_states == 0 || num_chars == 0 {
             return;
@@ -229,6 +243,7 @@ impl Genome for SdaGenome {
         let state = rng.random_range(0..num_states);
         let trans = rng.random_range(0..num_chars);
 
+        // coin flip: turbofish spells out the type `random` can't infer from an argument
         if rng.random::<bool>() {
             self.transitions[state][trans] = rng.random_range(0..num_states) as u16;
         } else {
@@ -244,6 +259,9 @@ impl Genome for SdaGenome {
     /// `SdaContext`, not the genome, and `print` has no context parameter to
     /// read it from.
     fn print(&self) -> String {
+        // Brings write!/writeln! for String into scope; writes to a String
+        // can't actually fail, so the .unwrap()s below just satisfy the
+        // trait's Result return.
         use std::fmt::Write as _;
 
         let mut out = String::new();
@@ -326,10 +344,7 @@ mod tests {
                 init_state: 0,
                 max_edge_multiplicity: 5,
             };
-            assert_eq!(
-                genome.express(&context),
-                Graph::new(num_nodes, 5)
-            );
+            assert_eq!(genome.express(&context), Graph::new(num_nodes, 5));
         }
     }
 
@@ -524,20 +539,24 @@ mod tests {
             genome.mutate(&mut rng);
 
             let init_char_changed = (genome.init_char != before.init_char) as usize;
-            let changed_transitions = genome
-                .transitions
-                .iter()
-                .flatten()
-                .zip(before.transitions.iter().flatten())
-                .filter(|(a, b)| a != b)
-                .count();
-            let changed_responses = genome
-                .responses
-                .iter()
-                .flatten()
-                .zip(before.responses.iter().flatten())
-                .filter(|(a, b)| a != b)
-                .count();
+
+            let mut changed_transitions = 0;
+            for (before_row, after_row) in before.transitions.iter().zip(&genome.transitions) {
+                for (before_val, after_val) in before_row.iter().zip(after_row) {
+                    if before_val != after_val {
+                        changed_transitions += 1;
+                    }
+                }
+            }
+
+            let mut changed_responses = 0;
+            for (before_row, after_row) in before.responses.iter().zip(&genome.responses) {
+                for (before_val, after_val) in before_row.iter().zip(after_row) {
+                    if before_val != after_val {
+                        changed_responses += 1;
+                    }
+                }
+            }
 
             let changes = init_char_changed + changed_transitions + changed_responses;
             assert!(changes <= 1, "expected at most one change, got {changes}");
@@ -621,7 +640,11 @@ mod tests {
 
             // The swapped set must be a single contiguous run, if non-empty.
             if let (Some(&first), Some(&last)) = (swapped.first(), swapped.last()) {
-                assert_eq!(swapped, (first..=last).collect::<Vec<_>>());
+                let mut expected = Vec::new();
+                for state in first..=last {
+                    expected.push(state);
+                }
+                assert_eq!(swapped, expected);
             }
 
             // init_char swaps iff state 0 was part of the swapped segment.

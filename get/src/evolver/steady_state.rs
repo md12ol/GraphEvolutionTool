@@ -57,14 +57,18 @@ impl<G: Genome> SteadyStateEvolver<G> {
         if rng.random_bool(self.shared.crossover_rate) {
             first.crossover(&mut second, rng);
         }
-        for child in [&mut first, &mut second] {
-            mutate_child(
-                child,
-                self.shared.mutation_rate,
-                self.shared.max_mutations,
-                rng,
-            );
-        }
+        mutate_child(
+            &mut first,
+            self.shared.mutation_rate,
+            self.shared.max_mutations,
+            rng,
+        );
+        mutate_child(
+            &mut second,
+            self.shared.mutation_rate,
+            self.shared.max_mutations,
+            rng,
+        );
 
         // Scoring both children in one batch rather than individually halves the
         // FFI hops a Python-backed objective pays per event.
@@ -75,9 +79,11 @@ impl<G: Genome> SteadyStateEvolver<G> {
             tournament[tournament.len() - 1],
             tournament[tournament.len() - 2],
         ];
-        for (slot, (child, score)) in worst.into_iter().zip(children.into_iter().zip(scores)) {
-            self.population[slot] = child;
-            fitnesses[slot] = score;
+        let mut children = children.into_iter();
+        let mut scores = scores.into_iter();
+        for &slot in &worst {
+            self.population[slot] = children.next().expect("exactly two children");
+            fitnesses[slot] = scores.next().expect("exactly two scores");
         }
     }
 
@@ -132,6 +138,8 @@ impl<G: Genome> SteadyStateEvolver<G> {
             best_fitness_engine: fitnesses[best],
             direction,
             best_genome,
+            // mem::take moves history out and leaves an empty Vec in its
+            // place, so `self` stays valid without cloning the whole log.
             history: std::mem::take(&mut self.history),
         }
     }
@@ -322,6 +330,26 @@ mod tests {
         selection().tournament_indices(fitnesses, &mut mirror)
     }
 
+    /// The best (lowest) fitness among a population's scores.
+    fn best_of(fitnesses: &[f64]) -> f64 {
+        let mut best = fitnesses[0];
+        for &f in &fitnesses[1..] {
+            if f < best {
+                best = f;
+            }
+        }
+        best
+    }
+
+    /// The mean fitness across a population's scores.
+    fn mean_of(fitnesses: &[f64]) -> f64 {
+        let mut sum = 0.0;
+        for &f in fitnesses {
+            sum += f;
+        }
+        sum / fitnesses.len() as f64
+    }
+
     #[test]
     fn a_mating_event_replaces_the_tournaments_two_worst_and_nothing_else() {
         let seed = 12;
@@ -389,11 +417,11 @@ mod tests {
     fn the_best_individual_never_gets_worse() {
         let (mut evolver, mut fitnesses) = evolver(10, 0.9, 0.9);
         let mut rng = StdRng::seed_from_u64(4);
-        let mut best = fitnesses.iter().copied().reduce(f64::min).unwrap();
+        let mut best = best_of(&fitnesses);
 
         for event in 0..50 {
             evolver.mating_event(&NodeCount, &mut fitnesses, &mut rng);
-            let now = fitnesses.iter().copied().reduce(f64::min).unwrap();
+            let now = best_of(&fitnesses);
             assert!(
                 now <= best,
                 "best worsened from {best} to {now} at event {event}"
@@ -502,11 +530,13 @@ mod tests {
         let first = a.run(&NodeCount, 1);
         let second = b.run(&NodeCount, 999);
 
-        let histories_match = first
-            .history
-            .iter()
-            .zip(&second.history)
-            .all(|(x, y)| x.mean_fitness == y.mean_fitness);
+        let mut histories_match = true;
+        for (x, y) in first.history.iter().zip(&second.history) {
+            if x.mean_fitness != y.mean_fitness {
+                histories_match = false;
+                break;
+            }
+        }
         assert!(!histories_match, "two seeds produced identical histories");
     }
 
@@ -553,7 +583,7 @@ mod tests {
 
         // Nothing in the final population may beat the reported best.
         let (_, finals) = express_and_score(&evolver.population, &(), &NodeCount);
-        let best = finals.iter().copied().reduce(f64::min).unwrap();
+        let best = best_of(&finals);
         assert_eq!(outcome.best_fitness_engine, best);
 
         // The graph must be the winner's expression, not a stale or default one.
@@ -567,13 +597,13 @@ mod tests {
         // breeds still satisfies almost every other test here.
         let mut evolver = walk_evolver(10, 500);
         let (_, before) = express_and_score(&evolver.population, &(), &NodeCount);
-        let best_before = before.iter().copied().reduce(f64::min).unwrap();
-        let mean_before = before.iter().sum::<f64>() / before.len() as f64;
+        let best_before = best_of(&before);
+        let mean_before = mean_of(&before);
 
         let outcome = evolver.run(&NodeCount, 2024);
 
         let (_, after) = express_and_score(&evolver.population, &(), &NodeCount);
-        let mean_after = after.iter().sum::<f64>() / after.len() as f64;
+        let mean_after = mean_of(&after);
 
         assert!(
             outcome.best_fitness_engine < best_before,

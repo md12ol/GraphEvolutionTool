@@ -17,6 +17,7 @@ impl Graph {
         Self {
             num_nodes,
             max_edge_multiplicity,
+            // num_nodes x num_nodes matrix, all zeros (no edges yet).
             adjacency: vec![vec![0; num_nodes]; num_nodes],
         }
     }
@@ -74,6 +75,10 @@ impl Graph {
 
     /// Set every weighted edge in `edges`.
     pub fn set_edges(&mut self, edges: &[(usize, usize, u32)]) {
+        // &(u, v, weight): destructures a reference to the tuple, pulling out
+        // owned copies of its fields directly rather than binding one
+        // reference to the whole tuple. The same &x / |&y| pattern recurs
+        // below in degree() and total_edge_multiplicity().
         for &(u, v, weight) in edges {
             self.set_edge(u, v, weight);
         }
@@ -125,7 +130,7 @@ impl Graph {
         }
         self.adjacency[node]
             .iter()
-            .filter(|&&weight| weight > 0)
+            .filter(|&&weight| weight > 0) // && here is double deref, not logical-AND
             .count()
     }
 

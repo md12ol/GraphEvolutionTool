@@ -31,6 +31,8 @@ pub enum Selection {
 /// order the RNG produced them. `total_cmp` is used simply because sorting
 /// needs a total order; `Direction::orient` rejects `NaN` before it gets here.
 pub(super) fn rank(fitnesses: &[f64], a: usize, b: usize) -> Ordering {
+    // .then() only falls through to the index comparison when the fitness
+    // comparison was Equal — this is the tie-break, not a second sort key.
     fitnesses[a].total_cmp(&fitnesses[b]).then(a.cmp(&b))
 }
 
@@ -48,6 +50,8 @@ impl Selection {
     ) -> Vec<G>
     where
         G: Genome,
+        // `?Sized` lets callers pass a trait-object RNG (e.g. `&mut dyn RngCore`),
+        // not just a concrete sized type — same reason on every `R: Rng` bound below.
         R: Rng + ?Sized,
     {
         assert_eq!(
@@ -115,10 +119,14 @@ impl Selection {
     where
         R: Rng + ?Sized,
     {
-        (0..tournament_size)
-            .map(|_| rng.random_range(0..fitnesses.len()))
-            .min_by(|&a, &b| rank(fitnesses, a, b))
-            .expect("tournament_size is at least 1")
+        let mut winner = rng.random_range(0..fitnesses.len());
+        for _ in 1..tournament_size {
+            let candidate = rng.random_range(0..fitnesses.len());
+            if rank(fitnesses, candidate, winner) == Ordering::Less {
+                winner = candidate;
+            }
+        }
+        winner
     }
 }
 
@@ -265,13 +273,23 @@ pub fn generation_stats(iteration: usize, fitnesses: &[f64]) -> GenerationStats 
     );
 
     let n = fitnesses.len() as f64;
-    let best = fitnesses
-        .iter()
-        .copied()
-        .reduce(f64::min)
-        .expect("population is not empty");
-    let mean = fitnesses.iter().sum::<f64>() / n;
-    let variance = fitnesses.iter().map(|f| (f - mean).powi(2)).sum::<f64>() / n;
+    let mut best = fitnesses[0];
+    for &f in &fitnesses[1..] {
+        if f < best {
+            best = f;
+        }
+    }
+    let mut sum = 0.0;
+    for &f in fitnesses {
+        sum += f;
+    }
+    let mean = sum / n;
+
+    let mut sum_sq_dev = 0.0;
+    for &f in fitnesses {
+        sum_sq_dev += (f - mean).powi(2);
+    }
+    let variance = sum_sq_dev / n;
 
     GenerationStats {
         iteration,

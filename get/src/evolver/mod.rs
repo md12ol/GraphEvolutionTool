@@ -8,6 +8,8 @@ pub mod common;
 pub mod generational;
 pub mod steady_state;
 
+// Re-exported so callers write evolver::GenerationalEvolver rather than
+// reaching into the generational submodule directly.
 pub use generational::GenerationalEvolver;
 pub use steady_state::SteadyStateEvolver;
 
@@ -36,6 +38,11 @@ use common::Selection;
 pub struct SharedEvolutionContext<G: Genome> {
     /// Genome-specific expression configuration (e.g. `EdgeEditContext`,
     /// `SdaContext`) supplied by the associated [`Genome::Context`] type.
+    ///
+    /// `G::Context` is not a static member of a class named `G` — it's the
+    /// concrete type that `G`'s [`Genome`] implementation supplies for
+    /// `Genome`'s associated `Context` type (Rust's per-implementation "type
+    /// member").
     ///
     /// Also the authority on graph size and edge-weight cap — see above.
     pub genome_context: G::Context,
@@ -124,6 +131,10 @@ pub struct EvolutionOutcome<G: Genome> {
 pub trait Evolver<G: Genome> {
     /// Strategy-specific configuration ([`GenerationalContext`] or
     /// [`SteadyStateContext`]).
+    ///
+    /// An "associated type": each implementor of `Evolver` fixes this to one
+    /// concrete type, rather than `Evolver` taking a second generic parameter
+    /// like `Evolver<G, T>`.
     type TypeContext;
 
     /// Build an evolver from the shared and strategy-specific contexts and a
@@ -139,6 +150,9 @@ pub trait Evolver<G: Genome> {
         type_context: Self::TypeContext,
         population: Vec<G>,
     ) -> Self
+    // `Self: Sized` opts only this method out of dynamic-dispatch support, so
+    // `Evolver` can still be used as `dyn Evolver<G>` elsewhere — a
+    // constructor can't be called through a trait object anyway.
     where
         Self: Sized;
 
