@@ -19,6 +19,9 @@
 //! recovers and never infects again. A single patient zero seeds the outbreak,
 //! which runs until no infected nodes remain.
 
+// Both traits must be in scope to call their methods (.random(),
+// .seed_from_u64()) below — Rust requires the trait import even when the
+// concrete type (ChaCha8Rng) is already imported.
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
@@ -122,6 +125,9 @@ pub fn batch_epidemics(graph: &Graph, params: &SirBatchParams, batch_seed: u64) 
     let mut runs = Vec::with_capacity(params.num_epidemics);
 
     for epidemic in 0..params.num_epidemics {
+        // Starts empty and is filled on every attempt; the .expect() below is
+        // safe because the inner loop always runs at least once
+        // (max_epidemic_retries > 0 is asserted above).
         let mut kept = None;
 
         for attempt in 0..params.max_epidemic_retries {
@@ -196,6 +202,10 @@ enum State {
 /// zero still occupies the burnout step. Zero therefore means *no epidemic
 /// existed to measure*, which is a different statement from *nobody was
 /// infected*, and only a nodeless graph can make it. Agreed 2026-08-04.
+// `R: Rng + ?Sized` accepts either a concrete RNG type or a `&mut dyn Rng`
+// trait object — `?Sized` opts out of Rust's default "must have a known
+// size" requirement, which a trait object doesn't satisfy. Same bound, same
+// reason, on `transmits` below.
 pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) -> SirRun {
     let num_nodes = graph.num_nodes;
     if num_nodes == 0 {
@@ -230,6 +240,8 @@ pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) 
         // multiplicity of `k` contributes `k`, because parallel edges are `k`
         // independent chances to transmit, not one.
         exposure.fill(0);
+        // Iterating with .iter()/&mut state yields references, not values —
+        // the * below dereferences to read or assign the underlying State.
         for (node, node_state) in state.iter().enumerate() {
             if *node_state != State::Infectious {
                 continue;
@@ -275,7 +287,7 @@ pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) 
     SirRun {
         length: profile.len() - 1,
         spread: profile.iter().sum(),
-        profile,
+        profile, // shorthand for `profile: profile` — the local var name matches the field name
     }
 }
 
