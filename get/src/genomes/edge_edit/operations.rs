@@ -158,6 +158,10 @@ impl GraphOperation {
         first_neighbor_index: usize,
         second_neighbor_index: usize,
     ) {
+        // Reject anything that can't yield two disjoint edges to swap: too few
+        // nodes, an out-of-range or repeated vertex, degree <= 2 (leaves no
+        // spare edge once one is removed), or the two vertices already
+        // adjacent to each other.
         if graph.num_nodes < 4
             || first_vertex >= graph.num_nodes
             || second_vertex >= graph.num_nodes
@@ -179,6 +183,8 @@ impl GraphOperation {
             return;
         };
 
+        // Reject if the swap would collide two of the four vertices, or would
+        // create an edge that already exists.
         let mut quartet = [first_vertex, first_neighbor, second_vertex, second_neighbor];
         quartet.sort_unstable();
         if quartet.windows(2).any(|pair| pair[0] == pair[1])
