@@ -4,7 +4,7 @@
 use rand::Rng;
 
 use super::{
-    Evolver, EvolutionOutcome, GenerationStats, GenerationalContext, SharedEvolutionContext,
+    EvolutionOutcome, Evolver, GenerationStats, GenerationalContext, SharedEvolutionContext,
 };
 use crate::fitness::Fitness;
 use crate::genomes::Genome;

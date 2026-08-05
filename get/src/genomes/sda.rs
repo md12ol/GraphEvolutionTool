@@ -104,7 +104,12 @@ impl SdaGenome {
         max_resp_len: usize,
         rng: &mut R,
     ) -> Result<Self, &'static str> {
-        Self::random(num_states, edge_multiplicity_cap as usize + 1, max_resp_len, rng)
+        Self::random(
+            num_states,
+            edge_multiplicity_cap as usize + 1,
+            max_resp_len,
+            rng,
+        )
     }
 
     /// Re-roll the initial character and every transition/response in place,
@@ -326,10 +331,7 @@ mod tests {
                 init_state: 0,
                 max_edge_multiplicity: 5,
             };
-            assert_eq!(
-                genome.express(&context),
-                Graph::new(num_nodes, 5)
-            );
+            assert_eq!(genome.express(&context), Graph::new(num_nodes, 5));
         }
     }
 
