@@ -269,3 +269,22 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   what #22 exists to fix), so a stray descent produces *real* diff, not a no-op — and it lands in
   whichever file the other owner has claimed.
 - **Added:** 2026-08-04 — rustfmt-descends-into-submodules-of-a-mod-rs
+
+### `deny_unknown_fields` does nothing through a `#[serde(flatten)]`, and reports no error either
+- **Bites when:** you assume a typo'd or stale key in a TOML table is a parse error. For any struct
+  reached through a flattened field it is **silently discarded** — the attribute does not warn, does
+  not fail to compile, and does not fire.
+- **Do this instead:** if a key must be rejected, either do not flatten that block, or check the
+  raw text before deserializing. Verify which you have with an actual test rather than reading the
+  attribute and believing it.
+- **Why:** serde deserializes a flattened field through a buffered content map, and the buffering
+  loses the "this key was not claimed" information the deny relies on.
+- **Where this is live in the tree:** `[fitness]` accepts and drops unknown keys, because
+  `FitnessConfig`'s three epidemic variants flatten `SirParams` (spec §7 requires the flatten).
+  `[genome.operation_weights]` **does** reject them — `EdgeEditOperationWeights` carries the
+  attribute and is not flattened (`get/src/genomes/edge_edit.rs:27`). Two tables, two behaviours,
+  neither wrong. Pinned by `an_unknown_fitness_key_is_ignored_rather_than_rejected` in
+  `get/src/config.rs`.
+- **Measured 2026-08-05** on `SirParams`: a stray `seed = 42` parsed clean both with and without
+  `#[serde(deny_unknown_fields)]` on the struct. Full reasoning in `decisions.md` 2026-08-05 15:47.
+- **Added:** 2026-08-05 — deny-unknown-fields-does-nothing-through-a-flatten

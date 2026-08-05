@@ -60,10 +60,11 @@ everybody's problem to remove.
 - **Remove when:** #18 lands. It is a one-method change and no caller moves, which is why the
   seam was put here rather than threading a seed argument through the three objectives.
 - **Added:** 2026-08-04 — sir-batch-seed-never-changes-between-evaluations
-- **Last checked:** 2026-08-04 — James, at the `/done` gate for express-and-score. Both passes
-  verified, not inferred: the code is **still present**, `fn batch_seed` returning `self.run_seed`
-  unchanged at `get/src/fitness.rs:158-160`; and the `Remove when:` is **not met** — GitHub #18 is
-  still `open`. Carried forward unchanged.
+- **Last checked:** 2026-08-05 — James, at the `/done` gate for direction-at-boundary. Both passes
+  verified on `main` at `252347d`, not inferred: the code is **still present**, `fn batch_seed`
+  returning `self.run_seed` unchanged at `get/src/fitness.rs:158-160`; and the `Remove when:` is
+  **not met** — GitHub #18 is still `open`. Carried forward unchanged, second cycle running.
+  (Previously checked 2026-08-04 at the express-and-score gate, same result on both passes.)
 - **Status note added 2026-08-04 — James (not a rewrite of Michael's lines above):** the `Machine:`
   line anticipates the merge that has now happened. PR #40 merged `mdube_sir_objectives` into `main`
   on 2026-08-04, so this hotfix is **committed and in every tree**, no longer branch-local. Michael's

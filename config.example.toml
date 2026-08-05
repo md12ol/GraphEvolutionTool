@@ -65,25 +65,61 @@ gene_length = 256            # number of edit operations per genome
 # null         = 0.0        # e.g. drop the no-op so every gene does something
 
 # SDA alternative: a self-driving automaton that generates a graph from scratch.
+# There is no `num_chars`: the alphabet is derived as max_edge_multiplicity + 1,
+# so every character is a legal edge weight and none is ever clamped away.
 # [genome]
 # type         = "sda"
 # num_states   = 12
-# num_chars    = 2           # for unweighted graphs use max_edge_multiplicity + 1
 # max_resp_len = 4
 # init_state   = 0           # starting state; must be < num_states (default 0)
 
 # --- Fitness objective --------------------------------------------------------
-# SIR epidemic simulation over the expressed graph (native Rust, parallel).
+# Three objectives read the same SIR simulation over the expressed graph, and
+# share the parameter block below: epi_spread (total ever-infected, maximized),
+# epi_length (timesteps to burn out, maximized), and epi_prof_match (RMSE against
+# a target profile, minimized). Direction is fixed by the objective and is
+# deliberately not configurable.
+#
+# No seed appears anywhere in this file. One master seed is passed to `run()`
+# and the population, evolution, epidemics and replicate stream all derive from
+# it, so replicates differ in their epidemics as well as their evolution.
+#
+# Migrating an older config: delete its `seed` line. A leftover `seed` under
+# [fitness] is silently ignored rather than reported, so it would otherwise look
+# like it still controls the epidemics when it no longer does.
 
 [fitness]
-type           = "sir"
+type           = "epi_spread"
 infection_rate = 0.05        # per-edge transmission probability per timestep
-seed           = 42          # seeds the stochastic simulation
+num_epidemics  = 30          # outbreaks averaged per evaluation
 # patient_zero = 0           # optional: pin the seed node; omit for a random one
 
+# Outbreaks shorter than min_epidemic_length are discarded and re-simulated, up
+# to max_epidemic_retries attempts; whatever the last attempt gives is kept. A
+# fizzled outbreak says the dice went badly, not that the network is poor. Both
+# default to the values shown, which are the legacy C++ constants. Set
+# min_epidemic_length = 1 to disable the re-roll. Note this is a biased resample,
+# not variance reduction — it is not interchangeable with raising num_epidemics.
+# min_epidemic_length  = 3
+# max_epidemic_retries = 5
+
+# Epidemic-length alternative: same parameters, different reading of the run.
+# [fitness]
+# type           = "epi_length"
+# infection_rate = 0.05
+# num_epidemics  = 30
+
+# Profile-matching alternative: adds a target profile to match against.
+# [fitness]
+# type                = "epi_prof_match"
+# infection_rate      = 0.05
+# num_epidemics       = 30
+# target_profile_path = "Profiles/Profile3.dat"
+
 # Python fitness alternative: select "python" here, then call
-# `evolver.set_fitness_function(callable)` from Python before `run()`.
-# The callable receives a batch and returns one float per graph (lower = better):
+# `evolver.set_fitness_function(callable, direction)` from Python before `run()`.
+# The callable receives a batch and returns one float per graph, and declares its
+# own direction at registration:
 #   def fitness(batch):  # batch: list[(num_nodes, list[(u, v, weight)])]
 #       return [score(n, edges) for (n, edges) in batch]
 # [fitness]
