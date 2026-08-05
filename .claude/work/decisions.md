@@ -906,3 +906,59 @@ was run rather than assumed.
 dozen unrelated assertions); trusting `cargo test` green as evidence the guards work.
 **Affects:** `get/src/evolver/steady_state.rs` test module; `get/src/evolver/common.rs:381`.
 *#15 · recorded 2026-08-04 22:08 — James, at the implementation save.*
+
+## 2026-08-05 15:09 — James — A task closes when the work is done, not when someone else clicks merge
+**Chose:** Ran `/done direction-at-boundary` on 2026-08-05 with **PR #41 still open, unreviewed and
+unmerged**, and started GitHub #24 as a new task rather than waiting. The plan's last `[ ]` —
+"Michael reviews and merges #41" — was struck rather than ticked, because it was never a task.
+**Why:** `/done`'s gate exists to stop unfinished *work* being archived, and the test that matters
+is whether the item owes **this owner** an action. This one does not: PR #41's body opens with
+`Closes #15.`, so the merge closes the GitHub issue with nothing left to do on James's side. Had it
+been left open, `work/current/` would have been held hostage to another person's availability — and
+`work/current/` holds exactly one task, so blocking on #41 blocks #24 too. That is the "empty
+`archive/` next to a plan that no longer fits in context" failure `CLAUDE.md` warns about, arriving
+by a route the rule did not anticipate.
+**What this does NOT license:** archiving over an item that owes *you* something. The disposition
+turned on reading the PR body for a closing keyword, which was checked on 2026-08-05, not assumed.
+A PR closed **unmerged** is a different situation — #15 would reopen as new work.
+**Rejected:** Waiting for the merge (blocks a tier-1 issue on someone else's calendar for an item
+with no action attached); self-merging to clear the gate (`CLAUDE.md` — the other owner merges
+yours, and the unavailable-and-blocking exception does not apply when an unrelated issue is
+available to work on instead).
+**Affects:** `.claude/work/archive/2026-08_direction-at-boundary/`; the `/done` gate's reading of a
+`[ ]` item that belongs to the other owner.
+*#15 · recorded 2026-08-05 15:09 — James, at `/done`.*
+
+## Task complete: direction-at-boundary — 2026-08-05
+Archived to `.claude/work/archive/2026-08_direction-at-boundary/`. GitHub **#15** shipped as
+**PR #41** (`320fe68`, 3 files, +110/−41), which was **open and unmerged** at archive time — see the
+entry directly above for why that did not block the close. The engine no longer converts fitness
+direction internally: `generation_stats` takes no `Direction`, `SteadyStateEvolver::outcome` stores
+one instead of applying it, and `EvolutionOutcome` carries `direction` alongside
+`best_fitness_engine`. 128 tests green, both guards proven by sabotage. Entries below this line
+belong to later tasks — the next is **#24**, the `config.rs` schema.
+*Task marker · direction-at-boundary · recorded 2026-08-05 15:09 — James, at `/done`.*
+
+## 2026-08-05 15:47 — James — The flatten wins over #24's unknown-key rejection, because serde cannot do both
+**Chose:** `FitnessConfig`'s three epidemic variants share one `#[serde(flatten)] sir: SirParams`
+block, and a stray key under `[fitness]` — notably a leftover `seed` — is **silently ignored**.
+Pinned by `an_unknown_fitness_key_is_ignored_rather_than_rejected` in `get/src/config.rs` so the
+behaviour is recorded rather than rediscovered. Catching it moves to `Config::validate` (#23).
+**Why:** GitHub #24 asks for both the flatten and for `seed` to be "rejected as an unknown key",
+and those are mutually exclusive in serde: a `flatten` field is deserialized through a buffered
+content map, so `deny_unknown_fields` never fires. Measured 2026-08-05 — a stray `seed = 42` parsed
+clean, and adding `deny_unknown_fields` to `SirParams` itself changed nothing. Spec §7 states the
+flatten as a requirement ("flatten the shared block rather than triplicating it"), while the
+rejection appears only in the issue's `Verify by` line, so `CLAUDE.md`'s "the sheet is the intent"
+decides it.
+**Why this is not just a shrug:** the failure it leaves open is the silent kind. Someone migrating a
+pre-#24 config keeps `seed = 42`, gets no error, and runs under a different seeding model than they
+believe — the master seed now comes from the `run` call. That is worth catching, but it has to be
+caught by something that sees the raw text, which `validate` does and the parser no longer can.
+**Rejected:** (a) Triplicating the parameters per variant so `deny_unknown_fields` works — delivers
+the verify line exactly and contradicts the sheet, which is the one thing an agent may not do here.
+(b) A phantom `Option<u64> seed` field existing only to be rejected — keeps the flatten and catches
+the exact case, but adds a field the sheet does not have, which is a joint-meeting change.
+**Affects:** `get/src/config.rs` `FitnessConfig`/`SirParams`; GitHub #23's `Config::validate`;
+`collab.md` item 25.
+*#24 · recorded 2026-08-05 15:47 — James, during the config-schema implementation.*

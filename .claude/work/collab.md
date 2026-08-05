@@ -200,6 +200,71 @@ so neither answer wastes the work.
 
 *#21 · raised 2026-08-04 22:00 — Michael.*
 
+### 24. What is in a `Profile*.dat`? The C++ loader adds patient zero and rescales by `verts / 128`
+
+**For you, before #26 reads one — not blocking #24, which only stores the path.** Raised while
+building the `config.rs` schema. `epi_prof_match` needs a target profile, and the sheet says only
+that it "adds a target" (§7); §7's TOML block does not show the field and issue #24's enum sketch
+omits it. James settled the config side on 2026-08-05: the variant carries
+**`target_profile_path`**, a path that `config.rs` never opens, so parsing stays pure
+deserialization. That leaves the question of what the file actually contains, and **whoever builds
+#26 has to answer it** — the dispatch is what turns a path into the `Vec<f64>` that
+`EpiProfMatch::new` (`get/src/fitness.rs:251`) requires.
+
+**What the C++ does, which is more than "one number per line"** — `legacy/main.cpp:370-388`, reading
+`./Profiles/Profile<n>.dat`:
+
+    for (int i = 0; i < PL; i++) { PD[i] = 0; }        // pre-fill
+    PD[0] = 1;                                         // patient zero is NOT in the file
+    for (int i = 0; i < PL; i++) {
+        inp.getline(buf, 19);  val = strtod(buf, nullptr);
+        PD[i + 1] = val * ((double) verts / 128);      // rescale to the network size
+    }
+
+So a stored profile **omits its own first element** and is **normalized to a 128-node network**.
+Two conventions, neither in the sheet, and both silent if got wrong: forget the prepend and every
+target is shifted one timestep; forget the rescale and a 512-node run is compared against
+128-node counts, which is a wrong number rather than an error.
+
+**The ask:** decide whether GET reproduces both conventions, one, or neither — and if the file
+format changes, say so before #26 is built rather than after. My own read is that reproducing both
+is right for comparability with the archived C++ results, which is the same argument that kept the
+short-epidemic re-roll (§5.2), but this is your issue and the profiles are your data.
+
+**Also worth noting the length interaction.** The 2026-08-04 amendment to §5.2 gave `profile` a
+terminating zero and made `length` one higher than before, so a target captured from older output is
+already one element out of step. `EpiProfMatch`'s doc comment at `fitness.rs:236-238` says as much.
+Whatever is decided here should say which convention a `.dat` on disk is in.
+
+*#24 · raised 2026-08-05 15:09 — James, while planning GitHub issue #24.*
+
+### 25. Unknown keys under `[fitness]` are silently ignored, and cannot be made to error
+
+**FYI, and one thing to not assume in #26 — no decision needed from you unless you disagree.**
+Measured while building GitHub #24 on 2026-08-05: a `[fitness]` block carrying a leftover
+`seed = 42` **parses clean and the key is discarded**. Issue #24's `Verify by` line asked for it to
+be rejected as an unknown key; that is not achievable. Serde deserializes a `#[serde(flatten)]`
+field through a buffered content map, so `deny_unknown_fields` never fires — confirmed by putting
+the attribute on `SirParams` itself, which changed nothing.
+
+Spec §7 requires the flatten in as many words, so the flatten stayed and the verify line is what
+gave. Reasoning and the rejected alternatives are in `decisions.md` 2026-08-05 15:47; the behaviour
+is pinned by `an_unknown_fitness_key_is_ignored_rather_than_rejected` in `get/src/config.rs`.
+
+**Why you may care, in #26.** The natural assumption when reading `config.rs` is that a typo in a
+`[fitness]` key is a parse error. It is not, for that table specifically — `[genome]`'s operation
+weights *do* reject unknown keys, because `EdgeEditOperationWeights` carries
+`deny_unknown_fields` and is not flattened (`get/src/genomes/edge_edit.rs:27`). So the two tables
+behave differently and neither is wrong.
+
+**Where I think the check belongs:** `Config::validate` (#23, mine), which can look at the raw text
+before it is deserialized and reject a `seed` under `[fitness]` by name. I will pick it up there
+unless you would rather it went somewhere else. Flagging it because the migration case is the
+silent kind — an old config keeps `seed = 42`, sees no error, and runs under a different seeding
+model than its author believes, since the master seed now comes from the `run` call.
+
+*#25 · raised 2026-08-05 15:47 — James, during GitHub issue #24.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
