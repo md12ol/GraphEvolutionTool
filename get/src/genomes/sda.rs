@@ -118,6 +118,7 @@ impl SdaGenome {
     /// keeping the current number of states, characters, and `max_resp_len`.
     pub fn randomize<R: Rng + ?Sized>(&mut self, rng: &mut R) -> Result<(), &'static str> {
         let num_states = self.transitions.len();
+        // map_or: 0 if there are no states yet (transitions is empty), else the row width
         let num_chars = self.transitions.first().map_or(0, |row| row.len());
         *self = Self::random(num_states, num_chars, self.max_resp_len, rng)?;
         Ok(())
@@ -140,6 +141,9 @@ impl SdaGenome {
         output.push(self.init_char);
 
         let mut cur_state = init_state;
+        // Two cursors into the same growing buffer: tail_idx reads a
+        // character already produced; output.len() is where the next one
+        // gets written.
         let mut tail_idx = 0;
         while output.len() < output_len {
             let driver = output[tail_idx] as usize;
@@ -199,6 +203,8 @@ impl Genome for SdaGenome {
             return;
         }
 
+        // Rejection sampling for two distinct cut points. `loop` is itself an
+        // expression here — `break`'s argument becomes the value of (start, end).
         let (start, end) = loop {
             let a = rng.random_range(0..=states);
             let b = rng.random_range(0..=states);
@@ -223,6 +229,7 @@ impl Genome for SdaGenome {
     /// that want more disruption per generation call this multiple times.
     fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R) {
         let num_states = self.transitions.len();
+        // map_or: 0 if there are no states yet (transitions is empty), else the row width
         let num_chars = self.transitions.first().map_or(0, |row| row.len());
         if num_states == 0 || num_chars == 0 {
             return;
@@ -236,6 +243,7 @@ impl Genome for SdaGenome {
         let state = rng.random_range(0..num_states);
         let trans = rng.random_range(0..num_chars);
 
+        // coin flip: turbofish spells out the type `random` can't infer from an argument
         if rng.random::<bool>() {
             self.transitions[state][trans] = rng.random_range(0..num_states) as u16;
         } else {
@@ -251,6 +259,9 @@ impl Genome for SdaGenome {
     /// `SdaContext`, not the genome, and `print` has no context parameter to
     /// read it from.
     fn print(&self) -> String {
+        // Brings write!/writeln! for String into scope; writes to a String
+        // can't actually fail, so the .unwrap()s below just satisfy the
+        // trait's Result return.
         use std::fmt::Write as _;
 
         let mut out = String::new();
