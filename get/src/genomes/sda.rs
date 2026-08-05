@@ -64,26 +64,28 @@ impl SdaGenome {
 
         let init_char = rng.random_range(0..num_chars) as u8;
 
-        let transitions = (0..num_states)
-            .map(|_| {
-                (0..num_chars)
-                    .map(|_| rng.random_range(0..num_states) as u16)
-                    .collect()
-            })
-            .collect();
+        let mut transitions = Vec::with_capacity(num_states);
+        for _ in 0..num_states {
+            let mut state_transitions = Vec::with_capacity(num_chars);
+            for _ in 0..num_chars {
+                state_transitions.push(rng.random_range(0..num_states) as u16);
+            }
+            transitions.push(state_transitions);
+        }
 
-        let responses = (0..num_states)
-            .map(|_| {
-                (0..num_chars)
-                    .map(|_| {
-                        let resp_len = rng.random_range(1..=max_resp_len);
-                        (0..resp_len)
-                            .map(|_| rng.random_range(0..num_chars) as u8)
-                            .collect()
-                    })
-                    .collect()
-            })
-            .collect();
+        let mut responses = Vec::with_capacity(num_states);
+        for _ in 0..num_states {
+            let mut state_responses = Vec::with_capacity(num_chars);
+            for _ in 0..num_chars {
+                let resp_len = rng.random_range(1..=max_resp_len);
+                let mut response = Vec::with_capacity(resp_len);
+                for _ in 0..resp_len {
+                    response.push(rng.random_range(0..num_chars) as u8);
+                }
+                state_responses.push(response);
+            }
+            responses.push(state_responses);
+        }
 
         Ok(Self {
             init_char,
@@ -526,20 +528,24 @@ mod tests {
             genome.mutate(&mut rng);
 
             let init_char_changed = (genome.init_char != before.init_char) as usize;
-            let changed_transitions = genome
-                .transitions
-                .iter()
-                .flatten()
-                .zip(before.transitions.iter().flatten())
-                .filter(|(a, b)| a != b)
-                .count();
-            let changed_responses = genome
-                .responses
-                .iter()
-                .flatten()
-                .zip(before.responses.iter().flatten())
-                .filter(|(a, b)| a != b)
-                .count();
+
+            let mut changed_transitions = 0;
+            for (before_row, after_row) in before.transitions.iter().zip(&genome.transitions) {
+                for (before_val, after_val) in before_row.iter().zip(after_row) {
+                    if before_val != after_val {
+                        changed_transitions += 1;
+                    }
+                }
+            }
+
+            let mut changed_responses = 0;
+            for (before_row, after_row) in before.responses.iter().zip(&genome.responses) {
+                for (before_val, after_val) in before_row.iter().zip(after_row) {
+                    if before_val != after_val {
+                        changed_responses += 1;
+                    }
+                }
+            }
 
             let changes = init_char_changed + changed_transitions + changed_responses;
             assert!(changes <= 1, "expected at most one change, got {changes}");
@@ -623,7 +629,11 @@ mod tests {
 
             // The swapped set must be a single contiguous run, if non-empty.
             if let (Some(&first), Some(&last)) = (swapped.first(), swapped.last()) {
-                assert_eq!(swapped, (first..=last).collect::<Vec<_>>());
+                let mut expected = Vec::new();
+                for state in first..=last {
+                    expected.push(state);
+                }
+                assert_eq!(swapped, expected);
             }
 
             // init_char swaps iff state 0 was part of the swapped segment.
