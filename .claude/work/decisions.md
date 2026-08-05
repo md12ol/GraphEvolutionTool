@@ -962,3 +962,16 @@ the exact case, but adds a field the sheet does not have, which is a joint-meeti
 **Affects:** `get/src/config.rs` `FitnessConfig`/`SirParams`; GitHub #23's `Config::validate`;
 `collab.md` item 25.
 *#24 · recorded 2026-08-05 15:47 — James, during the config-schema implementation.*
+
+## Task complete: mdube_format_and_readability — 2026-08-06
+Archived to `.claude/work/archive/2026-08_mdube_format_and_readability/`. GitHub **#22** shipped as
+**PR #43** (`971feef`, 16 commits, `mdube_format_and_readability` → `main`), open and unmerged at
+archive time, assigned to James, body carries `Closes #22`. One tree-wide `cargo fmt` commit, the
+`needless_return = "allow"` lint decision, and two rounds of pure readability pass across the whole
+tree (naming, comment density, explicit-loop convention) — no behavior changes. `generational.rs`
+stayed out of scope throughout, per the issue body. 135 tests green, `cargo fmt -- --check` clean on
+the branch (not yet on `main` — `traps.md`'s bare-`cargo fmt` entry stands until #43 merges).
+Carried forward, not resolved: `collab.md` #27 (`Swap`'s degree floor, `> 2` vs. the Java original's
+`>= 2`), and the SIR-batch-seed hotfix (blocked on #18). Entries below this line belong to later
+tasks.
+*Task marker · mdube_format_and_readability · recorded 2026-08-06 — Michael, at `/done`.*

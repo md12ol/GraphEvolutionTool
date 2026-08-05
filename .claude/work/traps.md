@@ -28,6 +28,12 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   `steady_state.rs` were formatted as part of editing them.
 - **The real fix** is one tree-wide `cargo fmt` commit, agreed with James — `collab.md` #7.
   Until that happens, this trap stands.
+- **Update 2026-08-06:** the tree-wide fmt commit (`4898c51`) landed on
+  `mdube_format_and_readability` — `cargo fmt -- --check` is clean on that branch. It is **not yet
+  on `main`**, since PR #43 (issue #22) hasn't merged — confirmed via
+  `git merge-base --is-ancestor mdube_format_and_readability origin/main` returning false. This
+  trap still stands for anyone on `main` or a branch cut from it until #43 merges; drop this entry
+  once it has.
 - **Added:** 2026-07-31 — running-bare-cargo-fmt-rewrites-files-you-di
 
 ### A `-0.0` fitness would make the selection tests disagree with the code
@@ -288,3 +294,19 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
 - **Measured 2026-08-05** on `SirParams`: a stray `seed = 42` parsed clean both with and without
   `#[serde(deny_unknown_fields)]` on the struct. Full reasoning in `decisions.md` 2026-08-05 15:47.
 - **Added:** 2026-08-05 — deny-unknown-fields-does-nothing-through-a-flatten
+
+### `gh` is not on `PATH` on Michael's machine, in either shell
+- **Bites when:** you call `gh` directly in Bash or PowerShell on this machine — both report
+  `command not found` / `CommandNotFoundException`, even though `gh auth status` works fine once
+  invoked correctly.
+- **Do this instead:** use the full path — `"C:\Program Files\GitHub CLI\gh.exe"` (PowerShell) or
+  `/c/Program Files/GitHub CLI/gh.exe` (Bash/Git Bash).
+- **Why:** the install put `gh.exe` in `C:\Program Files\GitHub CLI\` without adding it to this
+  user's `PATH`. Machine-specific, not a repo issue.
+- **Also worth knowing:** the stored token only carries `gist`, `read:org`, `repo` scopes — reading
+  `user/emails` (e.g. to check which addresses are verified) 404s and asks for
+  `gh auth refresh -h github.com -s user`, which is an interactive browser flow and can't be run
+  from a non-interactive session. `gh api repos/<owner>/<repo>/commits/<sha>` (public repo data,
+  no extra scope) is a working substitute for checking whether a specific commit's email resolves
+  to a GitHub login.
+- **Added:** 2026-08-06 — gh-is-not-on-path-on-michaels-machine

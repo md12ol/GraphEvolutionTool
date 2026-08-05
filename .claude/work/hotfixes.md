@@ -65,6 +65,10 @@ everybody's problem to remove.
   returning `self.run_seed` unchanged at `get/src/fitness.rs:158-160`; and the `Remove when:` is
   **not met** — GitHub #18 is still `open`. Carried forward unchanged, second cycle running.
   (Previously checked 2026-08-04 at the express-and-score gate, same result on both passes.)
+- **Last checked:** 2026-08-06 — Michael, at the `/done` gate for issue #22. Verified, not inferred:
+  `fn batch_seed` still returns `self.run_seed` unchanged at `get/src/fitness.rs:162-164`; GitHub
+  #18 still `open` (`gh api repos/md12ol/GraphEvolutionTool/issues/18` → `state: open`). Carried
+  forward unchanged, third cycle running.
 - **Status note added 2026-08-04 — James (not a rewrite of Michael's lines above):** the `Machine:`
   line anticipates the merge that has now happened. PR #40 merged `mdube_sir_objectives` into `main`
   on 2026-08-04, so this hotfix is **committed and in every tree**, no longer branch-local. Michael's
