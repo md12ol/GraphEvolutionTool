@@ -1022,3 +1022,47 @@ Carried forward, not resolved: `collab.md` **#24** (the `Profile*.dat` format, f
 (unknown `[fitness]` keys, for #23), both still awaiting Michael; and the SIR-batch-seed hotfix,
 blocked on #18. Entries below this line belong to later tasks.
 *Task marker · config-schema · recorded 2026-08-05 22:20 EDT — James, at `/done`.*
+
+## 2026-08-06 00:05 — James — `ConfigError::Validation` keeps the field and the constraint apart
+**Chose:** A struct variant, `Validation { field: &'static str, constraint: String }`, rather than
+a single pre-formatted `String` or one enum variant per check. `ConfigError` also gained `Display`
+and `std::error::Error`, which it had neither of before.
+**Why:** Spec §7 requires a bad config to reach the user as a Python exception "naming the offending
+field and its constraint". Keeping the two apart means the FFI can compose its own message instead
+of passing an opaque blob through, and — the part that actually pays off daily — the twelve tests
+assert on `field` rather than substring-matching prose, so rewording a constraint message does not
+break a single test. `Display` exists so `get/src/lib.rs` can format with `{err}`; it was using
+`{err:?}`, which would have sent Python `Validation { field: "max_mutations", .. }`.
+**Rejected:** (a) `Validation(String)` — simplest, but every test then matches prose and the FFI can
+only forward the blob. (b) A dedicated `ValidationError` enum with one variant per check — precise
+and exhaustively matchable, but ~12 variants to maintain for a message the user reads once, and
+heavier than §7 asks for.
+**Affects:** `get/src/config.rs` `ConfigError`; `get/src/lib.rs:30`; the FFI work in #19/#29, which
+inherits this shape.
+*#23 · recorded 2026-08-06 00:05 — James, during the config-validate implementation.*
+
+## 2026-08-06 00:07 — James — Parsing and validating stay separate, and the `[fitness] seed` check can only live in the parse path
+**Chose:** `from_toml_str` parses **without** running §7's constraints; `from_path` parses and then
+calls `validate`, because it is the TOML front end. The stray-`seed` check sits in `from_toml_str`,
+reading the raw text through a loose `toml::Value` parse before deserialization.
+**Why:** §7 says validation must be one function "both front ends call" — `from_path` for TOML,
+PyO3 for Python — which is satisfied by the front end calling it, not by welding it onto every
+parse. Keeping `from_toml_str` unvalidated is also what lets a test build a config that breaks
+exactly one constraint. The `seed` check cannot be in `validate` at all: `validate` takes `&self` on
+an already-parsed `Config`, and the key is gone by then — serde buffers a `#[serde(flatten)]`
+field's content, so `deny_unknown_fields` never fires (`traps.md`, measured 2026-08-05). It follows
+that the check is TOML-only by construction; the Python front end has no text to inspect, which is
+acceptable because the hazard is specifically an *old TOML file* still carrying `seed = 42`.
+**Rejected:** (a) A general unknown-key sweep over `[fitness]` — hand-rolls what serde does
+everywhere else and would reject keys as the schema grows; the narrowness is pinned by
+`an_unknown_fitness_key_other_than_seed_is_still_ignored`. (b) Leaving it out and keeping
+`collab.md` #25 open — the migration failure is silent, which is the kind worth spending a check on.
+(c) Making `from_toml_str` validate too — symmetrical, but removes the only clean way to construct
+an invalid `Config` in a test.
+**Supersedes:** the pinned behaviour in #24's `an_unknown_fitness_key_is_ignored_rather_than_rejected`
+(2026-08-05 15:47, "The flatten wins over #24's unknown-key rejection"). That entry's *mechanism*
+still holds exactly as written — serde still cannot do this. What changed is where the check went,
+which that entry itself nominated. The test is replaced, not deleted.
+**Affects:** `get/src/config.rs` `from_toml_str` / `from_path` / `validate` / `reject_fitness_seed`;
+answers `collab.md` item 25.
+*#23 · recorded 2026-08-06 00:07 — James, during the config-validate implementation.*

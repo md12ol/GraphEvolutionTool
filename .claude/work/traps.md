@@ -219,6 +219,18 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   `git stash -u && cargo clippy --manifest-path get/Cargo.toml --all-targets -- -D warnings; git stash pop`
   and check your branch adds nothing new. Say so explicitly in the PR — "fails identically to
   `main`" is a reviewable claim, "clippy passes" would be false.
+- **Cheaper and safer: capture the baseline BEFORE you edit anything**, while the tree is still
+  clean, and diff against the saved file at the end — no stash, no `stash pop` to forget. Added
+  2026-08-06 by James after doing it this way on #23:
+
+      cargo clippy -p get --all-targets 2>&1 | grep -E '^(warning|error)' | sort > /tmp/clippy_base.txt
+      # ... do the work ...
+      cargo clippy -p get --all-targets 2>&1 | grep -E '^(warning|error)' | sort | diff /tmp/clippy_base.txt -
+
+  This also sidesteps the stash pitfall #24 hit: `git stash -u` on a task that changed
+  `config.example.toml` as well as `get/src/` leaves an example the stashed code cannot parse, so
+  the "baseline" is contaminated by unrelated failures. Stashing is only safe when you stash
+  **every** path the task touched, and knowing that set is exactly what is easy to get wrong.
 - **Added:** 2026-08-04 — cargo-clippy-d-warnings-cannot-pass-on-main
 
 ### Union merge can SPLICE two entries together without duplicating a line, so `uniq -d` says clean

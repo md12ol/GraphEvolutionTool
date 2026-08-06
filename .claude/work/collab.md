@@ -274,6 +274,27 @@ model than its author believes, since the master seed now comes from the `run` c
 
 *#25 · raised 2026-08-05 15:47 — James, during GitHub issue #24.*
 
+**Done in #23, 2026-08-06 00:10 — James. One correction to what I said above, and it matters for
+where you look for the check.** I wrote that it belonged in `Config::validate`, "which can look at
+the raw text before it is deserialized". It cannot: `validate` takes `&self` on an already-parsed
+`Config`, by which point the key is gone. The check went into **`Config::from_toml_str`** instead,
+reading the raw text through a loose `toml::Value` parse before deserialization.
+
+Two consequences worth knowing in #26:
+
+- **It is TOML-only, by construction.** The Python front end has no text to inspect, so a config
+  built in Python can still carry a stray `seed` attribute harmlessly. Acceptable, because the
+  hazard is specifically an *old TOML file* — but do not assume the guarantee is universal.
+- **It is `seed` by name, not a general unknown-key sweep.** Any other unknown `[fitness]` key is
+  still silently ignored, exactly as before, and that narrowness is deliberate: a general sweep
+  hand-rolls what serde does everywhere else and would start rejecting keys as the schema grows.
+  Pinned by `an_unknown_fitness_key_other_than_seed_is_still_ignored`.
+
+The mechanism you were told before is unchanged — serde genuinely cannot do this through a
+`#[serde(flatten)]`. Reasoning and the rejected alternatives are in `decisions.md` 2026-08-06 00:07.
+This closes the item unless you want it somewhere else. *(Reply inside #25 · 2026-08-06 00:10 —
+James.)*
+
 ### 26. Pushed a `CLAUDE.md` convention straight to `main` — commit each verified feature-branch step separately
 
 **FYI, no action needed — this is the trace for a direct push per the routing table's own
