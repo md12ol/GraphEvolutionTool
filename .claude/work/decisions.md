@@ -1084,3 +1084,22 @@ gates **#26** and not #18. Dropped at this gate: the `cargo fmt` trap, per its o
 #43 merged and `cargo fmt -- --check` is clean on `main`. Anything below this line belongs to a
 later task, not to sir-objectives.
 *Task marker · sir-objectives · recorded 2026-08-06 — Michael, at `/done`.*
+## Task complete: config-validate — 2026-08-06
+Archived to `.claude/work/archive/2026-08_config-validate/`. GitHub **#23** shipped as **PR #45**
+(`5fd8dbc` + `2c590f4`, 2 files, +528/−18), **open and unmerged at archive time**, awaiting Michael,
+body carries `Closes #23.`. `Config::from_path` implemented over its `todo!()`, and `Config::validate`
+added with every spec §7 constraint — the steady-state-only tournament floor, the generational-only
+elite count, the weights delegated to `EdgeEditOperationWeights::validate`, and `python` skipping the
+SIR checks entirely. A stray `[fitness] seed` is now rejected from the raw TOML, closing the
+migration hazard #24 left open. 154 tests, up from 135; clippy `diff`-identical to a pre-edit
+baseline; rustdoc and rustfmt unchanged.
+Archived with its PR still open, on the disposition recorded 2026-08-05 15:09 — the item owes this
+owner no action, since the body's closing keyword was verified on the remote. Third task closed this
+way, after #15 and #24.
+Superseded a test rather than only adding: #24's `an_unknown_fitness_key_is_ignored_rather_than_rejected`
+is gone, replaced by a pair pinning both the new rejection and its deliberate narrowness.
+Carried forward, not resolved: `collab.md` **#24** (`Profile*.dat` format, for #26) and **#27**
+(`Swap`'s degree floor, awaiting James, a joint-meeting change either way); and the SIR-batch-seed
+hotfix, blocked on #18, fifth cycle. `collab.md` **#25** was answered and needs only Michael's
+acknowledgement. Entries below this line belong to later tasks.
+*Task marker · config-validate · recorded 2026-08-06 00:38 EDT — James, at `/done`.*
