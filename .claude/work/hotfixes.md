@@ -77,4 +77,9 @@ everybody's problem to remove.
   line anticipates the merge that has now happened. PR #40 merged `mdube_sir_objectives` into `main`
   on 2026-08-04, so this hotfix is **committed and in every tree**, no longer branch-local. Michael's
   original wording is left intact; this line supersedes only the tense.
+- **Last checked:** 2026-08-06 — Michael, at the `/done` gate for **sir-objectives**, the task that
+  introduced this hotfix. Verified on `main` at `ed198c4`, not inferred: `fn batch_seed` still
+  returns `self.run_seed` unchanged at `get/src/fitness.rs:162-164`, and GitHub #18 is still `open`.
+  Carried forward unchanged, fifth cycle. James's status note above is confirmed from this side too —
+  the hotfix is committed and in both trees, so it is no longer something only I can see.
 

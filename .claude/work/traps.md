@@ -15,27 +15,6 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
 - **Do this instead:** the correct form.
 - **Why:** the mechanism, one line.
 - **Added:** <YYYY-MM-DD>
-### Running bare `cargo fmt` rewrites files you did not touch
-- **Bites when:** you run `cargo fmt` (no path) to tidy your own edit. It reformats the whole
-  workspace, and part of the tree has never been formatted, so you get unrelated hunks in your
-  diff — in files someone else is actively editing.
-- **Do this instead:** format only what you changed —
-  `rustfmt --edition 2024 get/src/path/to/file.rs`
-- **Why:** these files predate any `cargo fmt` run. Check the current set with
-  `cargo fmt -- --check 2>&1 | grep "^Diff in"`. As of 2026-07-31 it is
-  `get/src/evolver/generational.rs` and `get/src/genomes/sda.rs` — `generational.rs` is James's
-  live work, so sweeping it hands him a conflict. It was 4 files before `fitness.rs` and
-  `steady_state.rs` were formatted as part of editing them.
-- **The real fix** is one tree-wide `cargo fmt` commit, agreed with James — `collab.md` #7.
-  Until that happens, this trap stands.
-- **Update 2026-08-06:** the tree-wide fmt commit (`4898c51`) landed on
-  `mdube_format_and_readability` — `cargo fmt -- --check` is clean on that branch. It is **not yet
-  on `main`**, since PR #43 (issue #22) hasn't merged — confirmed via
-  `git merge-base --is-ancestor mdube_format_and_readability origin/main` returning false. This
-  trap still stands for anyone on `main` or a branch cut from it until #43 merges; drop this entry
-  once it has.
-- **Added:** 2026-07-31 — running-bare-cargo-fmt-rewrites-files-you-di
-
 ### A `-0.0` fitness would make the selection tests disagree with the code
 - **Bites when:** a fitness function returns `-0.0` alongside `0.0`, and a selection test fails in
   a way that looks impossible.

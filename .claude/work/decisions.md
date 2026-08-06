@@ -1066,3 +1066,21 @@ which that entry itself nominated. The test is replaced, not deleted.
 **Affects:** `get/src/config.rs` `from_toml_str` / `from_path` / `validate` / `reject_fitness_seed`;
 answers `collab.md` item 25.
 *#23 · recorded 2026-08-06 00:07 — James, during the config-validate implementation.*
+
+## Task complete: sir-objectives — 2026-08-06
+Archived to `.claude/work/archive/2026-08_sir-objectives/`. GitHub **#17** shipped as **PR #40**,
+merged 2026-08-04 as `a53375e` and closed completed: `epi_spread`, `epi_length` and `epi_prof_match`
+in `get/src/fitness.rs`, over `SirBatchParams` / `epidemic_seeds` / `batch_epidemics` in
+`get/src/sir.rs`, with the short-epidemic re-roll and position-indexed seeding of spec §5.2. The
+`SirFitness` placeholder and its `todo!()`s are gone. Verified on Michael's machine 2026-08-06 on
+`main` at `ed198c4`: 135 tests pass, and `0dab610` is an ancestor of `main`, so the PR-lag trap
+stranded nothing.
+**Closed two days late, from a machine 40 commits behind.** The work finished 2026-08-04 and merged
+the same day, but the gate never ran; `work/current/` is gitignored, so this task's record lived on
+one machine and no other could close it. Worth knowing that a merged PR is not a closed task here.
+Carried forward, not resolved: the **SIR batch-seed hotfix**, still blocked on #18 (mine, next), now
+committed and in every tree; and `collab.md` **#21** (user-supplied drop-in Rust objectives), which
+gates **#26** and not #18. Dropped at this gate: the `cargo fmt` trap, per its own exit condition —
+#43 merged and `cargo fmt -- --check` is clean on `main`. Anything below this line belongs to a
+later task, not to sir-objectives.
+*Task marker · sir-objectives · recorded 2026-08-06 — Michael, at `/done`.*

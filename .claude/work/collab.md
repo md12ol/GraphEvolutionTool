@@ -383,6 +383,53 @@ skim later.
 
 *#30 · raised 2026-08-06 — Michael.*
 
+**Status from my second machine, 2026-08-06 — Michael. The hook has merged, and this session was
+the exact case it exists to prevent.** PR #44 is in as `e42ffde`, so `pull_main.sh` is live in both
+trees now; your confirmation on the behaviour is still the open half of this item.
+
+Worth recording because it is evidence rather than argument: I opened a session on my other machine
+to close out #17 and found `main` **40 commits behind `origin/main`** — it had never seen PR #40's
+merge, nor #41, #42, #43 or #44. The stale-window this hook closes is not hypothetical and is not
+small. Two concrete consequences in that one session, before any work started:
+
+- The local `decisions.md`, `traps.md`, `collab.md` and `hotfixes.md` were all two days stale. Since
+  #33 narrowed the union glob, `hotfixes.md` no longer merges by union — appending to that stale
+  base would have produced a genuine conflict, not a silent merge.
+- `traps.md` carried a `cargo fmt` entry whose own exit condition ("drop once #43 merges") had been
+  met on `origin/main` for hours. Working from the stale copy, I would have kept following a trap
+  that no longer exists.
+
+I re-read the script before pulling it in rather than trusting my own PR from the other machine, and
+the three paths hold as described: it exits unless `branch == main`, it only ever runs
+`merge --ff-only`, and the non-fast-forwardable case prints and returns 0 without touching anything.
+
+*#30 · status update 2026-08-06 14:05 — Michael, from the second machine.*
+
+### 31. One clause in your `rustfmt`-descends-into-submodules trap went stale when #22 shipped
+
+**Announcing before touching your text, per rule 5 — the trap itself is right and stays.** Your
+entry "Per-file `rustfmt` is not per-file on a `mod.rs`" closes with **"the tree is not currently
+rustfmt-clean (that is exactly what #22 exists to fix), so a stray descent produces *real* diff, not
+a no-op"**. #22 shipped as PR #43, and `cargo fmt -- --check` now reports zero offenders on `main` —
+verified on `ed198c4` at 2026-08-06.
+
+**What that changes and what it does not.** The mechanism is untouched: rustfmt still parses the
+module tree and still descends into every `mod x;`, so `--config skip_children=true` is still the
+right instruction and the `--skip-children` CLI note is still worth having. What changed is only the
+stated *consequence* — on a clean tree a stray descent is now usually a no-op rather than real diff.
+That makes the trap read as less urgent than it is, which is the wrong direction for a trap.
+
+**Suggested amendment, yours to accept or ignore:** replace that final bullet with one saying the
+descent is silent either way, and that a clean tree makes it *harder* to notice, not safer — the
+diff that does appear is now the only signal, where before you might have caught it in the noise.
+I have not edited a character; say the word and I will make exactly that change.
+
+**Related sweep at the same gate:** I deleted the `cargo fmt` trap outright, under its own written
+exit condition ("drop this entry once #43 merges"). Flagging it here because it is a deletion from a
+shared churn list that you may go looking for.
+
+*#31 · raised 2026-08-06 14:05 — Michael, at the sir-objectives `/done` gate.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
