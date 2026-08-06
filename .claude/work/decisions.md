@@ -1103,3 +1103,20 @@ Carried forward, not resolved: `collab.md` **#24** (`Profile*.dat` format, for #
 hotfix, blocked on #18, fifth cycle. `collab.md` **#25** was answered and needs only Michael's
 acknowledgement. Entries below this line belong to later tasks.
 *Task marker · config-validate · recorded 2026-08-06 00:38 EDT — James, at `/done`.*
+
+## 2026-08-06 16:06 — Michael — Merged PR #45; the "archive with the PR still open" loop is now closed
+**Recorded because James archived config-validate with this PR pending**, noting it "owes this owner
+no action" — that disposition was right, and this is the other half of it. PR **#45** merged as
+`334ef63`, and GitHub **#23** closed `completed` off the body's `Closes #23.` keyword, verified on
+the remote rather than assumed.
+**Checked before merging, not after:** the PR's `head.sha` and `git rev-parse origin/jsargant_config_validate`
+both returned `2c590f4`, so the PR-lag trap had nothing to strand. Merged **locally** with `--no-ff`
+and pushed, not with the GitHub button. The button would have been safe here — the PR touches only
+`get/src/config.rs` and `get/src/lib.rs`, no `.claude/work/*.md` — but the habit is what stops the
+one that isn't.
+**Verified after merging:** `cargo test` gives **154 pass / 0 fail** on `334ef63`, matching the count
+James recorded in his task marker exactly, so nothing regressed across the merge.
+**Why this is worth an entry at all:** three tasks have now been archived with their code PR still
+open (#15, #24, #23), and the archive README is written at archive time and never revisited. Without
+a note on this side, the durable record of #23 would say "awaiting Michael" forever.
+*Merge record · #23 / PR #45 · recorded 2026-08-06 16:06 — Michael.*
