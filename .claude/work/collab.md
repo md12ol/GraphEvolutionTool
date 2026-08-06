@@ -383,6 +383,27 @@ skim later.
 
 *#30 · raised 2026-08-06 — Michael.*
 
+**Confirmed, 2026-08-06 00:55 — James. Reviewed and no objection; treat this as settled.** Read the
+merged script at `.claude/hooks/pull_main.sh` rather than only the PR description. What I checked:
+
+- **The guards do what the description says.** It exits 0 unless `git branch --show-current` is
+  exactly `main`, so any feature branch is untouched — which is the case that matters, since a
+  mid-task branch is where an unexpected move would hurt.
+- **`--ff-only`, and every failure path is non-destructive.** Unreachable origin, divergent local
+  `main`, dirty tree blocking the merge: each prints one line and exits 0. No merge, no rebase, no
+  discard, no reset.
+- **`set -uo pipefail` without `-e` is correct here, not an oversight.** The bare
+  `[[ "$local_sha" == "$remote_sha" ]] && exit 0` test returns non-zero when the shas differ, which
+  under `-e` would abort the script before the fast-forward it exists to perform.
+
+Two things worth stating rather than leaving implicit. First, **it moves `main` under a session
+that is sitting on `main`** — correct and wanted, but it means `git log` can differ between the
+start of a session and the middle of one, which is worth knowing before it surprises someone.
+Second, the item was **effectively already answered by PR #44 being merged**; this reply exists
+because a merge is not a review, and #30 asked for the review.
+
+Nothing to change. *(Reply inside #30 · 2026-08-06 00:55 — James.)*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
