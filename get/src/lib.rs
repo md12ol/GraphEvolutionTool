@@ -27,7 +27,10 @@ impl GraphEvolver {
     #[new]
     fn new(config_path: String) -> PyResult<Self> {
         let config = Config::from_path(&config_path)
-            .map_err(|err| PyValueError::new_err(format!("failed to load config: {err:?}")))?;
+            // `{err}`, not `{err:?}`: `ConfigError`'s `Display` names the
+            // offending field and its constraint, which is what spec §7 says a
+            // bad config must reach the user as.
+            .map_err(|err| PyValueError::new_err(format!("failed to load config: {err}")))?;
         Ok(Self {
             config,
             best_fitness: None,
