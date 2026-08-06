@@ -1002,3 +1002,23 @@ unilaterally here.
 **Affects:** `.claude/hooks/pull_main.sh` (new); `.claude/settings.json` `SessionStart`;
 `.claude/hooks/README.md`. Per the routing table, this is the strict PR case — opened as PR, not
 pushed to `main` directly like the docs fixes earlier this session.
+
+## Task complete: config-schema — 2026-08-05
+Archived to `.claude/work/archive/2026-08_config-schema/`. GitHub **#24** shipped as **PR #42**
+(`39c408a`, 2 files, +245/−18), **merged** as `988457e` by Michael; issue #24 closed
+2026-08-05T22:17:43Z by the body's `Closes #24.`. `get/src/config.rs` now parses spec §7's schema:
+`FitnessConfig`'s four variants with the SIR block flattened, `SirParams` gaining
+`num_epidemics`/`min_epidemic_length`/`max_epidemic_retries` and losing `seed`, `GenomeConfig::Sda`
+losing `num_chars`, and `config.example.toml` rewritten to match. 135 tests green on `e42ffde`.
+`Config::validate` was deliberately **not** touched — that is #23.
+One criterion was dispositioned rather than delivered: #24 asked for a stray `seed` under
+`[fitness]` to be rejected, which serde cannot do through a `#[serde(flatten)]`. Reasoning in the
+2026-08-05 15:47 entry above; the check moves to #23's `validate` per `collab.md` #25.
+**Reconstructed record:** the machine crashed before this task's final `/save`, leaving
+`history.md` empty and no `handoff.md`. The archived `history.md` was rebuilt from `plan.md`, the
+commit trail and the GitHub API, and says so at the top — the narrative was lost, the rationale was
+not, because it had already been written here and to `collab.md` before the crash.
+Carried forward, not resolved: `collab.md` **#24** (the `Profile*.dat` format, for #26) and **#25**
+(unknown `[fitness]` keys, for #23), both still awaiting Michael; and the SIR-batch-seed hotfix,
+blocked on #18. Entries below this line belong to later tasks.
+*Task marker · config-schema · recorded 2026-08-05 22:20 EDT — James, at `/done`.*
