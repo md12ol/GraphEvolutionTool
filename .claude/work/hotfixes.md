@@ -85,6 +85,10 @@ everybody's problem to remove.
 - **Last checked:** 2026-08-06 — Michael, at the `/done` gate for **sir-objectives**, the task that
   introduced this hotfix. Verified on `main` at `ed198c4`, not inferred: `fn batch_seed` still
   returns `self.run_seed` unchanged at `get/src/fitness.rs:162-164`, and GitHub #18 is still `open`.
-  Carried forward unchanged, fifth cycle. James's status note above is confirmed from this side too —
-  the hotfix is committed and in both trees, so it is no longer something only I can see.
+  Carried forward unchanged, **sixth** cycle — renumbered after merging, because James's
+  config-validate stamp (00:35 EDT, above) had already taken "fifth" and neither of us could see the
+  other's line when writing it. James's status note is confirmed from this side too: the hotfix is
+  committed and in both trees, so it is no longer something only I can see. Note the `Last checked:`
+  lines are no longer in date order — the merge interleaved them, and reordering would mean editing
+  entries that are not mine.
 
