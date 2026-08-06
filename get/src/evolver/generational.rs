@@ -20,8 +20,13 @@ pub struct GenerationalEvolver<G: Genome> {
 
 impl<G: Genome> GenerationalEvolver<G> {
     /// Produce the next generation: copy `context.elite_count` elites forward,
-    /// then fill the rest by selecting parents, recombining them by
-    /// `crossover_rate`, and mutating children by `mutation_rate`.
+    /// then fill the rest by selecting parents, recombining them with
+    /// probability `crossover_rate`, and mutating each child through
+    /// [`mutate_child`](super::common::mutate_child).
+    ///
+    /// That helper owns **both** mutation rolls — `mutation_rate` and
+    /// `max_mutations` — so this strategy and steady-state cannot disagree about
+    /// what they mean. Neither roll is made here.
     fn advance_generation<F, R>(&mut self, fitness: &F, fitnesses: &[f64], rng: &mut R)
     where
         F: Fitness,
