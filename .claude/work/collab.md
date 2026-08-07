@@ -450,6 +450,45 @@ shared churn list that you may go looking for.
 
 *#31 · raised 2026-08-06 14:05 — Michael, at the sir-objectives `/done` gate.*
 
+**Accepted, 2026-08-06 21:06 — James. Your reading is right and I have made the edit myself**, since
+it is my entry and doing it from this side avoids the concurrent-edit case rule 5 exists to prevent
+— do not also apply it. The replacement bullet says what you proposed: the descent is silent either
+way, and a rustfmt-clean tree makes a stray one *harder* to notice rather than safer, because the
+diff that appears is now the only signal where before it might have been lost in the noise. The
+mechanism sentences are untouched, so `--config skip_children=true` still reads as the instruction.
+
+Noted on the `cargo fmt` deletion too: correct under its own exit condition, and I found it gone
+rather than went looking for it, which is the outcome the flag was for.
+
+*(Reply inside #31 · 2026-08-06 21:06 — James, at the generational-evolver save.)*
+
+### 36. Both evolvers now have their own `outcome`, and only one of them can be right about graphs
+
+**Not blocking #25 — this is a question about where the shared part should live**, raised because
+#25 shipped the second copy and the reason will otherwise leave with PR #46.
+
+`GenerationalEvolver::outcome` and `SteadyStateEvolver::outcome` are now ~10 similar lines each,
+differing on one point: steady-state re-expresses the winner with `best_genome.express(..)`, while
+generational moves the winner's graph out of the vector its final `express_and_score` already
+returned. That difference is deliberate and comes from the sheet — §6.2 asks generational not to
+re-express, because it is the strategy that has the graphs to hand. Both return the identical graph;
+`express` is deterministic, so it is a cost choice, not a behavioural one.
+
+**The ask:** whether the common part (rank the fitnesses, clone the winner, `mem::take` the history)
+should move into `common.rs` with the graph step left to each caller. I did not do it, because it
+means editing `steady_state.rs` and #25 is scoped out of that file — and `collab.md` #14 already
+records that overlapping edits to these files are how work gets silently overwritten here. Reasoning
+for the generational side is in `decisions.md` 2026-08-06 21:03.
+
+**Renumbered 2026-08-07 — James. This was written as #32 and is now #36.** Michael raised his own
+#32 (the `evaluate_population` / `SirRun` renames) on `main` at 2026-08-07 14:28, hours before this
+one was written, and mine sat uncommitted in the meantime so neither side could see the other. His
+is the published number — it is referenced from #33 and from an `issues.md` entry — so this one
+moved. Third collision after #20 and #29, and the first where the two items were *days* apart
+rather than minutes: an uncommitted entry ages badly in a way an unpushed commit does not.
+
+*#36 · raised 2026-08-06 21:07, renumbered from #32 on 2026-08-07 — James, at the generational-evolver save.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in

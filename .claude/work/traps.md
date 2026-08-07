@@ -262,9 +262,14 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
 - **`--skip-children` is NOT a CLI flag on this toolchain** — it exits `Unrecognized option`. It
   moved into the config system, so it must be passed as `--config skip_children=true`. The stale
   flag form is what most search results show.
-- **Why it matters here beyond tidiness:** the tree is not currently rustfmt-clean (that is exactly
-  what #22 exists to fix), so a stray descent produces *real* diff, not a no-op — and it lands in
-  whichever file the other owner has claimed.
+- **Why it matters here beyond tidiness:** the descent is silent either way, and a rustfmt-clean
+  tree makes a stray one **harder** to notice, not safer. ~~The tree is not currently rustfmt-clean
+  (that is exactly what #22 exists to fix), so a stray descent produces *real* diff, not a no-op.~~
+  Superseded 2026-08-06: #22 shipped as PR #43 and `cargo fmt -- --check` reports no offenders on
+  `main`, so most stray descents are now no-ops — which means the occasional one that *does* produce
+  diff is the only signal there is, where before it might have been lost in the noise. Whatever it
+  produces still lands in whichever file the other owner has claimed. Amendment proposed by Michael
+  in `collab.md` #31 and applied by James, its author.
 - **Added:** 2026-08-04 — rustfmt-descends-into-submodules-of-a-mod-rs
 
 ### `deny_unknown_fields` does nothing through a `#[serde(flatten)]`, and reports no error either
@@ -301,3 +306,27 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   no extra scope) is a working substitute for checking whether a specific commit's email resolves
   to a GitHub login.
 - **Added:** 2026-08-06 — gh-is-not-on-path-on-michaels-machine
+
+### A dirty working tree means `pull_main.sh` does not pull, and you may not see it say so
+- **Bites when:** you start a session on `main` with uncommitted changes to `decisions.md` or
+  `collab.md` — the normal state after a `/save` that was not committed — and then branch for new
+  work. `main` is silently whatever it was when you last pulled, and the branch is cut from there.
+- **Measured 2026-08-06 — James, at the start of the generational-evolver session.** Local `main`
+  was 7 commits behind `origin/main` (PR #45 merged, #17 archived, a trap deleted), with
+  `collab.md` and `decisions.md` modified in the tree. The hook is right to refuse — `merge
+  --ff-only` will not overwrite local changes, and refusing non-destructively is the design
+  (`collab.md` #30) — but **no `pull_main:` line appeared in the session's context**, only
+  `session_brief.sh`'s block. Whether the line was printed and not surfaced, or not printed, was
+  not established from inside the session; what is certain is that the warning did not arrive.
+- **Do this instead:** check for yourself before branching, rather than trusting that a silent
+  session start means an up-to-date `main`.
+
+      git fetch origin --dry-run     # prints nothing when you are actually current
+      git status --short             # a dirty tree is the condition that suppresses the pull
+
+  Then commit or stash the docs and `git pull` before cutting the branch. This session's plan named
+  a base commit that was two merges stale by the time it was acted on.
+- **Why:** `.claude/settings.json` runs the hook as `pull_main.sh 2>/dev/null || true`, and the
+  script exits 0 on every failure path by design, so nothing downstream distinguishes "pulled",
+  "refused", and "never ran".
+- **Added:** 2026-08-06 — dirty-tree-means-pull-main-does-not-pull

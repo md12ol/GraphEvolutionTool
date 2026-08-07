@@ -1140,3 +1140,57 @@ James recorded in his task marker exactly, so nothing regressed across the merge
 open (#15, #24, #23), and the archive README is written at archive time and never revisited. Without
 a note on this side, the durable record of #23 would say "awaiting Michael" forever.
 *Merge record · #23 / PR #45 · recorded 2026-08-06 16:06 — Michael.*
+
+## 2026-08-06 21:03 — James — Generational's `outcome` takes the winner's graph from the final scoring pass
+**Chose:** `GenerationalEvolver::outcome` moves the winner's `Graph` out of the vector
+`express_and_score` returned on the last generation (`graphs.swap_remove(best)`), rather than
+calling `best_genome.express(..)` the way steady-state's `outcome` does. It is a second, local
+`outcome` method — not a shared helper.
+**Why:** spec §6.2 asks generational specifically to use "the graph that scoring already built, so
+the winner is never re-expressed", and generational is the strategy that has them: it scores every
+individual every generation, where steady-state scores only the two children of each mating event
+and so has nothing to reuse. Both paths return the identical graph — `Genome::express` takes
+`&self` and `&G::Context` with no RNG, so it is deterministic — which makes this purely a choice of
+which cost to pay: one extra expression per run, or one population's worth of `Graph`s held alive
+across the loop.
+**Rejected:** (a) Factoring the shared part of the two `outcome`s into `common.rs` — the right
+long-term shape, but it means editing `steady_state.rs`, which #25 is explicitly scoped out of.
+Raised as `collab.md` #36 instead of done unilaterally. (b) Re-expressing the winner like
+steady-state, for symmetry — simpler, and contradicts the sheet on the one point where the sheet
+speaks about generational in particular.
+**Affects:** `get/src/evolver/generational.rs` `outcome`; `collab.md` #36 (renumbered from #32).
+*#25 · recorded 2026-08-06 21:03 — James, during the generational implementation.*
+
+## 2026-08-06 21:04 — James — §6.2's "track the best" is the best of the final population, not a running best-ever
+**Chose:** the outcome reports the best individual of the **final** scored population. No best-ever
+is tracked across generations.
+**Why:** §6.2's phrase is a description of the per-generation loop, not a specification of the
+report, and the two readings only differ in cases the engine already handles. At `elite_count >= 1`
+under a deterministic objective they are identical, because the best is copied forward every
+generation and cannot be lost. Where they differ — a stochastic objective — best-ever is actively
+worse: it latches the luckiest sample of a genome, which is the same failure §6.2 gives as the
+reason elites are rescored rather than keeping their old number. It would also let
+`best_fitness_engine` disagree with the last row of `history`, and report a fitness no individual in
+the returned population currently has.
+**Rejected:** (a) A running best-ever genome/graph/fitness updated each generation — robust at
+`elite_count = 0`, which is the one case it buys anything, and the config default is 1. (b) Raising
+it as a `collab.md` item before implementing — the sheet is not contradicted by either reading, so
+there was nothing to ask; recorded here instead so the reading is visible and reversible.
+**Affects:** `get/src/evolver/generational.rs` `outcome` and `run`;
+`the_outcome_reports_the_actual_best_and_its_graph`.
+*#25 · recorded 2026-08-06 21:04 — James, during the generational implementation.*
+
+## 2026-08-06 21:05 — James — `advance_generation` does not take the objective
+**Chose:** dropped the `fitness: &F` parameter (and the `F: Fitness` bound) the `todo!()` stub
+carried, leaving `advance_generation(&mut self, fitnesses: &[f64], rng: &mut R)`.
+**Why:** generational rescores the whole population in `run` after advancing, so nothing inside
+`advance_generation` scores anything — it only needs the *previous* generation's fitnesses, to rank
+elites and to run selection. Keeping an unused `&F` would have meant keeping the stub's
+`let _ = (..)` discard alive, which is exactly the kind of line that reads as an oversight later.
+The asymmetry with steady-state's `mating_event`, which does take `fitness`, is real and correct:
+that strategy scores its two children in place, because it never rescores anyone else.
+**Rejected:** keeping the parameter for signature symmetry with `mating_event` — symmetry between
+two methods that genuinely do different work is worth nothing, and it would have hidden that
+generational scores in exactly one place.
+**Affects:** `get/src/evolver/generational.rs` `advance_generation` and its caller in `run`.
+*#25 · recorded 2026-08-06 21:05 — James, during the generational implementation.*
