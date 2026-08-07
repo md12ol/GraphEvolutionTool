@@ -8,7 +8,8 @@ pub mod sir;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use crate::config::Config;
+use crate::config::{Config, FitnessConfig};
+use crate::fitness::{Direction, PyFitness};
 
 /// Python-facing entry point to the graph-evolution engine.
 ///
@@ -19,6 +20,13 @@ use crate::config::Config;
 pub struct GraphEvolver {
     config: Config,
     best_fitness: Option<f64>,
+    /// The objective registered by [`GraphEvolver::set_fitness_function`], set
+    /// only when `[fitness] type = "python"`.
+    ///
+    /// Runtime configuration that cannot live in a config file arrives through
+    /// a setter instead (§8): the config *selects* Python, this *is* the
+    /// callable.
+    fitness_function: Option<PyFitness>,
 }
 
 #[pymethods]
@@ -34,7 +42,73 @@ impl GraphEvolver {
         Ok(Self {
             config,
             best_fitness: None,
+            fitness_function: None,
         })
+    }
+
+    /// Register a Python callable as the objective, with the direction it is
+    /// meant to be optimized in.
+    ///
+    /// `config.toml` only *selects* Python — `[fitness] type = "python"`. The
+    /// callable itself arrives here, and so does its direction, because nothing
+    /// can infer whether a user's function wants its value large or small
+    /// (§5, §8).
+    ///
+    /// The callable takes the **whole batch** and returns one float per graph,
+    /// in the same order — see [`crate::fitness::PyFitness`] for the contract
+    /// and why a per-graph callback is not an option:
+    ///
+    /// ```python
+    /// evolver.set_fitness_function(
+    ///     lambda batch: [score(n, edges) for (n, edges) in batch],
+    ///     "maximize",
+    /// )
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// `ValueError` if `callable` is not callable, if `direction` is not
+    /// `"minimize"` or `"maximize"`, or if the config did not select Python.
+    /// That last one is the interesting case: accepting a callable the run
+    /// would never consult is indistinguishable, from Python, from having
+    /// registered it successfully.
+    fn set_fitness_function(
+        &mut self,
+        callable: &Bound<'_, PyAny>,
+        direction: &str,
+    ) -> PyResult<()> {
+        // Refused rather than ignored: silently accepting this leaves the user
+        // watching an SIR objective's numbers and wondering why their own
+        // function never runs.
+        if !matches!(self.config.fitness, FitnessConfig::Python) {
+            return Err(PyValueError::new_err(format!(
+                "[fitness] type is \"{}\", so a registered callable would never be used; \
+                 set type = \"python\" in the config to use a Python objective",
+                self.config.fitness.type_name(),
+            )));
+        }
+
+        if !callable.is_callable() {
+            return Err(PyValueError::new_err(format!(
+                "fitness function: must be callable, got {}",
+                callable.get_type().name()?,
+            )));
+        }
+
+        // Spelled out rather than taking a `Direction` enum across the boundary,
+        // so the Python side needs no import to say which way is better.
+        let direction = if direction.eq_ignore_ascii_case("minimize") {
+            Direction::Minimize
+        } else if direction.eq_ignore_ascii_case("maximize") {
+            Direction::Maximize
+        } else {
+            return Err(PyValueError::new_err(format!(
+                "direction: must be \"minimize\" or \"maximize\", got \"{direction}\"",
+            )));
+        };
+
+        self.fitness_function = Some(PyFitness::new(callable.clone().unbind(), direction));
+        Ok(())
     }
 
     /// Evolve a population and return the best graph as a weighted edge list
@@ -69,4 +143,176 @@ impl GraphEvolver {
 fn get(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GraphEvolver>()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::fitness::Fitness;
+    use crate::graph::Graph;
+
+    /// A config whose `[fitness]` block is exactly `fitness_block`, with the
+    /// rest of the document held fixed.
+    ///
+    /// Written out rather than reaching for `config.rs`'s fixtures, which are
+    /// private to its own test module.
+    fn config_with(fitness_block: &str) -> Config {
+        // Top-level keys first: in TOML anything after a `[table]` header
+        // belongs to that table, so the shared settings cannot follow one.
+        let text = format!(
+            "population_size = 10\n\
+             network_size = 8\n\
+             max_edge_multiplicity = 1\n\
+             crossover_rate = 0.8\n\
+             mutation_rate = 0.2\n\
+             \n\
+             [evolution]\n\
+             type = \"generational\"\n\
+             num_generations = 5\n\
+             elite_count = 1\n\
+             \n\
+             [selection]\n\
+             type = \"tournament\"\n\
+             tournament_size = 4\n\
+             \n\
+             [genome]\n\
+             type = \"edge_edit\"\n\
+             gene_length = 16\n\
+             \n\
+             {fitness_block}"
+        );
+        Config::from_toml_str(&text).expect("the test config parses")
+    }
+
+    fn evolver_with(fitness_block: &str) -> GraphEvolver {
+        GraphEvolver {
+            config: config_with(fitness_block),
+            best_fitness: None,
+            fitness_function: None,
+        }
+    }
+
+    const PYTHON_FITNESS: &str = "[fitness]\ntype = \"python\"\n";
+    const SIR_FITNESS: &str =
+        "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.05\nnum_epidemics = 30\n";
+
+    /// `lambda batch: [float(n) for (n, edges) in batch]`, as a bound object.
+    fn scoring_lambda(py: Python<'_>) -> Bound<'_, PyAny> {
+        py.eval(
+            c"lambda batch: [float(n) for (n, edges) in batch]",
+            None,
+            None,
+        )
+        .expect("the lambda compiles")
+    }
+
+    #[test]
+    fn a_registered_callable_becomes_the_objective() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+
+            evolver
+                .set_fitness_function(&scoring_lambda(py), "maximize")
+                .expect("registering a callable on a python config");
+
+            let objective = evolver
+                .fitness_function
+                .as_ref()
+                .expect("the callable was stored");
+
+            // Reached through the objective, not just stored: this is the same
+            // path a run would take.
+            assert_eq!(objective.direction(), Direction::Maximize);
+            assert_eq!(objective.evaluate(&Graph::new(6, 1)), 6.0);
+        });
+    }
+
+    #[test]
+    fn the_direction_string_is_case_insensitive_but_closed() {
+        Python::attach(|py| {
+            for (spelling, expected) in [
+                ("minimize", Direction::Minimize),
+                ("MINIMIZE", Direction::Minimize),
+                ("Maximize", Direction::Maximize),
+            ] {
+                let mut evolver = evolver_with(PYTHON_FITNESS);
+                evolver
+                    .set_fitness_function(&scoring_lambda(py), spelling)
+                    .unwrap_or_else(|_| panic!("{spelling} should be accepted"));
+
+                assert_eq!(
+                    evolver.fitness_function.as_ref().unwrap().direction(),
+                    expected,
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn an_unrecognized_direction_is_rejected_and_says_what_is_allowed() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+
+            // British spelling: the most likely near-miss, and silently
+            // defaulting it to Minimize would run a maximizing search backwards.
+            let err = evolver
+                .set_fitness_function(&scoring_lambda(py), "maximise")
+                .expect_err("an unknown direction must be rejected");
+
+            let message = err.to_string();
+            assert!(
+                message.contains("maximise"),
+                "names what was given: {message}"
+            );
+            assert!(
+                message.contains("\"maximize\""),
+                "names what is allowed: {message}"
+            );
+            assert!(evolver.fitness_function.is_none(), "nothing was stored");
+        });
+    }
+
+    #[test]
+    fn a_non_callable_is_rejected_naming_its_type() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            let not_a_function = py
+                .eval(c"'not a function'", None, None)
+                .expect("a string evaluates");
+
+            let err = evolver
+                .set_fitness_function(&not_a_function, "minimize")
+                .expect_err("a non-callable must be rejected");
+
+            let message = err.to_string();
+            assert!(message.contains("callable"), "{message}");
+            assert!(message.contains("str"), "names the type given: {message}");
+            assert!(evolver.fitness_function.is_none(), "nothing was stored");
+        });
+    }
+
+    #[test]
+    fn registering_against_a_non_python_config_is_rejected() {
+        // The failure this prevents is silent: the run would score with
+        // epi_spread while the user watched for their own function's numbers.
+        Python::attach(|py| {
+            let mut evolver = evolver_with(SIR_FITNESS);
+
+            let err = evolver
+                .set_fitness_function(&scoring_lambda(py), "minimize")
+                .expect_err("registering against a non-python config must be rejected");
+
+            let message = err.to_string();
+            assert!(
+                message.contains("epi_spread"),
+                "names the configured type: {message}"
+            );
+            assert!(
+                message.contains("python"),
+                "says what to change it to: {message}"
+            );
+            assert!(evolver.fitness_function.is_none(), "nothing was stored");
+        });
+    }
 }
