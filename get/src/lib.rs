@@ -9,7 +9,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::config::{Config, FitnessConfig};
-use crate::fitness::{Direction, PyFitness};
+use crate::fitness::{Direction, Fitness, PyFitness};
 
 /// Python-facing entry point to the graph-evolution engine.
 ///
@@ -136,6 +136,59 @@ impl GraphEvolver {
     fn save_results(&self, filename: &str) -> PyResult<()> {
         let _ = filename;
         todo!("write the best genome and edge list to `filename`")
+    }
+}
+
+/// Rust-only, so deliberately outside the `#[pymethods]` block above: these
+/// take and return engine types that have no Python representation.
+impl GraphEvolver {
+    /// The objective for one run, when the config selected Python.
+    ///
+    /// This is the seam the dispatch in **#26** calls: it turns the registered
+    /// callable into the erased `Box<dyn Fitness>` that §8 hands the evolver,
+    /// so the `python` arm of that match is one call rather than a second place
+    /// that knows how registration works.
+    ///
+    /// **A fresh instance per call, not a shared one.** Replicate runs each
+    /// need their own objective (§8.1), so the erasing step is re-run per
+    /// replicate rather than cloning one box. The Python callable itself is
+    /// shared by refcount — see [`PyFitness::clone_ref`] — which is right,
+    /// because it is the *scorer* state that must stay per-run and this has
+    /// none.
+    ///
+    /// The other three variants are not built here: they need
+    /// `config::SirParams` mapped onto [`crate::sir::SirSampleParams`] plus the
+    /// run seed, which is #26's to write.
+    ///
+    /// # Errors
+    ///
+    /// `ValueError` if no callable has been registered — the case spec §8 and
+    /// issue #19 both call out, since a run that reached scoring with nothing
+    /// registered would otherwise panic deep inside the engine. Also if the
+    /// config did not select Python, which is a caller mistake rather than a
+    /// user one, but is reported rather than asserted so it cannot become a
+    /// panic in a release build.
+    // TEMPORARY — remove when #26 lands. This is the seam #26's dispatch calls,
+    // so until that match exists nothing in non-test code calls it and
+    // `dead_code` fires, which would break the `-D warnings` gate that #25 just
+    // made usable. Its tests do exercise it. Recorded in `hotfixes.md`.
+    #[allow(dead_code)]
+    pub(crate) fn python_fitness(&self) -> PyResult<Box<dyn Fitness>> {
+        if !matches!(self.config.fitness, FitnessConfig::Python) {
+            return Err(PyValueError::new_err(format!(
+                "python_fitness is only for a \"python\" objective, but [fitness] type \
+                 is \"{}\"",
+                self.config.fitness.type_name(),
+            )));
+        }
+
+        match self.fitness_function {
+            Some(ref registered) => Ok(Box::new(registered.clone_ref())),
+            None => Err(PyValueError::new_err(
+                "[fitness] type is \"python\" but no fitness function has been \
+                 registered; call set_fitness_function(callable, direction) before run()",
+            )),
+        }
     }
 }
 
@@ -290,6 +343,83 @@ mod tests {
             assert!(message.contains("str"), "names the type given: {message}");
             assert!(evolver.fitness_function.is_none(), "nothing was stored");
         });
+    }
+
+    #[test]
+    fn a_python_config_with_no_registered_callable_is_an_error_not_a_panic() {
+        // The second half of #19's verify-by. Without this the run would reach
+        // scoring with nothing to call and panic somewhere inside the engine,
+        // where the message would name none of this.
+        let evolver = evolver_with(PYTHON_FITNESS);
+
+        // `map(|_| ())` because `Box<dyn Fitness>` is not `Debug`, which
+        // `expect_err` would require of the Ok type.
+        let err = evolver
+            .python_fitness()
+            .map(|_| ())
+            .expect_err("a python config with no callable cannot produce an objective");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("set_fitness_function"),
+            "says what to do about it: {message}",
+        );
+    }
+
+    #[test]
+    fn the_resolved_objective_scores_through_the_registered_callable() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            evolver
+                .set_fitness_function(&scoring_lambda(py), "maximize")
+                .expect("registering a callable");
+
+            let objective = evolver.python_fitness().expect("an objective is available");
+
+            // Through the box, which is how the evolver will hold it: proves
+            // the erasure keeps both the callable and its direction.
+            assert_eq!(objective.direction(), Direction::Maximize);
+            assert_eq!(
+                objective.evaluate_population(&[Graph::new(3, 1), Graph::new(7, 1)]),
+                vec![3.0, 7.0],
+            );
+        });
+    }
+
+    #[test]
+    fn each_call_hands_back_its_own_objective() {
+        // Replicates need one instance each (§8.1), so the seam is re-run per
+        // replicate rather than handing the same box to several runs.
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            evolver
+                .set_fitness_function(&scoring_lambda(py), "minimize")
+                .expect("registering a callable");
+
+            let first = evolver.python_fitness().expect("first instance");
+            let second = evolver.python_fitness().expect("second instance");
+
+            // Both live and usable at once, which a moved-out registration
+            // could not manage.
+            assert_eq!(first.evaluate(&Graph::new(4, 1)), 4.0);
+            assert_eq!(second.evaluate(&Graph::new(9, 1)), 9.0);
+            assert_eq!(first.evaluate(&Graph::new(2, 1)), 2.0);
+        });
+    }
+
+    #[test]
+    fn resolving_a_non_python_objective_reports_rather_than_panics() {
+        let evolver = evolver_with(SIR_FITNESS);
+
+        let err = evolver
+            .python_fitness()
+            .map(|_| ())
+            .expect_err("a non-python config has no python objective to resolve");
+
+        assert!(
+            err.to_string().contains("epi_spread"),
+            "names the configured type: {err}",
+        );
     }
 
     #[test]
