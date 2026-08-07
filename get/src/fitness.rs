@@ -746,6 +746,38 @@ mod tests {
         );
     }
 
+    /// Issue #18's own verification: one seed reproduces a whole run.
+    ///
+    /// Two objectives built identically score the same batches in the same
+    /// order, and must agree score for score — not just on the first batch,
+    /// which a frozen seed would also pass, but across a sequence long enough
+    /// that the counter has advanced several times.
+    #[test]
+    fn the_same_run_seed_replays_every_batch_of_a_run() {
+        let population = identical_batch(4);
+
+        let first_run = EpiSpread::new(chancy_batch(3), 4242);
+        let second_run = EpiSpread::new(chancy_batch(3), 4242);
+
+        for batch in 0..5 {
+            assert_eq!(
+                first_run.evaluate_population(&population),
+                second_run.evaluate_population(&population),
+                "batch {batch} differed between two runs at the same seed",
+            );
+        }
+
+        // And a different run seed must not replay it, or replicates would be
+        // copies of each other rather than independent samples (§8.1). Both
+        // sides are fresh, so this compares first batch against first batch.
+        let this_seed = EpiSpread::new(chancy_batch(3), 4242);
+        let other_seed = EpiSpread::new(chancy_batch(3), 4243);
+        assert_ne!(
+            this_seed.evaluate_population(&population),
+            other_seed.evaluate_population(&population),
+        );
+    }
+
     /// The first `count` batch seeds a fresh scorer at `run_seed` hands out.
     fn first_batch_seeds(run_seed: u64, count: usize) -> Vec<u64> {
         let scorer = EpidemicScorer::new(certain_batch(1), run_seed);
