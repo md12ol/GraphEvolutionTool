@@ -1,6 +1,7 @@
 ---
 name: start
 description: Start a new task — scaffold .claude/work/current/ and write .claude/work/current/plan.md — the agreed objective and task list for the current work — BEFORE writing any code. Use when starting a new piece of work, when the user asks to plan something out, or when the current plan no longer matches what is actually being built.
+model: sonnet
 ---
 
 # Start

@@ -1,6 +1,7 @@
 ---
 name: load
 description: Start a session on the current task — read .claude/work/current/handoff.md, plan.md, decisions.md and hotfixes.md, verify them against the actual repo state, and report where things stand before doing any work. Use at the start of a session, when resuming a task, or when the user asks where things are.
+model: sonnet
 ---
 
 # Load

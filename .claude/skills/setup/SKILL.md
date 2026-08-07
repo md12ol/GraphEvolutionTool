@@ -1,6 +1,7 @@
 ---
 name: setup
 description: Initialize the .claude working-docs system in a project for the first time — inspect the repo, interview the user, and fill in the FILL IN blocks in .claude/CLAUDE.md. Run ONCE, right after install.sh. Use when CLAUDE.md still contains FILL IN blocks, when the user says to set up / configure / initialize the docs system, or when they ask what to do after installing the template.
+model: sonnet
 ---
 
 # Setup
