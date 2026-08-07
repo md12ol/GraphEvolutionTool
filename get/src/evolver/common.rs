@@ -324,38 +324,53 @@ mod tests {
 
     /// A genome that is just its index, so a winner reports its own slot.
     ///
-    /// The index doubles as a **mutation counter**: `mutate` increments it, so
-    /// the `mutate_child` tests read the number of mutations applied instead of
-    /// inferring it. A test that relies on the index identifying a slot must
-    /// therefore not run its individuals through a mutation path — none do
-    /// today, and `mutate` is called nowhere but inside `mutate_child`.
+    /// `mutations` counts how many mutations have been applied, and is a
+    /// **separate field from `index` on purpose**. The two used to be one: the
+    /// index was incremented by `mutate`, so the `mutate_child` tests could read
+    /// the count directly — but then an individual that went through a mutation
+    /// path stopped identifying the slot it came from, and a selection test that
+    /// mutated would fail as though selection were broken. Kept apart, each test
+    /// reads the field it means.
     #[derive(Clone, Debug, PartialEq, Eq)]
-    struct IndexGenome(usize);
+    struct IndexGenome {
+        index: usize,
+        mutations: usize,
+    }
+
+    impl IndexGenome {
+        fn new(index: usize) -> Self {
+            Self {
+                index,
+                mutations: 0,
+            }
+        }
+    }
 
     impl Genome for IndexGenome {
         type Context = ();
 
         // Node count encodes the index, so an expressed graph is traceable
-        // back to the genome it came from.
+        // back to the genome it came from. Mutations deliberately do not move
+        // it — that is what keeps the slot identifiable.
         fn express(&self, _context: &Self::Context) -> Graph {
-            Graph::new(self.0 + 1, 1)
+            Graph::new(self.index + 1, 1)
         }
 
         fn crossover<R: Rng + ?Sized>(&mut self, _other: &mut Self, _rng: &mut R) {}
 
-        // One mutation is one increment, which is what makes the count
-        // observable — see the type's doc comment.
+        // One mutation is one increment of the counter, which is what makes the
+        // count observable — see the type's doc comment.
         fn mutate<R: Rng + ?Sized>(&mut self, _rng: &mut R) {
-            self.0 += 1;
+            self.mutations += 1;
         }
 
         fn print(&self) -> String {
-            format!("IndexGenome({})", self.0)
+            format!("IndexGenome({}, {} mutations)", self.index, self.mutations)
         }
     }
 
     fn population(size: usize) -> Vec<IndexGenome> {
-        (0..size).map(IndexGenome).collect()
+        (0..size).map(IndexGenome::new).collect()
     }
 
     /// What a tournament should pick, written independently of `rank`.
@@ -481,7 +496,7 @@ mod tests {
         // Nothing to compare, so winners are the raw index stream.
         let mut mirror = StdRng::seed_from_u64(3);
         let expected: Vec<_> = (0..20)
-            .map(|_| IndexGenome(mirror.random_range(0..8)))
+            .map(|_| IndexGenome::new(mirror.random_range(0..8)))
             .collect();
 
         assert_eq!(selected, expected);
@@ -503,7 +518,10 @@ mod tests {
             let entrants: Vec<usize> = (0..tournament_size)
                 .map(|_| mirror.random_range(0..10))
                 .collect();
-            assert_eq!(winner, IndexGenome(expected_winner(&fitnesses, &entrants)));
+            assert_eq!(
+                winner,
+                IndexGenome::new(expected_winner(&fitnesses, &entrants))
+            );
         }
     }
 
@@ -520,7 +538,7 @@ mod tests {
         let mut mirror = StdRng::seed_from_u64(17);
         for winner in selected {
             let lowest_drawn = (0..5).map(|_| mirror.random_range(0..6)).min().unwrap();
-            assert_eq!(winner, IndexGenome(lowest_drawn));
+            assert_eq!(winner, IndexGenome::new(lowest_drawn));
         }
     }
 
@@ -534,7 +552,7 @@ mod tests {
             let selection = Selection::Tournament { tournament_size };
             let mut rng = StdRng::seed_from_u64(97);
             let picks = selection.select(&population, &fitnesses, 2_000, &mut rng);
-            picks.iter().map(|g| g.0 as f64).sum::<f64>() / picks.len() as f64
+            picks.iter().map(|g| g.index as f64).sum::<f64>() / picks.len() as f64
         };
 
         let uniform = mean_selected(1);
@@ -569,7 +587,7 @@ mod tests {
             if entrants.iter().any(|&e| e != 1) {
                 assert_ne!(
                     winner,
-                    IndexGenome(1),
+                    IndexGenome::new(1),
                     "NaN won against a real fitness in {entrants:?}",
                 );
             }
@@ -668,7 +686,7 @@ mod tests {
     #[test]
     fn a_zero_mutation_rate_never_mutates() {
         let mut rng = StdRng::seed_from_u64(1);
-        let mut child = IndexGenome(0);
+        let mut child = IndexGenome::new(0);
 
         // Over enough trials that a rate misread as a per-mutation probability,
         // or an unconditional count roll, would show up.
@@ -676,7 +694,7 @@ mod tests {
             mutate_child(&mut child, 0.0, 4, &mut rng);
         }
 
-        assert_eq!(child.0, 0, "rate 0.0 must not mutate at all");
+        assert_eq!(child.mutations, 0, "rate 0.0 must not mutate at all");
     }
 
     #[test]
@@ -684,11 +702,11 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(2);
 
         for _ in 0..100 {
-            let mut child = IndexGenome(0);
+            let mut child = IndexGenome::new(0);
             mutate_child(&mut child, 1.0, 1, &mut rng);
 
             // The contract this task exists to enforce: one call, one mutation.
-            assert_eq!(child.0, 1, "max_mutations 1 must apply exactly one");
+            assert_eq!(child.mutations, 1, "max_mutations 1 must apply exactly one");
         }
     }
 
@@ -698,15 +716,15 @@ mod tests {
         let mut seen = [false; 5];
 
         for _ in 0..500 {
-            let mut child = IndexGenome(0);
+            let mut child = IndexGenome::new(0);
             mutate_child(&mut child, 1.0, 4, &mut rng);
 
             assert!(
-                (1..=4).contains(&child.0),
+                (1..=4).contains(&child.mutations),
                 "{} mutations applied, max_mutations was 4",
-                child.0,
+                child.mutations,
             );
-            seen[child.0] = true;
+            seen[child.mutations] = true;
         }
 
         // An inclusive range drawn uniformly: a `1..max` off-by-one would never
@@ -721,6 +739,6 @@ mod tests {
     #[should_panic(expected = "max_mutations must be at least 1")]
     fn a_zero_max_mutations_is_rejected() {
         let mut rng = StdRng::seed_from_u64(4);
-        mutate_child(&mut IndexGenome(0), 1.0, 0, &mut rng);
+        mutate_child(&mut IndexGenome::new(0), 1.0, 0, &mut rng);
     }
 }
