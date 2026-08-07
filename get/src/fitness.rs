@@ -411,6 +411,27 @@ mod tests {
     use super::*;
     use crate::sir::SirParams;
 
+    /// The test harness can reach a live Python interpreter.
+    ///
+    /// Not a test of this crate's logic — a guard on `get/Cargo.toml`. Moving
+    /// `extension-module` back into `[dependencies]` leaves the Python symbols
+    /// for an interpreter to supply at load time, and `cargo test` has none, so
+    /// the whole suite stops **linking** — an error with no obvious connection
+    /// to whatever was being changed. This fails first and says why.
+    #[test]
+    fn the_test_harness_can_call_a_live_python_interpreter() {
+        use pyo3::types::PyAnyMethods;
+
+        pyo3::Python::attach(|py| {
+            let two: i64 = py
+                .eval(c"1 + 1", None, None)
+                .expect("evaluating `1 + 1` in the embedded interpreter")
+                .extract()
+                .expect("`1 + 1` is an integer");
+            assert_eq!(two, 2);
+        });
+    }
+
     /// A path `0 - 1 - ... - (n-1)`, every edge at multiplicity 1.
     fn path_graph(num_nodes: usize) -> Graph {
         let mut graph = Graph::new(num_nodes, 1);
