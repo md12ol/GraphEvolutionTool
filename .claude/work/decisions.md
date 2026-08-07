@@ -1104,6 +1104,26 @@ hotfix, blocked on #18, fifth cycle. `collab.md` **#25** was answered and needs 
 acknowledgement. Entries below this line belong to later tasks.
 *Task marker · config-validate · recorded 2026-08-06 00:38 EDT — James, at `/done`.*
 
+## 2026-08-06 00:50 — James — `GenerationalEvolver::new` gets a backstop assert on `elite_count`
+**Chose:** `GenerationalEvolver::new` will `assert!(elite_count < population.len())`, matching the
+posture of `SteadyStateEvolver::new` (`get/src/evolver/steady_state.rs:156-178`). Settled before any
+of #25 was written.
+**Why:** spec §7 keeps the evolvers' `assert!`s as backstops for **direct Rust use** — tests and
+embedding — precisely because an evolver is constructible without passing through `Config`. #23's
+`Config::validate` now rejects `elite_count >= population_size` for every config-driven run, so this
+assert can only fire on the direct path, which is exactly the path §7 says to keep covered. The
+failure it catches is the silent kind: elites fill every slot, nothing breeds, and the run is a
+fixed point that reads as a broken fitness function rather than a bad construction. Steady-state
+already argues this in its own `new` — the two evolvers should not disagree about whether they trust
+their caller.
+**Rejected:** (a) Leaving `new` bare and relying on `validate` — correct for config-driven runs and
+useless for the one path that can actually reach it. (b) Also asserting
+`population.len() >= tournament_size`, for symmetry with steady-state — generational's tournament
+sampling is **with replacement**, so a tournament larger than the population draws fine; that assert
+would have no failure mode and would misinform a reader about what generational requires.
+**Affects:** `get/src/evolver/generational.rs` `new`; the plan's `new` task in
+`work/current/plan.md`.
+*#25 · recorded 2026-08-06 00:50 — James, at `/start` for the generational evolver.*
 ## 2026-08-06 16:06 — Michael — Merged PR #45; the "archive with the PR still open" loop is now closed
 **Recorded because James archived config-validate with this PR pending**, noting it "owes this owner
 no action" — that disposition was right, and this is the other half of it. PR **#45** merged as
