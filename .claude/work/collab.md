@@ -547,6 +547,29 @@ the branch before you start, or merge #18 first, rather than resolving it afterw
 
 *#33 · raised 2026-08-07 14:28 — Michael, during #18.*
 
+### 34. I pinned the five working-docs skills to sonnet — it changes execution on your machine
+
+**FYI, no action needed unless you disagree.** Pushed to `main` as `011480d`. `model: sonnet` added
+to the frontmatter of `done`, `load`, `save`, `setup` and `start`. They are bookkeeping skills —
+read the working docs, update a plan, archive a task — and none of them needs the larger model.
+
+**Why this is a `collab.md` entry rather than a silent push.** `CLAUDE.md` rule 2 requires a PR for
+`settings.json` and `hooks/` because they execute on your machine at session start without you
+reading them. `.claude/skills/` is not named in that rule and not in the routing table either, so a
+direct push is permitted — but the *reason* behind rule 2 applies to it just as much: on your next
+pull these five skills run under a different model than they did today, and nothing announces it.
+So: permitted, pushed, and logged rather than left to be discovered.
+
+**If you think skills belong under rule 2**, that is worth deciding rather than leaving to
+precedent, and it would be a `CLAUDE.md` amendment binding both of us. I have no strong view; I
+lean toward "yes, but only when the frontmatter changes", since the body of a skill is prose we both
+read anyway.
+
+**Revert is one line each** if any of them reads worse to you at this size — say so and I will drop
+it, or drop it yourself, no discussion needed.
+
+*#34 · raised 2026-08-07 16:52 — Michael, closing out #18.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
