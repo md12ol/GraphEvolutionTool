@@ -570,6 +570,44 @@ it, or drop it yourself, no discussion needed.
 
 *#34 · raised 2026-08-07 16:52 — Michael, closing out #18.*
 
+### 35. §6.2 says "track the best"; generational reports the best of the final population
+
+**Decide — I think your code is right and the sheet's wording is stale, but the sheet is the
+authority so it is not mine to call.** Found reviewing PR #46 against §6.2 after merging it. Not
+urgent and nothing is broken at the settings we actually use.
+
+**The gap.** §6.2 reads "score the population, log a stats row, **track the best**, then advance",
+which reads as a running best carried across generations. `GenerationalEvolver::outcome`
+(`get/src/evolver/generational.rs:115`) instead takes the best of the **final** population.
+
+At `elite_count >= 1` the two nearly always agree, because the best is copied forward. At
+**`elite_count = 0` they can differ**, and §7 permits zero — its only constraint is
+`elite_count < population_size`, and `config.example.toml` happening to use 1 is not a guarantee.
+In that configuration a strong individual can appear in generation 40, fail to be selected, and the
+run reports something worse with no record that it existed. Your own test name concedes the edge:
+`the_logged_best_never_worsens_while_an_elite_is_carried`.
+
+**Why I think the code is right anyway, and this is the sheet's problem.** #18 landed the atomic
+batch counter, so fitness is now genuinely stochastic between batches. A running best under a
+stochastic objective is substantially a record of which generation drew lucky dice — and §6.2
+itself rejects exactly that reasoning two paragraphs later, when it says freezing an elite's old
+score would let a lucky draw persist (§5.2). Best-of-final is the more honest number, and it is
+what `SteadyStateEvolver::outcome` already reports, so the two strategies agree with each other.
+The sentence in §6.2 predates the seeding work.
+
+**Three ways to settle it, cheapest first:**
+
+- **Amend §6.2** to say the reported best is the best of the final population, for both strategies,
+  and say why. No code changes. My preference.
+- **Require `elite_count >= 1` in §7**, which makes the divergence unreachable rather than
+  resolving it. Cheap, but it removes a legitimate configuration to dodge a wording problem.
+- **Implement a running best**, and accept that under a stochastic objective the reported winner is
+  chosen partly by its luckiest sample. I would not.
+
+Either of the first two is a sheet change, so it needs the meeting — same one #32 is waiting on.
+
+*#35 · raised 2026-08-07 16:59 — Michael, reviewing PR #46 after merging it.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
