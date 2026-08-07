@@ -1,33 +1,47 @@
-//! Objectives the genetic algorithm optimizes, and the direction gate.
+//! The objectives the GA optimizes, and the sign rule that makes them
+//! comparable.
 //!
 //! # Adding your own objective
 //!
-//! 1. Implement [`Fitness`] on your type — [`Fitness::evaluate`] is the only
-//!    required method; add [`Fitness::direction`] if bigger is better.
+//! 1. Implement [`Fitness`] — [`Fitness::evaluate`] is the only required
+//!    method; add [`Fitness::direction`] if bigger is better.
 //! 2. Add a variant to `FitnessConfig` in [`crate::config`].
 //! 3. Add the matching arm in `GraphEvolver::run`.
 //!
-//! The three SIR objectives below are worked examples. If yours is
-//! epidemic-based, build it on [`EpidemicScorer`] rather than calling the
-//! simulator directly — it owns the seeding, which is easy to get subtly wrong
-//! and gives plausible-looking numbers when you do.
+//! If it is epidemic-based, build it on [`EpidemicScorer`] rather than calling
+//! the simulator yourself. It owns the seeding, and wrong seeding still gives
+//! numbers that look fine. Copy the shape [`EpiSpread`] uses: both `evaluate`
+//! and `evaluate_population` hand [`EpidemicScorer::mean_batch`] a closure
+//! saying what to read off one epidemic. Write the same reading in both — the
+//! test `both_entry_points_use_the_same_reading` fails if they disagree.
+
+use std::slice;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rayon::prelude::*;
 
 use crate::graph::Graph;
-use crate::sir::{SirBatchParams, SirRun, batch_epidemics};
+use crate::sir::{SirRun, SirSampleParams, simulate_epidemics};
 
-/// Whether an objective is better when its value is smaller or larger.
+/// Whether an objective wants its value small or large.
 ///
-/// The engine always minimizes. An objective returns its own value from
-/// [`Fitness::evaluate`] and declares its direction here; [`Direction::orient`]
-/// puts that value into the order the engine works in.
+/// Every fitness number in the engine is in one of two forms, and mixing them
+/// up is the bug this type exists to prevent:
 ///
-/// Declaring the direction rather than making each objective negate its own
-/// output is deliberate. If `evaluate` returned an already-negated value *and*
-/// the trait declared `Maximize`, the two could silently disagree — and a run
-/// that optimizes backwards is indistinguishable from one that simply is not
-/// converging.
+/// - **original** — what the fitness function returned, in its own units. 28
+///   nodes infected is `28.0`, and bigger is better.
+/// - **oriented** — the original after [`Direction::orient`], which negates it
+///   when the objective maximizes and leaves it alone when the objective
+///   minimizes, so that smaller is always better. That same 28 becomes
+///   `-28.0`.
+///
+/// The engine only ever compares, so it works in oriented values throughout;
+/// logs and results are turned back into originals at the boundary (§5.1),
+/// which is what the sheet calls engine orientation.
+///
+/// The objective does not negate its own output, because then the value and
+/// the declared direction could disagree — and a run optimizing backwards
+/// looks exactly like a run that is simply not converging.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     /// Smaller is better, as for an error or a distance. The default.
@@ -37,23 +51,21 @@ pub enum Direction {
 }
 
 impl Direction {
-    /// Convert between an objective's own value and the order the engine works
-    /// in, where lower is always better.
+    /// Orient an original, so that smaller always wins.
     ///
-    /// Negation is its own inverse, so one function maps both ways: in, to
-    /// compare individuals; out again, to log and report in the objective's
-    /// units and sign.
+    /// Under [`Direction::Minimize`] the two are the same number; under
+    /// [`Direction::Maximize`] the oriented value is the negated original, so
+    /// the largest original becomes the smallest oriented value.
+    ///
+    /// Negation is its own inverse, so this one function converts both ways:
+    /// an original in to compare, an oriented value in to report.
     ///
     /// # Panics
     ///
-    /// If `value` is `NaN`. That is deliberate. Ordering `NaN` as merely worst
-    /// would hide a bug in the objective, and letting it through is dangerous
-    /// under [`Direction::Maximize`]: `-NaN` sorts below `-inf`, so it would win
-    /// every tournament it entered and leave a run that looks converged.
-    ///
-    /// Unlike C/C++'s `assert()`, Rust's `assert!` is not compiled out in a
-    /// release build — this check always runs (the release-strippable
-    /// equivalent would be `debug_assert!`, not used here).
+    /// On `NaN`. Under [`Direction::Maximize`] it becomes `-NaN`, which sorts
+    /// below `-inf` — so it would win every tournament it entered and leave a
+    /// run that looks converged. Rust's `assert!` survives a release build, so
+    /// this check always runs.
     pub fn orient(self, value: f64) -> f64 {
         assert!(
             !value.is_nan(),
@@ -68,62 +80,53 @@ impl Direction {
     }
 }
 
-/// An objective the genetic algorithm optimizes over expressed graphs.
+/// An objective the GA optimizes over expressed graphs.
 ///
-/// [`Fitness::evaluate`] returns a score in whatever units suit the objective;
-/// [`Fitness::direction`] says whether bigger or smaller is better. The engine
-/// minimizes, converting once via [`Direction::orient`], so logs and the value
-/// handed back to Python stay in the objective's own units and sign.
+/// [`Fitness::evaluate`] returns the **original** score, in the objective's
+/// own units; [`Fitness::direction`] says which way is better. The engine
+/// orients it exactly once, so logs and results keep the original units and
+/// sign (§5.1). See [`Direction`] for both terms.
 ///
-/// # Implementors must not return `NaN`
+/// `Send + Sync` lets [`Fitness::evaluate_population`] score across rayon
+/// threads.
 ///
-/// Enforced, not merely documented: every value entering the engine passes
-/// through [`Direction::orient`], which panics on `NaN`. Guard the arithmetic
-/// that produces one — division by a possibly-zero count, `0.0 / 0.0`,
-/// `inf - inf`.
+/// # Implement these; never call them
 ///
-/// The `Send + Sync` bound lets [`Fitness::evaluate_population`] score a whole
-/// generation across rayon worker threads.
+/// Only `common::express_and_score` calls them. A direct call compiles and
+/// returns plausible numbers, but hands the engine an original where an
+/// oriented value belongs — so under [`Direction::Maximize`] every comparison
+/// runs backwards, and nothing says so. It skips the `NaN` check too.
 ///
-/// # These methods are implemented here and called by the engine in exactly one place
+/// # Never return `NaN`
 ///
-/// **Nothing in the engine calls [`Fitness::evaluate`] or
-/// [`Fitness::evaluate_population`] directly.** Both are reached only through
-/// `common::express_and_score`, which is the sole path from a population to a set
-/// of fitnesses. Implement them; do not call them.
-///
-/// A direct call compiles, returns plausible numbers, and is wrong in two ways
-/// that never announce themselves — it skips the [`Direction`] conversion, so
-/// under [`Direction::Maximize`] every comparison runs backwards, and it skips
-/// the `NaN` rejection that [`Direction::orient`] performs. Spec §5.1.
+/// [`Direction::orient`] panics on it. Watch for division by a count that can
+/// be zero, `0.0 / 0.0`, and `inf - inf`.
 pub trait Fitness: Send + Sync {
-    /// Score a single expressed graph, in the objective's own units.
-    ///
-    /// Must not return `NaN`; the engine panics if it does.
-    ///
-    /// Implemented by an objective, called by `common::express_and_score` — see
-    /// the note on the trait. The engine does not call this.
+    /// Score one graph: the **original**, in the objective's own units, never
+    /// an oriented value. Must not return `NaN`.
     fn evaluate(&self, graph: &Graph) -> f64;
 
-    /// Whether larger or smaller scores are better.
-    ///
-    /// Defaults to [`Direction::Minimize`], so an error or distance objective
-    /// needs to say nothing.
+    /// Which way is better. Defaults to [`Direction::Minimize`], so an error
+    /// or distance objective says nothing.
     fn direction(&self) -> Direction {
         Direction::Minimize
     }
 
-    /// Score an entire generation of expressed graphs.
+    /// Score a **batch of graphs** — whatever set the evolver scores together.
+    /// These come back as originals too; the caller converts them.
     ///
-    /// The default fans [`Fitness::evaluate`] out across rayon, which is ideal
-    /// for native Rust objectives. A Python-backed adapter overrides this to
-    /// acquire the GIL once per generation and vectorize the whole batch,
-    /// instead of paying the FFI/GIL cost once per individual.
+    /// The batch is not always a generation. Generational hands over the whole
+    /// population each cycle; steady-state hands over just the two new
+    /// children per mating event, and its starting population once (§6.3). All
+    /// three are batches.
     ///
-    /// Implemented or overridden by an objective, called by
-    /// `common::express_and_score` — see the note on the trait. The engine does
-    /// not call this. Note the scores it returns are in the objective's own
-    /// units and are **not** yet oriented; `express_and_score` converts them.
+    /// The default runs [`Fitness::evaluate`] on each graph across rayon,
+    /// which suits a Rust objective. A Python one overrides this to take the
+    /// GIL once per batch instead of once per graph.
+    ///
+    /// **A stochastic objective must override it as well** — the default would
+    /// draw a fresh seed per graph, so scores would no longer be comparable
+    /// inside the batch. See [`EpidemicScorer::mean_batch`].
     fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
         graphs
             .par_iter()
@@ -132,70 +135,150 @@ pub trait Fitness: Send + Sync {
     }
 }
 
-/// Runs the epidemics that every SIR objective scores.
+/// Runs the epidemics that every SIR objective scores (§5.2).
 ///
-/// One epidemic is the expensive part and all three objectives want the same
-/// one, so this runs the batch and each objective supplies only the reading
-/// (spec §5.2). A new epidemic-based objective needs nothing but a reading —
-/// see [`EpiSpread`] for the smallest possible example.
+/// The epidemic is the expensive part and all three objectives want the same
+/// one, so this runs the batch and each objective supplies only a reading —
+/// see [`EpiSpread`] for the smallest example.
+///
+/// The nesting, widest first (§5.2, §8.1): an **experiment** is many **runs**
+/// at one set of parameters; a run scores many **batches of graphs**; each
+/// batch averages many **epidemics** per graph. One scorer covers one run.
+///
+/// A batch is whatever the evolver scores in one call, and its size is not
+/// fixed: the whole population for a generational cycle or for either
+/// evolver's starting population, but only the **two new children** for a
+/// steady-state mating event (§6.3). Nothing here needs to know which — it
+/// seeds whatever arrives.
+///
+/// **One scorer per run.** The counter below is per-run state; two replicates
+/// sharing a scorer would let thread scheduling pick which run saw which seed,
+/// and reproducibility goes with it (§8.1).
 pub struct EpidemicScorer {
-    params: SirBatchParams,
+    params: SirSampleParams,
     run_seed: u64,
+    /// Batches scored so far — see [`EpidemicScorer::next_batch_seed`].
+    batches_scored: AtomicU64,
 }
 
 impl EpidemicScorer {
-    /// Build a scorer for one run's epidemics.
+    /// Build a scorer for one run.
     ///
-    /// `run_seed` comes from the single master seed passed to `run`; there is
-    /// deliberately no separate fitness seed (§5.2).
-    pub fn new(params: SirBatchParams, run_seed: u64) -> Self {
-        Self { params, run_seed }
-    }
-
-    /// The seed every graph in the current batch is simulated from.
-    ///
-    /// **Stub — issue #18 replaces this method.** It should be the run seed
-    /// plus a counter that ticks once per batch, so each batch draws fresh
-    /// dice. Sharing one seed *within* a batch is already right; what is
-    /// missing is changing it *between* batches, so a run currently optimizes
-    /// against one frozen sample of the disease. See `hotfixes.md`.
-    fn batch_seed(&self) -> u64 {
-        self.run_seed
-    }
-
-    /// One evaluation's epidemics over `graph`.
-    pub fn runs(&self, graph: &Graph) -> Vec<SirRun> {
-        batch_epidemics(graph, &self.params, self.batch_seed())
-    }
-
-    /// Average `read` across this evaluation's epidemics.
-    ///
-    /// Averaging matters: a single SIR draw is noisy enough that selection
-    /// would chase the dice instead of the graph. The division is safe because
-    /// [`batch_epidemics`] rejects an empty batch.
-    ///
-    /// `read: impl Fn(&SirRun) -> f64` accepts any closure or function
-    /// matching that signature — like passing a Java `Function<SirRun,
-    /// Double>` or a Python callable.
-    pub fn mean(&self, graph: &Graph, read: impl Fn(&SirRun) -> f64) -> f64 {
-        let runs = self.runs(graph);
-
-        let mut total = 0.0;
-        for run in &runs {
-            total += read(run);
+    /// `run_seed` is this run's share of the master seed handed to
+    /// `GraphEvolver::run`; `[fitness]` has no seed of its own (§5.2).
+    pub fn new(params: SirSampleParams, run_seed: u64) -> Self {
+        Self {
+            params,
+            run_seed,
+            batches_scored: AtomicU64::new(0),
         }
-        total / runs.len() as f64
+    }
+
+    /// The seed for the next batch of graphs. Every call returns a different
+    /// one, because it advances the counter.
+    ///
+    /// A seed fixes every random choice the epidemic simulator makes. Same
+    /// seed, same epidemics. Different seed, different epidemics.
+    ///
+    /// **Call this once per batch, then give that one seed to every graph in
+    /// the batch.** The batch size depends on the evolver, and nothing here
+    /// changes with it:
+    ///
+    /// ```text
+    /// generational   batch 1   seed A   all 200 of the population
+    ///                batch 2   seed B   all 200 of the next generation
+    ///
+    /// steady-state   batch 1   seed A   the 200 starting graphs
+    ///                batch 2   seed B   the 2 children of one mating event
+    ///                batch 3   seed C   the 2 children of the next event
+    /// ```
+    ///
+    /// *One seed across the batch*, because those graphs are compared with
+    /// each other. If each drew its own, a graph could rank first for having
+    /// been handed a milder outbreak.
+    ///
+    /// *A new seed for the next batch*, because reusing A forever would breed
+    /// a population good at outbreak A rather than good at the disease.
+    ///
+    /// Both properties together are what §5.2 calls common random numbers.
+    ///
+    /// Steady-state pays a known cost here, accepted in §5.2: its two children
+    /// are scored under a newer seed than the population they are compared
+    /// against, and a graph that drew an easy outbreak keeps that score until
+    /// something replaces it.
+    ///
+    /// The counter is an atomic for a duller reason than it looks: `evaluate`
+    /// only gets `&self`, so a plain `+= 1` will not compile, and `Cell` is
+    /// not `Sync`, which [`Fitness`] requires. Nothing here is actually
+    /// contended — [`EpidemicScorer::mean_batch`] calls this once on its own
+    /// thread before rayon fans out, batches are scored one after another, and
+    /// each replicate owns its own scorer (§8.1). `Relaxed` is enough because
+    /// no other data rides along with the count.
+    pub fn next_batch_seed(&self) -> u64 {
+        let counter = self.batches_scored.fetch_add(1, Ordering::Relaxed);
+        mix_seed(self.run_seed, counter)
+    }
+
+    /// Score a whole batch of graphs — **one seed for every graph, one tick**.
+    ///
+    /// This is the only way to score, and the method that delivers common
+    /// random numbers. It is why each objective overrides
+    /// [`Fitness::evaluate_population`] rather than letting the default score
+    /// the graphs one at a time (§5.2). It does not care whether the batch is
+    /// a generation, a starting population or two steady-state children — a
+    /// single graph is a batch of one.
+    ///
+    /// `read` turns one epidemic into one number, which is what keeps each
+    /// objective to a single line. Averaging matters: a single epidemic is
+    /// noisy enough that selection would chase the dice instead of the graph.
+    /// The division is safe — [`simulate_epidemics`] rejects an empty batch.
+    ///
+    /// `+ Sync` on `read` lets rayon call it from several threads at once.
+    pub fn mean_batch(&self, graphs: &[Graph], read: impl Fn(&SirRun) -> f64 + Sync) -> Vec<f64> {
+        // Taken once, here, and handed to every graph below. Taking it inside
+        // the loop would give each graph its own dice — see next_batch_seed.
+        let seed = self.next_batch_seed();
+
+        graphs
+            .par_iter()
+            .map(|graph| {
+                let epidemics = simulate_epidemics(graph, &self.params, seed);
+
+                let mut total = 0.0;
+                for epidemic in &epidemics {
+                    total += read(epidemic);
+                }
+                total / epidemics.len() as f64
+            })
+            .collect()
     }
 }
 
-/// Total ever-infected, averaged over the evaluation's epidemics. **Maximized.**
+/// Turn a run seed and a batch number into that batch's seed.
+///
+/// SplitMix64: step a large odd constant `counter` times, then scramble. Every
+/// pair gives a different, well-spread `u64`, which is all this needs — the
+/// result seeds a real generator and is never used as randomness itself.
+/// (`wrapping_*` lets the arithmetic overflow and wrap instead of panicking.)
+///
+/// **Not `run_seed ^ counter`** (§8.1): neighbouring run seeds would collide
+/// across batch numbers, so two replicates would replay each other's epidemics
+/// one batch apart. See `decisions.md` 2026-08-06.
+fn mix_seed(run_seed: u64, counter: u64) -> u64 {
+    let mut z = run_seed.wrapping_add(counter.wrapping_mul(0x9E37_79B9_7F4A_7C15));
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// Total ever-infected, averaged over the batch's epidemics. **Maximized.**
 pub struct EpiSpread {
     scorer: EpidemicScorer,
 }
 
 impl EpiSpread {
     /// Build the objective from its epidemic sampling parameters.
-    pub fn new(params: SirBatchParams, run_seed: u64) -> Self {
+    pub fn new(params: SirSampleParams, run_seed: u64) -> Self {
         Self {
             scorer: EpidemicScorer::new(params, run_seed),
         }
@@ -204,7 +287,13 @@ impl EpiSpread {
 
 impl Fitness for EpiSpread {
     fn evaluate(&self, graph: &Graph) -> f64 {
-        self.scorer.mean(graph, |run| run.spread as f64)
+        self.scorer
+            .mean_batch(slice::from_ref(graph), |epidemic| epidemic.spread as f64)[0]
+    }
+
+    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+        self.scorer
+            .mean_batch(graphs, |epidemic| epidemic.spread as f64)
     }
 
     fn direction(&self) -> Direction {
@@ -222,7 +311,7 @@ pub struct EpiLength {
 
 impl EpiLength {
     /// Build the objective from its epidemic sampling parameters.
-    pub fn new(params: SirBatchParams, run_seed: u64) -> Self {
+    pub fn new(params: SirSampleParams, run_seed: u64) -> Self {
         Self {
             scorer: EpidemicScorer::new(params, run_seed),
         }
@@ -231,7 +320,13 @@ impl EpiLength {
 
 impl Fitness for EpiLength {
     fn evaluate(&self, graph: &Graph) -> f64 {
-        self.scorer.mean(graph, |run| run.length as f64)
+        self.scorer
+            .mean_batch(slice::from_ref(graph), |epidemic| epidemic.length as f64)[0]
+    }
+
+    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+        self.scorer
+            .mean_batch(graphs, |epidemic| epidemic.length as f64)
     }
 
     fn direction(&self) -> Direction {
@@ -241,9 +336,9 @@ impl Fitness for EpiLength {
 
 /// RMSE between the epidemic profile and a target profile. **Minimized.**
 ///
-/// The target is a vector of newly-infected counts, one per timestep. A run's
-/// profile starts with patient zero and ends with a terminating zero (§5.2), so
-/// a target captured from older output will not line up element for element.
+/// The target is newly-infected counts, one per timestep. An epidemic's
+/// profile starts with patient zero and ends with a terminating zero (§5.2),
+/// so a target captured from older output will not line up element for element.
 pub struct EpiProfMatch {
     scorer: EpidemicScorer,
     target: Vec<f64>,
@@ -254,13 +349,11 @@ impl EpiProfMatch {
     ///
     /// # Errors
     ///
-    /// If `target` is empty or holds a non-finite value. Either would put a
-    /// `NaN` into every score, which the [`Fitness`] contract forbids.
-    ///
-    /// `&'static str`: a fixed string literal baked into the binary, used
-    /// here as a lightweight error type.
+    /// If `target` is empty or holds a non-finite value — either would put a
+    /// `NaN` into every score, which [`Fitness`] forbids. (`&'static str` is a
+    /// fixed string literal, used here as a lightweight error type.)
     pub fn new(
-        params: SirBatchParams,
+        params: SirSampleParams,
         run_seed: u64,
         target: Vec<f64>,
     ) -> Result<Self, &'static str> {
@@ -276,25 +369,24 @@ impl EpiProfMatch {
         })
     }
 
-    /// RMSE of one epidemic against the target.
+    /// RMSE of one epidemic against the target — this objective's reading.
     ///
-    /// **The target sets the comparison, not the run** (§5.2, matching
-    /// `legacy/main.cpp:545-553`). The consequence is asymmetric and worth
-    /// knowing when reading a score: a run that ends early is penalised for the
-    /// whole remaining target, while a run that outlasts the target is not
-    /// penalised at all. So this rewards *matching or exceeding* the target's
-    /// tail, not matching it exactly. See `decisions.md` 2026-08-04 18:13.
-    fn rmse(&self, run: &SirRun) -> f64 {
+    /// A method rather than an inline closure only because it is too long to
+    /// read twice; the other two objectives inline theirs.
+    ///
+    /// **The target sets the comparison, not the epidemic** (§5.2, matching
+    /// `legacy/main.cpp:545-553`), so the scoring is asymmetric: an epidemic
+    /// that ends early is penalised for the whole remaining target, while one
+    /// that outlasts the target is not penalised at all. This rewards matching
+    /// *or exceeding* the tail. See `decisions.md` 2026-08-04 18:13.
+    fn rmse(&self, epidemic: &SirRun) -> f64 {
         let mut total = 0.0;
 
         for (step, wanted) in self.target.iter().enumerate() {
-            // Past the end of the run, nobody was newly infected: the epidemic
-            // had already finished. Any surplus run beyond the target is never
-            // visited, so overshoot costs nothing.
-            // .get(step) is bounds-checked (None past the end, no panic);
-            // .copied() pulls the value out of the reference; .unwrap_or(0)
-            // supplies the zero explained above.
-            let actual = run.profile.get(step).copied().unwrap_or(0) as f64;
+            // Past the end of the epidemic nobody was newly infected, so a
+            // missing step counts as zero. `.get` returns None instead of
+            // panicking there, and `.unwrap_or(0)` supplies that zero.
+            let actual = epidemic.profile.get(step).copied().unwrap_or(0) as f64;
             total += (actual - wanted).powi(2);
         }
 
@@ -304,7 +396,13 @@ impl EpiProfMatch {
 
 impl Fitness for EpiProfMatch {
     fn evaluate(&self, graph: &Graph) -> f64 {
-        self.scorer.mean(graph, |run| self.rmse(run))
+        self.scorer
+            .mean_batch(slice::from_ref(graph), |epidemic| self.rmse(epidemic))[0]
+    }
+
+    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+        self.scorer
+            .mean_batch(graphs, |epidemic| self.rmse(epidemic))
     }
 }
 
@@ -326,10 +424,29 @@ mod tests {
 
     /// Rate 1.0 from a pinned patient zero, so every epidemic is identical and
     /// no test depends on the seed.
-    fn certain_batch(num_epidemics: usize) -> SirBatchParams {
-        SirBatchParams {
+    fn certain_batch(num_epidemics: usize) -> SirSampleParams {
+        SirSampleParams {
             epidemic: SirParams {
                 infection_rate: 1.0,
+                patient_zero: Some(0),
+            },
+            num_epidemics,
+            min_epidemic_length: 1,
+            max_epidemic_retries: 1,
+        }
+    }
+
+    /// A rate whose epidemics genuinely vary with the seed. The seeding tests
+    /// need that — under `certain_batch` every epidemic is identical, so they
+    /// would pass no matter how the seeding worked.
+    ///
+    /// 0.15 on `complete_graph(12)` is picked from measurement, not taste:
+    /// higher and every epidemic reaches all 12 nodes, lower and the average
+    /// over `num_epidemics` keeps landing on the same value.
+    fn chancy_batch(num_epidemics: usize) -> SirSampleParams {
+        SirSampleParams {
+            epidemic: SirParams {
+                infection_rate: 0.15,
                 patient_zero: Some(0),
             },
             num_epidemics,
@@ -374,49 +491,49 @@ mod tests {
     #[test]
     fn epi_prof_match_minimizes_and_scores_an_exact_match_at_zero() {
         let objective = profile_match(vec![1.0, 1.0, 1.0, 0.0]);
-        let run = SirRun {
+        let epidemic = SirRun {
             length: 3,
             spread: 3,
             profile: vec![1, 1, 1, 0],
         };
 
-        assert_eq!(objective.rmse(&run), 0.0);
+        assert_eq!(objective.rmse(&epidemic), 0.0);
         assert_eq!(objective.direction(), Direction::Minimize);
     }
 
-    /// The missing days count as zero newly infected, not as absent.
+    /// The missing steps count as zero newly infected, not as absent.
     #[test]
-    fn a_run_shorter_than_the_target_is_penalised_for_the_remainder() {
+    fn an_epidemic_shorter_than_the_target_is_penalised_for_the_remainder() {
         let objective = profile_match(vec![1.0, 2.0, 3.0, 4.0]);
-        let run = SirRun {
+        let epidemic = SirRun {
             length: 1,
             spread: 3,
             profile: vec![1, 2],
         };
 
         // Squared error 0 + 0 + 9 + 16 = 25, over 4 steps, square-rooted.
-        assert_eq!(objective.rmse(&run), 2.5);
+        assert_eq!(objective.rmse(&epidemic), 2.5);
     }
 
     /// The deliberate asymmetry: overshoot is free — see `rmse`.
     #[test]
-    fn a_run_longer_than_the_target_is_not_penalised_for_the_surplus() {
+    fn an_epidemic_longer_than_the_target_is_not_penalised_for_the_surplus() {
         let objective = profile_match(vec![1.0, 2.0]);
-        let short_run = SirRun {
+        let short = SirRun {
             length: 1,
             spread: 3,
             profile: vec![1, 2],
         };
-        let long_run = SirRun {
+        let long = SirRun {
             length: 3,
             spread: 17,
             profile: vec![1, 2, 5, 9, 0],
         };
 
-        assert_eq!(objective.rmse(&short_run), 0.0);
+        assert_eq!(objective.rmse(&short), 0.0);
         assert_eq!(
-            objective.rmse(&long_run),
-            objective.rmse(&short_run),
+            objective.rmse(&long),
+            objective.rmse(&short),
             "the surplus beyond the target is ignored entirely",
         );
     }
@@ -426,13 +543,13 @@ mod tests {
         // One matching step out of four. Were the divisor the overlap (2), the
         // score would be sqrt(9/2); it must be sqrt(9/4).
         let objective = profile_match(vec![1.0, 3.0, 0.0, 0.0]);
-        let run = SirRun {
+        let epidemic = SirRun {
             length: 1,
             spread: 1,
             profile: vec![1, 0],
         };
 
-        assert_eq!(objective.rmse(&run), 1.5);
+        assert_eq!(objective.rmse(&epidemic), 1.5);
     }
 
     #[test]
@@ -461,22 +578,22 @@ mod tests {
     }
 
     #[test]
-    fn minimize_leaves_a_score_untouched() {
+    fn minimizing_leaves_the_oriented_value_equal_to_the_original() {
         assert_eq!(Direction::Minimize.orient(2.5), 2.5);
         assert_eq!(Direction::Minimize.orient(-2.5), -2.5);
         assert_eq!(Direction::Minimize.orient(f64::INFINITY), f64::INFINITY);
     }
 
     #[test]
-    fn maximize_flips_a_score_so_the_engine_can_minimize_it() {
+    fn maximizing_makes_the_oriented_value_the_negated_original() {
         assert_eq!(Direction::Maximize.orient(2.5), -2.5);
         assert_eq!(Direction::Maximize.orient(f64::INFINITY), f64::NEG_INFINITY);
-        // A better score must come out lower.
+        // A better original must give a lower oriented value.
         assert!(Direction::Maximize.orient(9.0) < Direction::Maximize.orient(1.0));
     }
 
     #[test]
-    fn orient_is_its_own_inverse_so_reporting_round_trips() {
+    fn orienting_an_oriented_value_gives_back_the_original() {
         for direction in [Direction::Minimize, Direction::Maximize] {
             for value in [0.0, 1.5, -7.25, f64::MAX, f64::INFINITY] {
                 assert_eq!(direction.orient(direction.orient(value)), value);
@@ -520,5 +637,195 @@ mod tests {
             scores[0].is_nan(),
             "negated NaN should sort first, got {scores:?}",
         );
+    }
+
+    /// Every pair of nodes joined, at multiplicity 1.
+    fn complete_graph(num_nodes: usize) -> Graph {
+        let mut graph = Graph::new(num_nodes, 1);
+        for from in 0..num_nodes {
+            for to in (from + 1)..num_nodes {
+                graph.set_edge(from, to, 1);
+            }
+        }
+        graph
+    }
+
+    /// A batch of `count` identical graphs.
+    ///
+    /// Complete rather than a path: at rate 0.5 a path's spread barely varies,
+    /// and averaging over the epidemics quantizes two different batches onto
+    /// the same score often enough to make a difference test useless.
+    fn identical_batch(count: usize) -> Vec<Graph> {
+        let mut graphs = Vec::with_capacity(count);
+        for _ in 0..count {
+            graphs.push(complete_graph(12));
+        }
+        graphs
+    }
+
+    #[test]
+    fn one_batch_ticks_the_counter_once_however_many_graphs_it_holds() {
+        let objective = EpiSpread::new(chancy_batch(3), 2026);
+
+        objective.evaluate_population(&identical_batch(6));
+
+        assert_eq!(
+            objective.scorer.batches_scored.load(Ordering::Relaxed),
+            1,
+            "the counter must advance per batch, not per graph",
+        );
+    }
+
+    #[test]
+    fn scoring_one_graph_ticks_the_counter_once_like_any_other_batch() {
+        let objective = EpiSpread::new(chancy_batch(3), 2026);
+
+        objective.evaluate(&complete_graph(12));
+
+        assert_eq!(
+            objective.scorer.batches_scored.load(Ordering::Relaxed),
+            1,
+            "a single graph is a batch of one, not a special case",
+        );
+    }
+
+    /// `evaluate` and `evaluate_population` must read the same thing off an
+    /// epidemic. Each objective writes that reading twice, once per entry
+    /// point, so this is what catches the two drifting apart.
+    #[test]
+    fn both_entry_points_use_the_same_reading() {
+        let graph = path_graph(6);
+
+        // certain_batch is deterministic, so the two differing seeds cannot
+        // account for any difference in the scores.
+        let spread = EpiSpread::new(certain_batch(2), 7);
+        assert_eq!(
+            spread.evaluate(&graph),
+            spread.evaluate_population(slice::from_ref(&graph))[0],
+        );
+
+        let length = EpiLength::new(certain_batch(2), 7);
+        assert_eq!(
+            length.evaluate(&graph),
+            length.evaluate_population(slice::from_ref(&graph))[0],
+        );
+
+        let profile = profile_match(vec![1.0, 1.0, 1.0]);
+        assert_eq!(
+            profile.evaluate(&graph),
+            profile.evaluate_population(slice::from_ref(&graph))[0],
+        );
+    }
+
+    #[test]
+    fn every_graph_in_one_batch_faces_the_same_epidemics() {
+        let objective = EpiSpread::new(chancy_batch(3), 2026);
+
+        let scores = objective.evaluate_population(&identical_batch(6));
+
+        for (i, score) in scores.iter().enumerate() {
+            assert_eq!(
+                *score, scores[0],
+                "graph {i} of the batch drew different dice from graph 0",
+            );
+        }
+    }
+
+    #[test]
+    fn consecutive_batches_face_different_epidemics() {
+        let objective = EpiSpread::new(chancy_batch(3), 2026);
+        let population = identical_batch(6);
+
+        let first = objective.evaluate_population(&population);
+        let second = objective.evaluate_population(&population);
+
+        assert_ne!(
+            first, second,
+            "the dice never changed, so the run would optimize against one \
+             frozen sample of the disease",
+        );
+    }
+
+    /// Issue #18's own verification: one seed reproduces a whole run.
+    ///
+    /// Two objectives built identically score the same batches in the same
+    /// order, and must agree score for score — not just on the first batch,
+    /// which a frozen seed would also pass, but across a sequence long enough
+    /// that the counter has advanced several times.
+    #[test]
+    fn the_same_run_seed_replays_every_batch_of_a_run() {
+        let population = identical_batch(4);
+
+        let first_run = EpiSpread::new(chancy_batch(3), 4242);
+        let second_run = EpiSpread::new(chancy_batch(3), 4242);
+
+        for batch in 0..5 {
+            assert_eq!(
+                first_run.evaluate_population(&population),
+                second_run.evaluate_population(&population),
+                "batch {batch} differed between two runs at the same seed",
+            );
+        }
+
+        // And a different run seed must not replay it, or replicates would be
+        // copies of each other rather than independent samples (§8.1). Both
+        // sides are fresh, so this compares first batch against first batch.
+        let this_seed = EpiSpread::new(chancy_batch(3), 4242);
+        let other_seed = EpiSpread::new(chancy_batch(3), 4243);
+        assert_ne!(
+            this_seed.evaluate_population(&population),
+            other_seed.evaluate_population(&population),
+        );
+    }
+
+    /// The first `count` batch seeds a fresh scorer at `run_seed` hands out.
+    fn first_batch_seeds(run_seed: u64, count: usize) -> Vec<u64> {
+        let scorer = EpidemicScorer::new(certain_batch(1), run_seed);
+
+        let mut seeds = Vec::with_capacity(count);
+        for _ in 0..count {
+            seeds.push(scorer.next_batch_seed());
+        }
+        seeds
+    }
+
+    #[test]
+    fn one_run_seed_always_produces_the_same_batch_seed_sequence() {
+        assert_eq!(
+            first_batch_seeds(2026, 4),
+            first_batch_seeds(2026, 4),
+            "the same run seed must reproduce a run exactly",
+        );
+    }
+
+    #[test]
+    fn consecutive_batches_get_different_seeds() {
+        let seeds = first_batch_seeds(2026, 4);
+
+        for (i, seed) in seeds.iter().enumerate() {
+            for (j, other) in seeds.iter().enumerate().skip(i + 1) {
+                assert_ne!(
+                    seed, other,
+                    "batches {i} and {j} share a seed, so the run would \
+                     optimize against one frozen sample of the disease",
+                );
+            }
+        }
+    }
+
+    /// The property that rules out `run_seed ^ counter`: under xor, run seed
+    /// `n`'s batch 1 is run seed `n + 1`'s batch 0, so two replicates replay
+    /// each other's epidemics one batch out of step.
+    #[test]
+    fn neighbouring_run_seeds_share_no_batch_seed() {
+        let mine = first_batch_seeds(2026, 4);
+        let neighbour = first_batch_seeds(2027, 4);
+
+        for (i, seed) in mine.iter().enumerate() {
+            assert!(
+                !neighbour.contains(seed),
+                "batch {i} of run seed 2026 also appears in run seed 2027",
+            );
+        }
     }
 }

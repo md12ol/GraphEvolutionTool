@@ -1,6 +1,7 @@
 ---
 name: done
 description: Close out the finished task — run a final save, then archive .claude/work/current/ to .claude/work/archive/<YYYY-MM>_<slug>/ and start a clean current/. Use when the user says a task is done, finished, wrapped up, or wants to start a new task.
+model: sonnet
 ---
 
 # Done

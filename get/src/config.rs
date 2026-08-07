@@ -139,7 +139,7 @@ pub enum FitnessConfig {
 /// one is the simulator's own two-field struct (`infection_rate`,
 /// `patient_zero`) and is deliberately independent of the config schema; this
 /// one is the deserializable `[fitness]` block and also carries the batch
-/// settings. This type maps onto [`crate::sir::SirBatchParams`], not onto its
+/// settings. This type maps onto [`crate::sir::SirSampleParams`], not onto its
 /// namesake.
 ///
 /// **No seed appears here.** One master seed is supplied to the Python `run`

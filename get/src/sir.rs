@@ -11,7 +11,7 @@
 //! amendment of 2026-08-04. Two things are genuinely ours: the draw is written
 //! `1 - (1 - rate)^k` rather than `1 - exp(k · ln(1 - alpha))`, which avoids a
 //! `ln(0)` at `infection_rate = 1.0`, and the RNG is passed in rather than
-//! taken from a global, which is what lets one seed drive a whole batch.
+//! taken from a global, which is what lets one seed drive a whole batch of graphs.
 //!
 //! The model is SIR with a **one-timestep infectious period**. A node infected
 //! during a step spends the *following* step infectious, transmitting to each
@@ -40,9 +40,9 @@ pub struct SirParams {
     pub patient_zero: Option<usize>,
 }
 
-/// How one evaluation samples its epidemics (spec §5.2).
+/// How one graph's epidemics are sampled (spec §5.2).
 ///
-/// An evaluation averages over `num_epidemics` outbreaks, and re-rolls ones
+/// A graph's score averages over `num_epidemics` outbreaks, and re-rolls ones
 /// that fizzle — a short outbreak says the dice went badly, not that the
 /// network is poor.
 ///
@@ -51,10 +51,10 @@ pub struct SirParams {
 /// so it is not a substitute for raising `num_epidemics`. Kept for
 /// comparability with the archived C++ results.
 #[derive(Clone, Debug, PartialEq)]
-pub struct SirBatchParams {
+pub struct SirSampleParams {
     /// The epidemic itself — rate and patient zero.
     pub epidemic: SirParams,
-    /// How many outbreaks one evaluation averages over. At least 1.
+    /// How many outbreaks one graph's score averages over. At least 1.
     pub num_epidemics: usize,
     /// Outbreaks shorter than this are re-rolled. C++ default 3; **set to 1 to
     /// disable the re-roll**, since every epidemic has `length >= 1`.
@@ -94,20 +94,20 @@ pub fn epidemic_seeds(
     seeds
 }
 
-/// Run one evaluation's epidemics over `graph`, re-rolling short ones.
+/// Run one graph's epidemics, re-rolling short ones.
 ///
 /// This is what an objective calls; each of the three SIR objectives is just a
-/// reading over the runs it returns.
+/// reading over the epidemics it returns.
 ///
 /// The epidemics run **sequentially** (§5.2) — parallelism comes from the
-/// replicate and population levels above.
+/// replicate and graph-batch levels above.
 ///
 /// # Panics
 ///
 /// If `num_epidemics` or `max_epidemic_retries` is zero. Config validation
-/// rejects both (§7), and an empty batch would leave the objective averaging
+/// rejects both (§7), and no epidemics at all would leave the objective averaging
 /// nothing, producing the `NaN` the `Fitness` contract forbids.
-pub fn batch_epidemics(graph: &Graph, params: &SirBatchParams, batch_seed: u64) -> Vec<SirRun> {
+pub fn simulate_epidemics(graph: &Graph, params: &SirSampleParams, batch_seed: u64) -> Vec<SirRun> {
     assert!(
         params.num_epidemics > 0,
         "num_epidemics must be at least 1; spec 7 validates this at config load",
@@ -122,7 +122,7 @@ pub fn batch_epidemics(graph: &Graph, params: &SirBatchParams, batch_seed: u64) 
         params.num_epidemics,
         params.max_epidemic_retries,
     );
-    let mut runs = Vec::with_capacity(params.num_epidemics);
+    let mut epidemics = Vec::with_capacity(params.num_epidemics);
 
     for epidemic in 0..params.num_epidemics {
         // Starts empty and is filled on every attempt; the .expect() below is
@@ -143,10 +143,10 @@ pub fn batch_epidemics(graph: &Graph, params: &SirBatchParams, batch_seed: u64) 
             }
         }
 
-        runs.push(kept.expect("at least one attempt always runs"));
+        epidemics.push(kept.expect("at least one attempt always runs"));
     }
 
-    runs
+    epidemics
 }
 
 /// Everything the three SIR objectives read from one epidemic.
@@ -476,19 +476,19 @@ mod tests {
         );
     }
 
-    // --- The batch runner: position-indexed seeding and the re-roll ---------
+    // --- The epidemic runner: position-indexed seeding and the re-roll ------
 
     /// Two connected nodes at rate 0.5: an epidemic is `length == 2` when it
     /// transmits and `length == 1` when it does not. That split is what lets
     /// these tests tell *which* attempt was kept.
-    fn coin_flip_batch(
+    fn coin_flip_sample(
         num_epidemics: usize,
         min_len: usize,
         retries: usize,
-    ) -> (Graph, SirBatchParams) {
+    ) -> (Graph, SirSampleParams) {
         let mut graph = Graph::new(2, 1);
         graph.set_edge(0, 1, 1);
-        let params = SirBatchParams {
+        let params = SirSampleParams {
             epidemic: SirParams {
                 infection_rate: 0.5,
                 patient_zero: Some(0),
@@ -501,13 +501,13 @@ mod tests {
     }
 
     /// Where epidemic `i` attempt `a` sits in the seed pool.
-    fn slot(params: &SirBatchParams, epidemic: usize, attempt: usize) -> usize {
+    fn slot(params: &SirSampleParams, epidemic: usize, attempt: usize) -> usize {
         epidemic * params.max_epidemic_retries + attempt
     }
 
-    /// The epidemic one pool seed produces — what `batch_epidemics` must be
+    /// The epidemic one pool seed produces — what `simulate_epidemics` must be
     /// shown to have used.
-    fn run_from_seed(graph: &Graph, params: &SirBatchParams, seed: u64) -> SirRun {
+    fn run_from_seed(graph: &Graph, params: &SirSampleParams, seed: u64) -> SirRun {
         sir_sim(
             graph,
             &params.epidemic,
@@ -529,10 +529,10 @@ mod tests {
 
     #[test]
     fn each_epidemic_takes_its_own_position_in_the_pool() {
-        let (graph, params) = coin_flip_batch(4, 1, 5);
+        let (graph, params) = coin_flip_sample(4, 1, 5);
         let seeds = epidemic_seeds(2026, params.num_epidemics, params.max_epidemic_retries);
 
-        let runs = batch_epidemics(&graph, &params, 2026);
+        let runs = simulate_epidemics(&graph, &params, 2026);
 
         assert_eq!(runs.len(), 4, "one run per epidemic");
         for (epidemic, run) in runs.iter().enumerate() {
@@ -544,12 +544,12 @@ mod tests {
     #[test]
     fn two_graphs_under_one_batch_seed_face_an_identical_pool() {
         // Different graphs, so the outcomes differ; the dice must not.
-        let (pair, params) = coin_flip_batch(6, 1, 5);
+        let (pair, params) = coin_flip_sample(6, 1, 5);
         let path = path_graph(5);
         let seeds = epidemic_seeds(4242, params.num_epidemics, params.max_epidemic_retries);
 
-        let pair_runs = batch_epidemics(&pair, &params, 4242);
-        let path_runs = batch_epidemics(&path, &params, 4242);
+        let pair_runs = simulate_epidemics(&pair, &params, 4242);
+        let path_runs = simulate_epidemics(&path, &params, 4242);
 
         for epidemic in 0..params.num_epidemics {
             let seed = seeds[slot(&params, epidemic, 0)];
@@ -564,25 +564,25 @@ mod tests {
 
     #[test]
     fn the_same_batch_seed_replays_the_same_epidemics() {
-        let (graph, params) = coin_flip_batch(8, 3, 4);
+        let (graph, params) = coin_flip_sample(8, 3, 4);
 
         assert_eq!(
-            batch_epidemics(&graph, &params, 7),
-            batch_epidemics(&graph, &params, 7),
+            simulate_epidemics(&graph, &params, 7),
+            simulate_epidemics(&graph, &params, 7),
         );
         assert_ne!(
-            batch_epidemics(&graph, &params, 7),
-            batch_epidemics(&graph, &params, 8),
+            simulate_epidemics(&graph, &params, 7),
+            simulate_epidemics(&graph, &params, 8),
             "a different batch seed is a different set of dice",
         );
     }
 
     #[test]
     fn a_min_length_of_one_never_rerolls() {
-        let (graph, params) = coin_flip_batch(20, 1, 5);
+        let (graph, params) = coin_flip_sample(20, 1, 5);
         let seeds = epidemic_seeds(11, params.num_epidemics, params.max_epidemic_retries);
 
-        let runs = batch_epidemics(&graph, &params, 11);
+        let runs = simulate_epidemics(&graph, &params, 11);
 
         for (epidemic, run) in runs.iter().enumerate() {
             let first_attempt = run_from_seed(&graph, &params, seeds[slot(&params, epidemic, 0)]);
@@ -598,10 +598,10 @@ mod tests {
     fn an_unreachable_min_length_exhausts_the_retries_and_keeps_the_last() {
         // `length` is at most 2 here, so nothing ever satisfies 3 and every
         // epidemic runs all five attempts. The kept run must be the last.
-        let (graph, params) = coin_flip_batch(12, 3, 5);
+        let (graph, params) = coin_flip_sample(12, 3, 5);
         let seeds = epidemic_seeds(5150, params.num_epidemics, params.max_epidemic_retries);
 
-        let runs = batch_epidemics(&graph, &params, 5150);
+        let runs = simulate_epidemics(&graph, &params, 5150);
 
         for (epidemic, run) in runs.iter().enumerate() {
             let last = slot(&params, epidemic, params.max_epidemic_retries - 1);
@@ -620,10 +620,10 @@ mod tests {
 
     #[test]
     fn the_reroll_stops_on_the_first_long_enough_attempt() {
-        let (graph, params) = coin_flip_batch(12, 2, 5);
+        let (graph, params) = coin_flip_sample(12, 2, 5);
         let seeds = epidemic_seeds(31337, params.num_epidemics, params.max_epidemic_retries);
 
-        let runs = batch_epidemics(&graph, &params, 31337);
+        let runs = simulate_epidemics(&graph, &params, 31337);
 
         let mut stopped_early = 0;
         for (epidemic, run) in runs.iter().enumerate() {
@@ -653,16 +653,16 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "num_epidemics must be at least 1")]
-    fn a_batch_of_no_epidemics_is_rejected_rather_than_averaged() {
-        let (graph, params) = coin_flip_batch(0, 1, 5);
-        batch_epidemics(&graph, &params, 1);
+    fn no_epidemics_at_all_is_rejected_rather_than_averaged() {
+        let (graph, params) = coin_flip_sample(0, 1, 5);
+        simulate_epidemics(&graph, &params, 1);
     }
 
     #[test]
     #[should_panic(expected = "max_epidemic_retries must be at least 1")]
-    fn a_batch_with_no_attempts_is_rejected() {
-        let (graph, params) = coin_flip_batch(4, 1, 0);
-        batch_epidemics(&graph, &params, 1);
+    fn no_attempts_at_all_is_rejected() {
+        let (graph, params) = coin_flip_sample(4, 1, 0);
+        simulate_epidemics(&graph, &params, 1);
     }
 
     /// Zero here means *no epidemic existed*, not *nobody was infected* — since
