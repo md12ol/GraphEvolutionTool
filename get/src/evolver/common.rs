@@ -464,6 +464,62 @@ mod tests {
         assert_eq!(best, -4.0);
     }
 
+    /// Scores by node count, but counts the batches it was handed rather than
+    /// the graphs — the one number that distinguishes a forwarded batched call
+    /// from the trait's per-graph default.
+    struct CountingBatches {
+        /// Shared, because the objective is moved into the box and the test
+        /// still has to read the count back out.
+        batches: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl Fitness for CountingBatches {
+        fn evaluate(&self, graph: &Graph) -> f64 {
+            graph.num_nodes as f64
+        }
+
+        fn direction(&self) -> Direction {
+            Direction::Maximize
+        }
+
+        fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+            self.batches
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+            let mut scores = Vec::with_capacity(graphs.len());
+            for graph in graphs {
+                scores.push(graph.num_nodes as f64);
+            }
+            scores
+        }
+    }
+
+    #[test]
+    fn a_boxed_objective_keeps_its_batched_override_through_express_and_score() {
+        // The engine scores through `Box<dyn Fitness>` once the config layer
+        // erases the objective (§8), so the box has to reach the objective's own
+        // `evaluate_population` — not the trait default, which would call Python
+        // once per individual from inside a rayon closure. Tested here rather
+        // than in `fitness.rs` because this is the path the engine actually
+        // takes: one call, through the scoring gate.
+        let batches = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let boxed: Box<dyn Fitness> = Box::new(CountingBatches {
+            batches: std::sync::Arc::clone(&batches),
+        });
+
+        let (_, fitnesses) = express_and_score(&population(5), &(), &boxed);
+
+        // Maximize, so the oriented values are negated node counts 1..=5. Both
+        // halves matter: the values prove `direction` was forwarded, the count
+        // proves `evaluate_population` was.
+        assert_eq!(fitnesses, vec![-1.0, -2.0, -3.0, -4.0, -5.0]);
+        assert_eq!(
+            batches.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "five graphs should have been scored in one batched call",
+        );
+    }
+
     #[test]
     fn express_and_score_of_an_empty_population_yields_empty_vectors() {
         let (graphs, fitnesses) =

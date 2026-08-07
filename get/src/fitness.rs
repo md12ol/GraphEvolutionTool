@@ -136,6 +136,48 @@ pub trait Fitness: Send + Sync {
     }
 }
 
+/// A boxed objective is an objective.
+///
+/// # Why this exists
+///
+/// The config layer erases its fitness variant to one `Box<dyn Fitness>` before
+/// instantiating anything, so that adding an objective is one match arm rather
+/// than one arm per strategy × genome combination (§1, §8). But `Evolver::run<F>`
+/// requires `F: Fitness`, and a `Box` holding a `Fitness` is not itself one
+/// until this says so. It has to live here beside the trait — the orphan rule
+/// rejects it anywhere else.
+///
+/// # Every method is forwarded, including the two with defaults
+///
+/// This is the whole point, and both omissions **compile**:
+///
+/// - **`evaluate_population`** — without it the box inherits the trait's
+///   default, which fans out over rayon and calls `evaluate` per graph. For a
+///   Python objective that means one GIL acquisition per individual from inside
+///   a rayon closure, which is what [`PyFitness`]'s batching exists to prevent —
+///   and which **deadlocks** rather than merely running slowly (measured
+///   2026-08-07; see [`PyFitness`]). For an epidemic objective it also re-seeds
+///   per graph, so scores stop being comparable within a batch.
+/// - **`direction`** — without it the box reports [`Direction::Minimize`]
+///   whatever it holds, so every maximizing objective runs the search backwards
+///   while looking merely unconverged.
+///
+/// Neither failure produces a compiler error, a panic, or a wrong-looking
+/// number, which is why `a_boxed_objective_forwards_every_method` exists.
+impl Fitness for Box<dyn Fitness> {
+    fn evaluate(&self, graph: &Graph) -> f64 {
+        (**self).evaluate(graph)
+    }
+
+    fn direction(&self) -> Direction {
+        (**self).direction()
+    }
+
+    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+        (**self).evaluate_population(graphs)
+    }
+}
+
 /// Runs the epidemics that every SIR objective scores (§5.2).
 ///
 /// The epidemic is the expensive part and all three objectives want the same
@@ -562,6 +604,70 @@ impl Fitness for PyFitness {
 mod tests {
     use super::*;
     use crate::sir::SirParams;
+
+    /// An objective that records the size of every batch handed to it, and
+    /// reports a non-default direction. Both are what a box must not lose.
+    struct Instrumented {
+        batch_sizes: std::sync::Arc<std::sync::Mutex<Vec<usize>>>,
+    }
+
+    impl Fitness for Instrumented {
+        fn evaluate(&self, graph: &Graph) -> f64 {
+            graph.num_nodes as f64
+        }
+
+        // Deliberately not Minimize: the box reports Minimize if `direction`
+        // is left unforwarded, so a default here would hide that.
+        fn direction(&self) -> Direction {
+            Direction::Maximize
+        }
+
+        fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+            self.batch_sizes
+                .lock()
+                .expect("no test panics while holding this")
+                .push(graphs.len());
+
+            let mut scores = Vec::with_capacity(graphs.len());
+            for graph in graphs {
+                scores.push(graph.num_nodes as f64);
+            }
+            scores
+        }
+    }
+
+    #[test]
+    fn a_boxed_objective_forwards_every_method_including_the_defaulted_ones() {
+        // The erasure in §8 hands the evolver a Box<dyn Fitness>. If the
+        // forwarding impl omits either defaulted method it still compiles, and
+        // both failures are silent: `direction` reports Minimize and runs the
+        // search backwards, `evaluate_population` reverts to the per-graph
+        // rayon fan-out that deadlocks a Python objective.
+        let batch_sizes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let boxed: Box<dyn Fitness> = Box::new(Instrumented {
+            batch_sizes: std::sync::Arc::clone(&batch_sizes),
+        });
+
+        assert_eq!(
+            boxed.direction(),
+            Direction::Maximize,
+            "the box reported its own default instead of the objective's direction",
+        );
+
+        let graphs = [path_graph(3), path_graph(5), path_graph(8)];
+        let scores = boxed.evaluate_population(&graphs);
+
+        assert_eq!(scores, vec![3.0, 5.0, 8.0]);
+        assert_eq!(
+            *batch_sizes.lock().unwrap(),
+            vec![3],
+            "the box fell back to the trait's per-graph default instead of \
+             forwarding to the objective's own batched override",
+        );
+
+        // And the required method, for completeness.
+        assert_eq!(boxed.evaluate(&path_graph(4)), 4.0);
+    }
 
     /// Compile `source` and return the callable named `name` from it.
     ///
