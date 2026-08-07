@@ -1194,3 +1194,44 @@ two methods that genuinely do different work is worth nothing, and it would have
 generational scores in exactly one place.
 **Affects:** `get/src/evolver/generational.rs` `advance_generation` and its caller in `run`.
 *#25 · recorded 2026-08-06 21:05 — James, during the generational implementation.*
+
+## 2026-08-07 — James — The clippy trap was retired with a successor, not deleted
+**Chose:** replaced the `cargo clippy -- -D warnings cannot pass on main` entry with a shorter one
+saying the opposite — the gate passes as of `94a4679`, so a warning is now yours — which keeps two
+things the old entry carried: the `git stash -u` contamination pitfall hit on #24, and the
+capture-the-baseline-before-editing recipe for the next time a non-empty baseline exists.
+**Why:** #25's plan said "drop the entry once the warnings are gone", and dropping it outright would
+have been the literal reading. But the entry's *exit condition* was about the claim in its title,
+not about everything written underneath it, and the stash pitfall is still true and still expensive
+— it is a property of `git stash -u` and this repo's `config.example.toml`, not of the dead-code
+warnings. Deleting a churn-list entry also deletes whatever knowledge accreted in it, and this one
+had accreted a technique from a different task.
+**Rejected:** (a) Deleting it as written — loses the pitfall, and leaves nothing recording that the
+gate flipped, so the next person diffing against a baseline has no way to know they need not. (b)
+Keeping it and appending "no longer true" — a trap whose title contradicts its body is worse than
+either, and `traps.md` is read by `/load` on every session.
+**Affects:** `.claude/work/traps.md`; the `Verify by:` of any future task that says "clippy passes".
+*#25 · recorded 2026-08-07 — James, at the `/done` gate for generational-evolver.*
+
+## Task complete: generational-evolver — 2026-08-07
+Archived to `.claude/work/archive/2026-08_generational-evolver/`. GitHub **#25** shipped as
+**PR #46** (`349399e`, `ab68796`, `a30422e`, `7de4a66` — 2 files, +414/−17 on the test commit alone),
+**merged** by Michael as `74de0b5` on 2026-08-07T14:51:59Z; issue #25 closed by the body's
+`Closes #25.` `GenerationalEvolver::run` and `advance_generation` are implemented over their
+`todo!()`s, `new` gained the `elite_count` backstop, and the two cleanups folded into the issue
+landed with them. 176 tests green on the merged tree — verified *after* merging with Michael's
+#18 rewrite of `fitness.rs`, not only on the branch.
+The clippy gate flipped with this task: `cargo clippy -p get --all-targets -- -D warnings` exits 0
+on `main` for the first time, because the two dead-code warnings every task since 2026-08-04 diffed
+against **were** this evolver's unbuilt shell. The trap that recorded them is retired, with a
+successor — see the entry above.
+Two sheet questions leave this task **unresolved and pointed at the joint meeting**: `collab.md`
+**#35** (§6.2's "track the best" versus the best-of-final-population that shipped — endorsed
+Michael's amend-the-sheet option) and **#36** (whether the two evolvers' `outcome` methods should
+share a helper in `common.rs`). Neither blocks anything; both are sheet or cross-file changes that
+one owner may not make alone.
+Carried forward, not resolved: `issues.md`'s `evaluate_population`/`SirRun` rename, unfiled and
+blocked on the same meeting; `collab.md` **#27** (`Swap`'s degree floor), still James's, fifth gate.
+**`hotfixes.md` is empty of live entries for the first time** — Michael's #18 removed the SIR
+batch-seed hotfix after six cycles of carrying it. Entries below this line belong to later tasks.
+*Task marker · generational-evolver · recorded 2026-08-07 — James, at `/done`.*

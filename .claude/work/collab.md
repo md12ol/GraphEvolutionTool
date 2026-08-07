@@ -609,6 +609,24 @@ it, or drop it yourself, no discussion needed.
 
 *#34 · raised 2026-08-07 16:52 — Michael, closing out #18.*
 
+**Agreed, and your lean is the right line, 2026-08-07 — James. Frontmatter yes, body no.** No
+objection to the sonnet pin itself; I have run `/load`, `/save` and `/done` under it this session
+and noticed nothing.
+
+The distinction that makes this workable is the one you already drew: **frontmatter changes what
+executes on my machine without my reading it, which is precisely rule 2's stated reason, while the
+body is prose we both read anyway.** `model:`, and any future `allowed-tools:` or hook-adjacent
+key, should take a PR. Rewording a step inside a skill should not — that would put a PR round-trip
+in front of typo fixes, and the rule would start being skipped, which is worse than not having it.
+
+I am not writing the `CLAUDE.md` amendment in this session, since it binds your practice as much as
+mine and the routing table is yours by authorship. If you write it, this reply is the agreement it
+can cite; the one thing worth spelling out in it is that the test is *"does this change what runs"*,
+not *"which directory is it in"* — otherwise the next person adds a fourth directory and we do this
+again.
+
+*(Reply inside #34 · 2026-08-07 — James, at the generational-evolver `/done` gate.)*
+
 ### 35. §6.2 says "track the best"; generational reports the best of the final population
 
 **Decide — I think your code is right and the sheet's wording is stale, but the sheet is the
@@ -646,6 +664,30 @@ The sentence in §6.2 predates the seeding work.
 Either of the first two is a sheet change, so it needs the meeting — same one #32 is waiting on.
 
 *#35 · raised 2026-08-07 16:59 — Michael, reviewing PR #46 after merging it.*
+
+**Endorsed, 2026-08-07 — James: your first option, amend §6.2. Taking this to the meeting as a
+position rather than a question.** I wrote the code and I reached the same conclusion from the other
+direction — `decisions.md` 2026-08-06 21:04 records best-of-final and the running-best it rejected,
+written before your review and independently of it. Two people arriving at the same reading from
+opposite ends is the best evidence either of us has that the sheet's sentence is what is stale.
+
+**On `elite_count = 0`, which is the honest part of your objection:** you are right that §7 permits
+it and that the two readings genuinely diverge there. I do not think that argues for a running best.
+It argues that a non-elitist generational GA *can* lose its best individual, which is a true fact
+about the algorithm and not a reporting bug — the run really did end without that individual, and a
+report claiming otherwise describes a population that no longer exists. What the amendment should
+say is that the reported best is the best of the **final** population for both strategies, and that
+at `elite_count = 0` this is a property of the configuration rather than of the report.
+
+You are right that my test name concedes the edge; `the_logged_best_never_worsens_while_an_elite_is_carried`
+is named that way because the guarantee genuinely is conditional, and I would rather the name say so
+than have it read as unconditional and be quietly wrong at zero.
+
+**Not endorsing your option 2** — requiring `elite_count >= 1` in §7 removes a legitimate
+configuration to avoid amending a sentence, and non-elitist generational is a real thing people run
+deliberately. Two sheet changes are on the table for the same meeting now, this and #36.
+
+*(Reply inside #35 · 2026-08-07 — James, at the generational-evolver `/done` gate.)*
 
 ## Settled
 
