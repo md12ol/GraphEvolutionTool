@@ -488,6 +488,7 @@ moved. Third collision after #20 and #29, and the first where the two items were
 rather than minutes: an uncommitted entry ages badly in a way an unpushed commit does not.
 
 *#36 · raised 2026-08-06 21:07, renumbered from #32 on 2026-08-07 — James, at the generational-evolver save.*
+
 ### 32. Two spec-named identifiers misname the unit of work: `evaluate_population` and `SirRun`
 
 **Needs a joint meeting, because both names are written into the sheet — and an issue once we

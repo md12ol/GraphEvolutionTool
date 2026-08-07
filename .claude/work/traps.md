@@ -183,34 +183,26 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   just misreporting it.
 - **Added:** 2026-08-04 — githubs-pr-object-lags-the-branch
 
-### `cargo clippy -- -D warnings` cannot pass on `main`, so it is not a usable gate
-- **Bites when:** your task's `Verify by:` says "clippy passes" and you treat the failure as a
-  regression you introduced. Issue **#22**'s verify-by says exactly that, so this will bite whoever
-  picks it up.
-- **Measured 2026-08-04 22:05 by Michael**, on branch `mdube_sir_objectives` and again on `main`
-  with the branch stashed. Both produce the identical two errors, and nothing else:
-  `fields shared, context, population, and history are never read` and
-  `method advance_generation is never used`, both in `get/src/evolver/generational.rs`.
-- **Why:** `-D warnings` promotes `dead_code` to an error, and `GenerationalEvolver` is a built
-  shell whose `run` is still unimplemented — issue **#25**, James's. The dead code is the unbuilt
-  work, so this clears when #25 lands and not before.
-- **Do this instead:** compare against the baseline rather than expecting zero.
-  `git stash -u && cargo clippy --manifest-path get/Cargo.toml --all-targets -- -D warnings; git stash pop`
-  and check your branch adds nothing new. Say so explicitly in the PR — "fails identically to
-  `main`" is a reviewable claim, "clippy passes" would be false.
-- **Cheaper and safer: capture the baseline BEFORE you edit anything**, while the tree is still
-  clean, and diff against the saved file at the end — no stash, no `stash pop` to forget. Added
-  2026-08-06 by James after doing it this way on #23:
+### `cargo clippy -- -D warnings` IS a usable gate now, so a failure is yours
+- **Bites when:** you carry forward the old habit of diffing clippy against a non-empty baseline and
+  treat leftover warnings as pre-existing. They are not any more — **a warning on `main` is one you
+  introduced.**
+- **Measured 2026-08-07 — James, on `main` at `94a4679`:** `cargo clippy -p get --all-targets --
+  -D warnings` exits 0. This **supersedes** the entry that stood here from 2026-08-04 to
+  2026-08-07, which said the gate could not pass because `GenerationalEvolver` was an unbuilt shell
+  emitting two `dead_code` warnings. Issue #25 built it (PR #46), and both warnings went with it,
+  exactly as that entry predicted they would.
+- **Do this instead:** just run the gate. `cargo clippy -p get --all-targets -- -D warnings`.
+- **If a non-empty baseline ever comes back** — another shell landing ahead of its implementation —
+  capture it on the clean tree *before* editing, and diff at the end. Do not use `git stash -u`
+  for this: on a task that also changed `config.example.toml`, stashing leaves an example the
+  stashed code cannot parse, so the "baseline" is contaminated by unrelated failures (hit on #24).
 
       cargo clippy -p get --all-targets 2>&1 | grep -E '^(warning|error)' | sort > /tmp/clippy_base.txt
       # ... do the work ...
       cargo clippy -p get --all-targets 2>&1 | grep -E '^(warning|error)' | sort | diff /tmp/clippy_base.txt -
 
-  This also sidesteps the stash pitfall #24 hit: `git stash -u` on a task that changed
-  `config.example.toml` as well as `get/src/` leaves an example the stashed code cannot parse, so
-  the "baseline" is contaminated by unrelated failures. Stashing is only safe when you stash
-  **every** path the task touched, and knowing that set is exactly what is easy to get wrong.
-- **Added:** 2026-08-04 — cargo-clippy-d-warnings-cannot-pass-on-main
+- **Added:** 2026-08-07 — cargo-clippy-d-warnings-is-a-usable-gate-now
 
 ### Union merge can SPLICE two entries together without duplicating a line, so `uniq -d` says clean
 - **Bites when:** you and the other owner each append a new item to `collab.md` (or `decisions.md`)
