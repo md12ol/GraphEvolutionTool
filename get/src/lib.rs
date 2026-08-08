@@ -13,7 +13,7 @@ use crate::config::{Config, FitnessConfig};
 use crate::fitness::{Direction, Fitness, PyFitness};
 use crate::py_config::{
     PyConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig, PyOperationWeights,
-    PySelectionConfig, PySirParams,
+    PySelectionConfig, PySirParams, config_error_to_py,
 };
 
 /// Python-facing entry point to the graph-evolution engine.
@@ -98,12 +98,12 @@ impl GraphEvolver {
             ))
         })?;
 
-        // `{err}` unadorned: `ConfigError`'s `Display` already opens with
-        // "invalid config:" and names the field and its constraint, which is
-        // what spec §7 says a bad config must reach the user as.
-        parsed
-            .validate()
-            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        // Reported through `config_error_to_py`, which rewrites the field name
+        // `validate` uses — spelled as it appears in the TOML — into the Python
+        // attribute path that produced it. The bare name is right for the file
+        // front end and unhelpful here, where the user never saw a document
+        // (spec §8).
+        parsed.validate().map_err(|err| config_error_to_py(&err))?;
 
         Ok(Self {
             config: parsed,
@@ -699,8 +699,9 @@ mod tests {
         };
 
         assert!(
-            message.contains("max_edge_multiplicity"),
-            "the error should name the offending field, got: {message}"
+            message.contains("config.max_edge_multiplicity"),
+            "the error should name the Python attribute path, not the bare TOML field, \
+             got: {message}"
         );
     }
 

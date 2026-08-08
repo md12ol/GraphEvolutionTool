@@ -390,6 +390,60 @@ impl PyConfig {
     }
 }
 
+/// The Python attribute path a validation field name corresponds to.
+///
+/// [`crate::config::Config::validate`] names the offending field as it appears
+/// in the TOML document, which is the right answer for the file front end and a
+/// poor one here: a user who wrote `SirParams(num_epidemics=0)` is told
+/// `num_epidemics` and left to work out which of the objects they assembled
+/// owns it. Spec §8 calls this out — errors referencing a document the user
+/// never wrote need mapping back to the attribute that produced them.
+///
+/// Returns `None` for a field with no Python equivalent, and the caller then
+/// falls back to the unmapped name rather than inventing a path. Today the only
+/// such field is `seed`, which `reject_fitness_seed` raises against raw TOML
+/// text and which this front end cannot produce — [`PyConfig`] has no seed to
+/// write (spec §7: one master seed, supplied to `run`).
+///
+/// Every name here is checked against `config.rs`'s actual `invalid(...)` calls
+/// by `every_validation_field_maps_to_a_python_attribute` below, so a check
+/// added there without a mapping here fails the suite rather than silently
+/// degrading to a bare field name.
+fn python_attribute_path(field: &str) -> Option<&'static str> {
+    match field {
+        // Directly on the config object.
+        "population_size" => Some("config.population_size"),
+        "max_edge_multiplicity" => Some("config.max_edge_multiplicity"),
+        "max_mutations" => Some("config.max_mutations"),
+        // On the strategy and selection objects.
+        "elite_count" => Some("config.evolution.elite_count"),
+        "tournament_size" => Some("config.selection.tournament_size"),
+        // On the genome object; each belongs to one variant.
+        "operation_weights" => Some("config.genome.operation_weights"),
+        "init_state" => Some("config.genome.init_state"),
+        // On the SIR block, which every epidemic objective reaches the same
+        // way even though it flattens into `[fitness]` in the document.
+        "num_epidemics" => Some("config.fitness.sir.num_epidemics"),
+        "min_epidemic_length" => Some("config.fitness.sir.min_epidemic_length"),
+        "max_epidemic_retries" => Some("config.fitness.sir.max_epidemic_retries"),
+        "patient_zero" => Some("config.fitness.sir.patient_zero"),
+        _ => None,
+    }
+}
+
+/// Report a [`crate::config::ConfigError`] to Python, naming the attribute that
+/// caused it wherever one can be identified.
+pub fn config_error_to_py(error: &crate::config::ConfigError) -> PyErr {
+    if let crate::config::ConfigError::Validation { field, constraint } = error
+        && let Some(path) = python_attribute_path(field)
+    {
+        return PyValueError::new_err(format!("invalid config: `{path}` {constraint}"));
+    }
+
+    // Anything else already reads correctly without a document to point at.
+    PyValueError::new_err(error.to_string())
+}
+
 /// A `usize` as a TOML integer.
 ///
 /// TOML integers are `i64`, so this is not infallible on a 64-bit `usize`, and
@@ -879,6 +933,122 @@ mod tests {
         round_trip(&mirror())
             .validate()
             .expect("a sane mirror should produce a valid config");
+    }
+
+    /// Every field name `config.rs` can raise, scraped from its own source.
+    ///
+    /// Reading the source rather than maintaining a second list by hand: a list
+    /// is exactly the thing that goes stale, and the failure it would hide is
+    /// silent — an unmapped field degrades to a bare name rather than erroring.
+    fn validation_fields_in_config_rs() -> Vec<String> {
+        let source = include_str!("config.rs");
+        let mut fields = Vec::new();
+
+        // Every check is `invalid("<field>", ...)`, sometimes wrapped onto the
+        // following line by rustfmt, so this takes the first string literal
+        // after each call rather than assuming it is on the same line.
+        for (index, _) in source.match_indices("invalid(") {
+            let rest = &source[index + "invalid(".len()..];
+            let Some(open) = rest.find('"') else {
+                continue;
+            };
+            // Nothing but whitespace may sit between the paren and the literal,
+            // or this is a call whose first argument is not the field name.
+            if !rest[..open].trim().is_empty() {
+                continue;
+            }
+            let after_open = &rest[open + 1..];
+            let Some(close) = after_open.find('"') else {
+                continue;
+            };
+            let field = after_open[..close].to_string();
+            if !fields.contains(&field) {
+                fields.push(field);
+            }
+        }
+        fields
+    }
+
+    #[test]
+    fn the_scraper_finds_the_checks_it_is_supposed_to() {
+        // Guards the test below: a scraper that silently matched nothing would
+        // make it pass while checking no fields at all.
+        let fields = validation_fields_in_config_rs();
+
+        assert!(
+            fields.len() >= 10,
+            "expected the scraper to find every validation field, found {}: {fields:?}",
+            fields.len()
+        );
+        for expected in ["max_edge_multiplicity", "init_state", "patient_zero"] {
+            assert!(
+                fields.iter().any(|field| field == expected),
+                "the scraper missed `{expected}`, so it is not reading config.rs correctly: \
+                 {fields:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_validation_field_maps_to_a_python_attribute() {
+        // `seed` is raised by `reject_fitness_seed` against raw TOML text and
+        // is unreachable from this front end, which has no seed to write. It is
+        // exempt by name so that adding any OTHER unmapped field still fails.
+        const NOT_REACHABLE_FROM_PYTHON: [&str; 1] = ["seed"];
+
+        let mut unmapped = Vec::new();
+        for field in validation_fields_in_config_rs() {
+            if NOT_REACHABLE_FROM_PYTHON.contains(&field.as_str()) {
+                continue;
+            }
+            if python_attribute_path(&field).is_none() {
+                unmapped.push(field);
+            }
+        }
+
+        assert!(
+            unmapped.is_empty(),
+            "these validation fields have no Python attribute path, so a user would be told a \
+             bare field name: {unmapped:?}. Add them to `python_attribute_path`."
+        );
+    }
+
+    #[test]
+    fn a_nested_field_is_reported_by_its_full_python_path() {
+        let mut config = mirror();
+        config.fitness = PyFitnessConfig::EpiSpread {
+            sir: PySirParams::new(0.05, 0, None, 3, 5),
+        };
+
+        let parsed = Config::from_toml_str(&config.to_toml().expect("renders")).expect("parses");
+        let message =
+            config_error_to_py(&parsed.validate().expect_err("zero epidemics is invalid"))
+                .to_string();
+
+        assert!(
+            message.contains("config.fitness.sir.num_epidemics"),
+            "the error should name the Python attribute path, got: {message}"
+        );
+        // The constraint itself must survive the rewrite.
+        assert!(
+            message.contains("must be at least 1"),
+            "the constraint should be kept intact, got: {message}"
+        );
+    }
+
+    #[test]
+    fn an_error_with_no_python_equivalent_keeps_its_original_wording() {
+        // A parse failure has no attribute to point at, and its message is
+        // already the useful one.
+        let error = Config::from_toml_str("this is not toml at all")
+            .expect_err("that is not a valid document");
+
+        let message = config_error_to_py(&error).to_string();
+
+        assert!(
+            message.contains("could not parse the config"),
+            "a parse error should pass through unchanged, got: {message}"
+        );
     }
 
     #[test]
