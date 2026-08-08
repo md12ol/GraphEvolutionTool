@@ -322,3 +322,49 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   script exits 0 on every failure path by design, so nothing downstream distinguishes "pulled",
   "refused", and "never ran".
 - **Added:** 2026-08-06 — dirty-tree-means-pull-main-does-not-pull
+
+### `cargo test` cannot link anything that touches Python, unless `extension-module` is off
+- **Bites when:** you write a `#[test]` that calls `Python::attach`/`with_gil`, or add any pyo3-based
+  test to `get/`. `extension-module` in `[dependencies]` tells pyo3 to leave the Python C API symbols
+  **unresolved** — correct for the built module, which the interpreter dlopens and supplies them for,
+  fatal for `cargo test`, which produces an ordinary binary with nothing to supply them. Failure is a
+  wall of `undefined symbol: PyObject_GetAttr`, `PyLong_AsLong`, `PyDict_Type`, … at **link** time,
+  and it takes down the **whole suite**, including tests that never mention Python.
+- **Measured 2026-08-07, during #19.** Confirmed both the failure and the fix on this repo before
+  writing `PyFitness`.
+- **Do this instead:** the fix is already in `get/Cargo.toml` as of #19 — `extension-module` is out
+  of `[dependencies]`, and `[dev-dependencies] pyo3` carries `auto-initialize`. The built module
+  supplies the feature from outside the manifest instead: maturin via
+  `[tool.maturin] features = ["pyo3/extension-module"]` (not yet set up — `issues.md`, the
+  `pyproject.toml` gap), or by hand with `cargo build -p get --features pyo3/extension-module`.
+  `fitness.rs`'s `the_test_harness_can_call_a_live_python_interpreter` is a permanent smoke test that
+  fails loudly if the manifest is ever reverted.
+- **The runtime half:** `cargo test` then needs `libpython3.*.so` at **run** time too. A pyenv-managed
+  Python is not on the default loader path — symptom is `error while loading shared libraries:
+  libpython3.11.so.1.0: cannot open shared object file`, exit code **127**, before any test runs.
+
+      export LD_LIBRARY_PATH="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"
+      cargo test -p get
+
+  **Unverified on Windows** — Michael's machine links Python differently and this is Linux/pyenv
+  only; `collab.md` should carry a heads-up rather than this trap silently not applying to him.
+- **Why:** full mechanism, and what transfers from `graph_refiner` versus what doesn't, in
+  `.claude/reference/pyo3-maturin.md` §1.
+- **Added:** 2026-08-07 — cargo-test-cannot-link-python-unless-extension-module-is-off
+
+### Calling Python from inside a rayon closure doesn't just run slow — it deadlocks
+- **Bites when:** a `Fitness` objective wraps a Python callable and its `evaluate_population` is
+  left at the trait default, or any future rayon-parallel path calls into pyo3 without first
+  releasing whatever GIL the calling thread holds.
+- **Measured 2026-08-07**, during #19, by deleting `PyFitness`'s `evaluate_population` override and
+  running the batching test. The default fans out over `par_iter()`; each worker calls
+  `Python::attach` while the calling thread already holds the GIL and is blocked waiting for rayon
+  to finish. The suite **hung** until killed at 2 minutes — no failure, no message, just silence.
+- **Do this instead:** every objective that wraps Python **must** override `evaluate_population`
+  and take the GIL exactly once per batch, never per graph. This is why
+  `impl Fitness for Box<dyn Fitness>` forwards it explicitly rather than relying on the trait
+  default — an unforwarded box reintroduces exactly this deadlock silently.
+- **Why:** spec §8 states the rule ("never call Python from inside a rayon closure") and argues it
+  on performance; the measured failure is stronger than the stated one. Full writeup in
+  `.claude/reference/pyo3-maturin.md` §2.
+- **Added:** 2026-08-07 — calling-python-from-a-rayon-closure-deadlocks

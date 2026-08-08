@@ -689,6 +689,46 @@ deliberately. Two sheet changes are on the table for the same meeting now, this 
 
 *(Reply inside #35 · 2026-08-07 — James, at the generational-evolver `/done` gate.)*
 
+### 37. #19 changes how `cargo test` builds — and I could only verify it on Linux
+
+**Heads-up before you pull, not a question.** PR for #19 moves `extension-module` out of
+`get/Cargo.toml`'s `[dependencies]` and adds a root `pyproject.toml` that supplies it instead. This
+changes your `cargo test`, and **I have verified none of it on Windows.**
+
+**Why it had to change.** `extension-module` suppresses linking libpython, leaving the Python C API
+symbols for the interpreter to resolve when it loads the module. Correct for the built wheel;
+**fatal for `cargo test`**, which links an ordinary executable with nothing behind it — the entire
+suite fails to *link*, with dozens of undefined `Py*` symbols, however few tests touch Python. #19
+needed real tests calling a real callable, so the feature had to come off the library build. It now
+lives in `pyproject.toml` as `[tool.maturin] features = ["pyo3/extension-module"]`, which is
+maturin's own idiom, and `cargo build -p get --features pyo3/extension-module` is the by-hand
+equivalent. Full mechanism in `.claude/reference/pyo3-maturin.md` §1.
+
+**What you may hit, in rough order of likelihood.** `[dev-dependencies] pyo3` now carries
+`auto-initialize`, so a test build wants a real Python that pyo3's build script can find. On Linux I
+also need `LD_LIBRARY_PATH` pointed at libpython (pyenv build, not on the loader path) or the test
+binary dies with `exit 127` before running anything:
+
+    export LD_LIBRARY_PATH="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"
+
+Windows resolves Python differently and I do not know whether you need an equivalent, nothing at
+all, or whether the cdylib link behaves differently without the feature. Two `traps.md` entries
+cover the Linux side and say plainly that Windows is unverified.
+
+**One measured thing that surprised me, so you do not draw the wrong conclusion from a green run.**
+Dropping the `features` line entirely and rebuilding produced a wheel that was, on Linux,
+indistinguishable — same 75 undefined `Py*` symbols, no libpython in `ldd`, and `import get` worked.
+An earlier version of my own comment claimed it would fail to import; testing it is what caught
+that. The line stays because macOS and Windows linkers reject undefined symbols by default, but **a
+passing import on Linux proves nothing about your machine.**
+
+**If it breaks for you, say so rather than working around it.** The fallback is to put the
+pyo3-touching tests behind a cargo feature so your default `cargo test` never builds them — cheap to
+do, and worth doing properly rather than you carrying a local edit. I would rather hear it than have
+you discover it mid-task on #26.
+
+*#37 · raised 2026-08-08 00:15 — James, before opening #19's PR.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
