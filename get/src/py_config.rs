@@ -76,7 +76,7 @@ impl PySirParams {
         min_epidemic_length = 3,
         max_epidemic_retries = 5,
     ))]
-    fn new(
+    pub fn new(
         infection_rate: f64,
         num_epidemics: usize,
         patient_zero: Option<usize>,
@@ -136,7 +136,7 @@ impl PyOperationWeights {
         null = 1.0,
     ))]
     #[allow(clippy::too_many_arguments)] // nine weights is the schema, not a smell
-    fn new(
+    pub fn new(
         toggle: f64,
         hop: f64,
         add: f64,
@@ -313,7 +313,7 @@ impl PyConfig {
         max_mutations = 1,
     ))]
     #[allow(clippy::too_many_arguments)] // ten fields is the schema, not a smell
-    fn new(
+    pub fn new(
         evolution: PyEvolutionConfig,
         population_size: usize,
         network_size: usize,
