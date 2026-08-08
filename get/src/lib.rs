@@ -3,6 +3,7 @@ pub mod evolver;
 pub mod fitness;
 pub mod genomes;
 pub mod graph;
+pub mod py_config;
 pub mod sir;
 
 use pyo3::exceptions::PyValueError;
@@ -10,6 +11,10 @@ use pyo3::prelude::*;
 
 use crate::config::{Config, FitnessConfig};
 use crate::fitness::{Direction, Fitness, PyFitness};
+use crate::py_config::{
+    PyConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig, PyOperationWeights,
+    PySelectionConfig, PySirParams,
+};
 
 /// Python-facing entry point to the graph-evolution engine.
 ///
@@ -224,6 +229,15 @@ impl GraphEvolver {
 #[pymodule]
 fn get(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GraphEvolver>()?;
+    // The config builders (spec §8). Registered under their unprefixed names —
+    // the `Py` prefix is a Rust-side disambiguator, not part of the API.
+    m.add_class::<PyConfig>()?;
+    m.add_class::<PyEvolutionConfig>()?;
+    m.add_class::<PySelectionConfig>()?;
+    m.add_class::<PyGenomeConfig>()?;
+    m.add_class::<PyFitnessConfig>()?;
+    m.add_class::<PySirParams>()?;
+    m.add_class::<PyOperationWeights>()?;
     Ok(())
 }
 
