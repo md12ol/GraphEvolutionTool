@@ -1235,3 +1235,100 @@ blocked on the same meeting; `collab.md` **#27** (`Swap`'s degree floor), still 
 **`hotfixes.md` is empty of live entries for the first time** — Michael's #18 removed the SIR
 batch-seed hotfix after six cycles of carrying it. Entries below this line belong to later tasks.
 *Task marker · generational-evolver · recorded 2026-08-07 — James, at `/done`.*
+
+## 2026-08-07 19:20 — James — `extension-module` moves out of `[dependencies]`, gated behind the built module instead
+**Chose:** `get/Cargo.toml`'s `pyo3` drops `extension-module` from `[dependencies]` entirely;
+`[dev-dependencies] pyo3` carries `auto-initialize`. The built module supplies `extension-module`
+from outside the manifest — maturin via `[tool.maturin] features = ["pyo3/extension-module"]`, or
+`cargo build --features pyo3/extension-module` by hand.
+**Why:** `extension-module` tells pyo3 to leave the Python C API symbols unresolved, for the
+interpreter to supply at load time. `cargo test` produces an ordinary binary with no interpreter
+behind it, so with the feature always on the whole suite fails to **link** — dozens of undefined
+`Py*` symbols — however few tests touch Python. Measured on this repo before choosing the fix, not
+assumed from pyo3's docs. The alternative sketched first (a local `[features] extension-module =
+["pyo3/extension-module"]` passthrough) also worked, but the maturin-native form needs no such
+passthrough and is what a real build will use anyway once `pyproject.toml` exists (`issues.md`).
+**Rejected:** (a) The local `[features]` passthrough — functionally equivalent, verified working,
+but reinvents what maturin already does. (b) Leaving `extension-module` on and testing `PyFitness`
+only through a separate, non-`cargo test` harness — weaker verification, and this project's whole
+posture is that untested code is unverified code.
+**Affects:** `get/Cargo.toml`; every future pyo3-touching test; `traps.md` (new entry);
+`.claude/reference/pyo3-maturin.md` §1; the `pyproject.toml` issue staged in `issues.md`, which now
+must remember to set `[tool.maturin] features`.
+*#19 · recorded 2026-08-07 19:20 — James, fixing the test harness before writing PyFitness.*
+
+## 2026-08-07 19:50 — James — `PyFitness` routes both trait methods through one inherent `score_batch`
+**Chose:** neither `Fitness::evaluate` nor `Fitness::evaluate_population` calls the other on
+`PyFitness`; both call a private `score_batch`, which does the one call into Python.
+**Why:** the trait's default `evaluate_population` calls `evaluate`. Had `evaluate` been written to
+call `evaluate_population` — the seemingly natural "one graph is a batch of one" — deleting the
+override would turn that pair into infinite recursion instead of a compile error, exactly the trap
+`collab.md` #33 documents for `EpidemicScorer`. Routing both through an inherent method has no cycle
+to fall into regardless of which override is present or absent.
+**Rejected:** `evaluate` calling `evaluate_population` directly — reads more obviously correct and
+is the pattern `EpidemicScorer`'s own `evaluate` used to use, before #18 restructured it for the
+same reason.
+**Affects:** `get/src/fitness.rs` `PyFitness`.
+*#19 · recorded 2026-08-07 19:50 — James, writing PyFitness's evaluate/evaluate_population pair.*
+
+## 2026-08-07 20:20 — James — `set_fitness_function` rejects registration against a non-Python config
+**Chose:** `set_fitness_function` errors if `self.config.fitness` is not `FitnessConfig::Python`,
+rather than storing the callable regardless of what the config selected.
+**Why:** a stored-but-unused callable is indistinguishable, from Python, from a successfully
+registered one — the run would score with whatever the config actually selected (an SIR objective)
+while the user watched for their own function's numbers and never got them. Spec §8 already argues
+this shape for the reverse case (a `python` config with nothing registered); the config-mismatch
+direction is the same failure, just triggered from the other side. `FitnessConfig::type_name()` was
+added so the rejection message names the configured objective in the words the user actually typed,
+rather than a `Debug` dump of the variant's fields.
+**Rejected:** storing unconditionally and letting `python_fitness()` be the only gate — technically
+sufficient (the callable would simply never be read), but the config layer is meant to be the single
+source of truth for which objective a run uses, and letting registration silently succeed against
+the wrong config makes debugging "why isn't my function being called" a search through two files
+instead of one error at the point of the mistake.
+**Affects:** `get/src/lib.rs` `set_fitness_function`; `get/src/config.rs` `FitnessConfig::type_name`.
+*#19 · recorded 2026-08-07 20:20 — James, adding set_fitness_function to GraphEvolver.*
+
+## 2026-08-07 20:45 — James — `python_fitness` carries a temporary `#[allow(dead_code)]`, not a `#[cfg(test)]` hide
+**Chose:** the seam #26 will call (`GraphEvolver::python_fitness`) is `pub(crate)`, always compiled,
+and wears `#[allow(dead_code)]` with a comment and a matching `hotfixes.md` entry, rather than being
+`#[cfg(test)]`-gated or left to produce a clippy warning.
+**Why:** `#[cfg(test)]` would mean the method does not exist in the real build at all, so #26 could
+not call it without first un-gating it — a needless extra step at the exact moment #26 lands. Leaving
+the warning unsuppressed would break `cargo clippy -p get --all-targets -- -D warnings`, which #25
+spent an entire task restoring to a real gate (`traps.md`). The `#[allow]` is scoped to the one
+method, not the module, and both its removal condition and its owner are recorded.
+**Rejected:** `#[cfg(test)]` — cheaper today, worse for #26. A crate-wide or module-wide
+`#[allow(dead_code)]` — hides genuinely dead code elsewhere for the same span, which is a bigger
+blind spot than one method needs.
+**Affects:** `get/src/lib.rs` `python_fitness`; `hotfixes.md`.
+*#19 · recorded 2026-08-07 20:45 — James, adding the seam #26's dispatch will call.*
+
+## 2026-08-07 22:10 — James — GET gets a `pyproject.toml` at the workspace root, carrying the `extension-module` feature
+**Chose:** a `pyproject.toml` at the repo root with `build-backend = "maturin"`,
+`[tool.maturin] manifest-path = "get/Cargo.toml"` and `features = ["pyo3/extension-module"]`. Staged
+as an unfiled issue earlier the same day, then built instead of filed, on instruction.
+**Why:** the crate is a workspace member, so the manifest is not beside the pyproject and maturin has
+to be pointed at it; and `extension-module` is deliberately absent from `get/Cargo.toml`
+(2026-08-07 19:20) so `cargo test` can link, which means the build path is the only place left to
+supply it. Verified end to end rather than by inspection: `maturin build` reports "Using build
+options features from pyproject.toml", and the wheel installed into a throwaway venv imports,
+constructs a `GraphEvolver` against a `type = "python"` config, registers a callable, and returns
+both rejection paths to Python as `ValueError` with their messages intact. This is the first time
+anything in GET has been callable from Python.
+**Corrected in the doing:** the first version of the comment on that `features` line asserted that
+removing it yields a wheel that fails to import. **Measured false** — with the line dropped, the
+wheel has the same 75 undefined `Py*` symbols, no `libpython` in `ldd`, and imports fine on this
+Linux/pyenv setup. The line is kept for macOS/Windows linkers and because it is the documented
+configuration, and the comment now says exactly that, plus a warning not to read a green Linux
+import as evidence it is unnecessary. Recording the correction because the wrong version is the
+kind a later reader would reasonably trust.
+**Rejected:** (a) Filing it as a tracker issue and leaving the repo unable to build a wheel —
+overtaken by instruction, and the work turned out to be ~15 lines plus verification. (b) Putting the
+pyproject inside `get/` beside the crate — then `pip install .` from the repo root does not work,
+which is where a user would run it. (c) A `[features]` passthrough in `get/Cargo.toml` instead —
+already rejected on 2026-08-07 19:20 for reinventing what maturin does.
+**Affects:** `/pyproject.toml` (new); `.claude/reference/pyo3-maturin.md` §3, rewritten from "what
+GET does not have" to what it now has; `issues.md`, whose staged entry was removed as resolved
+rather than filed.
+*#19 · recorded 2026-08-07 22:10 — James, after the pyproject.toml verification.*

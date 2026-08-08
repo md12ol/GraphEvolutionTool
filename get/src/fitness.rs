@@ -18,6 +18,7 @@
 use std::slice;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use pyo3::prelude::*;
 use rayon::prelude::*;
 
 use crate::graph::Graph;
@@ -132,6 +133,48 @@ pub trait Fitness: Send + Sync {
             .par_iter()
             .map(|graph| self.evaluate(graph))
             .collect()
+    }
+}
+
+/// A boxed objective is an objective.
+///
+/// # Why this exists
+///
+/// The config layer erases its fitness variant to one `Box<dyn Fitness>` before
+/// instantiating anything, so that adding an objective is one match arm rather
+/// than one arm per strategy × genome combination (§1, §8). But `Evolver::run<F>`
+/// requires `F: Fitness`, and a `Box` holding a `Fitness` is not itself one
+/// until this says so. It has to live here beside the trait — the orphan rule
+/// rejects it anywhere else.
+///
+/// # Every method is forwarded, including the two with defaults
+///
+/// This is the whole point, and both omissions **compile**:
+///
+/// - **`evaluate_population`** — without it the box inherits the trait's
+///   default, which fans out over rayon and calls `evaluate` per graph. For a
+///   Python objective that means one GIL acquisition per individual from inside
+///   a rayon closure, which is what [`PyFitness`]'s batching exists to prevent —
+///   and which **deadlocks** rather than merely running slowly (measured
+///   2026-08-07; see [`PyFitness`]). For an epidemic objective it also re-seeds
+///   per graph, so scores stop being comparable within a batch.
+/// - **`direction`** — without it the box reports [`Direction::Minimize`]
+///   whatever it holds, so every maximizing objective runs the search backwards
+///   while looking merely unconverged.
+///
+/// Neither failure produces a compiler error, a panic, or a wrong-looking
+/// number, which is why `a_boxed_objective_forwards_every_method` exists.
+impl Fitness for Box<dyn Fitness> {
+    fn evaluate(&self, graph: &Graph) -> f64 {
+        (**self).evaluate(graph)
+    }
+
+    fn direction(&self) -> Direction {
+        (**self).direction()
+    }
+
+    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+        (**self).evaluate_population(graphs)
     }
 }
 
@@ -406,10 +449,447 @@ impl Fitness for EpiProfMatch {
     }
 }
 
+/// A user's Python callable, used as an objective (§5, §8).
+///
+/// `config.toml` only *selects* Python — `[fitness] type = "python"`. The
+/// callable itself is registered at runtime through
+/// `GraphEvolver::set_fitness_function`, together with its [`Direction`],
+/// because nothing can infer whether a user's function wants its value large
+/// or small.
+///
+/// # The callable takes a whole batch, and that is not negotiable
+///
+/// One call receives the entire batch and returns one float per graph, in the
+/// same order — the shape of pymoo's `Problem._evaluate`, which this audience
+/// already knows:
+///
+/// ```python
+/// def fitness(batch):   # batch: list[(num_nodes, [(u, v, weight), ...])]
+///     return [score(n, edges) for (n, edges) in batch]
+/// ```
+///
+/// A per-graph callback would serialize every call behind the GIL, losing all
+/// rayon parallelism and paying lock contention on top of Python being slower
+/// at the same arithmetic — together, potentially hundreds of times slower
+/// wall-clock than native Rust. Batched, only the speed of the user's own code
+/// remains.
+///
+/// **And "slower" understates it: the per-graph arrangement deadlocks.**
+/// Measured 2026-08-07 by deleting the `evaluate_population` override below and
+/// running the batching test. The trait's default then fans out over rayon and
+/// each worker tries to take the GIL, while the calling thread is holding it and
+/// blocking on rayon to finish. The suite hung until it was killed — it did not
+/// fail, which is worse, because a hang carries no message saying why.
+///
+/// Two rules keep that from happening, and both are structural rather than
+/// advisory:
+///
+/// - **Python is never called from inside a rayon closure.** Expression fans
+///   out across threads into a `Vec<Graph>` first; only then does the single
+///   batched call happen, here.
+/// - **The Rust-heavy part of a run should release the GIL**, this adapter
+///   re-acquiring it per batch — the caller's job, at the entry point.
+///
+/// # Panics
+///
+/// Like every objective, this one has no `Result` path — [`Fitness`]'s methods
+/// return `f64`. So a callable that raises, returns the wrong type, returns the
+/// wrong number of scores, or returns `NaN` panics, each naming what was
+/// expected and which item was at fault. That is the same posture
+/// [`Direction::orient`] already takes on `NaN`.
+pub struct PyFitness {
+    callable: Py<PyAny>,
+    direction: Direction,
+}
+
+impl PyFitness {
+    /// Wrap a registered callable and the direction declared alongside it.
+    pub fn new(callable: Py<PyAny>, direction: Direction) -> Self {
+        Self {
+            callable,
+            direction,
+        }
+    }
+
+    /// A second handle on the same callable.
+    ///
+    /// Replicate runs need one objective instance each (§8.1), and this is how
+    /// the dispatch layer produces them. The Python object is shared rather
+    /// than copied — `clone_ref` bumps its refcount — which is correct: the
+    /// user's function is stateless as far as the engine is concerned, and it
+    /// is the *scorer* state that must not be shared, of which this has none.
+    pub fn clone_ref(&self) -> Self {
+        Python::attach(|py| Self {
+            callable: self.callable.clone_ref(py),
+            direction: self.direction,
+        })
+    }
+
+    /// The one call into Python, which both trait methods route through.
+    ///
+    /// Inherent rather than having [`Fitness::evaluate`] call
+    /// [`Fitness::evaluate_population`] directly: that arrangement is a latent
+    /// stack overflow, because the trait's **default** `evaluate_population`
+    /// calls `evaluate`, so removing the override below turns the pair into
+    /// infinite recursion instead of a compile error. Routing both through here
+    /// has no cycle to fall into (`collab.md` #33).
+    fn score_batch(&self, graphs: &[Graph]) -> Vec<f64> {
+        // Nothing to score, so nothing to hand Python. Skipping the call also
+        // spares a user's function from having to handle an empty batch.
+        if graphs.is_empty() {
+            return Vec::new();
+        }
+
+        // Built before the GIL is taken: this is plain Rust work, and holding
+        // the GIL across it would block every other Python thread for no reason.
+        let mut batch = Vec::with_capacity(graphs.len());
+        for graph in graphs {
+            batch.push((graph.num_nodes, graph.get_edge_list()));
+        }
+
+        Python::attach(|py| {
+            let returned = self
+                .callable
+                .call1(py, (batch,))
+                .unwrap_or_else(|err| panic!("the registered Python objective raised: {err}"));
+
+            let scores: Vec<f64> = returned.extract(py).unwrap_or_else(|err| {
+                panic!(
+                    "the registered Python objective must return one float per graph, \
+                     as a sequence: {err}"
+                )
+            });
+
+            assert_eq!(
+                scores.len(),
+                graphs.len(),
+                "the registered Python objective returned {} scores for a batch of {} \
+                 graphs; it must return exactly one per graph, in the same order",
+                scores.len(),
+                graphs.len(),
+            );
+
+            // Caught here rather than at `Direction::orient`, which sees a lone
+            // number and cannot say which graph produced it. A user debugging
+            // their own function needs the index.
+            for (index, &score) in scores.iter().enumerate() {
+                assert!(
+                    !score.is_nan(),
+                    "the registered Python objective returned NaN for batch item {index}. \
+                     Check for division by a possibly-zero count, 0.0/0.0, or inf - inf",
+                );
+            }
+
+            scores
+        })
+    }
+}
+
+impl Fitness for PyFitness {
+    /// One graph is a batch of one, so there is a single path into Python.
+    fn evaluate(&self, graph: &Graph) -> f64 {
+        self.score_batch(slice::from_ref(graph))[0]
+    }
+
+    fn direction(&self) -> Direction {
+        self.direction
+    }
+
+    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+        self.score_batch(graphs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::sir::SirParams;
+
+    /// An objective that records the size of every batch handed to it, and
+    /// reports a non-default direction. Both are what a box must not lose.
+    struct Instrumented {
+        batch_sizes: std::sync::Arc<std::sync::Mutex<Vec<usize>>>,
+    }
+
+    impl Fitness for Instrumented {
+        fn evaluate(&self, graph: &Graph) -> f64 {
+            graph.num_nodes as f64
+        }
+
+        // Deliberately not Minimize: the box reports Minimize if `direction`
+        // is left unforwarded, so a default here would hide that.
+        fn direction(&self) -> Direction {
+            Direction::Maximize
+        }
+
+        fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+            self.batch_sizes
+                .lock()
+                .expect("no test panics while holding this")
+                .push(graphs.len());
+
+            let mut scores = Vec::with_capacity(graphs.len());
+            for graph in graphs {
+                scores.push(graph.num_nodes as f64);
+            }
+            scores
+        }
+    }
+
+    #[test]
+    fn a_boxed_objective_forwards_every_method_including_the_defaulted_ones() {
+        // The erasure in §8 hands the evolver a Box<dyn Fitness>. If the
+        // forwarding impl omits either defaulted method it still compiles, and
+        // both failures are silent: `direction` reports Minimize and runs the
+        // search backwards, `evaluate_population` reverts to the per-graph
+        // rayon fan-out that deadlocks a Python objective.
+        let batch_sizes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let boxed: Box<dyn Fitness> = Box::new(Instrumented {
+            batch_sizes: std::sync::Arc::clone(&batch_sizes),
+        });
+
+        assert_eq!(
+            boxed.direction(),
+            Direction::Maximize,
+            "the box reported its own default instead of the objective's direction",
+        );
+
+        let graphs = [path_graph(3), path_graph(5), path_graph(8)];
+        let scores = boxed.evaluate_population(&graphs);
+
+        assert_eq!(scores, vec![3.0, 5.0, 8.0]);
+        assert_eq!(
+            *batch_sizes.lock().unwrap(),
+            vec![3],
+            "the box fell back to the trait's per-graph default instead of \
+             forwarding to the objective's own batched override",
+        );
+
+        // And the required method, for completeness.
+        assert_eq!(boxed.evaluate(&path_graph(4)), 4.0);
+    }
+
+    /// Compile `source` and return the callable named `name` from it.
+    ///
+    /// The module keeps whatever state the source defines, so a test objective
+    /// can record how it was called and the test can read that back.
+    fn python_module(py: Python<'_>, source: &std::ffi::CStr) -> Py<PyAny> {
+        use pyo3::types::PyModule;
+
+        PyModule::from_code(py, source, c"objective.py", c"objective")
+            .expect("the test objective compiles")
+            .into_any()
+            .unbind()
+    }
+
+    /// A `PyFitness` over `source`'s `fitness` function, plus a handle on the
+    /// module so the test can read back what the call recorded.
+    fn py_objective(
+        py: Python<'_>,
+        source: &std::ffi::CStr,
+        direction: Direction,
+    ) -> (PyFitness, Py<PyAny>) {
+        use pyo3::types::PyAnyMethods;
+
+        let module = python_module(py, source);
+        let callable = module
+            .bind(py)
+            .getattr("fitness")
+            .expect("the test objective defines `fitness`")
+            .unbind();
+
+        (PyFitness::new(callable, direction), module)
+    }
+
+    /// Scores each graph by its node count, and records the size of every batch
+    /// it was handed — which is what distinguishes one call per batch from one
+    /// call per graph.
+    const COUNTING_OBJECTIVE: &std::ffi::CStr = c"
+batch_sizes = []
+
+def fitness(batch):
+    batch_sizes.append(len(batch))
+    return [float(num_nodes) for (num_nodes, edges) in batch]
+";
+
+    /// The batch sizes `COUNTING_OBJECTIVE` has seen so far.
+    fn batch_sizes(py: Python<'_>, module: &Py<PyAny>) -> Vec<usize> {
+        use pyo3::types::PyAnyMethods;
+
+        module
+            .bind(py)
+            .getattr("batch_sizes")
+            .expect("the objective records batch sizes")
+            .extract()
+            .expect("batch sizes are integers")
+    }
+
+    #[test]
+    fn a_python_objective_is_called_once_per_batch_not_once_per_graph() {
+        // The whole reason the contract is batched: a per-graph callback would
+        // serialize every call behind the GIL and lose all rayon parallelism.
+        Python::attach(|py| {
+            let (objective, module) = py_objective(py, COUNTING_OBJECTIVE, Direction::Minimize);
+            let graphs = [path_graph(3), path_graph(5), path_graph(8)];
+
+            let scores = objective.evaluate_population(&graphs);
+
+            assert_eq!(scores, vec![3.0, 5.0, 8.0], "scores, in population order");
+            assert_eq!(
+                batch_sizes(py, &module),
+                vec![3],
+                "one call carrying all three graphs, not three calls",
+            );
+        });
+    }
+
+    #[test]
+    fn scoring_one_graph_is_a_batch_of_one() {
+        Python::attach(|py| {
+            let (objective, module) = py_objective(py, COUNTING_OBJECTIVE, Direction::Minimize);
+
+            let score = objective.evaluate(&path_graph(4));
+
+            assert_eq!(score, 4.0);
+            assert_eq!(batch_sizes(py, &module), vec![1]);
+        });
+    }
+
+    #[test]
+    fn an_empty_batch_never_reaches_python() {
+        // A user's function should not have to handle a batch of nothing.
+        Python::attach(|py| {
+            let (objective, module) = py_objective(py, COUNTING_OBJECTIVE, Direction::Minimize);
+
+            assert!(objective.evaluate_population(&[]).is_empty());
+            assert!(
+                batch_sizes(py, &module).is_empty(),
+                "an empty batch should not have called Python at all",
+            );
+        });
+    }
+
+    #[test]
+    fn the_edges_handed_to_python_are_the_graph_that_was_expressed() {
+        // Scores by edge weight, so a wrong or empty edge list changes the
+        // answer rather than passing silently.
+        const SUMS_WEIGHTS: &std::ffi::CStr = c"
+def fitness(batch):
+    return [float(sum(w for (u, v, w) in edges)) for (num_nodes, edges) in batch]
+";
+        Python::attach(|py| {
+            let (objective, _module) = py_objective(py, SUMS_WEIGHTS, Direction::Minimize);
+
+            let mut graph = Graph::new(4, 3);
+            graph.set_edge(0, 1, 2);
+            graph.set_edge(1, 2, 3);
+
+            assert_eq!(objective.evaluate(&graph), 5.0);
+        });
+    }
+
+    #[test]
+    fn the_registered_direction_is_what_the_objective_reports() {
+        // Nothing can infer this from the callable, so it is registered
+        // alongside it — and getting it wrong runs the search backwards (§5).
+        Python::attach(|py| {
+            let (minimizing, _m) = py_objective(py, COUNTING_OBJECTIVE, Direction::Minimize);
+            let (maximizing, _n) = py_objective(py, COUNTING_OBJECTIVE, Direction::Maximize);
+
+            assert_eq!(minimizing.direction(), Direction::Minimize);
+            assert_eq!(maximizing.direction(), Direction::Maximize);
+        });
+    }
+
+    #[test]
+    fn a_second_handle_scores_identically_to_the_first() {
+        // Replicates need an objective instance each (§8.1); this is how the
+        // dispatch layer will make them.
+        Python::attach(|py| {
+            let (objective, module) = py_objective(py, COUNTING_OBJECTIVE, Direction::Maximize);
+            let second = objective.clone_ref();
+
+            assert_eq!(second.direction(), Direction::Maximize);
+            assert_eq!(second.evaluate(&path_graph(6)), 6.0);
+            assert_eq!(objective.evaluate(&path_graph(6)), 6.0);
+            assert_eq!(batch_sizes(py, &module), vec![1, 1], "both handles ran");
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "raised")]
+    fn a_raising_callable_panics_rather_than_returning_a_wrong_number() {
+        const RAISES: &std::ffi::CStr = c"
+def fitness(batch):
+    raise ValueError('no good')
+";
+        Python::attach(|py| {
+            let (objective, _module) = py_objective(py, RAISES, Direction::Minimize);
+            objective.evaluate(&path_graph(3));
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "must return one float per graph")]
+    fn a_callable_returning_the_wrong_type_panics() {
+        const RETURNS_A_STRING: &std::ffi::CStr = c"
+def fitness(batch):
+    return 'not a list of floats'
+";
+        Python::attach(|py| {
+            let (objective, _module) = py_objective(py, RETURNS_A_STRING, Direction::Minimize);
+            objective.evaluate(&path_graph(3));
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "returned 1 scores for a batch of 2")]
+    fn a_callable_returning_too_few_scores_panics() {
+        // Silently mismatched lengths would misalign every score with its
+        // graph, which no later stage could detect.
+        const RETURNS_ONE: &std::ffi::CStr = c"
+def fitness(batch):
+    return [1.0]
+";
+        Python::attach(|py| {
+            let (objective, _module) = py_objective(py, RETURNS_ONE, Direction::Minimize);
+            objective.evaluate_population(&[path_graph(3), path_graph(4)]);
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "returned NaN for batch item 1")]
+    fn a_callable_returning_nan_panics_naming_the_item() {
+        const RETURNS_NAN: &std::ffi::CStr = c"
+def fitness(batch):
+    return [1.0, float('nan')]
+";
+        Python::attach(|py| {
+            let (objective, _module) = py_objective(py, RETURNS_NAN, Direction::Minimize);
+            objective.evaluate_population(&[path_graph(3), path_graph(4)]);
+        });
+    }
+
+    /// The test harness can reach a live Python interpreter.
+    ///
+    /// Not a test of this crate's logic — a guard on `get/Cargo.toml`. Moving
+    /// `extension-module` back into `[dependencies]` leaves the Python symbols
+    /// for an interpreter to supply at load time, and `cargo test` has none, so
+    /// the whole suite stops **linking** — an error with no obvious connection
+    /// to whatever was being changed. This fails first and says why.
+    #[test]
+    fn the_test_harness_can_call_a_live_python_interpreter() {
+        use pyo3::types::PyAnyMethods;
+
+        pyo3::Python::attach(|py| {
+            let two: i64 = py
+                .eval(c"1 + 1", None, None)
+                .expect("evaluating `1 + 1` in the embedded interpreter")
+                .extract()
+                .expect("`1 + 1` is an integer");
+            assert_eq!(two, 2);
+        });
+    }
 
     /// A path `0 - 1 - ... - (n-1)`, every edge at multiplicity 1.
     fn path_graph(num_nodes: usize) -> Graph {

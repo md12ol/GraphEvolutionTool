@@ -133,6 +133,22 @@ pub enum FitnessConfig {
     Python,
 }
 
+impl FitnessConfig {
+    /// The `type` string this variant is written as in `config.toml`.
+    ///
+    /// For error messages that have to name the configured objective back to
+    /// the user in the words they typed. `Debug` would print the variant's
+    /// fields too, which is not what a message about the *choice* wants.
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            FitnessConfig::EpiSpread { .. } => "epi_spread",
+            FitnessConfig::EpiLength { .. } => "epi_length",
+            FitnessConfig::EpiProfMatch { .. } => "epi_prof_match",
+            FitnessConfig::Python => "python",
+        }
+    }
+}
+
 /// Epidemic sampling parameters, shared by the three SIR objectives.
 ///
 /// **Not the same type as [`crate::sir::SirParams`], despite the name.** That

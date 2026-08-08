@@ -56,6 +56,18 @@ Session state lives in `.claude/`:
 Finished tasks land in `.claude/work/archive/<YYYY-MM>_<slug>/` — **tracked**, so a finished
 task's record reaches the other owner. Only `work/current/` is per-person.
 
+**Reference notes** — `.claude/reference/`, added 2026-08-07. Longer-form notes about how a
+*dependency or toolchain* behaves, where a `traps.md` entry would be too long and a `decisions.md`
+entry would be the wrong shape because nothing was decided. Deliberately **outside `work/`**, so it
+is never mistaken for a churn list and never picks up a merge driver.
+
+| File | |
+|---|---|
+| `reference/pyo3-maturin.md` | the Python boundary: why `extension-module` breaks `cargo test`, why calling Python from a rayon closure deadlocks, and what GET still lacks (a `pyproject.toml`) |
+
+Each note says whether a claim was **measured here** or came from elsewhere. Keep that split — a
+borrowed configuration is evidence that something works somewhere, not that it is right here.
+
 ### Keep `plan.md` small — it is a task list, not a record
 
 Left alone it grows without bound. In the project this template came from it reached **1432 lines**
