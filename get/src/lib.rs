@@ -113,6 +113,35 @@ impl GraphEvolver {
 
     /// Evolve a population and return the best graph as a weighted edge list
     /// `(u, v, multiplicity)`.
+    ///
+    /// # For whoever implements the dispatch (#26)
+    ///
+    /// Two things #19 left in place for this method, both easy to miss because
+    /// neither fails loudly:
+    ///
+    /// **Get the Python objective from [`GraphEvolver::python_fitness`]**, don't
+    /// reach for `self.fitness_function` directly. It returns the erased
+    /// `Box<dyn Fitness>` this method needs, a fresh instance per call — which
+    /// is what replicate runs require, since each needs its own objective
+    /// (§8.1) — and it turns "no callable registered" into a `ValueError`
+    /// naming `set_fitness_function`, rather than a panic from deep inside
+    /// scoring. It carries a temporary `#[allow(dead_code)]` only because this
+    /// method is its only non-test caller; delete that attribute once this
+    /// calls it (`hotfixes.md`).
+    ///
+    /// **Release the GIL around the run itself** — wrap the evolve loop in
+    /// `Python::attach(|py| py.detach(|| ...))` (pyo3's older name for it is
+    /// `allow_threads`). Everything the engine does between scoring calls is
+    /// pure Rust, and [`crate::fitness::PyFitness`] re-acquires the GIL per
+    /// batch on its own, so holding it across the whole run buys nothing and
+    /// blocks every other Python thread in the process for the duration. Under
+    /// a native Rust objective it also serializes rayon against any Python
+    /// caller. The failure mode is a run that works and is inexplicably slow, or
+    /// a host application that freezes while a run is in progress — neither of
+    /// which points back here.
+    ///
+    /// Spec §8 has the surrounding argument; `.claude/reference/pyo3-maturin.md`
+    /// §2 has the measured deadlock that motivates the GIL discipline.
     fn run(&mut self, seed: u64) -> PyResult<Vec<(usize, usize, u32)>> {
         let _ = (seed, &self.config, &mut self.best_fitness);
         todo!(
