@@ -56,3 +56,9 @@ everybody's problem to remove.
 - **Remove when:** #26 lands and calls `python_fitness`. Deleting the attribute and re-running
   `cargo clippy -p get --all-targets -- -D warnings` is the whole check.
 - **Added:** 2026-08-07 — allow-dead-code-on-graphevolver-python-fitness
+- **Last checked:** 2026-08-08 — James, at the `/done` gate for pyfitness. Verified on `main` at
+  `32ceb11`, not inferred: the attribute is **still present**, `#[allow(dead_code)]` directly above
+  `pub(crate) fn python_fitness` in `get/src/lib.rs`; and the `Remove when:` is **not met** —
+  GitHub #26 is still `open` and unstarted, with no branch for it. Note the `Machine:` line above
+  now understates the reach: PR #48 merged as `32ceb11` on 2026-08-08, so this is committed and in
+  **every** tree, not just the branch. First cycle.

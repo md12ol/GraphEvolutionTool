@@ -1332,3 +1332,29 @@ already rejected on 2026-08-07 19:20 for reinventing what maturin does.
 GET does not have" to what it now has; `issues.md`, whose staged entry was removed as resolved
 rather than filed.
 *#19 · recorded 2026-08-07 22:10 — James, after the pyproject.toml verification.*
+
+## Task complete: pyfitness — 2026-08-08
+Archived to `.claude/work/archive/2026-08_pyfitness/`. GitHub **#19** shipped as **PR #48** (8
+commits, `6e2d262`..`b1f8557`), **merged** by Michael as `32ceb11` on 2026-08-08T13:57:26Z; issue
+#19 closed by the body's `Closes #19.` `PyFitness` adapts a registered Python callable to the
+`Fitness` trait on the batched contract, `impl Fitness for Box<dyn Fitness>` forwards every method
+including both defaulted ones, `set_fitness_function` registers callable + direction with three
+rejections, and `python_fitness` is the seam #26's dispatch calls. **198 tests**, up from 176 —
+the delta counted from the diff rather than carried forward as a remembered number.
+Two things landed that were not on the original plan. **`pyproject.toml`** (root, `manifest-path`
+into the workspace member, `features = ["pyo3/extension-module"]`) — built rather than filed, on
+instruction, making GET importable from Python for the first time. And **`.claude/reference/`**, a
+new documentation lifetime for notes about how a dependency behaves, deliberately outside `work/`
+so it cannot be mistaken for a churn list.
+Two measured findings outlived the code. Calling Python from inside a rayon closure **deadlocks**
+rather than merely running slowly — found by deleting the `evaluate_population` override to check a
+test was not vacuous, and watching the suite hang for two minutes with no failure message. And a
+claim written into `pyproject.toml`'s own comment was **measured false** the same session: a
+featureless wheel imports fine on Linux, identical undefined symbols. Both are in `traps.md` and
+`.claude/reference/pyo3-maturin.md`; the correction is in the 2026-08-07 22:10 entry above.
+Carried forward, not resolved: the `#[allow(dead_code)]` on `python_fitness`, now committed and in
+every tree, blocked on **#26** which is still open and unstarted; `issues.md`'s
+`evaluate_population`/`SirRun` rename, unfiled and blocked on the joint meeting; and `collab.md`
+**#35**, **#36**, **#37** all awaiting Michael, plus **#27** still awaiting James. Entries below
+this line belong to later tasks.
+*Task marker · pyfitness · recorded 2026-08-08 — James, at `/done`.*
