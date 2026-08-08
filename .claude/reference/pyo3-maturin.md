@@ -78,31 +78,32 @@ performance. The measured consequence is stronger than the stated one, and it is
 `impl Fitness for Box<dyn Fitness>` must forward `evaluate_population` explicitly: an unforwarded
 box silently inherits that default.
 
-## 3. What GET does not have yet: a `pyproject.toml`
+## 3. GET's `pyproject.toml` — added 2026-08-07, and how it differs from `graph_refiner`'s
 
-`graph_refiner` has one and GET does not, so **GET cannot currently be built or installed as a
-Python package at all** — there is no `maturin develop`, and nothing importable from Python. It is
-the gap between #19's unit-tested adapter and the issue's literal "a Python objective drives a full
-run end to end".
+**Resolved during #19.** GET previously had none, so it could not be built or installed as a Python
+package at all. It now has one at the repo root, and `maturin build` produces an importable wheel.
 
-`graph_refiner`'s, as a starting point — note it has no `[tool.maturin]` section, which GET's will
-need for §1 above:
+Two differences from `graph_refiner`'s, both forced by this repo's shape:
 
-```toml
-[build-system]
-requires = ["maturin>=1.0,<2.0"]
-build-backend = "maturin"
+- **`manifest-path = "get/Cargo.toml"`.** GET is a cargo workspace whose crate is a member, so the
+  manifest is not beside `pyproject.toml`. `graph_refiner` is a single crate at the root and needs
+  no such line.
+- **`features = ["pyo3/extension-module"]`.** `graph_refiner` has no `[tool.maturin]` section at all,
+  because its `Cargo.toml` keeps `extension-module` in `[dependencies]`. GET cannot — see §1 — so the
+  feature has to be supplied on the build path instead.
 
-[project]
-name = "graph_refiner"
-version = "0.1.0"
-requires-python = ">=3.8"
-classifiers = [
-    "Programming Language :: Rust",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
-]
-```
+**What the feature does and does not buy, measured 2026-08-07.** Dropping the `features` line and
+rebuilding produced a wheel that was, on this Linux/pyenv setup, indistinguishable: **75 undefined
+`Py*` symbols in both**, no `libpython` in `ldd` for either, and `import get` succeeded either way.
+An earlier version of the comment in `pyproject.toml` claimed the featureless wheel would fail to
+import; that was wrong, and testing it is what caught it. The line stays because macOS and Windows
+linkers reject undefined symbols by default and because it is the documented configuration — but
+**a passing `import` on Linux is not evidence the line is unnecessary**, and nobody should conclude
+that from a green run here.
+
+Verified end to end on 2026-08-07 in a throwaway venv: `import get`, construct
+`GraphEvolver(config)` against a `type = "python"` config, register a callable, and see both
+rejection paths arrive as Python `ValueError`s with their messages intact.
 
 ## 4. Patterns worth copying from `graph_refiner`
 

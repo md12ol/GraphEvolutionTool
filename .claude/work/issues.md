@@ -64,3 +64,4 @@ as **#34** (assigned to md12ol), same obligation. Open count refreshed from the 
   Scope table and the already-done local renames are in `collab.md` #32.
 - **Noticed:** 2026-08-07, writing the comments for #18 — rename-evaluate-population-and-sirrun
 
+
