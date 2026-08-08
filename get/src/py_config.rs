@@ -26,6 +26,29 @@
 //! invisible from Python. That is what the round-trip tests below guard — they
 //! build a mirror, serialize it, parse it back as a real
 //! [`crate::config::Config`], and compare field for field.
+//!
+//! # What this looks like from Python
+//!
+//! ```python
+//! config = get.Config(
+//!     population_size=200,
+//!     network_size=100,
+//!     crossover_rate=0.9,
+//!     mutation_rate=0.2,
+//!     evolution=get.EvolutionConfig.Generational(num_generations=500),
+//!     selection=get.SelectionConfig.Tournament(tournament_size=5),
+//!     genome=get.GenomeConfig.EdgeEdit(gene_length=256),
+//!     fitness=get.FitnessConfig.EpiSpread(
+//!         sir=get.SirParams(infection_rate=0.05, num_epidemics=30)
+//!     ),
+//! )
+//! evolver = get.GraphEvolver.from_config(config)
+//! ```
+//!
+//! Worked examples for every objective, both genomes and both evolution
+//! strategies live in `examples/config_builder.py`, which is runnable and is
+//! the place to add a new one — not this comment, which cannot be executed and
+//! so cannot be caught going stale.
 
 use std::path::PathBuf;
 
