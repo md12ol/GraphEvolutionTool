@@ -3,6 +3,7 @@ pub mod evolver;
 pub mod fitness;
 pub mod genomes;
 pub mod graph;
+pub mod py_config;
 pub mod sir;
 
 use pyo3::exceptions::PyValueError;
@@ -10,6 +11,10 @@ use pyo3::prelude::*;
 
 use crate::config::{Config, FitnessConfig};
 use crate::fitness::{Direction, Fitness, PyFitness};
+use crate::py_config::{
+    PyConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig, PyOperationWeights,
+    PySelectionConfig, PySirParams, config_error_to_py,
+};
 
 /// Python-facing entry point to the graph-evolution engine.
 ///
@@ -41,6 +46,67 @@ impl GraphEvolver {
             .map_err(|err| PyValueError::new_err(format!("failed to load config: {err}")))?;
         Ok(Self {
             config,
+            best_fitness: None,
+            fitness_function: None,
+        })
+    }
+
+    /// Build from configuration assembled in Python, rather than from a file.
+    ///
+    /// The config object is rendered to TOML and parsed by exactly the same
+    /// [`Config::from_toml_str`] and [`Config::validate`] the file path above
+    /// goes through — Python is a *builder* for the config format, not a second
+    /// parser of it (spec §8). So this cannot accept a configuration a
+    /// `config.toml` would reject, and both front ends report the same
+    /// constraint in the same words.
+    ///
+    /// ```python
+    /// config = get.Config(
+    ///     population_size=200,
+    ///     network_size=100,
+    ///     crossover_rate=0.9,
+    ///     mutation_rate=0.2,
+    ///     evolution=get.EvolutionConfig.Generational(num_generations=500),
+    ///     selection=get.SelectionConfig.Tournament(tournament_size=5),
+    ///     genome=get.GenomeConfig.EdgeEdit(gene_length=256),
+    ///     fitness=get.FitnessConfig.EpiSpread(
+    ///         sir=get.SirParams(infection_rate=0.05, num_epidemics=30)
+    ///     ),
+    /// )
+    /// evolver = get.GraphEvolver.from_config(config)
+    /// ```
+    ///
+    /// `config.to_toml()` returns the document this parsed, which is the run's
+    /// provenance record: written beside the results, it re-runs verbatim.
+    ///
+    /// # Errors
+    ///
+    /// `ValueError` if the configuration breaks one of spec §7's constraints,
+    /// or if a field is too large for a TOML integer.
+    #[staticmethod]
+    fn from_config(config: &PyConfig) -> PyResult<Self> {
+        let text = config.to_toml()?;
+
+        // Parsing its own rendering should not fail, so this reports the text
+        // as well: a failure here is a defect in `py_config`'s emission rather
+        // than anything the user did, and the document is what a bug report
+        // needs.
+        let parsed = Config::from_toml_str(&text).map_err(|err| {
+            PyValueError::new_err(format!(
+                "the generated config did not parse: {err}. This is a bug in GET, not in \
+                 your configuration — please report it with the document below.\n---\n{text}"
+            ))
+        })?;
+
+        // Reported through `config_error_to_py`, which rewrites the field name
+        // `validate` uses — spelled as it appears in the TOML — into the Python
+        // attribute path that produced it. The bare name is right for the file
+        // front end and unhelpful here, where the user never saw a document
+        // (spec §8).
+        parsed.validate().map_err(|err| config_error_to_py(&err))?;
+
+        Ok(Self {
+            config: parsed,
             best_fitness: None,
             fitness_function: None,
         })
@@ -113,6 +179,39 @@ impl GraphEvolver {
 
     /// Evolve a population and return the best graph as a weighted edge list
     /// `(u, v, multiplicity)`.
+    ///
+    /// # Memory: the three sizes multiply, they do not add
+    ///
+    /// Expression materializes the whole population as `Vec<Graph>` before
+    /// scoring, and a `Graph` is a **dense** `network_size × network_size`
+    /// matrix however sparse the graph actually is (spec §2). So peak memory is
+    /// roughly:
+    ///
+    /// ```text
+    /// network_size² × 4 bytes × population_size × min(max_cores, replicates)
+    /// ```
+    ///
+    /// | `network_size` | one graph | population of 200 | × 8 concurrent replicates |
+    /// |---|---|---|---|
+    /// | 100 | 40 KB | 8 MB | 64 MB |
+    /// | 500 | 1 MB | 200 MB | 1.6 GB |
+    /// | 1000 | 4 MB | 800 MB | 6.4 GB |
+    ///
+    /// Treat those as a floor rather than an exact figure: the matrix is a
+    /// `Vec<Vec<u32>>`, so each row carries its own allocation header on top of
+    /// the `4 × network_size` bytes of weights. That overhead is well under 1%
+    /// at these sizes and does not change the shape of the problem.
+    ///
+    /// The failure mode is unintuitive, which is why it is documented on the
+    /// call rather than left to be derived: a configuration that ran fine, given
+    /// a larger `max_cores` to exploit a bigger machine, multiplies peak memory
+    /// by that same factor and can exhaust hardware that handled the smaller
+    /// setting. A user cannot work this out from the Rust internals, and this
+    /// package is the only surface they see.
+    ///
+    /// Required by spec §8.1 and agreed at the joint meeting of 2026-08-04; the
+    /// `max_cores` and replicate-count parameters it refers to arrive with
+    /// GitHub #20, which is what makes the last column reachable.
     ///
     /// # For whoever implements the dispatch (#26)
     ///
@@ -224,6 +323,15 @@ impl GraphEvolver {
 #[pymodule]
 fn get(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GraphEvolver>()?;
+    // The config builders (spec §8). Registered under their unprefixed names —
+    // the `Py` prefix is a Rust-side disambiguator, not part of the API.
+    m.add_class::<PyConfig>()?;
+    m.add_class::<PyEvolutionConfig>()?;
+    m.add_class::<PySelectionConfig>()?;
+    m.add_class::<PyGenomeConfig>()?;
+    m.add_class::<PyFitnessConfig>()?;
+    m.add_class::<PySirParams>()?;
+    m.add_class::<PyOperationWeights>()?;
     Ok(())
 }
 
@@ -231,6 +339,7 @@ fn get(m: &Bound<'_, PyModule>) -> PyResult<()> {
 mod tests {
     use super::*;
 
+    use crate::config::{EvolutionConfig, GenomeConfig, SelectionConfig};
     use crate::fitness::Fitness;
     use crate::graph::Graph;
 
@@ -472,6 +581,186 @@ mod tests {
                 "says what to change it to: {message}"
             );
             assert!(evolver.fitness_function.is_none(), "nothing was stored");
+        });
+    }
+
+    /// The Python builder equivalent of `config.example.toml`.
+    ///
+    /// Kept in step with that file by
+    /// `the_python_builder_and_config_example_toml_agree` below — the point of
+    /// spec §8's single-parser design is that these two cannot diverge, so a
+    /// change to one that is not made to the other should fail here.
+    fn example_mirror() -> PyConfig {
+        PyConfig::new(
+            PyEvolutionConfig::Generational {
+                num_generations: 500,
+                elite_count: 1,
+            },
+            200,
+            100,
+            0.9,
+            0.2,
+            PySelectionConfig::Tournament { tournament_size: 5 },
+            PyGenomeConfig::EdgeEdit {
+                gene_length: 256,
+                operation_weights: None,
+            },
+            PyFitnessConfig::EpiSpread {
+                sir: PySirParams::new(0.05, 30, None, 3, 5),
+            },
+            1,
+            1,
+        )
+    }
+
+    #[test]
+    fn the_python_builder_and_config_example_toml_agree() {
+        // The shipped example, read at compile time so the test cannot pass by
+        // finding a stale copy on disk.
+        let from_file = Config::from_toml_str(include_str!("../../config.example.toml"))
+            .expect("the shipped example parses");
+        let from_python =
+            Config::from_toml_str(&example_mirror().to_toml().expect("the mirror renders"))
+                .expect("the rendered mirror parses");
+
+        // Destructured with no `..` for the same reason as `py_config`'s tests:
+        // a field added to `Config` must break this, not slip past it.
+        let Config {
+            evolution,
+            population_size,
+            network_size,
+            max_edge_multiplicity,
+            crossover_rate,
+            mutation_rate,
+            max_mutations,
+            selection,
+            genome,
+            fitness,
+        } = from_file;
+
+        assert_eq!(population_size, from_python.population_size);
+        assert_eq!(network_size, from_python.network_size);
+        assert_eq!(max_edge_multiplicity, from_python.max_edge_multiplicity);
+        assert_eq!(crossover_rate, from_python.crossover_rate);
+        assert_eq!(mutation_rate, from_python.mutation_rate);
+        assert_eq!(max_mutations, from_python.max_mutations);
+
+        match (evolution, from_python.evolution) {
+            (
+                EvolutionConfig::Generational {
+                    num_generations: file_generations,
+                    elite_count: file_elites,
+                },
+                EvolutionConfig::Generational {
+                    num_generations: python_generations,
+                    elite_count: python_elites,
+                },
+            ) => {
+                assert_eq!(file_generations, python_generations);
+                assert_eq!(file_elites, python_elites);
+            }
+            (file, python) => panic!("evolution differs: {file:?} vs {python:?}"),
+        }
+
+        match (selection, from_python.selection) {
+            (
+                SelectionConfig::Tournament {
+                    tournament_size: file_size,
+                },
+                SelectionConfig::Tournament {
+                    tournament_size: python_size,
+                },
+            ) => assert_eq!(file_size, python_size),
+        }
+
+        match (genome, from_python.genome) {
+            (
+                GenomeConfig::EdgeEdit {
+                    gene_length: file_length,
+                    operation_weights: file_weights,
+                },
+                GenomeConfig::EdgeEdit {
+                    gene_length: python_length,
+                    operation_weights: python_weights,
+                },
+            ) => {
+                assert_eq!(file_length, python_length);
+                assert_eq!(file_weights, python_weights);
+            }
+            (file, python) => panic!("genome differs: {file:?} vs {python:?}"),
+        }
+
+        match (fitness, from_python.fitness) {
+            (
+                FitnessConfig::EpiSpread { sir: file_sir },
+                FitnessConfig::EpiSpread { sir: python_sir },
+            ) => {
+                assert_eq!(file_sir.infection_rate, python_sir.infection_rate);
+                assert_eq!(file_sir.patient_zero, python_sir.patient_zero);
+                assert_eq!(file_sir.num_epidemics, python_sir.num_epidemics);
+                assert_eq!(file_sir.min_epidemic_length, python_sir.min_epidemic_length);
+                assert_eq!(
+                    file_sir.max_epidemic_retries,
+                    python_sir.max_epidemic_retries
+                );
+            }
+            (file, python) => panic!("fitness differs: {file:?} vs {python:?}"),
+        }
+    }
+
+    #[test]
+    fn from_config_builds_an_evolver_and_keeps_the_parsed_config() {
+        let evolver = GraphEvolver::from_config(&example_mirror())
+            .expect("a config equivalent to the shipped example should build");
+
+        assert_eq!(evolver.config.population_size, 200);
+        assert!(evolver.best_fitness.is_none());
+        assert!(evolver.fitness_function.is_none());
+    }
+
+    #[test]
+    fn from_config_rejects_what_the_toml_front_end_would_reject() {
+        // Zero clamps every edge weight to nothing under any genome, so the run
+        // would look like a broken fitness function rather than a bad config
+        // (spec §7, GitHub #6). The TOML path rejects it; so must this one.
+        let mut config = example_mirror();
+        config.max_edge_multiplicity = 0;
+
+        let message = match GraphEvolver::from_config(&config) {
+            Err(err) => err.to_string(),
+            Ok(_) => panic!("a zero edge multiplicity should have been rejected"),
+        };
+
+        assert!(
+            message.contains("config.max_edge_multiplicity"),
+            "the error should name the Python attribute path, not the bare TOML field, \
+             got: {message}"
+        );
+    }
+
+    #[test]
+    fn from_config_accepts_a_python_objective_and_set_fitness_function_then_works() {
+        // The two halves of the Python front end meeting: a config built in
+        // Python selecting a callable registered from Python.
+        Python::attach(|py| {
+            let mut config = example_mirror();
+            config.fitness = PyFitnessConfig::Python();
+
+            let mut evolver =
+                GraphEvolver::from_config(&config).expect("a python objective is a valid config");
+
+            let callable = py
+                .eval(
+                    c"lambda batch: [float(len(edges)) for (n, edges) in batch]",
+                    None,
+                    None,
+                )
+                .expect("the lambda compiles");
+
+            evolver
+                .set_fitness_function(&callable, "maximize")
+                .expect("registering against a python config succeeds");
+            assert!(evolver.python_fitness().is_ok());
         });
     }
 }
