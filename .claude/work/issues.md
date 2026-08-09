@@ -32,6 +32,17 @@ as **#34** (assigned to md12ol), same obligation. Open count refreshed from the 
 - **Noticed:** <YYYY-MM-DD>, in <what you were doing when you hit it>
 
 
+### `cargo doc` warns twice on a private intra-doc link in `sda.rs`
+
+- **Where:** `get/src/genomes/sda.rs`, the doc comment referencing [`INIT_CHAR_MUTATION_RATE`].
+- **Impact:** cosmetic only — `cargo doc -p get --no-deps` emits "this item is private ... this link
+  will resolve properly if you pass `--document-private-items`", twice. No gate covers `cargo doc`,
+  so nothing fails; it just means the rendered docs carry a broken link. Whoever owns `sda.rs` can
+  either make the constant public or write it as plain text rather than a link.
+- **Noticed:** 2026-08-08, checking that #29's new memory-note table in `run`'s docstring rendered.
+  Confirmed **pre-existing** by stashing the #29 changes and re-running — same two warnings, so it
+  is not something #29 introduced.
+
 ## Ready to file — root-caused and evidenced
 
 ### <title — imperative, issue-ready>

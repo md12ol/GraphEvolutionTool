@@ -1358,3 +1358,57 @@ every tree, blocked on **#26** which is still open and unstarted; `issues.md`'s
 **#35**, **#36**, **#37** all awaiting Michael, plus **#27** still awaiting James. Entries below
 this line belong to later tasks.
 *Task marker · pyfitness · recorded 2026-08-08 — James, at `/done`.*
+
+## 2026-08-08 21:15 — James — The Python config schema is a mirror in `py_config.rs`, not `#[pyclass]` on `config`'s own types
+**Chose:** `get/src/py_config.rs` holds a parallel set of `#[pyclass]` types — `PyConfig`,
+`PyEvolutionConfig`, `PySelectionConfig`, `PyGenomeConfig`, `PyFitnessConfig`, `PySirParams`,
+`PyOperationWeights` — mirroring `config.rs` field for field, and converts to TOML through explicit
+`to_toml_value` matches rather than a `Serialize` derive.
+**Why:** not a style preference — the two attribute sets are **mutually exclusive on the fitness
+enum**, measured on pyo3 0.27.2 and serde 1.0.228 while building #29. pyo3 refuses a unit variant in
+a complex enum ("not yet supported in a complex enum; change to an empty tuple variant instead"), so
+`FitnessConfig::Python` would have to become `Python()`; serde then refuses exactly that with
+"`#[serde(tag = "...")]` cannot be used with tuple variants". The tag is what deserializes
+`type = "python"` for the hand-written TOML path, so annotating `config`'s enum directly would break
+the file front end in order to serve the Python one. The same conflict rules out deriving
+`Serialize` on the mirror, hence the explicit conversions — which also suit a codebase one owner
+reads without writing Rust. Secondary benefit: every pyo3 attribute stays in one new file, which
+matters with two owners editing the crate at once and #26 due to touch `lib.rs`.
+**Rejected:** (a) `#[pyclass]` on `config.rs`'s types — impossible, above, and it was my first
+preference because it eliminates drift. (b) A `Serialize` derive on the mirror — same blocker.
+(c) Exposing config as plain dicts — loses the typed API #29 asks for and pushes schema errors to
+run time.
+**The cost is drift, and it is guarded rather than accepted:** the round-trip tests destructure the
+parsed `Config` **exhaustively with no `..`**, so a field added to `config.rs` and not to the mirror
+is a compile error in `py_config.rs`. Verified by adding a field and watching it fail with "pattern
+does not mention field", not assumed.
+**Affects:** `get/src/py_config.rs` (new); `get/src/lib.rs` `from_config` and the `#[pymodule]`
+block. Spec §8. GitHub #29.
+*#29 · recorded 2026-08-08 21:15 — James, building the Python config front end.*
+
+## 2026-08-08 21:18 — James — Validation errors reach Python as attribute paths, guarded by scraping `config.rs`
+**Chose:** `py_config::config_error_to_py` rewrites `ConfigError::Validation`'s field name into the
+Python attribute path that produced it — `num_epidemics` becomes `config.fitness.sir.num_epidemics`
+— leaving the constraint text untouched. A field with no Python equivalent keeps its original
+wording rather than being given an invented path.
+**Why:** spec §8 requires it in as many words: the Python front end reports against a TOML document
+the user never wrote, so a bare field name leaves them to work out which of the objects they
+assembled owns it. `Config::validate` is right to name the TOML field — that is the correct answer
+for the file front end — so the rewrite belongs at the Python boundary, not in `config.rs`.
+**The mapping is a hand-written match, so the real decision is how it is kept honest.**
+`every_validation_field_maps_to_a_python_attribute` scrapes `config.rs`'s own `invalid("<field>",
+...)` call sites out of `include_str!("config.rs")` and asserts each is mapped or explicitly exempt.
+A second test guards the scraper itself, because one that silently matched nothing would make the
+first pass while checking no fields at all. Verified by adding a `crossover_rate` check to
+`config.rs` and confirming the suite failed naming it; then reverted.
+**Rejected:** (a) A hand-maintained list of field names — the exact thing that goes stale, and the
+failure is silent: an unmapped field degrades to a bare name rather than erroring. (b) Changing
+`Config::validate` to emit Python paths — wrong for the TOML front end, which is the majority case
+and has no Python attributes. (c) Leaving the bare names — cheapest, and the thing §8 names as
+making errors useless.
+**One exemption exists:** `seed`, raised by `reject_fitness_seed` against raw TOML text, is
+unreachable from a front end that has no seed to write (spec §7). Exempt by name, so any *other*
+unmapped field still fails.
+**Affects:** `get/src/py_config.rs` `config_error_to_py` and `python_attribute_path`;
+`get/src/lib.rs` `from_config`. Spec §8. GitHub #29.
+*#29 · recorded 2026-08-08 21:18 — James, on the error-reporting half of #29.*

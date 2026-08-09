@@ -729,6 +729,45 @@ you discover it mid-task on #26.
 
 *#37 · raised 2026-08-08 00:15 — James, before opening #19's PR.*
 
+### 38. What #29 leaves for #26, and the `lib.rs` region we will both have touched
+
+**Heads-up, not a question — worth reading before you start #26.** #29, the Python config front
+end, is six commits on `jsargant_python_config` and not yet a PR. It edits `get/src/lib.rs`, which
+is where #26 works, so this is the "source files genuinely overlap" case `CLAUDE.md` warns about
+rather than a courtesy note.
+
+**Where we collide, both in `lib.rs`:** `run`'s **docstring**, where I added the §8.1
+memory-multiplication note the 2026-08-04 meeting assigned to #29 — its *body* is untouched and
+still `todo!()`, so the textual conflict sits directly above the code you are replacing. And the
+`#[pymodule]` block, which gains seven `add_class` lines for the config builders.
+
+**Three things #29 hands you, each of which changes what #26 has to do:**
+
+1. **`from_config` gives you a validated `Config` by the same path as the file front end.** It
+   renders the Python objects to TOML and parses that through `Config::from_toml_str` and
+   `Config::validate`, so by the time dispatch runs there is no Python-specific config shape left to
+   handle — one `Config`, however it was built, and nothing in #26 needs to know which front end
+   produced it.
+2. **`python_fitness`'s `#[allow(dead_code)]` is still there and still yours to delete.** #29 did
+   not touch it, and `hotfixes.md`'s entry stands unchanged: it goes when #26's `python` arm calls
+   the method.
+3. **`run`'s new memory note names `max_cores`, which does not exist yet** — that parameter is
+   **#20**'s, mine. The note is written to spec §8.1 rather than to today's signature, so it
+   describes a `run` taking a replicate count and a core cap. If #26 lands first the note reads
+   slightly ahead of the code; that is deliberate, and #20 closes the gap.
+
+**One standing obligation #29 creates, worth knowing before you add anything to the config schema.**
+`config::FitnessConfig` and its neighbours now have a Python mirror in `get/src/py_config.rs`,
+because pyo3 and serde cannot both annotate the same fitness enum: pyo3 rejects a unit variant in a
+complex enum and directs you to an empty tuple variant, and serde's `tag` then rejects exactly that.
+So a new field or variant in `config.rs` needs a matching one in the mirror. **It fails loudly
+rather than silently** — the round-trip tests destructure `Config` exhaustively with no `..`, so an
+unmirrored field is a compile error, and a new validation check with no attribute mapping fails
+`every_validation_field_maps_to_a_python_attribute`, which scrapes `config.rs`'s own `invalid(...)`
+call sites. Both guards were verified by deliberately breaking them rather than assumed to work.
+
+*#38 · raised 2026-08-08 21:13 — James, closing out #29's implementation.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in

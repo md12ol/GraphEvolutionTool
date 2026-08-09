@@ -368,3 +368,25 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   on performance; the measured failure is stronger than the stated one. Full writeup in
   `.claude/reference/pyo3-maturin.md` §2.
 - **Added:** 2026-08-07 — calling-python-from-a-rayon-closure-deadlocks
+
+### `#[pyclass]` cannot go on `config`'s fitness enum, so `py_config.rs` is not duplication to tidy away
+- **Bites when:** you look at `get/src/py_config.rs`, see it mirroring `get/src/config.rs` field for
+  field, and try to collapse the two — either by putting `#[pyclass]` on `config`'s own types or by
+  deriving `Serialize` on the mirror so the conversions can go. Both are dead ends, and the second
+  error only appears after you have rewritten the conversions.
+- **Do this instead:** leave the mirror in place. Add the field in **both** files; the tests below
+  will tell you if you forget.
+- **Why:** pyo3 and serde disagree about one variant. pyo3 rejects a **unit** variant in a complex
+  enum and directs you to an empty tuple variant (`Python()`); serde then rejects that with
+  `#[serde(tag = "...")] cannot be used with tuple variants`. The tag is what deserializes
+  `type = "python"` for the hand-written TOML path, so annotating `config::FitnessConfig` breaks the
+  file front end to serve the Python one. Measured 2026-08-08 on pyo3 0.27.2 and serde 1.0.228,
+  both directions, while building #29.
+- **The corollary, which looks like a bug and is not:** editing `config.rs` can break tests in
+  `py_config.rs` you never touched. That is the drift guard working. The round-trip tests
+  destructure `Config` with **no `..`**, so a new field fails to compile ("pattern does not mention
+  field"), and a new `invalid("<field>", ...)` check with no Python attribute mapping fails
+  `every_validation_field_maps_to_a_python_attribute`, which scrapes `config.rs`'s source. Both were
+  confirmed by deliberately breaking them, then reverting. Fix the mirror; do not weaken the test by
+  adding `..`.
+- **Added:** 2026-08-08 — pyclass-cannot-go-on-configs-fitness-enum
