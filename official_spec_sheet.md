@@ -16,11 +16,15 @@ fitness direction, steady-state replacement, and mutation. Started 2026-07-31.
 | `EdgeEditGenome`, `SdaGenome` | built — mutation contract landed 2026-08-04 (§4) |
 | `Selection`, population scoring, logging stats | built |
 | `SteadyStateEvolver` | built |
-| `GenerationalEvolver` | designed, not built |
+| `GenerationalEvolver` | built — landed 2026-08-06 via GitHub #25 |
 | `sir_sim` | built |
-| the three SIR objectives | designed, not built |
-| `Config` parsing | partly built; validation not built |
-| Python interface | designed, not built |
+| the three SIR objectives | built — GitHub #17, with #18's epidemic seeding (§8.1) |
+| `Config` parsing | built, and `Config::validate` covers both front ends — GitHub #23 |
+| Python interface | built **except dispatch** — the module, the config builders (§8) and `set_fitness_function` are in; `GraphEvolver::run`'s body is still `todo!()`, which is GitHub #26 |
+
+*Status table corrected 2026-08-09 at the joint meeting: four rows still read "designed, not built"
+for components that had since landed. It is the only place in this document that carries status, so
+a stale row here is the whole signal.*
 
 ---
 
@@ -614,12 +618,24 @@ and its own clone does nothing but mutate. Steady-state cannot self-mate by cons
 ### 6.2 Generational
 
 The whole population is replaced each generation. Per generation: score the population, log a
-stats row, track the best, then advance — copy `elite_count` best individuals forward unchanged,
-then fill the remaining slots by selecting parent pairs, recombining by `crossover_rate`, and
-mutating by §4.
+stats row, then advance — copy `elite_count` best individuals forward unchanged, then fill the
+remaining slots by selecting parent pairs, recombining by `crossover_rate`, and mutating by §4.
 
-Tracking the best uses the graph that scoring already built, so the winner is never re-expressed.
-Comparison is by total order rather than `partial_cmp().unwrap()`.
+**The reported best is the best of the final population, for both strategies** — not a running
+best carried across generations. Amended 2026-08-09; the previous wording, "track the best", read
+as the latter and never matched either evolver. Generational takes the winner out of the graphs
+its last scoring pass already built, so the winner is never re-expressed; steady-state re-expresses
+its winner, having no such vector to hand. Both return the identical graph, since expression is
+deterministic — the difference is cost, not behaviour. Comparison is by total order rather than
+`partial_cmp().unwrap()`.
+
+Two reasons this is the honest number rather than a limitation. Fitness is stochastic between
+batches (§8.1), so a running best is substantially a record of which generation drew the luckiest
+sample — the same argument that rejects freezing an elite's old score three paragraphs below. And
+at `elite_count = 0`, which §7 permits, a non-elitist generational GA genuinely can lose its best
+individual: the run really did end without it, and a report claiming otherwise describes a
+population that no longer exists. **At `elite_count = 0` the divergence is a property of the
+configuration, not of the report.**
 
 **Odd slot count.** Crossover yields two children, but `population_size - elite_count` may be odd.
 The last pair contributes **one** child; the other is discarded. Only the final pair is ever

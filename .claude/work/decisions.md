@@ -1438,6 +1438,27 @@ that item. The amendment was written at the joint meeting of 2026-08-09.
 **Affects:** `.claude/CLAUDE.md` routing table. `collab.md` #34.
 *#34 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
 
+## 2026-08-09 — Michael & James — §6.2's "track the best" amended to best-of-final population
+**Chose:** the reported best is the best of the **final** population, for both strategies. Spec
+§6.2's "track the best" wording is amended to say so, and to say that at `elite_count = 0` the
+divergence is a property of the configuration rather than of the report. **No code changes** —
+`GenerationalEvolver::outcome` and `SteadyStateEvolver::outcome` already do this.
+**Why:** the sentence read as a running best carried across generations, which neither evolver has
+ever implemented. Two arguments against building one. Fitness is stochastic between batches since
+the atomic batch counter landed (§8.1), so a running best is substantially a record of which
+generation drew the luckiest sample — and §6.2 already rejects exactly that reasoning three
+paragraphs later, where freezing an elite's old score is refused on the same grounds (§5.2). And a
+non-elitist generational GA really can lose its best individual; the run ended without it, so a
+report naming it describes a population that no longer exists.
+**Rejected:** (a) Requiring `elite_count >= 1` in §7 — removes a legitimate configuration to avoid
+amending a sentence, and non-elitist generational is deliberately run. James declined this
+explicitly. (b) Implementing a running best — both owners rejected it, for the reason above.
+**Arrived at independently from both ends**, which is the evidence the sentence rather than the
+code was stale: James recorded best-of-final and the running-best he rejected in `decisions.md`
+2026-08-06 21:04 while writing the generational evolver; Michael reached the same reading reviewing
+PR #46 against §6.2 the following day, without having seen it.
+**Affects:** `/official_spec_sheet.md` §6.2. No files under `get/src/`. `collab.md` #35.
+*#35 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
 ## 2026-08-09 — Michael & James — The self-merge exception widens to strict deletions of false text
 **Chose:** a second permitted case for merging your own PR — **a strict deletion, or a one-line
 correction, to a doc, where the change removes something already false.** The first case, "the other
