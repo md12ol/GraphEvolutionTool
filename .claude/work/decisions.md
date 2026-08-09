@@ -1437,3 +1437,26 @@ James agreed the same day and drew the frontmatter/body line; both positions are
 that item. The amendment was written at the joint meeting of 2026-08-09.
 **Affects:** `.claude/CLAUDE.md` routing table. `collab.md` #34.
 *#34 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+
+## 2026-08-09 — Michael & James — The self-merge exception widens to strict deletions of false text
+**Chose:** a second permitted case for merging your own PR — **a strict deletion, or a one-line
+correction, to a doc, where the change removes something already false.** The first case, "the other
+owner is unavailable and the change is blocking", is unchanged. The trace obligation applies to
+both: say it in the PR and in `collab.md`.
+**The test is that the change subtracts a falsehood rather than asserting anything.** Dropping a
+caveat that cites a closed issue, correcting a status row for a component that has shipped, fixing a
+glob that names files it no longer covers. A sentence adding a new claim is not this case however
+short it is, and that boundary is the whole reason the case can be safely widened — reviewing a
+deletion of something false is a check nobody was ever going to fail.
+**Why:** PR #37 was self-merged under case 1 when case 1 did not hold, and was logged honestly as a
+self-merge of convenience (`collab.md` #29). A rule that gets correctly broken is stated wrong,
+which is the same reasoning that reworded "an agent never merges a PR at all" on 2026-08-04. The
+cost was measured on 2026-08-09: `official_spec_sheet.md`'s status table had been stale on **four of
+nine rows** for days, each naming a shipped component as unbuilt, because correcting a fact needed
+the full branch-and-review cycle.
+**Rejected:** (a) Leaving the rule and treating #29 as a logged exception — precedent without a
+rule is how the exception quietly becomes the norm. (b) Widening only for the spec status table —
+too narrow to survive contact; the same argument applies to any doc, and a per-file carve-out
+invites a second one.
+**Affects:** `.claude/CLAUDE.md`, "Pull requests". `collab.md` #29.
+*#29 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
