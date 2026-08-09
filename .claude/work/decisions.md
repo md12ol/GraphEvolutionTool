@@ -1517,3 +1517,33 @@ of the Rust route, possibly a builder later, and explicitly not a reason to rout
 through the config enum.
 **Affects:** `/official_spec_sheet.md` §5.3 (new). GitHub #26. `collab.md` #21.
 *#21 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+
+## 2026-08-09 — Michael & James — The target profile is an inline config value, verbatim, with no C++ conventions
+**Chose:** `epi_prof_match`'s target becomes **`target_profile`, an ordinary inline config value** —
+a TOML array for the file front end, a Python list on `FitnessConfig.EpiProfMatch` for the Python
+one. Both front ends hand over the same list of numbers and no setter is involved. It replaces
+`target_profile_path`, which is deleted. Validated non-empty and finite by `Config::validate`.
+**This reverses spec §8, which said the opposite** — "passed as a sequence of numbers through a
+setter rather than serialized into the generated TOML ... a long inline array makes the provenance
+document unreadable". Keeping it out of the document protected readability but cost the thing the
+document exists for: a run whose target lived outside the config could not be reproduced from the
+config alone, so `to_toml()`'s provenance was incomplete for exactly one objective. A verbose
+`[fitness]` block is the smaller price.
+**Neither C++ loading convention is reproduced.** `legacy/main.cpp:378-386` prepends patient zero,
+so a stored `.dat` omits its own first element, and multiplies every value by `verts / 128` because
+profiles were normalized to a 128-node network. Both dropped. The user supplies the profile they
+want at the size of the network they are building, and GET compares against it unchanged. A silent
+one-step shift and a silent rescale are two ways to produce a wrong number rather than an error,
+and archived runs are usually not at 128 nodes anyway.
+**Rejected:** (a) Keeping `target_profile_path` — a second file to lose, version separately and
+omit from provenance. (b) Accepting either a path or an inline array — two ways to say one thing,
+needing a new validation rule to reject both being set, and a provenance document whose shape
+depends on which was used. (c) Reproducing the prepend and rescale for comparability with archived
+C++ results — the argument that kept the short-epidemic re-roll (§5.2), rejected here because these
+two conventions are invisible when wrong where the re-roll is a documented sampling policy.
+**Note the sheet was the stale side and the code was too**, differently: §8 described a setter
+nobody built, and `config.rs:129` stored a path §8 never authorized. Neither matched the other and
+neither is what was agreed.
+**Affects:** `/official_spec_sheet.md` §8, two passages. `get/src/config.rs`, `get/src/py_config.rs`,
+`config.example.toml`, `examples/config_builder.py`. `collab.md` #24.
+*#24 · recorded 2026-08-09 — Michael & James, at the joint meeting.*

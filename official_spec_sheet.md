@@ -812,8 +812,10 @@ be written next to the results and re-run verbatim.
 
 Two consequences to design around. Error messages will reference a TOML document the user never
 wrote, so field errors need mapping back to the Python attribute that produced them or they are
-useless. And anything large or awkward in TOML — a long target profile, a base graph — is better
-delivered through a setter than serialized into the document (see below).
+useless. And anything large or awkward in TOML — ~~a long target profile,~~ a base graph — is
+better delivered through a setter than serialized into the document (see below). **Amended
+2026-08-09: the target profile is no longer an example of this** — it is an ordinary inline config
+value, and the reasoning is below. The base graph still is.
 
 **The objective is erased before dispatch; the genome is not.** Agreed 2026-08-04. The config's
 fitness variant is turned into one `Box<dyn Fitness>` *first*, in a match that touches neither
@@ -959,13 +961,33 @@ through setters before `run`:
   and it is the same shape the batching argument above demands, so the ergonomic choice and the
   performance choice agree.
 
-- **The target profile for `epi_prof_match`.** A user-supplied vector of newly-infected counts,
-  passed as a sequence of numbers through a setter rather than serialized into the generated TOML —
-  it is bulk data, and a long inline array makes the provenance document unreadable. Validated
-  non-empty and finite at registration, alongside the other config checks, so a malformed target
-  fails before any evolution starts rather than producing an RMSE against nothing. Required
+- **The target profile for `epi_prof_match`.** A user-supplied vector of newly-infected counts.
+  **Amended 2026-08-09 at the joint meeting** (`collab.md` #24) — ~~passed as a sequence of numbers
+  through a setter rather than serialized into the generated TOML — it is bulk data, and a long
+  inline array makes the provenance document unreadable.~~ It is an **ordinary inline config
+  value**, `target_profile`, written into the document like any other field: a TOML array for the
+  file front end, a Python list on `FitnessConfig.EpiProfMatch` for the Python one. Both front ends
+  therefore hand over the same list of numbers, and no setter is involved.
+
+  **Why the reversal.** Keeping it out of the document was meant to protect readability, but it
+  cost the thing the document exists for: a run whose target lived outside the config could not be
+  reproduced from the config alone, so `to_toml()`'s provenance record was incomplete for exactly
+  one objective. A verbose `[fitness]` block is a smaller price than a provenance document that
+  silently omits the thing being matched against.
+
+  Validated non-empty and finite by `Config::validate` alongside every other check, so a malformed
+  target fails before any evolution starts rather than producing an RMSE against nothing. Required
   whenever `type = "epi_prof_match"`, and rejected as a contradiction if supplied for any other
   objective.
+
+  **The profile is the target verbatim — GET reproduces neither C++ loading convention.** The
+  legacy loader (`legacy/main.cpp:378-386`) prepended patient zero, so a stored file omitted its
+  own first element, and multiplied every value by `verts / 128`, because profiles were normalized
+  to a 128-node network. Both are dropped. The user supplies the profile they want, at the size of
+  the network they are building, and GET compares against it unchanged. Decided 2026-08-09: a
+  silent one-step shift and a silent rescale are two ways to get a wrong number rather than an
+  error, and neither is worth carrying for comparability with archived runs whose network size is
+  usually not 128 anyway.
 - **An edge-edit base graph.** Not a config value: it is either data the user brings or the output
   of a previous run. Since `run` already returns `(u, v, multiplicity)` triples, the two
   representations **stack with no new data format** — evolve a topology with SDA, then refine it
