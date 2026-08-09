@@ -1459,3 +1459,82 @@ code was stale: James recorded best-of-final and the running-best he rejected in
 PR #46 against §6.2 the following day, without having seen it.
 **Affects:** `/official_spec_sheet.md` §6.2. No files under `get/src/`. `collab.md` #35.
 *#35 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+## 2026-08-09 — Michael & James — The self-merge exception widens to strict deletions of false text
+**Chose:** a second permitted case for merging your own PR — **a strict deletion, or a one-line
+correction, to a doc, where the change removes something already false.** The first case, "the other
+owner is unavailable and the change is blocking", is unchanged. The trace obligation applies to
+both: say it in the PR and in `collab.md`.
+**The test is that the change subtracts a falsehood rather than asserting anything.** Dropping a
+caveat that cites a closed issue, correcting a status row for a component that has shipped, fixing a
+glob that names files it no longer covers. A sentence adding a new claim is not this case however
+short it is, and that boundary is the whole reason the case can be safely widened — reviewing a
+deletion of something false is a check nobody was ever going to fail.
+**Why:** PR #37 was self-merged under case 1 when case 1 did not hold, and was logged honestly as a
+self-merge of convenience (`collab.md` #29). A rule that gets correctly broken is stated wrong,
+which is the same reasoning that reworded "an agent never merges a PR at all" on 2026-08-04. The
+cost was measured on 2026-08-09: `official_spec_sheet.md`'s status table had been stale on **four of
+nine rows** for days, each naming a shipped component as unbuilt, because correcting a fact needed
+the full branch-and-review cycle.
+**Rejected:** (a) Leaving the rule and treating #29 as a logged exception — precedent without a
+rule is how the exception quietly becomes the norm. (b) Widening only for the spec status table —
+too narrow to survive contact; the same argument applies to any doc, and a per-file carve-out
+invites a second one.
+**Affects:** `.claude/CLAUDE.md`, "Pull requests". `collab.md` #29.
+*#29 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+
+## 2026-08-09 — Michael & James — `Swap`'s degree floor stays at 3, one higher than the Java original
+**Chose:** keep `graph.degree(v) <= 2` as the rejection test in
+`get/src/genomes/edge_edit/operations.rs::swap` — both endpoints need **degree >= 3**. Spec §3.1's
+"two non-adjacent vertices of degree > 2" already says this, so **no code and no sheet change**.
+This entry exists only to stop the discrepancy being rediscovered and filed as an off-by-one.
+**The discrepancy is real and was checked.** The 2019 Java predecessor (`Graph.java`/`GET.java`, in
+Michael's OneDrive archive, not in this repo) rejects on `nbr.get(v1).size() < k` with its only
+caller passing `MIN_DEG_SWAP = 2`, so the original required **degree >= 2**. Every other check in
+the operation was ported verbatim — non-adjacent `v1,v2`, four distinct vertices, and none of
+`v1-a2`, `v2-a1`, `a1-a2` already an edge — which is what made the single differing number look
+like a slip rather than a choice. No comment in the Java explains why 2 was chosen.
+**Why keep the stricter floor:** Michael's call at the meeting. `Swap` firing on a degree-2 vertex
+strips a vertex to a single connection, and the stricter floor is what every run and every test in
+this repo has been built and tuned against. Loosening it would change search behaviour on all of
+them to match a number nobody can show was deliberate.
+**Rejected:** (a) Loosening to `>= 2` to match the original — would need §3.1 reworded,
+`operations.rs:169-170` changed, and new fixtures for
+`swap_rejects_low_degree_and_conflicting_quartets`, all to adopt an unexplained constant.
+(b) Parking it until the Java is readable by both owners — the current behaviour is not in doubt,
+only its ancestry, and leaving the item open invites the same re-derivation later.
+**Worth recording plainly:** the Java is **not verifiable from this repo** — `legacy/` holds only
+`main.cpp`, `Graph.cpp/h` and `SDA.cpp/h`, none of which contains a swap operation. James agreed to
+this on evidence only Michael can see. If the archive is ever added to the repo, this entry is what
+a re-check should start from.
+**Affects:** nothing. `get/src/genomes/edge_edit/operations.rs` and spec §3.1 both stand as written.
+`collab.md` #27.
+*#27 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+
+## 2026-08-09 — Michael & James — Drop-in Rust objectives are supported, via the library, not the config
+**Chose:** GET supports **two** user-extension routes for fitness. Python — register a callable
+with `set_fitness_function` — for most users and any prototype. **Rust** — depend on `get` as a
+crate, `impl Fitness` for your own type, and drive an evolver directly — for a hot native objective
+without forking GET. Spec gains §5.3.
+**The finding that made this cheap:** `Evolver::run<F: Fitness>` is generic over the objective and
+`Fitness` is public, so a caller holding a concrete `F` instantiates the evolver and **never
+touches §8's dispatch `match`**. The closed match turns a *config document* into concrete types; a
+Rust user is a library consumer, not a config consumer. So supporting drop-in Rust objectives
+required **no change to #26's design**, which was the thing `collab.md` #21 was raised to protect.
+**A user objective deliberately gets no `FitnessConfig` variant.** The obvious alternative, a
+string-keyed registry that config could name, would move validation out of serde — the exact
+failure GitHub #13 and #23 exist to prevent. Keeping user objectives out of the schema means
+nothing user-supplied is ever deserialized, so there is nothing new to validate.
+**The one obligation it puts on #26:** dispatch must not become the only way to construct a run.
+`Fitness`, `Direction`, the genome `Context` types, `SharedEvolutionContext`, each `TypeContext`,
+`Evolver::new`, `Evolver::run` and `EvolutionOutcome` stay public. Narrowing any of them kills the
+Rust route **silently** — there would be no compile error inside `get`. Noted on GitHub #26.
+**Rejected:** (a) Declaring Python the only route and adding a §10 non-goal — James's lean when he
+raised it, overtaken by the finding above, which removes the cost that made it attractive.
+(b) A registry keyed by name in the config — see the validation argument. (c) Literally dropping a
+`.rs` file into `get/src/` — that is a fork plus a match arm, which buys nothing over the library
+route and costs a rebuild of GET itself.
+**Open, deliberately:** the ergonomics of assembling a population and contexts by hand. A real cost
+of the Rust route, possibly a builder later, and explicitly not a reason to route user objectives
+through the config enum.
+**Affects:** `/official_spec_sheet.md` §5.3 (new). GitHub #26. `collab.md` #21.
+*#21 · recorded 2026-08-09 — Michael & James, at the joint meeting.*

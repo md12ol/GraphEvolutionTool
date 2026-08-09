@@ -246,9 +246,27 @@ only thing that catches them:
   the other person's machine at session start, without them reading the diff. Those were already
   PR-only; this generalizes the habit to everything so the rule has no edge to fall off.
 
-Self-merging is allowed in exactly one case: the other owner is unavailable and the change is
-blocking. Say so in the PR, and say it in `collab.md` too — an unreviewed merge should leave a
+~~Self-merging is allowed in exactly one case: the other owner is unavailable and the change is
+blocking.~~ **Widened 2026-08-09 at the joint meeting to two cases** — `collab.md` #29:
+
+1. **The other owner is unavailable and the change is blocking.** Unchanged.
+2. **A strict deletion, or a one-line correction, to a doc — where the change removes something
+   that is already false.** New. The test is that the change *subtracts* a falsehood rather than
+   adding a claim: dropping a caveat that cites a closed issue, correcting a status row for
+   something that has shipped, fixing a glob that names files it no longer covers. A sentence that
+   asserts something new is not this case, however short it is.
+
+Either way: say so in the PR, and say it in `collab.md` too — an unreviewed merge should leave a
 trace, not a gap.
+
+**Why case 2 exists.** PR #37 was self-merged under case 1 when case 1 did not apply — James was
+demonstrably available, having merged two PRs six minutes earlier — and Michael logged it honestly
+as a self-merge of convenience rather than dressing it as the documented one (`collab.md` #29). A
+rule that gets correctly broken is stated wrong, which is the same reasoning that reworded the
+agent-merge rule above. The cost of the old wording was visible on 2026-08-09: the spec sheet's
+status table had been stale on **four of nine rows** for days, each row naming a component as
+unbuilt that had shipped, because correcting a fact needed the full branch-and-review cycle.
+Reviewing a deletion of something false is a check nobody was ever going to fail.
 
 **Merge locally whenever the PR touches `.claude/work/*.md` — never with the GitHub button.**
 Measured 2026-08-04: `.gitattributes` merge drivers are applied by *your* git, not by GitHub's
