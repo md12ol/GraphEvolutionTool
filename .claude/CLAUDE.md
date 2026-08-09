@@ -214,9 +214,9 @@ Branch naming: `<owner>_<short-description>`, e.g. `mdube_sir_sim`, `jsargant_mu
 This is not ceremony, because three things in this repo fail *silently* and a second reader is the
 only thing that catches them:
 
-- **`merge=union` never conflicts.** Byte-identical lines in `.claude/work/*.md` dedupe and
-  interleave two entries into one block that reads as coherent and is not. Git will not tell you;
-  the reviewer might.
+- **`merge=union` never conflicts.** Byte-identical lines in `decisions.md` and `collab.md` — the
+  two union-merged files, narrowed from all five on 2026-08-04 — dedupe and interleave two entries
+  into one block that reads as coherent and is not. Git will not tell you; the reviewer might.
 - **Source files genuinely overlap.** `collab.md` #14 has three files claimed by #10 *and* #14/#15
   at once. Review is where a conflicting edit gets noticed while it is still cheap.
 - **Rule 2 above is the strict case, not the exception.** `settings.json` and `hooks/` execute on
