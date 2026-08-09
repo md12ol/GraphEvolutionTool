@@ -57,47 +57,16 @@ Persistent: survives `/done`, because coordination outlives any one task.
 
 ## Open
 
-**Nothing is awaiting a decision.** Items 1–19 were settled at the joint meeting of 2026-08-04 and
-items 20–38 at the meeting of 2026-08-09; all of them now sit under **Settled**, bodies and stamps
-intact, behind their disposition tables. Item 39 below is a standing FYI rather than an open
-question — it stays here until James has pulled, because it carries the one command he needs.
-**Append the next item as 40**, numbering continuing across both sections.
+**Nothing is open.** Items 1–19 were settled at the joint meeting of 2026-08-04 and items 20–38 at
+the meeting of 2026-08-09; all of them sit under **Settled** below, bodies and stamps intact, behind
+their disposition tables. **Append the next item as 40**, numbering continuing across both sections.
 
-*(This replaces the "Items 1–19 are all dispositioned" note and the "Nothing is open" placeholder
-before it, both of which had been overtaken. The trail of what each said is in items 20 and 39.)*
+*(Item 39 was raised and withdrawn on 2026-08-09 — a trace of that meeting's self-merge, direct spec
+pushes and force-push, no longer needed once both owners had gone through it in the room. The trace
+survives where it is load-bearing: in the merge commit for PR #50 and in the two spec commits, each
+of which states its own route departure. The number is retired rather than reused, since it reached
+`main` and would otherwise collide with a stale copy.)*
 
-### 39. Trace: PR #50 was self-merged, and `main` was force-pushed — two things to know before you pull
-
-**FYI, and one action for James at the bottom.** Two departures from the written route happened at
-the 2026-08-09 meeting, both authorized by Michael in the room, both recorded here because the rules
-they depart from ask for a trace rather than silence.
-
-**1. PR #50 self-merged.** Michael's PR, merged by Michael, carrying spec §6.2's best-of-final
-amendment and the four stale status-table rows. Both halves were agreed at the joint meeting that
-produced them, so the review the PR rule exists to obtain had already happened; the status-table
-half is additionally a strict deletion of text that had become false, which is the second permitted
-case added to the self-merge rule earlier in that same meeting (#29). Merged **locally**, not with
-the GitHub button, because it touched `decisions.md` — the `uniq -d` audit and the entry-heading
-check were both clean after the merge.
-
-**2. Two spec sections went direct to `main` rather than through a PR.** §5.3 (the two extension
-routes) and §8's target-profile amendment. The routing table says the spec sheet takes a PR after a
-joint meeting; Michael directed the direct push during the meeting itself, and both commit messages
-say so explicitly rather than leaving it to be noticed.
-
-**3. `main` was force-pushed** — this is the part that affects your machine. Six commits made
-earlier in the meeting carried a `Co-Authored-By: Claude` trailer, because the rule banning it lived
-only in `~/.claude/CLAUDE.md` on James's machine and could not be seen from Michael's. History was
-rewritten to strip them, the rule now lives in the repo's `CLAUDE.md` where it binds both of us, and
-every commit on `main` is authored solely by Michael. Content is byte-identical to before the
-rewrite; only the messages changed.
-
-**James: `git fetch origin` then `git reset --hard origin/main`.** `pull_main.sh` will *decline* the
-fast-forward and print one line, which is correct behaviour and not a failure — it will not fix this
-for you. Check nothing of yours is unpushed on `main` first; the rewrite base is `0731aa6`, PR #49's
-merge, so anything before that is untouched.
-
-*#39 · raised 2026-08-09 — Michael, closing out the joint meeting.*
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
