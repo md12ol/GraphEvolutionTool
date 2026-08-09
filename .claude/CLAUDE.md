@@ -350,6 +350,15 @@ reach for `--json` on reads and the REST API on writes:
   written for someone new to the code; link `official_spec_sheet.md` rather than restating it —
   a copy of the sheet drifts, and the sheet is the authority. Agreed 2026-08-04; reasoning in
   `decisions.md` 2026-08-04 22:12.
+- **No agent co-attribution on commits or PRs — ever, and never ask.** No `Co-Authored-By: Claude`
+  trailer, no "Generated with Claude Code" footer, no `🤖` line. The author and committer are the
+  owner whose machine it is, and nothing else appears. Added to *this* file 2026-08-09 — Michael,
+  after six commits landed carrying the trailer. **The rule already existed and could not be seen
+  from here:** James wrote it into `~/.claude/CLAUDE.md` on 2026-08-03, which is global and
+  per-machine, so it bound his sessions and no one else's. A convention that lives only in one
+  person's home directory protects one person — the same argument that puts traps on `main`. The
+  precedent was also in plain sight and went unchecked: every one of the 40 commits before that day
+  carries no trailer. **Check `git log` before inventing a commit convention.**
 - **Never mark work `[x]` that you have not seen verified.** If it only compiled, or only ran
   somewhere that doesn't count, it is `[~]`. Work that looks done and isn't is the most expensive
   failure mode this system has.
