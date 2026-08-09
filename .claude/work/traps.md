@@ -335,8 +335,10 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
 - **Do this instead:** the fix is already in `get/Cargo.toml` as of #19 — `extension-module` is out
   of `[dependencies]`, and `[dev-dependencies] pyo3` carries `auto-initialize`. The built module
   supplies the feature from outside the manifest instead: maturin via
-  `[tool.maturin] features = ["pyo3/extension-module"]` (not yet set up — `issues.md`, the
-  `pyproject.toml` gap), or by hand with `cargo build -p get --features pyo3/extension-module`.
+  `[tool.maturin] features = ["pyo3/extension-module"]` (~~not yet set up — `issues.md`, the
+  `pyproject.toml` gap~~ — **set up 2026-08-08 in `7a3aa7f`; the root `pyproject.toml` carries it
+  along with `manifest-path = "get/Cargo.toml"`**), or by hand with
+  `cargo build -p get --features pyo3/extension-module`.
   `fitness.rs`'s `the_test_harness_can_call_a_live_python_interpreter` is a permanent smoke test that
   fails loudly if the manifest is ever reverted.
 - **The runtime half:** `cargo test` then needs `libpython3.*.so` at **run** time too. A pyenv-managed
@@ -346,8 +348,24 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
       export LD_LIBRARY_PATH="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"
       cargo test -p get
 
-  **Unverified on Windows** — Michael's machine links Python differently and this is Linux/pyenv
-  only; `collab.md` should carry a heads-up rather than this trap silently not applying to him.
+  ~~**Unverified on Windows** — Michael's machine links Python differently and this is Linux/pyenv
+  only; `collab.md` should carry a heads-up rather than this trap silently not applying to him.~~
+- **Windows half, measured 2026-08-09 on Michael's machine — the same trap, a different symptom
+  and a different fix.** Superseding the line above, which was written before anyone had run it
+  there. **Linking is fine on Windows**: `cargo test -p get --no-run` completes with exit 0 and no
+  undefined `Py*` symbols, so the link-time failure this entry opens with is Linux-specific in
+  practice. The **runtime** half does bite, as the exact analogue of exit 127: the test binary
+  cannot find `python3.dll` and dies with `exit code: 0xc0000135, STATUS_DLL_NOT_FOUND` before any
+  test runs. Fix is `PATH`, not `LD_LIBRARY_PATH` — put the Python install directory on it:
+
+      $env:PATH = "C:\Users\micha\AppData\Local\Programs\Python\Python312;$env:PATH"
+      cargo test -p get      # 213 passed, 0 failed
+
+  **The root cause is local, not #19's**, which is why this is a machine note rather than an
+  argument against the manifest change: bare `python` on that machine resolves to the Microsoft
+  Store stub, and the real interpreters are reachable only through the `py` launcher. James's
+  offered fallback — putting the pyo3-touching tests behind a cargo feature — is therefore **not
+  needed**. `collab.md` #37 is settled by this.
 - **Why:** full mechanism, and what transfers from `graph_refiner` versus what doesn't, in
   `.claude/reference/pyo3-maturin.md` §1.
 - **Added:** 2026-08-07 — cargo-test-cannot-link-python-unless-extension-module-is-off
