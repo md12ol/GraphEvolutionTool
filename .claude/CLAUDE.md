@@ -155,6 +155,19 @@ grep -vE '^\s*$' .claude/work/<file>.md | sort | uniq -d
 Anything it prints is a line two entries could collapse onto. All five files were clean on
 2026-07-31.
 
+**`uniq -d` is not sufficient on its own — run a structure check beside it** (added 2026-08-09,
+`collab.md` #23). Union merge has a third failure it cannot see: it can splice one entry into the
+*middle of a line* of another, which repeats no line, so the audit above comes back clean on a
+genuinely corrupted file. Measured on `main` 2026-08-04, when one item was spliced into another and
+stopped being a top-level heading at all:
+
+```bash
+grep -n '^### [0-9]' .claude/work/collab.md   # every heading at column 0; count as expected
+```
+
+An item heading that appears mid-line, or one you know exists but which this does not list, is the
+splice. Full mechanism in `traps.md`, `union-merge-splices-entries-without-duplicating`.
+
 - After a merge that touched these files, **read the tail** — `git diff HEAD~1 -- .claude/work/`.
   Fix interleaves by hand; the merge won't have told you.
 - Editing or deleting *someone else's* entry is a `collab.md` item, not a silent rewrite.

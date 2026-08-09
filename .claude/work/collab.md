@@ -37,6 +37,18 @@ Audit before pushing and after any merge; anything it prints could collapse:
 grep -vE '^\s*$' .claude/work/collab.md | sort | uniq -d
 ```
 
+**Run this second check too — the first one cannot see a splice** (added 2026-08-09, item #23).
+Union merge can graft one entry into the middle of a line of another, which duplicates no line, so
+the audit above returns clean on a corrupted file. It happened here on 2026-08-04:
+
+      grep -n '^### [0-9]' .claude/work/collab.md | wc -l   # then eyeball the list itself
+
+A heading that shows up mid-line, or one you know exists but which this does not list, is the
+splice. Two formatting notes, both learned by tripping over them while adding this paragraph:
+indented rather than fenced, because a second ```bash fence makes the `uniq -d` audit print the
+fence lines forever; and worded differently from the identical command inside item #23, because two
+byte-identical lines are the very thing the audit is looking for.
+
 Full rules: `CLAUDE.md`, "Formatting for union merge".
 
 Persistent: survives `/done`, because coordination outlives any one task.
