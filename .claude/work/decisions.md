@@ -1412,3 +1412,28 @@ unmapped field still fails.
 **Affects:** `get/src/py_config.rs` `config_error_to_py` and `python_attribute_path`;
 `get/src/lib.rs` `from_config`. Spec §8. GitHub #29.
 *#29 · recorded 2026-08-08 21:18 — James, on the error-reporting half of #29.*
+
+## 2026-08-09 — Michael & James — Skill frontmatter takes a PR; a skill's body does not
+**Chose:** `.claude/skills/*/SKILL.md` splits across the routing table. Frontmatter — `model:`,
+`allowed-tools:`, any hook-adjacent key — goes through a feature branch and a PR. The body is a
+direct push. The governing test is written into `CLAUDE.md` as **"does this change what runs", not
+"which directory is it in"**.
+**Why:** rule 2 already sends `settings.json` and `hooks/` through review because they execute on
+the other owner's machine at session start, without them reading the diff. Skill frontmatter has
+exactly that property and was named nowhere — not in rule 2, not in the routing table — so a
+`model:` change was permitted to land silently. The body does not have that property: it is prose
+both owners read anyway, and putting a PR round-trip in front of a typo fix is how a rule stops
+being followed at all.
+**Stating it as a test rather than a directory list is the load-bearing part.** A table that names
+directories goes stale the moment someone adds a fourth one; a principle routes the new case on its
+own.
+**Rejected:** (a) Extending rule 2 to all of `.claude/skills/` — would cover prose edits and buy
+nothing. (b) Leaving it unwritten and relying on precedent — the thing that produced the situation
+this settles. (c) Reverting the sonnet pin, offered by Michael and declined by James, who had run
+`/load`, `/save` and `/done` under it without noticing a difference.
+**Origin:** Michael pinned `done`, `load`, `save`, `setup` and `start` to `model: sonnet` in
+`011480d` and pushed direct, logging it in `collab.md` #34 because the rule did not yet cover it.
+James agreed the same day and drew the frontmatter/body line; both positions are stamped inside
+that item. The amendment was written at the joint meeting of 2026-08-09.
+**Affects:** `.claude/CLAUDE.md` routing table. `collab.md` #34.
+*#34 · recorded 2026-08-09 — Michael & James, at the joint meeting.*

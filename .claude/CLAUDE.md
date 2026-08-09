@@ -207,6 +207,16 @@ where review actually buys something:
 | `/official_spec_sheet.md` | **PR, and only after a joint meeting** — see the top of this file |
 | `.claude/work/*.md` — `decisions.md`, `traps.md`, `issues.md`, `hotfixes.md`, `collab.md` | Direct push to `main` is fine. They carry no behaviour, and a trap that is not on `main` protects nobody. Note only `decisions.md` and `collab.md` are union-merged (rule 1 above) |
 | `.claude/CLAUDE.md` | Direct push is permitted, but **prefer a PR when the change binds the other owner's practice** rather than recording a fact |
+| `.claude/skills/*/SKILL.md` — **frontmatter** (`model:`, `allowed-tools:`, any hook-adjacent key) | **Feature branch + PR.** Changing it changes what executes on the other person's machine on their next pull, without them reading it |
+| `.claude/skills/*/SKILL.md` — **body** | Direct push to `main` is fine. It is prose we both read anyway, and a PR round-trip in front of a typo fix is how a rule starts being skipped |
+
+**The test is "does this change what runs", not "which directory is it in"** — added 2026-08-09,
+agreed in `collab.md` #34. That is the whole reason rule 2 exists for `settings.json` and `hooks/`,
+and it is why the skills row splits rather than naming the directory: the next person to add a
+fourth directory should be able to route it from the principle instead of waiting for the table to
+catch up. Frontmatter is configuration the harness executes; a skill's body is prose a reader
+evaluates. Michael pinned the five working-docs skills to `model: sonnet` in `011480d` before this
+row existed, and logged it precisely because the rule did not yet cover it.
 
 **This applies even while the task's own code PR is still open.** `/done`'s sweep — the task-complete
 marker in `decisions.md`, `hotfixes.md`'s `Last checked` stamps, `traps.md` updates, the archive
