@@ -57,9 +57,16 @@ Persistent: survives `/done`, because coordination outlives any one task.
 
 ## Open
 
-Items 1–19 are all dispositioned; 14–19 were settled at the joint meeting of 2026-08-04 and moved
+~~Items 1–19 are all dispositioned; 14–19 were settled at the joint meeting of 2026-08-04 and moved
 into **Settled** below with every stamp intact. Item **20** was raised the same evening and is the
-only thing open. Append the next item here as **21**, numbering continuing across both sections.
+only thing open. Append the next item here as **21**, numbering continuing across both sections.~~
+
+**Superseded 2026-08-09 — nothing below is open.** Every item from **20 through 38** was
+dispositioned at the joint meeting of 2026-08-09; the disposition table is the last block in this
+file, under "Settled at the joint meeting of 2026-08-09". The bodies stay here rather than being
+relocated, deliberately: moving eighteen long entries in one pass is the operation that spliced
+items 20 and 29 into each other on 2026-08-04, and the table carries what a reader needs. **Append
+the next item as 39**, numbering continuing across both sections.
 
 *(The "Nothing is open" line that stood here was written before item 20 landed, and is corrected
 rather than removed — see the merge-repair note in item 20's tail.)*
@@ -780,6 +787,22 @@ call sites. Both guards were verified by deliberately breaking them rather than 
 
 *#38 · raised 2026-08-08 21:13 — James, closing out #29's implementation.*
 
+**One line is now stale, corrected at the 2026-08-09 meeting — Michael. Everything else in this
+item still holds and was re-verified.** The opening says #29 is "six commits on
+`jsargant_python_config` and not yet a PR." It landed as **PR #49, merged 2026-08-09 as
+`0731aa6`**, so the `lib.rs` overlap it warns about is a fact on `main` rather than a pending
+branch: #26 now works on top of it instead of around it. James's wording above is left exactly as
+written, per append-don't-edit.
+
+Re-checked on `main` at `0731aa6`, all three still true: `from_config` at `get/src/lib.rs:87` routes
+through `Config::from_toml_str` then `.validate()`; `python_fitness`'s `#[allow(dead_code)]` is
+still at `lib.rs:303` and still carried in `hotfixes.md` for #26 to delete; and `max_cores` appears
+only in `run`'s doc comments, never as a parameter, with `run`'s body still `todo!()`. The standing
+`config.rs` ↔ `py_config.rs` mirror obligation is unchanged and is about to be exercised by
+GitHub #53, which replaces `target_profile_path` with an inline array.
+
+*#38 · stale line corrected 2026-08-09 — Michael, at the joint meeting.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
@@ -1211,3 +1234,51 @@ because numbering is "one higher than the last" and neither of us had pulled. Yo
 numbered 20 and I have not renumbered it — that is your entry to change.
 
 *#23 · raised 2026-08-04 18:24 — James.*
+
+### Settled at the joint meeting of 2026-08-09
+
+Every item that was open going into this meeting is dispositioned below. Following the precedent
+set on 2026-08-04, this block is the disposition and the item bodies stay where they are under
+**Open** for now — relocating eighteen long entries in one pass is the operation that spliced items
+20 and 29 into each other, and the table below is what a reader needs.
+
+| # | Disposition agreed 2026-08-09 | Where it landed |
+|:---:|:----------|:----------|
+| 20 | **Fixed.** The last stale glob now names `decisions.md` and `collab.md` rather than all five | `CLAUDE.md`, "Pull requests" |
+| 21 | **Both extension routes supported.** Python for most users, a drop-in Rust objective for advanced ones — and it needs **no change to #26**, because `Evolver::run<F>` is generic so a Rust user never reaches dispatch | spec §5.3 (new); `decisions.md`; noted on GitHub #26 |
+| 23 | **Agreed.** `grep -n '^### [0-9]'` added beside the `uniq -d` audit in both front doors, since a splice duplicates no line | `CLAUDE.md`; this file's header |
+| 24 | **Inline `target_profile`, verbatim.** Replaces `target_profile_path`; **neither** C++ convention (patient-zero prepend, `/128` rescale) is reproduced | spec §8 amended; `decisions.md`; GitHub #53 |
+| 25 | **Closed** by the reply inside it — `reject_fitness_seed` in `from_toml_str` is the right home | `decisions.md` 2026-08-06 00:07 |
+| 26 | **Acknowledged**, no change. The commit-each-verified-step convention stands | `CLAUDE.md`, Conventions |
+| 27 | **Ratified as deliberate.** `Swap` keeps its degree floor of 3; no code and no sheet change | `decisions.md` 2026-08-09 |
+| 28 | **Acknowledged**, no change. `/done`'s sweep pushes direct regardless of an open code PR | `CLAUDE.md`, routing table |
+| 29 | **Rule widened to two cases** — the second being a strict deletion or one-line correction that removes something already false | `CLAUDE.md`; `decisions.md` 2026-08-09 |
+| 30 | **Settled.** Hook merged as PR #44 and reviewed; both halves complete | `decisions.md` 2026-08-06 |
+| 31 | **Already applied by James** on 2026-08-06. Michael must not re-apply it | `traps.md`, the rustfmt entry |
+| 32 | **Both renames agreed.** `evaluate_population` → `evaluate_batch`, `SirRun` → `Epidemic`; the sheet amendment rides in the same PR | GitHub #52 |
+| 33 | **FYI only**, verified intact. `EpidemicScorer` is `new` / `next_batch_seed` / `mean_batch` | `decisions.md`; no action |
+| 34 | **Frontmatter takes a PR, the body does not.** Written as a test — "does this change what runs", not "which directory is it in" | `CLAUDE.md`, routing table; `decisions.md` |
+| 35 | **§6.2 amended to best-of-final** for both strategies, with the `elite_count = 0` case stated | PR #50; `decisions.md` |
+| 36 | **Scoped down.** Only the argmin moves to `common::best_index`; the rest of `outcome` stays duplicated on purpose | GitHub #51 |
+| 37 | **Verified on Windows.** Linking is fine; the runtime failure is `STATUS_DLL_NOT_FOUND` and the fix is `PATH`, not `LD_LIBRARY_PATH`. James's cargo-feature fallback is **not** needed | `traps.md` |
+| 38 | **Stale and corrected** — #29 landed as PR #49, merged `0731aa6`, so its "not yet a PR" line no longer holds | see the note appended inside #38 |
+
+**Three things came out of the meeting that were not on the agenda.**
+
+1. **The spec status table was stale on four of nine rows** — `GenerationalEvolver`, the three SIR
+   objectives, `Config` parsing and the Python interface all read "designed, not built" for
+   components that had shipped. The sheet says status lives there "and nowhere else", so it was the
+   only signal a reader had. Corrected in PR #50.
+2. **Agent co-attribution was banned in this repo, not just in one home directory.** James wrote
+   the rule into `~/.claude/CLAUDE.md` on 2026-08-03, which is global and per-machine, so it bound
+   his sessions and reached nobody else; six commits made during this meeting carried a
+   `Co-Authored-By` trailer before it was caught. History was rewritten to strip them and the rule
+   now lives in the repo. **James: `git fetch origin; git reset --hard origin/main`** — `main` was
+   force-pushed, so `pull_main.sh` will decline the fast-forward and print rather than fixing it.
+3. **A correction to #25's reply, for James.** It states that a config built in Python "can still
+   carry a stray `seed` attribute harmlessly". That looks wrong: every pyclass in `py_config.rs` is
+   declared without `dict`, so a pyclass instance has no `__dict__` and `config.seed = 42` raises
+   `AttributeError` rather than being silently carried. Reasoned from the declarations, not
+   executed — worth two minutes to confirm before relying on either version.
+
+*Meeting block · #20-#38 dispositioned 2026-08-09 — Michael & James.*
