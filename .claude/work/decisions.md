@@ -1460,3 +1460,31 @@ too narrow to survive contact; the same argument applies to any doc, and a per-f
 invites a second one.
 **Affects:** `.claude/CLAUDE.md`, "Pull requests". `collab.md` #29.
 *#29 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+
+## 2026-08-09 — Michael & James — `Swap`'s degree floor stays at 3, one higher than the Java original
+**Chose:** keep `graph.degree(v) <= 2` as the rejection test in
+`get/src/genomes/edge_edit/operations.rs::swap` — both endpoints need **degree >= 3**. Spec §3.1's
+"two non-adjacent vertices of degree > 2" already says this, so **no code and no sheet change**.
+This entry exists only to stop the discrepancy being rediscovered and filed as an off-by-one.
+**The discrepancy is real and was checked.** The 2019 Java predecessor (`Graph.java`/`GET.java`, in
+Michael's OneDrive archive, not in this repo) rejects on `nbr.get(v1).size() < k` with its only
+caller passing `MIN_DEG_SWAP = 2`, so the original required **degree >= 2**. Every other check in
+the operation was ported verbatim — non-adjacent `v1,v2`, four distinct vertices, and none of
+`v1-a2`, `v2-a1`, `a1-a2` already an edge — which is what made the single differing number look
+like a slip rather than a choice. No comment in the Java explains why 2 was chosen.
+**Why keep the stricter floor:** Michael's call at the meeting. `Swap` firing on a degree-2 vertex
+strips a vertex to a single connection, and the stricter floor is what every run and every test in
+this repo has been built and tuned against. Loosening it would change search behaviour on all of
+them to match a number nobody can show was deliberate.
+**Rejected:** (a) Loosening to `>= 2` to match the original — would need §3.1 reworded,
+`operations.rs:169-170` changed, and new fixtures for
+`swap_rejects_low_degree_and_conflicting_quartets`, all to adopt an unexplained constant.
+(b) Parking it until the Java is readable by both owners — the current behaviour is not in doubt,
+only its ancestry, and leaving the item open invites the same re-derivation later.
+**Worth recording plainly:** the Java is **not verifiable from this repo** — `legacy/` holds only
+`main.cpp`, `Graph.cpp/h` and `SDA.cpp/h`, none of which contains a swap operation. James agreed to
+this on evidence only Michael can see. If the archive is ever added to the repo, this entry is what
+a re-check should start from.
+**Affects:** nothing. `get/src/genomes/edge_edit/operations.rs` and spec §3.1 both stand as written.
+`collab.md` #27.
+*#27 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
