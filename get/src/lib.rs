@@ -180,6 +180,39 @@ impl GraphEvolver {
     /// Evolve a population and return the best graph as a weighted edge list
     /// `(u, v, multiplicity)`.
     ///
+    /// # Memory: the three sizes multiply, they do not add
+    ///
+    /// Expression materializes the whole population as `Vec<Graph>` before
+    /// scoring, and a `Graph` is a **dense** `network_size × network_size`
+    /// matrix however sparse the graph actually is (spec §2). So peak memory is
+    /// roughly:
+    ///
+    /// ```text
+    /// network_size² × 4 bytes × population_size × min(max_cores, replicates)
+    /// ```
+    ///
+    /// | `network_size` | one graph | population of 200 | × 8 concurrent replicates |
+    /// |---|---|---|---|
+    /// | 100 | 40 KB | 8 MB | 64 MB |
+    /// | 500 | 1 MB | 200 MB | 1.6 GB |
+    /// | 1000 | 4 MB | 800 MB | 6.4 GB |
+    ///
+    /// Treat those as a floor rather than an exact figure: the matrix is a
+    /// `Vec<Vec<u32>>`, so each row carries its own allocation header on top of
+    /// the `4 × network_size` bytes of weights. That overhead is well under 1%
+    /// at these sizes and does not change the shape of the problem.
+    ///
+    /// The failure mode is unintuitive, which is why it is documented on the
+    /// call rather than left to be derived: a configuration that ran fine, given
+    /// a larger `max_cores` to exploit a bigger machine, multiplies peak memory
+    /// by that same factor and can exhaust hardware that handled the smaller
+    /// setting. A user cannot work this out from the Rust internals, and this
+    /// package is the only surface they see.
+    ///
+    /// Required by spec §8.1 and agreed at the joint meeting of 2026-08-04; the
+    /// `max_cores` and replicate-count parameters it refers to arrive with
+    /// GitHub #20, which is what makes the last column reachable.
+    ///
     /// # For whoever implements the dispatch (#26)
     ///
     /// Two things #19 left in place for this method, both easy to miss because
