@@ -16,11 +16,15 @@ fitness direction, steady-state replacement, and mutation. Started 2026-07-31.
 | `EdgeEditGenome`, `SdaGenome` | built — mutation contract landed 2026-08-04 (§4) |
 | `Selection`, population scoring, logging stats | built |
 | `SteadyStateEvolver` | built |
-| `GenerationalEvolver` | designed, not built |
+| `GenerationalEvolver` | built — landed 2026-08-06 via GitHub #25 |
 | `sir_sim` | built |
-| the three SIR objectives | designed, not built |
-| `Config` parsing | partly built; validation not built |
-| Python interface | designed, not built |
+| the three SIR objectives | built — GitHub #17, with #18's epidemic seeding (§8.1) |
+| `Config` parsing | built, and `Config::validate` covers both front ends — GitHub #23 |
+| Python interface | built **except dispatch** — the module, the config builders (§8) and `set_fitness_function` are in; `GraphEvolver::run`'s body is still `todo!()`, which is GitHub #26 |
+
+*Status table corrected 2026-08-09 at the joint meeting: four rows still read "designed, not built"
+for components that had since landed. It is the only place in this document that carries status, so
+a stale row here is the whole signal.*
 
 ---
 
