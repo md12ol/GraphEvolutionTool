@@ -1488,3 +1488,32 @@ a re-check should start from.
 **Affects:** nothing. `get/src/genomes/edge_edit/operations.rs` and spec §3.1 both stand as written.
 `collab.md` #27.
 *#27 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+
+## 2026-08-09 — Michael & James — Drop-in Rust objectives are supported, via the library, not the config
+**Chose:** GET supports **two** user-extension routes for fitness. Python — register a callable
+with `set_fitness_function` — for most users and any prototype. **Rust** — depend on `get` as a
+crate, `impl Fitness` for your own type, and drive an evolver directly — for a hot native objective
+without forking GET. Spec gains §5.3.
+**The finding that made this cheap:** `Evolver::run<F: Fitness>` is generic over the objective and
+`Fitness` is public, so a caller holding a concrete `F` instantiates the evolver and **never
+touches §8's dispatch `match`**. The closed match turns a *config document* into concrete types; a
+Rust user is a library consumer, not a config consumer. So supporting drop-in Rust objectives
+required **no change to #26's design**, which was the thing `collab.md` #21 was raised to protect.
+**A user objective deliberately gets no `FitnessConfig` variant.** The obvious alternative, a
+string-keyed registry that config could name, would move validation out of serde — the exact
+failure GitHub #13 and #23 exist to prevent. Keeping user objectives out of the schema means
+nothing user-supplied is ever deserialized, so there is nothing new to validate.
+**The one obligation it puts on #26:** dispatch must not become the only way to construct a run.
+`Fitness`, `Direction`, the genome `Context` types, `SharedEvolutionContext`, each `TypeContext`,
+`Evolver::new`, `Evolver::run` and `EvolutionOutcome` stay public. Narrowing any of them kills the
+Rust route **silently** — there would be no compile error inside `get`. Noted on GitHub #26.
+**Rejected:** (a) Declaring Python the only route and adding a §10 non-goal — James's lean when he
+raised it, overtaken by the finding above, which removes the cost that made it attractive.
+(b) A registry keyed by name in the config — see the validation argument. (c) Literally dropping a
+`.rs` file into `get/src/` — that is a fork plus a match arm, which buys nothing over the library
+route and costs a rebuild of GET itself.
+**Open, deliberately:** the ergonomics of assembling a population and contexts by hand. A real cost
+of the Rust route, possibly a builder later, and explicitly not a reason to route user objectives
+through the config enum.
+**Affects:** `/official_spec_sheet.md` §5.3 (new). GitHub #26. `collab.md` #21.
+*#21 · recorded 2026-08-09 — Michael & James, at the joint meeting.*

@@ -523,6 +523,41 @@ generational when the objective is stochastic and the comparison needs to be fai
 **Guidance:** keep hot objectives native in Rust. The Python adapter (§8) is for prototyping,
 where developer speed matters more than run time.
 
+### 5.3 Two extension routes, and a user objective never enters the config
+
+**Added 2026-08-09 at the joint meeting** — `collab.md` #21. Both routes are supported and neither
+is a fallback for the other. Most users will write Python; advanced users will write Rust.
+
+| | Route | For |
+|---|---|---|
+| **Python** | register a callable with `set_fitness_function(callable, direction)` (§8) | most users, and any prototype. No Rust, no compilation, config-driven |
+| **Rust** | depend on `get` as a crate, `impl Fitness` for your own type, and drive an evolver directly | a hot native objective, without forking GET |
+
+**The Rust route needs no dispatch arm, because it does not go through dispatch.** `Evolver::run`
+is generic over the objective — `fn run<F: Fitness>(&mut self, fitness: &F, seed: u64)` — so a
+caller who already holds a concrete `F` instantiates the evolver with it and never touches the
+`match` in §8. That `match` exists to turn *a config document* into concrete types; a Rust user is
+a library consumer rather than a config consumer, and the two front doors are independent.
+
+**Therefore a user-supplied objective never gets a `FitnessConfig` variant, and this is
+deliberate.** The alternative — a string-keyed registry that config could name — would move
+validation out of serde, which is the exact failure §7's "serde *is* the validation" exists to
+prevent. Keeping user objectives out of the config schema means nothing user-supplied is ever
+deserialized, so there is nothing new to validate.
+
+**What this obliges the dispatch layer to preserve.** Dispatch must not become the *only* way to
+construct a run. These stay public and usable from outside the crate, and narrowing any of them
+would kill the Rust route silently, with no compile error inside `get`:
+
+- the `Fitness` trait, and `Direction`
+- the `Genome` implementations and their `Context` types
+- `SharedEvolutionContext`, each strategy's `TypeContext`, and `Evolver::new`
+- `Evolver::run` and `EvolutionOutcome`
+
+**Not in scope here:** the ergonomics of assembling a population and contexts by hand. That is a
+real cost of the Rust route and may deserve a builder later; it is not a reason to route user
+objectives through the config enum instead.
+
 ---
 
 ## 6. Evolvers
