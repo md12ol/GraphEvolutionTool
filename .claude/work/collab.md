@@ -105,7 +105,124 @@ changes what executes on your machine. This change is prose the agent reads. It 
 the self-merge rule's case 2 — it subtracts a line that was already false — though as a body edit
 it never needed a PR for that argument to matter.
 
-*#40 · raised 2026-08-10 21:33 — Michael.*
+**Amended 2026-08-10 22:10 — Michael: the ask above is upgraded from FYI to ACKNOWLEDGE.**
+Appended rather than rewritten, because the original is already on `main` in `2f94dc7` and editing
+a line that has shipped is the case union merge duplicates without telling either of us.
+
+**Please reply in this item confirming you have read it.** The FYI framing undersold it: this
+changes what `/done` *does* on your machine on your next pull, without you having read the diff —
+the same property that makes `settings.json` and `hooks/` PR-only under rule 2. It went direct to
+`main` because a skill body is prose rather than configuration the harness executes, which I still
+think is the right route, but "right route" and "no acknowledgement needed" are different claims
+and I conflated them. Concretely: your next `/done` will prepare the close-out, report, and **stop
+to ask** before committing and pushing it to `main` — where the old body told it not to push at
+all, leaving the archive stranded in your working tree.
+
+*#40 · raised 2026-08-10 21:33 — Michael · amended 2026-08-10 22:10 — Michael.*
+
+### 41. I amended the sheet outside a meeting: `express_and_score(population, …)` → `(batch, …)`
+
+**ACKNOWLEDGE, please — reply in this item so there is a record you have seen it.** Not a
+question about whether it was right; a request that you confirm you know it happened, because it
+is a sheet change that did not go the documented route and I do not want it discovered at merge
+time.
+
+**What I changed.** In #52's PR, on top of the two renames the 2026-08-09 meeting agreed:
+
+- `get/src/evolver/common.rs` — `express_and_score`'s first parameter `population: &[G]` is now
+  `batch: &[G]`, with its doc prose and the test name `..._of_an_empty_population_...` following.
+- `official_spec_sheet.md` — **line 257** (the §5.1 signature), **line 274** ("the sole path from
+  a population to a set of fitnesses" → "from a batch of genomes to …"), and the §5.1 diagram at
+  **line 334** ("express population in parallel" → "express the batch in parallel").
+
+**Why it belongs with #52.** It is the same defect #52 exists to fix, one layer up. The unit
+`express_and_score` receives is a **batch, whose size varies**: `steady_state.rs:76` calls it with
+exactly **two children**, and the sheet's own §5.1 invariant sentence had it mapping "a population"
+to fitnesses four lines above a signature that steady-state contradicts on every mating event.
+Renaming `Fitness::evaluate_population` while leaving its sole caller's parameter named
+`population` would have fixed the identifier and left the misnomer sitting on top of it.
+
+**Why it is nonetheless a departure, stated plainly.** `CLAUDE.md` says the sheet changes only at
+a joint meeting — "not by one owner mid-task, not by an agent" — and that an agent finding the
+sheet wrong "writes a `collab.md` item, it does not fix the sheet". #52's scope was enumerated and
+verified on 2026-08-09 and names **two** identifiers; this is a third, so the meeting's
+authorisation does not stretch to cover it. Michael directed the change during the session after
+the agent flagged the conflict and declined to route around it. It is deliberate, not an oversight.
+
+**What I am not claiming.** Not that this is the self-merge rule's case 2 — it *adds* a naming
+claim rather than subtracting a falsehood, so that exception does not apply. You still merge the
+PR, and you can reject this part of it without touching the other two renames; it is confined to
+`common.rs` and three sheet lines.
+
+*#41 · raised 2026-08-10 22:04 — Michael.*
+
+### 42. Proposal: an SDA run's best graph should feed an edge-edit run as its base graph, automatically
+
+**PARKED — no answer needed now, and nothing is blocked on it.** Recording the idea and its open
+questions while the reasoning is fresh, for a meeting whenever we next want it. Likely future work
+rather than current. Not filed to the tracker: a GitHub issue nobody is scheduled to pick up is
+just a second copy of this that drifts.
+
+**This item is the park, because the sheet has nowhere to put one.** Worth stating, since the
+obvious instinct is to note it in `official_spec_sheet.md` and neither section fits: **§9** opens
+"Open decisions — **none**" and asserts everything raised while writing the sheet is settled, so
+parking a live question there contradicts the section's first word; **§10 Non-goals** is for
+deliberate exclusions, "stated so their absence reads as a decision rather than an oversight",
+which would say we decided *against* this. It is desired, just not now — a third thing the sheet
+has no section for. Adding one would itself be a sheet change needing a meeting, so `collab.md` is
+where this lives until it is genuinely picked up.
+
+**The want, in one line.** Run SDA to generate a network from scratch, then run edge-edit to
+refine it — with the first run's best graph becoming the second's `base_graph` **automatically**,
+not by the user exporting an edge list and hand-feeding it back in.
+
+**Why it fits the existing design.** The two genomes are already complementary and the sheet
+already says so: §3.2's `SdaGenome` generates "a graph from scratch", while §3.1's
+`EdgeEditGenome` is "an edit script over a base graph" and is explicit that "the same genome
+expressed against a different base graph gives a different result". §3.1 also notes that five of
+the nine operations — `Swap`, `Hop`, and the three `Local*` — are **inert on an empty base
+graph**, so a from-scratch edge-edit run wastes its early generations building structure those
+operators need. An SDA-generated starting network is exactly the structure that makes them useful
+on generation 1. The pieces exist; nothing joins them.
+
+**What the sheet does not currently support, and would have to say.** These are the questions I
+want us to settle together, not answers I am proposing:
+
+1. **Is this one run or two?** It bears on §10's non-goals. "Fixed-length runs" and "One
+   population" both read as within-a-run statements; a two-stage pipeline is arguably two runs in
+   sequence rather than a violation, but the sheet should say which, or the next reader will treat
+   the feature as contradicting a non-goal.
+2. **Config shape.** `[genome]` currently picks exactly one of `edge_edit | sda` (§7). A chain
+   needs a way to express both, in order — an array of stages, a `[pipeline]` section, or a
+   `base_graph = "previous_stage"` sentinel. This is the biggest open question and it drives §7's
+   validation rules.
+3. **Which graph carries over.** §6.2 was amended on 2026-08-09 to best-of-final-population. The
+   chain should presumably hand over exactly what §6.4's "best individual" reports, but it should
+   be stated rather than inferred.
+4. **Replicate semantics (§8.1).** With `n` replicates, does replicate `i` of the edge-edit stage
+   consume replicate `i` of the SDA stage, or do all edge-edit replicates start from one shared
+   SDA winner? These give different variance structures and different reproducibility guarantees,
+   and picking wrong silently makes the across-run band in §6.4 mean something other than it says.
+5. **Consistency constraints that must become validation.** `network_size` has to agree across
+   stages (§10, "Fixed node count"), and so does `max_edge_multiplicity` — §3.2 derives the SDA
+   alphabet from the cap (`num_chars = cap + 1`), so a stage-2 cap below stage 1's would clamp
+   weights the first stage deliberately produced.
+6. **Same objective for both stages, or one each?** Refining toward a different objective than the
+   one that generated the network is a legitimate thing to want and a very different feature.
+7. **Log and provenance (§6.4).** One log per run today. A chained run needs stage identity on
+   every row, or two logs, and the generated-TOML provenance record has to capture both stages.
+
+**One implementation note that is already in the tree.** `get/src/config.rs:337` refers to
+`set_base_graph` as the thing that owns base-graph validation, and **no such setter exists yet** —
+`grep -rn set_base_graph get/src/` returns only that comment. §8 also says a base graph "is better
+delivered through a setter than serialized into the document". So the delivery path this feature
+would extend is itself unbuilt; whoever specs this should decide whether the chain writes through
+that setter or bypasses it.
+
+**Not urgent, and not blocking anything current.** Raising it now so it is captured while the
+reasoning is fresh, not to interrupt #52 or #51.
+
+*#42 · raised 2026-08-10 22:06 — Michael.*
 
 ## Settled
 
