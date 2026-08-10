@@ -65,6 +65,48 @@ their disposition tables. **Append the next item as 40**, numbering continuing a
 raised and settled the same day, and sits at the very end of this file. It needed no decision once
 both owners had been through all three in the room.)*
 
+### 40. The `/done` skill body told the agent not to push, contradicting `CLAUDE.md` — corrected
+
+**FYI, no answer needed — but your next `/done` will behave differently, so read this before you
+run one.**
+
+**What was wrong.** `.claude/skills/done/SKILL.md` ended its Constraints section with a bare
+"Do not commit or push." `CLAUDE.md`'s PR-routing section says the opposite, in detail: the `/done`
+sweep — the task-complete marker in `decisions.md`, `hotfixes.md`'s `Last checked` stamps,
+`traps.md` updates, and the archive directory itself — "commits and pushes straight to `main` right
+then". That is the rule your own item **#28** established on 2026-08-06, closing #22 while PR #43
+was still open. The skill body was the template's generic default and had simply never been
+reconciled with it.
+
+**What it cost.** `/done epidemic-seeding` ran to completion on 2026-08-10 and then stopped with
+the archive sitting unpushed in my working tree. `work/archive/` is tracked precisely so a finished
+task's record reaches you — left uncommitted it reaches nobody, and the failure is silent, because
+a `/done` that archived-but-did-not-push looks completely successful from inside the session.
+Michael caught it by asking; nothing in the skill would have surfaced it.
+
+**The fix, and the part worth reading twice.** The constraint is struck through in place and
+replaced, per this repo's supersede-don't-overwrite convention, so the reversal trail survives. The
+replacement says the close-out belongs on `main` — **but that the agent must ask before pushing it,
+every time.** Michael corrected me on exactly this while I was writing the entry: my first draft
+had `/done` push automatically as its last step, which would have quietly created a standing
+authorization inside a skill. `CLAUDE.md` already forbids that shape — "every commit, push and PR
+needs its own explicit instruction, each time, no matter what the plan says" — and its stated
+reason is precisely that a plan or skill step reading "push" is what makes the rule *look*
+satisfied when it is not. Reaching the end of `/done` is not the instruction.
+
+So the corrected behaviour is: `/done` prepares the close-out, reports, and **stops with a
+question**. It also restates that the close-out is docs-only and needs no PR, and that **the task's
+own code still goes through its branch and PR** — two independent tracks, which is the part most
+worth not losing.
+
+**Route taken:** direct push to `main`, no PR. Skill **bodies** are the direct-push row of the
+routing table; only frontmatter (`model:`, `allowed-tools:`) needs review, since that is what
+changes what executes on your machine. This change is prose the agent reads. It is also close to
+the self-merge rule's case 2 — it subtracts a line that was already false — though as a body edit
+it never needed a PR for that argument to matter.
+
+*#40 · raised 2026-08-10 21:33 — Michael.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in

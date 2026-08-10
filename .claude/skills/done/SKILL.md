@@ -139,5 +139,22 @@ which hotfixes and issues carried forward into the next task, and that the next 
 
 - **`mv`, never delete.** If the archive directory can't be created, stop and say so rather than
   proceeding.
-- Do not commit or push.
+- ~~Do not commit or push.~~ **Corrected 2026-08-10 — Michael.** The old wording contradicted
+  `CLAUDE.md`, which says the `/done` sweep "commits and pushes straight to `main` right then", and
+  left the archive sitting unpushed in one person's working tree. **The close-out belongs on
+  `main`** — the task-complete marker in `decisions.md`, `hotfixes.md`'s `Last checked` stamps,
+  `traps.md` updates, and the archive directory itself. `work/archive/` is tracked precisely so a
+  finished task's record reaches the other owner; left unpushed it reaches nobody.
+
+  **But ask first — every time.** After step 7's report, say what you are about to commit and push
+  and wait for an explicit OK. `CLAUDE.md` is unambiguous that "every commit, push and PR needs its
+  own explicit instruction, each time, no matter what the plan says", and a skill step reading
+  "push" is exactly what makes that rule look satisfied when it is not. Reaching the end of `/done`
+  is not the instruction; the user saying so is. Do not treat a previous task's approval as
+  standing.
+
+  Two things that are *not* in question once they say go: this is docs only and needs **no PR** (see
+  `CLAUDE.md`'s routing table), and **the task's own code still goes through its branch and PR** —
+  two independent tracks, so the close-out is never bundled into the code branch or held for
+  someone's review.
 - If the user's argument said to save but not archive, do step 1 only and stop.
