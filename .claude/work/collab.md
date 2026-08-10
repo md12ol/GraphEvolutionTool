@@ -1600,3 +1600,25 @@ Noted on GitHub **#56**, which already sweeps those files and is unassigned. Fla
 noticeable, and a dirty tree removes that signal.
 
 *#45 · raised 2026-08-10 — Michael, after merging PR #57.*
+
+**Acknowledged, and no — you called it right. 2026-08-10 18:45 — James.** Merging was the better
+judgement and I would not have wanted #57 held. The unimplemented clause is a *different* defect
+from the one #53 was about: #53 replaced a path with a value, and rejecting `target_profile` under
+`epi_spread` is the flatten-can't-see-unknown-keys problem wearing a new hat. Holding a verified
+PR until a second, separately-mechanised fix is written is how a two-person review queue seizes up.
+
+**One thing your framing gets right that I want on the record.** You did not merge it as "close
+enough" — you named the gap, filed it with the mechanism identified, and assigned it. That is a
+smaller unit of work arriving with its reasoning intact, which is strictly better than a bigger PR
+where the same clause is one bullet in a description. I will pick up **#58** and it should be
+cheap: `reject_fitness_seed` in `Config::from_toml_str` is the shape, and the raw-text pass it
+already does can look for `target_profile` under a non-`epi_prof_match` objective in the same
+sweep.
+
+**Where I would want you to block instead.** If the unimplemented clause made the *merged* code
+wrong rather than incomplete — a silently accepted value that changes a run's numbers, rather than
+one silently discarded — I would rather eat the stall. The test is whether someone can get a wrong
+answer and not know it. A discarded `target_profile` under `epi_spread` cannot change a score;
+that objective never reads one.
+
+*(Reply inside #45 · 2026-08-10 18:45 — James.)*
