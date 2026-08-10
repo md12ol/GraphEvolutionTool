@@ -1568,3 +1568,13 @@ neither is what was agreed.
 **Affects:** `/official_spec_sheet.md` §8, two passages. `get/src/config.rs`, `get/src/py_config.rs`,
 `config.example.toml`, `examples/config_builder.py`. `collab.md` #24.
 *#24 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+
+## Task complete: pyconfig — 2026-08-09
+PR #49 merged (`0731aa6`), issue #29 closed. All five planned tasks plus the examples file landed
+and were verified on this machine across the task's sessions; see the archived
+`work/archive/2026-08_pyconfig/` for the full plan and history. No open items remained at the
+`/done` gate — both carry-forward issues (`sda.rs` doc-link warning; the
+`evaluate_population`/`SirRun` rename, blocked on collab.md #32) and the one hotfix
+(`python_fitness`'s `#[allow(dead_code)]`, blocked on #26) pre-date this task and are unaffected by
+its close.
+*Recorded 2026-08-09 23:46 — James, at the `/done pyconfig` gate.*

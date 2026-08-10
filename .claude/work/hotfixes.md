@@ -62,3 +62,7 @@ everybody's problem to remove.
   GitHub #26 is still `open` and unstarted, with no branch for it. Note the `Machine:` line above
   now understates the reach: PR #48 merged as `32ceb11` on 2026-08-08, so this is committed and in
   **every** tree, not just the branch. First cycle.
+- **Last checked:** 2026-08-09 — James, at the `/done` gate for pyconfig (#29). Verified on `main`
+  post-merge (PR #49, `0731aa6`): the attribute is **still present** at `get/src/lib.rs:303`, and
+  `Remove when:` is still **not met** — GitHub #26 is `open`, unstarted. #29 deliberately did not
+  touch it (it only builds the config front end, not `run`'s dispatch). Unchanged since last check.
