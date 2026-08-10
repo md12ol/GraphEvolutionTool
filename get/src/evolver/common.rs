@@ -183,7 +183,7 @@ where
 
 /// Express every genome against the shared context and score the whole batch,
 /// returning the expressed graphs alongside their fitnesses. Index `i` of both
-/// vectors refers to `population[i]`.
+/// vectors refers to `batch[i]`.
 ///
 /// The returned fitnesses are **oriented**: lower is better, whatever the
 /// objective's own direction. This is the one place that conversion happens, so
@@ -192,8 +192,8 @@ where
 /// # This is the engine's sole scoring entry
 ///
 /// **The engine never calls [`Fitness::evaluate`] or
-/// [`Fitness::evaluate_population`] directly.** Every path from a population to a
-/// set of fitnesses goes through here — generational scoring, steady-state child
+/// [`Fitness::evaluate_batch`] directly.** Every path from a batch of genomes
+/// to a set of fitnesses goes through here — generational scoring, steady-state child
 /// scoring, the final outcome, all of it. Those two trait methods exist to be
 /// *implemented* by an objective and *called by this function*.
 ///
@@ -211,11 +211,11 @@ where
 ///
 /// Both doors are the same door by design. This is also why the alternative — a
 /// direction-aware comparator — was rejected: it needs the direction at every
-/// comparison site, and a missed one is invisible. Scoring the whole population
+/// comparison site, and a missed one is invisible. Scoring the whole batch
 /// in one place is what lets "exactly once" be *guaranteed* rather than
 /// remembered. Spec §5.1.
 ///
-/// Defers to [`Fitness::evaluate_population`] so native objectives parallelize
+/// Defers to [`Fitness::evaluate_batch`] so native objectives parallelize
 /// over rayon and Python-backed ones batch across the FFI boundary.
 ///
 /// The graphs are returned rather than dropped because scoring has to build them
@@ -228,7 +228,7 @@ where
 /// If the objective returns `NaN` for any individual — see
 /// [`crate::fitness::Direction::orient`].
 pub fn express_and_score<G, F>(
-    population: &[G],
+    batch: &[G],
     context: &G::Context,
     fitness: &F,
 ) -> (Vec<Graph>, Vec<f64>)
@@ -237,11 +237,11 @@ where
     F: Fitness,
 {
     // Expression is parallel; `Genome::Context: Send + Sync` exists for this.
-    let graphs: Vec<Graph> = population.par_iter().map(|g| g.express(context)).collect();
+    let graphs: Vec<Graph> = batch.par_iter().map(|g| g.express(context)).collect();
 
     let direction = fitness.direction();
     let fitnesses = fitness
-        .evaluate_population(&graphs)
+        .evaluate_batch(&graphs)
         .into_iter()
         .map(|score| direction.orient(score))
         .collect();
@@ -482,7 +482,7 @@ mod tests {
             Direction::Maximize
         }
 
-        fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+        fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
             self.batches
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
@@ -498,7 +498,7 @@ mod tests {
     fn a_boxed_objective_keeps_its_batched_override_through_express_and_score() {
         // The engine scores through `Box<dyn Fitness>` once the config layer
         // erases the objective (§8), so the box has to reach the objective's own
-        // `evaluate_population` — not the trait default, which would call Python
+        // `evaluate_batch` — not the trait default, which would call Python
         // once per individual from inside a rayon closure. Tested here rather
         // than in `fitness.rs` because this is the path the engine actually
         // takes: one call, through the scoring gate.
@@ -511,7 +511,7 @@ mod tests {
 
         // Maximize, so the oriented values are negated node counts 1..=5. Both
         // halves matter: the values prove `direction` was forwarded, the count
-        // proves `evaluate_population` was.
+        // proves `evaluate_batch` was.
         assert_eq!(fitnesses, vec![-1.0, -2.0, -3.0, -4.0, -5.0]);
         assert_eq!(
             batches.load(std::sync::atomic::Ordering::SeqCst),
@@ -521,7 +521,7 @@ mod tests {
     }
 
     #[test]
-    fn express_and_score_of_an_empty_population_yields_empty_vectors() {
+    fn express_and_score_of_an_empty_batch_yields_empty_vectors() {
         let (graphs, fitnesses) =
             express_and_score::<IndexGenome, _>(&[], &(), &NodeCount(Direction::Minimize));
         assert!(graphs.is_empty());
