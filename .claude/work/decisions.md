@@ -1578,3 +1578,25 @@ and were verified on this machine across the task's sessions; see the archived
 (`python_fitness`'s `#[allow(dead_code)]`, blocked on #26) pre-date this task and are unaffected by
 its close.
 *Recorded 2026-08-09 23:46 — James, at the `/done pyconfig` gate.*
+
+## 2026-08-10 17:48 — James — A stray `seed` on a Python-built config raises `AttributeError`, so collab #25's reply is wrong
+**Measured, not reasoned.** `config.seed = 42` on a `get.Config` raises
+`AttributeError: 'builtins.Config' object has no attribute 'seed'`. Run on this machine against a
+`maturin develop` build of `de970ea` plus the working-tree changes for GitHub #53.
+**What this corrects:** the reply inside `collab.md` #25 (2026-08-06 00:10, mine) says "a config
+built in Python can still carry a stray `seed` attribute harmlessly", and offers that as a caveat
+to be careful about in #26. It is false, and it is false in the *safe* direction: every `#[pyclass]`
+in `py_config.rs` is declared without `dict`, so Python cannot set an attribute the class does not
+declare. There is no silent carry to worry about. The 2026-08-09 meeting suspected this (meeting
+note 3) but nobody had executed it; this is the execution.
+**Why the original claim was plausible.** The mechanism it described is real and unchanged — the
+`seed` check in `Config::from_toml_str` reads raw TOML text, and the Python front end has no text to
+read, so the *check* genuinely does not run there. The error came from assuming that leaves the
+Python side unguarded. A different guard covers it: pyo3's default attribute model, which is not
+part of the config schema at all and so was not in view when the caveat was written.
+**No code changes.** Both front ends reject a stray `seed`, by unrelated mechanisms, and the
+narrowness recorded in `decisions.md` 2026-08-06 00:07 still holds for every *other* unknown
+`[fitness]` key on the TOML side. What changes is one sentence of guidance for #26.
+**Affects:** nothing in `get/src/`. Supersedes one claim in `collab.md` #25's reply; GitHub #26
+should not plan around a Python-side stray-attribute hazard, because there is not one.
+*#25 · recorded 2026-08-10 17:48 — James, while closing out GitHub #53's task list.*
