@@ -16,11 +16,15 @@ fitness direction, steady-state replacement, and mutation. Started 2026-07-31.
 | `EdgeEditGenome`, `SdaGenome` | built — mutation contract landed 2026-08-04 (§4) |
 | `Selection`, population scoring, logging stats | built |
 | `SteadyStateEvolver` | built |
-| `GenerationalEvolver` | designed, not built |
+| `GenerationalEvolver` | built — landed 2026-08-06 via GitHub #25 |
 | `sir_sim` | built |
-| the three SIR objectives | designed, not built |
-| `Config` parsing | partly built; validation not built |
-| Python interface | designed, not built |
+| the three SIR objectives | built — GitHub #17, with #18's epidemic seeding (§8.1) |
+| `Config` parsing | built, and `Config::validate` covers both front ends — GitHub #23 |
+| Python interface | built **except dispatch** — the module, the config builders (§8) and `set_fitness_function` are in; `GraphEvolver::run`'s body is still `todo!()`, which is GitHub #26 |
+
+*Status table corrected 2026-08-09 at the joint meeting: four rows still read "designed, not built"
+for components that had since landed. It is the only place in this document that carries status, so
+a stale row here is the whole signal.*
 
 ---
 
@@ -523,6 +527,41 @@ generational when the objective is stochastic and the comparison needs to be fai
 **Guidance:** keep hot objectives native in Rust. The Python adapter (§8) is for prototyping,
 where developer speed matters more than run time.
 
+### 5.3 Two extension routes, and a user objective never enters the config
+
+**Added 2026-08-09 at the joint meeting** — `collab.md` #21. Both routes are supported and neither
+is a fallback for the other. Most users will write Python; advanced users will write Rust.
+
+| | Route | For |
+|---|---|---|
+| **Python** | register a callable with `set_fitness_function(callable, direction)` (§8) | most users, and any prototype. No Rust, no compilation, config-driven |
+| **Rust** | depend on `get` as a crate, `impl Fitness` for your own type, and drive an evolver directly | a hot native objective, without forking GET |
+
+**The Rust route needs no dispatch arm, because it does not go through dispatch.** `Evolver::run`
+is generic over the objective — `fn run<F: Fitness>(&mut self, fitness: &F, seed: u64)` — so a
+caller who already holds a concrete `F` instantiates the evolver with it and never touches the
+`match` in §8. That `match` exists to turn *a config document* into concrete types; a Rust user is
+a library consumer rather than a config consumer, and the two front doors are independent.
+
+**Therefore a user-supplied objective never gets a `FitnessConfig` variant, and this is
+deliberate.** The alternative — a string-keyed registry that config could name — would move
+validation out of serde, which is the exact failure §7's "serde *is* the validation" exists to
+prevent. Keeping user objectives out of the config schema means nothing user-supplied is ever
+deserialized, so there is nothing new to validate.
+
+**What this obliges the dispatch layer to preserve.** Dispatch must not become the *only* way to
+construct a run. These stay public and usable from outside the crate, and narrowing any of them
+would kill the Rust route silently, with no compile error inside `get`:
+
+- the `Fitness` trait, and `Direction`
+- the `Genome` implementations and their `Context` types
+- `SharedEvolutionContext`, each strategy's `TypeContext`, and `Evolver::new`
+- `Evolver::run` and `EvolutionOutcome`
+
+**Not in scope here:** the ergonomics of assembling a population and contexts by hand. That is a
+real cost of the Rust route and may deserve a builder later; it is not a reason to route user
+objectives through the config enum instead.
+
 ---
 
 ## 6. Evolvers
@@ -579,12 +618,24 @@ and its own clone does nothing but mutate. Steady-state cannot self-mate by cons
 ### 6.2 Generational
 
 The whole population is replaced each generation. Per generation: score the population, log a
-stats row, track the best, then advance — copy `elite_count` best individuals forward unchanged,
-then fill the remaining slots by selecting parent pairs, recombining by `crossover_rate`, and
-mutating by §4.
+stats row, then advance — copy `elite_count` best individuals forward unchanged, then fill the
+remaining slots by selecting parent pairs, recombining by `crossover_rate`, and mutating by §4.
 
-Tracking the best uses the graph that scoring already built, so the winner is never re-expressed.
-Comparison is by total order rather than `partial_cmp().unwrap()`.
+**The reported best is the best of the final population, for both strategies** — not a running
+best carried across generations. Amended 2026-08-09; the previous wording, "track the best", read
+as the latter and never matched either evolver. Generational takes the winner out of the graphs
+its last scoring pass already built, so the winner is never re-expressed; steady-state re-expresses
+its winner, having no such vector to hand. Both return the identical graph, since expression is
+deterministic — the difference is cost, not behaviour. Comparison is by total order rather than
+`partial_cmp().unwrap()`.
+
+Two reasons this is the honest number rather than a limitation. Fitness is stochastic between
+batches (§8.1), so a running best is substantially a record of which generation drew the luckiest
+sample — the same argument that rejects freezing an elite's old score three paragraphs below. And
+at `elite_count = 0`, which §7 permits, a non-elitist generational GA genuinely can lose its best
+individual: the run really did end without it, and a report claiming otherwise describes a
+population that no longer exists. **At `elite_count = 0` the divergence is a property of the
+configuration, not of the report.**
 
 **Odd slot count.** Crossover yields two children, but `population_size - elite_count` may be odd.
 The last pair contributes **one** child; the other is discarded. Only the final pair is ever
@@ -777,8 +828,10 @@ be written next to the results and re-run verbatim.
 
 Two consequences to design around. Error messages will reference a TOML document the user never
 wrote, so field errors need mapping back to the Python attribute that produced them or they are
-useless. And anything large or awkward in TOML — a long target profile, a base graph — is better
-delivered through a setter than serialized into the document (see below).
+useless. And anything large or awkward in TOML — ~~a long target profile,~~ a base graph — is
+better delivered through a setter than serialized into the document (see below). **Amended
+2026-08-09: the target profile is no longer an example of this** — it is an ordinary inline config
+value, and the reasoning is below. The base graph still is.
 
 **The objective is erased before dispatch; the genome is not.** Agreed 2026-08-04. The config's
 fitness variant is turned into one `Box<dyn Fitness>` *first*, in a match that touches neither
@@ -924,13 +977,33 @@ through setters before `run`:
   and it is the same shape the batching argument above demands, so the ergonomic choice and the
   performance choice agree.
 
-- **The target profile for `epi_prof_match`.** A user-supplied vector of newly-infected counts,
-  passed as a sequence of numbers through a setter rather than serialized into the generated TOML —
-  it is bulk data, and a long inline array makes the provenance document unreadable. Validated
-  non-empty and finite at registration, alongside the other config checks, so a malformed target
-  fails before any evolution starts rather than producing an RMSE against nothing. Required
+- **The target profile for `epi_prof_match`.** A user-supplied vector of newly-infected counts.
+  **Amended 2026-08-09 at the joint meeting** (`collab.md` #24) — ~~passed as a sequence of numbers
+  through a setter rather than serialized into the generated TOML — it is bulk data, and a long
+  inline array makes the provenance document unreadable.~~ It is an **ordinary inline config
+  value**, `target_profile`, written into the document like any other field: a TOML array for the
+  file front end, a Python list on `FitnessConfig.EpiProfMatch` for the Python one. Both front ends
+  therefore hand over the same list of numbers, and no setter is involved.
+
+  **Why the reversal.** Keeping it out of the document was meant to protect readability, but it
+  cost the thing the document exists for: a run whose target lived outside the config could not be
+  reproduced from the config alone, so `to_toml()`'s provenance record was incomplete for exactly
+  one objective. A verbose `[fitness]` block is a smaller price than a provenance document that
+  silently omits the thing being matched against.
+
+  Validated non-empty and finite by `Config::validate` alongside every other check, so a malformed
+  target fails before any evolution starts rather than producing an RMSE against nothing. Required
   whenever `type = "epi_prof_match"`, and rejected as a contradiction if supplied for any other
   objective.
+
+  **The profile is the target verbatim — GET reproduces neither C++ loading convention.** The
+  legacy loader (`legacy/main.cpp:378-386`) prepended patient zero, so a stored file omitted its
+  own first element, and multiplied every value by `verts / 128`, because profiles were normalized
+  to a 128-node network. Both are dropped. The user supplies the profile they want, at the size of
+  the network they are building, and GET compares against it unchanged. Decided 2026-08-09: a
+  silent one-step shift and a silent rescale are two ways to get a wrong number rather than an
+  error, and neither is worth carrying for comparability with archived runs whose network size is
+  usually not 128 anyway.
 - **An edge-edit base graph.** Not a config value: it is either data the user brings or the output
   of a previous run. Since `run` already returns `(u, v, multiplicity)` triples, the two
   representations **stack with no new data format** — evolve a topology with SDA, then refine it

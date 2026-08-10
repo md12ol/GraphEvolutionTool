@@ -56,6 +56,18 @@ Session state lives in `.claude/`:
 Finished tasks land in `.claude/work/archive/<YYYY-MM>_<slug>/` — **tracked**, so a finished
 task's record reaches the other owner. Only `work/current/` is per-person.
 
+**Reference notes** — `.claude/reference/`, added 2026-08-07. Longer-form notes about how a
+*dependency or toolchain* behaves, where a `traps.md` entry would be too long and a `decisions.md`
+entry would be the wrong shape because nothing was decided. Deliberately **outside `work/`**, so it
+is never mistaken for a churn list and never picks up a merge driver.
+
+| File | |
+|---|---|
+| `reference/pyo3-maturin.md` | the Python boundary: why `extension-module` breaks `cargo test`, why calling Python from a rayon closure deadlocks, and what GET still lacks (a `pyproject.toml`) |
+
+Each note says whether a claim was **measured here** or came from elsewhere. Keep that split — a
+borrowed configuration is evidence that something works somewhere, not that it is right here.
+
 ### Keep `plan.md` small — it is a task list, not a record
 
 Left alone it grows without bound. In the project this template came from it reached **1432 lines**
@@ -143,6 +155,19 @@ grep -vE '^\s*$' .claude/work/<file>.md | sort | uniq -d
 Anything it prints is a line two entries could collapse onto. All five files were clean on
 2026-07-31.
 
+**`uniq -d` is not sufficient on its own — run a structure check beside it** (added 2026-08-09,
+`collab.md` #23). Union merge has a third failure it cannot see: it can splice one entry into the
+*middle of a line* of another, which repeats no line, so the audit above comes back clean on a
+genuinely corrupted file. Measured on `main` 2026-08-04, when one item was spliced into another and
+stopped being a top-level heading at all:
+
+```bash
+grep -n '^### [0-9]' .claude/work/collab.md   # every heading at column 0; count as expected
+```
+
+An item heading that appears mid-line, or one you know exists but which this does not list, is the
+splice. Full mechanism in `traps.md`, `union-merge-splices-entries-without-duplicating`.
+
 - After a merge that touched these files, **read the tail** — `git diff HEAD~1 -- .claude/work/`.
   Fix interleaves by hand; the merge won't have told you.
 - Editing or deleting *someone else's* entry is a `collab.md` item, not a silent rewrite.
@@ -182,6 +207,16 @@ where review actually buys something:
 | `/official_spec_sheet.md` | **PR, and only after a joint meeting** — see the top of this file |
 | `.claude/work/*.md` — `decisions.md`, `traps.md`, `issues.md`, `hotfixes.md`, `collab.md` | Direct push to `main` is fine. They carry no behaviour, and a trap that is not on `main` protects nobody. Note only `decisions.md` and `collab.md` are union-merged (rule 1 above) |
 | `.claude/CLAUDE.md` | Direct push is permitted, but **prefer a PR when the change binds the other owner's practice** rather than recording a fact |
+| `.claude/skills/*/SKILL.md` — **frontmatter** (`model:`, `allowed-tools:`, any hook-adjacent key) | **Feature branch + PR.** Changing it changes what executes on the other person's machine on their next pull, without them reading it |
+| `.claude/skills/*/SKILL.md` — **body** | Direct push to `main` is fine. It is prose we both read anyway, and a PR round-trip in front of a typo fix is how a rule starts being skipped |
+
+**The test is "does this change what runs", not "which directory is it in"** — added 2026-08-09,
+agreed in `collab.md` #34. That is the whole reason rule 2 exists for `settings.json` and `hooks/`,
+and it is why the skills row splits rather than naming the directory: the next person to add a
+fourth directory should be able to route it from the principle instead of waiting for the table to
+catch up. Frontmatter is configuration the harness executes; a skill's body is prose a reader
+evaluates. Michael pinned the five working-docs skills to `model: sonnet` in `011480d` before this
+row existed, and logged it precisely because the rule did not yet cover it.
 
 **This applies even while the task's own code PR is still open.** `/done`'s sweep — the task-complete
 marker in `decisions.md`, `hotfixes.md`'s `Last checked` stamps, `traps.md` updates, the archive
@@ -202,18 +237,36 @@ Branch naming: `<owner>_<short-description>`, e.g. `mdube_sir_sim`, `jsargant_mu
 This is not ceremony, because three things in this repo fail *silently* and a second reader is the
 only thing that catches them:
 
-- **`merge=union` never conflicts.** Byte-identical lines in `.claude/work/*.md` dedupe and
-  interleave two entries into one block that reads as coherent and is not. Git will not tell you;
-  the reviewer might.
+- **`merge=union` never conflicts.** Byte-identical lines in `decisions.md` and `collab.md` — the
+  two union-merged files, narrowed from all five on 2026-08-04 — dedupe and interleave two entries
+  into one block that reads as coherent and is not. Git will not tell you; the reviewer might.
 - **Source files genuinely overlap.** `collab.md` #14 has three files claimed by #10 *and* #14/#15
   at once. Review is where a conflicting edit gets noticed while it is still cheap.
 - **Rule 2 above is the strict case, not the exception.** `settings.json` and `hooks/` execute on
   the other person's machine at session start, without them reading the diff. Those were already
   PR-only; this generalizes the habit to everything so the rule has no edge to fall off.
 
-Self-merging is allowed in exactly one case: the other owner is unavailable and the change is
-blocking. Say so in the PR, and say it in `collab.md` too — an unreviewed merge should leave a
+~~Self-merging is allowed in exactly one case: the other owner is unavailable and the change is
+blocking.~~ **Widened 2026-08-09 at the joint meeting to two cases** — `collab.md` #29:
+
+1. **The other owner is unavailable and the change is blocking.** Unchanged.
+2. **A strict deletion, or a one-line correction, to a doc — where the change removes something
+   that is already false.** New. The test is that the change *subtracts* a falsehood rather than
+   adding a claim: dropping a caveat that cites a closed issue, correcting a status row for
+   something that has shipped, fixing a glob that names files it no longer covers. A sentence that
+   asserts something new is not this case, however short it is.
+
+Either way: say so in the PR, and say it in `collab.md` too — an unreviewed merge should leave a
 trace, not a gap.
+
+**Why case 2 exists.** PR #37 was self-merged under case 1 when case 1 did not apply — James was
+demonstrably available, having merged two PRs six minutes earlier — and Michael logged it honestly
+as a self-merge of convenience rather than dressing it as the documented one (`collab.md` #29). A
+rule that gets correctly broken is stated wrong, which is the same reasoning that reworded the
+agent-merge rule above. The cost of the old wording was visible on 2026-08-09: the spec sheet's
+status table had been stale on **four of nine rows** for days, each row naming a component as
+unbuilt that had shipped, because correcting a fact needed the full branch-and-review cycle.
+Reviewing a deletion of something false is a check nobody was ever going to fail.
 
 **Merge locally whenever the PR touches `.claude/work/*.md` — never with the GitHub button.**
 Measured 2026-08-04: `.gitattributes` merge drivers are applied by *your* git, not by GitHub's
@@ -315,6 +368,15 @@ reach for `--json` on reads and the REST API on writes:
   written for someone new to the code; link `official_spec_sheet.md` rather than restating it —
   a copy of the sheet drifts, and the sheet is the authority. Agreed 2026-08-04; reasoning in
   `decisions.md` 2026-08-04 22:12.
+- **No agent co-attribution on commits or PRs — ever, and never ask.** No `Co-Authored-By: Claude`
+  trailer, no "Generated with Claude Code" footer, no `🤖` line. The author and committer are the
+  owner whose machine it is, and nothing else appears. Added to *this* file 2026-08-09 — Michael,
+  after six commits landed carrying the trailer. **The rule already existed and could not be seen
+  from here:** James wrote it into `~/.claude/CLAUDE.md` on 2026-08-03, which is global and
+  per-machine, so it bound his sessions and no one else's. A convention that lives only in one
+  person's home directory protects one person — the same argument that puts traps on `main`. The
+  precedent was also in plain sight and went unchecked: every one of the 40 commits before that day
+  carries no trailer. **Check `git log` before inventing a commit convention.**
 - **Never mark work `[x]` that you have not seen verified.** If it only compiled, or only ran
   somewhere that doesn't count, it is `[~]`. Work that looks done and isn't is the most expensive
   failure mode this system has.

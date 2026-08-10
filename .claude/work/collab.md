@@ -37,6 +37,18 @@ Audit before pushing and after any merge; anything it prints could collapse:
 grep -vE '^\s*$' .claude/work/collab.md | sort | uniq -d
 ```
 
+**Run this second check too — the first one cannot see a splice** (added 2026-08-09, item #23).
+Union merge can graft one entry into the middle of a line of another, which duplicates no line, so
+the audit above returns clean on a corrupted file. It happened here on 2026-08-04:
+
+      grep -n '^### [0-9]' .claude/work/collab.md | wc -l   # then eyeball the list itself
+
+A heading that shows up mid-line, or one you know exists but which this does not list, is the
+splice. Two formatting notes, both learned by tripping over them while adding this paragraph:
+indented rather than fenced, because a second ```bash fence makes the `uniq -d` audit print the
+fence lines forever; and worded differently from the identical command inside item #23, because two
+byte-identical lines are the very thing the audit is looking for.
+
 Full rules: `CLAUDE.md`, "Formatting for union merge".
 
 Persistent: survives `/done`, because coordination outlives any one task.
@@ -45,568 +57,13 @@ Persistent: survives `/done`, because coordination outlives any one task.
 
 ## Open
 
-Items 1–19 are all dispositioned; 14–19 were settled at the joint meeting of 2026-08-04 and moved
-into **Settled** below with every stamp intact. Item **20** was raised the same evening and is the
-only thing open. Append the next item here as **21**, numbering continuing across both sections.
-
-*(The "Nothing is open" line that stood here was written before item 20 landed, and is corrected
-rather than removed — see the merge-repair note in item 20's tail.)*
-
-### 20. `CLAUDE.md` still says all five working docs are union-merged; only two are now
-
-**Decide — it is your amendment, so I have not touched it.** Not blocking; I am starting #14 and
-this changes no code. Found reviewing PR #33 before merging it, and worth fixing soon because the
-stale text is in the document every session loads first.
-
-PR #33 narrowed `merge=union` to `decisions.md` and `collab.md`. Confirmed on `main` after the
-merge, with `git check-attr merge -- .claude/work/*.md`: those two report `union`, and `traps.md`,
-`issues.md` and `hotfixes.md` report `unspecified`. That is exactly what the `.gitattributes`
-comment intends — the three churn lists take a normal 3-way merge so a delete can no longer be
-silently discarded.
-
-Three places in `.claude/CLAUDE.md` still describe the old, wider behaviour:
-
-- **"Two people, one `.claude/`", rule 1** — "`decisions.md`, `traps.md`, `hotfixes.md`,
-  `issues.md` and `collab.md` … `/.gitattributes` sets `merge=union` on them". Three of those five
-  no longer.
-- **The routing table**, `.claude/work/*.md` row — permits a direct push to `main` on the grounds
-  that the files are "append-only observations, **union-merged**". The permission is still right;
-  the reason given is now wrong for three of the five, and they are the three where a concurrent
-  append will genuinely conflict.
-- **"Pull requests"**, first bullet of the three silent failures — "Byte-identical lines in
-  `.claude/work/*.md` dedupe and interleave". True only of the two remaining files.
-
-Why I am raising it rather than editing: the fix reads as recording a fact, which the routing table
-permits me to push directly. But it is *your* amendment, one sentence of it is a live permission
-rather than a fact, and rule 5 as you have just written it makes an in-place edit of a shared
-document announce-first. Editing your text silently to fix the consequences of your own PR is
-exactly the shape that rule exists to stop.
-
-What I suggest, if you want me to take it: amend the three passages to name the two union files
-explicitly, keep the direct-push permission unchanged but re-justify it on the audit command rather
-than on union, and add one line saying the other three now conflict on concurrent appends — which
-is the behaviour change a reader most needs to know about. Say the word and I will do it; say
-nothing and it is yours.
-
-*#20 · raised 2026-08-04 15:28 — James.*
-
-**Merge repair, 2026-08-04 15:40 — James. This item is itself a worked example of item 19.** I
-raised it and pushed; the push was rejected because you had meanwhile pushed `7efdd79` (which fixes
-exactly what this item asks for) and `27c863a` (which relocates items 14–19 into **Settled**). The
-`git pull` that followed union-merged your relocation against my copy, which still had 14–19 under
-**Open**. Result, with no conflict and no warning:
-
-- `## Settled` and the whole 2026-08-04 meeting block appeared **twice** — your revised wording near
-  the top, my stale copy of the pre-relocation wording at the tail.
-- **This item was swallowed.** It landed inside your "Items 14–19, moved from Open" block, between
-  item 19 and the duplicate `## Settled` — an *open* item filed under settled ones, which is the
-  version a reader would have believed.
-
-The item bodies themselves were each intact and unduplicated; the damage was confined to the
-structural headings and the block you had edited in place. Repaired by hand: deleted the duplicate
-tail section, kept your wording, and moved this item back under **Open**. The `uniq -d` audit is
-clean, verified before pushing. The pre-repair file is kept out-of-tree in this session's scratchpad.
-
-**Nothing of yours was lost** — your wording is the copy that survived, and your "Nothing is open"
-placeholder was corrected rather than deleted, since item 20 makes it untrue. If you would rather it
-read differently, it is yours to reword.
-
-*#20 · merge repair 2026-08-04 15:40 — James.*
-
-**Mostly overtaken by your own fix, 2026-08-04 15:45 — James. Two of the three are already done.**
-Checked `.claude/CLAUDE.md` on `main` after the merge: `7efdd79` rewrote rule 1 to "The two
-append-only docs merge by union" and added the paragraph saying the other three are **not**, and it
-re-justified the routing-table row while keeping the direct-push permission. Both are exactly what
-this item asked for, and you had written them before I raised it — we found the same thing
-independently within the hour.
-
-**One line is still stale**, `CLAUDE.md` line 197 in the "Pull requests" section: "**`merge=union`
-never conflicts.** Byte-identical lines in `.claude/work/*.md` dedupe and interleave" — the glob
-still names all five, where only `decisions.md` and `collab.md` behave that way now. Trivial, and
-the surrounding point stands.
-
-**Narrowed ask:** just that one line, and it is a fact rather than a permission, so I am happy to
-push it directly if you would rather not bother. Say nothing and I will leave it to you.
-
-*#20 · narrowed 2026-08-04 15:45 — James.*
-
-### 29. PR #37 self-merged — the one-line spec status tidy
-
-**FYI, no action needed — this is the trace `CLAUDE.md` requires for an unreviewed merge.**
-
-PR #37 dropped a single caveat from the `sir_sim` row of the spec status table. The row had read
-"corrected by GitHub #34"; #34 closed when PR #36 merged, so the sheet was citing a closed issue as
-pending work. One line, `official_spec_sheet.md` only, no `.claude/work/*.md`, so union merge was
-not involved.
-
-Michael merged it himself at 2026-08-04 19:52 rather than waiting, because it was blocking the
-`/done` gate on the sir-conventions task and the change is a strict deletion of text that had become
-false. Reviewed by nobody, which is the reason this entry exists.
-
-**Worth noting against the rule as written:** the exception in `CLAUDE.md` is "the other owner is
-unavailable", and James was demonstrably available — he had merged #35 and #36 six minutes earlier.
-So this is a self-merge of convenience, not of necessity. Recording it honestly rather than dressing
-it as the documented case. If that reads as the rule being too tight for one-line doc corrections,
-that is worth deciding rather than repeating.
-
-*#29 (renumbered from the duplicate 20 on 2026-08-06 — see resolution note below) · raised
-2026-08-04 19:52 — Michael.*
-
-**Merge-repair note, 2026-08-04 16:31 — James. This item was spliced into the middle of my
-item 20 and I have lifted it back out.** Union merge concatenated your entry into the first
-bullet of my merge-repair note, so your heading lost its line and my sentence was torn in half.
-Neither entry was readable and yours was not a top-level item at all. Your text and stamp are
-reproduced here **exactly**; only the position changed, placed by your 19:52 stamp so it sits
-between my item 20 and your item 21.
-
-**The `uniq -d` audit did not catch this** — the splice duplicated no line, so the documented
-check came back clean on a corrupted file. That is new, and it is in `traps.md`.
-
-**We both numbered an item 20.** I have not renumbered yours, since renumbering your entry is
-your call — but the two need distinguishing, and mine is the earlier stamp (15:28 against your
-19:52). Say which you want and I will do it.
-
-*#20-collision · repair note 2026-08-04 16:31 — James.*
-
-**Renumbering resolved, 2026-08-06 — Michael.** Took the call James left open above: my item (the
-PR #37 self-merge trace, 19:52 stamp) is now **#29**, the next free number, rather than reusing 20.
-James's item keeps its original **20** unchanged — his text and stamp above are untouched. This is a
-heading and closing-stamp change only, on my own entry, so no meeting or further announcement was
-needed beyond this note.
-
-*#29-collision · renumbering resolved 2026-08-06 — Michael.*
-
-### 21. Do users supply their own Rust objective as a drop-in file? The sheet says no; Michael says yes
-
-**Decide at the next meeting — it changes #26 far more than it changes #17.** Raised while planning
-#17, when Michael said the intended model is that "people provide a Rust file for their own fitness
-functions if they want to add one". I could not find that anywhere in the sheet, so this item is to
-settle which of the two is the real intent before #26 is built to the wrong one.
-
-**What the sheet actually says.** The only user-extension route described for fitness is the
-**Python** adapter — §5's "a user-supplied Python objective declares its direction when the callable
-is registered", and §8's adapter, tracked as issue #19. §5.2 closes with *"keep hot objectives native
-in Rust. The Python adapter is for prototyping"*, which reads as guidance to **us** about where to
-implement the objectives we ship, not as a documented extension point for users. §10's non-goals do
-not mention drop-in objectives either way, so this is a genuine silence rather than a stated no.
-
-**Why it is not a cosmetic question.** Issue #26 erases the objective to `Box<dyn Fitness>` via a
-closed `match config.fitness` with one arm per objective — the amendment agreed at the 2026-08-04
-meeting, and the thing that took dispatch from 16 arms to 4. A closed match over a config enum
-cannot name a type that is not in the crate. So a user-supplied Rust objective means forking and
-recompiling, and at that point adding the match arm is the smaller edit — which makes the drop-in
-file mechanism buy nothing unless something more is intended, such as a registration API or a
-build-time hook. **If the drop-in model is real, #26's step 1 is designed wrong**, and it is far
-cheaper to know that before it is built than after.
-
-**Worth noting the Python adapter may already be the answer.** It is the documented route, it needs
-no recompilation, and §5.2's own guidance concedes it is slower — so the honest question may be
-whether "hot objective, no fork" is a real user need or a hypothetical one.
-
-**Not blocking #17.** I am building the three SIR objectives to the sheet as written: they go in
-`get/src/fitness.rs` beside the trait, which is also what a drop-in example would want to look like,
-so neither answer wastes the work.
-
-*#21 · raised 2026-08-04 22:00 — Michael.*
-
-### 24. What is in a `Profile*.dat`? The C++ loader adds patient zero and rescales by `verts / 128`
-
-**For you, before #26 reads one — not blocking #24, which only stores the path.** Raised while
-building the `config.rs` schema. `epi_prof_match` needs a target profile, and the sheet says only
-that it "adds a target" (§7); §7's TOML block does not show the field and issue #24's enum sketch
-omits it. James settled the config side on 2026-08-05: the variant carries
-**`target_profile_path`**, a path that `config.rs` never opens, so parsing stays pure
-deserialization. That leaves the question of what the file actually contains, and **whoever builds
-#26 has to answer it** — the dispatch is what turns a path into the `Vec<f64>` that
-`EpiProfMatch::new` (`get/src/fitness.rs:251`) requires.
-
-**What the C++ does, which is more than "one number per line"** — `legacy/main.cpp:370-388`, reading
-`./Profiles/Profile<n>.dat`:
-
-    for (int i = 0; i < PL; i++) { PD[i] = 0; }        // pre-fill
-    PD[0] = 1;                                         // patient zero is NOT in the file
-    for (int i = 0; i < PL; i++) {
-        inp.getline(buf, 19);  val = strtod(buf, nullptr);
-        PD[i + 1] = val * ((double) verts / 128);      // rescale to the network size
-    }
-
-So a stored profile **omits its own first element** and is **normalized to a 128-node network**.
-Two conventions, neither in the sheet, and both silent if got wrong: forget the prepend and every
-target is shifted one timestep; forget the rescale and a 512-node run is compared against
-128-node counts, which is a wrong number rather than an error.
-
-**The ask:** decide whether GET reproduces both conventions, one, or neither — and if the file
-format changes, say so before #26 is built rather than after. My own read is that reproducing both
-is right for comparability with the archived C++ results, which is the same argument that kept the
-short-epidemic re-roll (§5.2), but this is your issue and the profiles are your data.
-
-**Also worth noting the length interaction.** The 2026-08-04 amendment to §5.2 gave `profile` a
-terminating zero and made `length` one higher than before, so a target captured from older output is
-already one element out of step. `EpiProfMatch`'s doc comment at `fitness.rs:236-238` says as much.
-Whatever is decided here should say which convention a `.dat` on disk is in.
-
-*#24 · raised 2026-08-05 15:09 — James, while planning GitHub issue #24.*
-
-### 25. Unknown keys under `[fitness]` are silently ignored, and cannot be made to error
-
-**FYI, and one thing to not assume in #26 — no decision needed from you unless you disagree.**
-Measured while building GitHub #24 on 2026-08-05: a `[fitness]` block carrying a leftover
-`seed = 42` **parses clean and the key is discarded**. Issue #24's `Verify by` line asked for it to
-be rejected as an unknown key; that is not achievable. Serde deserializes a `#[serde(flatten)]`
-field through a buffered content map, so `deny_unknown_fields` never fires — confirmed by putting
-the attribute on `SirParams` itself, which changed nothing.
-
-Spec §7 requires the flatten in as many words, so the flatten stayed and the verify line is what
-gave. Reasoning and the rejected alternatives are in `decisions.md` 2026-08-05 15:47; the behaviour
-is pinned by `an_unknown_fitness_key_is_ignored_rather_than_rejected` in `get/src/config.rs`.
-
-**Why you may care, in #26.** The natural assumption when reading `config.rs` is that a typo in a
-`[fitness]` key is a parse error. It is not, for that table specifically — `[genome]`'s operation
-weights *do* reject unknown keys, because `EdgeEditOperationWeights` carries
-`deny_unknown_fields` and is not flattened (`get/src/genomes/edge_edit.rs:27`). So the two tables
-behave differently and neither is wrong.
-
-**Where I think the check belongs:** `Config::validate` (#23, mine), which can look at the raw text
-before it is deserialized and reject a `seed` under `[fitness]` by name. I will pick it up there
-unless you would rather it went somewhere else. Flagging it because the migration case is the
-silent kind — an old config keeps `seed = 42`, sees no error, and runs under a different seeding
-model than its author believes, since the master seed now comes from the `run` call.
-
-*#25 · raised 2026-08-05 15:47 — James, during GitHub issue #24.*
-
-**Done in #23, 2026-08-06 00:10 — James. One correction to what I said above, and it matters for
-where you look for the check.** I wrote that it belonged in `Config::validate`, "which can look at
-the raw text before it is deserialized". It cannot: `validate` takes `&self` on an already-parsed
-`Config`, by which point the key is gone. The check went into **`Config::from_toml_str`** instead,
-reading the raw text through a loose `toml::Value` parse before deserialization.
-
-Two consequences worth knowing in #26:
-
-- **It is TOML-only, by construction.** The Python front end has no text to inspect, so a config
-  built in Python can still carry a stray `seed` attribute harmlessly. Acceptable, because the
-  hazard is specifically an *old TOML file* — but do not assume the guarantee is universal.
-- **It is `seed` by name, not a general unknown-key sweep.** Any other unknown `[fitness]` key is
-  still silently ignored, exactly as before, and that narrowness is deliberate: a general sweep
-  hand-rolls what serde does everywhere else and would start rejecting keys as the schema grows.
-  Pinned by `an_unknown_fitness_key_other_than_seed_is_still_ignored`.
-
-The mechanism you were told before is unchanged — serde genuinely cannot do this through a
-`#[serde(flatten)]`. Reasoning and the rejected alternatives are in `decisions.md` 2026-08-06 00:07.
-This closes the item unless you want it somewhere else. *(Reply inside #25 · 2026-08-06 00:10 —
-James.)*
-
-### 26. Pushed a `CLAUDE.md` convention straight to `main` — commit each verified feature-branch step separately
-
-**FYI, no action needed — this is the trace for a direct push per the routing table's own
-exception.** `CLAUDE.md` says prefer a PR when a change binds the other owner's practice; I judged
-this one not worth a branch and review cycle, so it went direct, same as the two conventions in
-item 22.
-
-**The rule:** commit each verified task-list step on a feature branch separately — a lint-policy
-decision, a formatting sweep, one file of a readability pass — rather than batching everything into
-one commit at PR time. Landed live on issue #22's branch this session: the `needless_return` lint
-decision and the tree-wide `cargo fmt` sweep are already two separate commits rather than one.
-
-**Why now:** working through #22 file-by-file with the user surfaced the question directly — small
-reviewable commits make each step independently bisectable and reviewable, rather than one large
-diff to audit at PR time. Push back here if you'd rather this weren't standard.
-
-*#26 · raised 2026-08-05 23:45 — Michael.*
-
-### 27. `Swap`'s degree floor is `> 2` in the spec and code, but the original Java required only `>= 2`
-
-**Decide.** Found while explaining `operations.rs::swap` to Michael during the #22 readability pass —
-not blocking anything, but it's a real, checkable numeric discrepancy rather than a style question.
-
-**Where it's from.** `GraphEvolutionTool/src/Graph.java` and `GET.java`, a 2019-era Java
-predecessor kept locally in `OneDrive - University of Guelph/Coding Projects/Archive/`, not on
-GitHub. `swap(int a, int b, int k)` rejects when `nbr.get(v1).size() < k` — i.e. it requires
-**degree >= k** — and the only caller passes a named constant: `MIN_DEG_SWAP = 2`. So the original
-requirement was **degree >= 2**.
-
-**What we have now.** `official_spec_sheet.md` §3.1 says "two non-adjacent vertices of **degree >
-2**", and `get/src/genomes/edge_edit/operations.rs::swap` implements exactly that —
-`graph.degree(first_vertex) <= 2` rejects, i.e. requires **degree >= 3**. One higher than the
-original, on both vertices.
-
-**The other four checks match exactly**, verbatim in spirit — non-adjacent `v1,v2`, all four
-vertices distinct, and none of `v1-a2`, `v2-a1`, `a1-a2` already an edge. Only the degree floor
-differs, which is what makes it look deliberate rather than a slip — everything else was ported
-faithfully.
-
-**No comment in the Java explains why `2` was chosen**, so I can't tell if `> 2` here is an
-intentional tightening or an off-by-one from the port. Worth deciding: match the original (`>= 2`),
-or keep the current stricter `> 2` and drop a line into `decisions.md` saying so on purpose.
-
-*#27 · raised 2026-08-06 00:09 — Michael, transcribed by Claude during a readability-pass session.*
-
-### 28. Documented: `/done`'s doc sweep pushes to `main` directly, decoupled from the task's own code PR
-
-**FYI, no action needed — clarifying an existing rule, not creating one.** Came up closing out #22:
-the `/done` sweep (task-complete marker in `decisions.md`, `hotfixes.md`'s `Last checked` stamps,
-`traps.md` updates, the archive itself) was written while PR #43, carrying #22's code, was still
-open and unmerged. The question was whether that meant committing to `main` directly or waiting for
-the PR — the routing table already answered "direct push is fine" for `.claude/work/*.md`, but not
-the *timing* relative to an open PR, so it kept needing re-deriving mid-session instead of being
-looked up.
-
-Added one paragraph to `CLAUDE.md`'s routing table, right after the `.claude/work/*.md` row: `/done`'s
-sweep goes to `main` immediately regardless of whether the task's own code PR has merged. The code PR
-and the doc close-out are two independent tracks — the PR carries the code, the docs carry the record
-that the task is closed — and holding the docs for someone else's review schedule would recreate the
-exact stall `/done` exists to avoid.
-
-*#28 · raised 2026-08-06 — Michael.*
-
-### 30. New `SessionStart` hook: `pull_main.sh` fast-forwards `main` automatically — needs your review
-
-**Confirm — this runs on your machine too, at every session start.** Opened as a PR
-(`mdube_pull-main-hook`), not pushed direct, per the routing table's own rule that `settings.json`
-and `hooks/` changes always go through review.
-
-**What it does:** on `main` only, fetches and fast-forwards to `origin/main` if it can do so
-cleanly. On any other branch, or if `main` has diverged (local commits not on origin, or a dirty
-working tree the incoming commit would overwrite), it prints one line and touches nothing — no
-merge, no rebase, no discard. Verified all three paths in a scratch repo before opening the PR.
-
-**Why:** `.claude/work/*.md` and `CLAUDE.md` route around a PR by design, so a change one of us
-pushes direct only reaches the other's machine on their next `git pull main` — nothing was prompting
-that. That gap is exactly how the two independent `collab.md` item-**20**s happened (see
-#20-collision / #29-collision): both of us were reading our own stale copy when we each picked "the
-next number." This closes the stale-window case; it doesn't and can't close true same-minute
-concurrency.
-
-Full reasoning and rejected alternatives in `decisions.md` 2026-08-06, "`pull_main.sh`: a
-`SessionStart` hook fast-forwards `main` automatically." Please review the PR when you get a chance
-— it's the one place in this session's work that binds your session start, not just a doc you can
-skim later.
-
-*#30 · raised 2026-08-06 — Michael.*
-
-**Confirmed, 2026-08-06 00:55 — James. Reviewed and no objection; treat this as settled.** Read the
-merged script at `.claude/hooks/pull_main.sh` rather than only the PR description. What I checked:
-
-- **The guards do what the description says.** It exits 0 unless `git branch --show-current` is
-  exactly `main`, so any feature branch is untouched — which is the case that matters, since a
-  mid-task branch is where an unexpected move would hurt.
-- **`--ff-only`, and every failure path is non-destructive.** Unreachable origin, divergent local
-  `main`, dirty tree blocking the merge: each prints one line and exits 0. No merge, no rebase, no
-  discard, no reset.
-- **`set -uo pipefail` without `-e` is correct here, not an oversight.** The bare
-  `[[ "$local_sha" == "$remote_sha" ]] && exit 0` test returns non-zero when the shas differ, which
-  under `-e` would abort the script before the fast-forward it exists to perform.
-
-Two things worth stating rather than leaving implicit. First, **it moves `main` under a session
-that is sitting on `main`** — correct and wanted, but it means `git log` can differ between the
-start of a session and the middle of one, which is worth knowing before it surprises someone.
-Second, the item was **effectively already answered by PR #44 being merged**; this reply exists
-because a merge is not a review, and #30 asked for the review.
-
-Nothing to change. *(Reply inside #30 · 2026-08-06 00:55 — James.)*
-**Status from my second machine, 2026-08-06 — Michael. The hook has merged, and this session was
-the exact case it exists to prevent.** PR #44 is in as `e42ffde`, so `pull_main.sh` is live in both
-trees now; your confirmation on the behaviour is still the open half of this item.
-
-Worth recording because it is evidence rather than argument: I opened a session on my other machine
-to close out #17 and found `main` **40 commits behind `origin/main`** — it had never seen PR #40's
-merge, nor #41, #42, #43 or #44. The stale-window this hook closes is not hypothetical and is not
-small. Two concrete consequences in that one session, before any work started:
-
-- The local `decisions.md`, `traps.md`, `collab.md` and `hotfixes.md` were all two days stale. Since
-  #33 narrowed the union glob, `hotfixes.md` no longer merges by union — appending to that stale
-  base would have produced a genuine conflict, not a silent merge.
-- `traps.md` carried a `cargo fmt` entry whose own exit condition ("drop once #43 merges") had been
-  met on `origin/main` for hours. Working from the stale copy, I would have kept following a trap
-  that no longer exists.
-
-I re-read the script before pulling it in rather than trusting my own PR from the other machine, and
-the three paths hold as described: it exits unless `branch == main`, it only ever runs
-`merge --ff-only`, and the non-fast-forwardable case prints and returns 0 without touching anything.
-
-*#30 · status update 2026-08-06 14:05 — Michael, from the second machine.*
-
-### 31. One clause in your `rustfmt`-descends-into-submodules trap went stale when #22 shipped
-
-**Announcing before touching your text, per rule 5 — the trap itself is right and stays.** Your
-entry "Per-file `rustfmt` is not per-file on a `mod.rs`" closes with **"the tree is not currently
-rustfmt-clean (that is exactly what #22 exists to fix), so a stray descent produces *real* diff, not
-a no-op"**. #22 shipped as PR #43, and `cargo fmt -- --check` now reports zero offenders on `main` —
-verified on `ed198c4` at 2026-08-06.
-
-**What that changes and what it does not.** The mechanism is untouched: rustfmt still parses the
-module tree and still descends into every `mod x;`, so `--config skip_children=true` is still the
-right instruction and the `--skip-children` CLI note is still worth having. What changed is only the
-stated *consequence* — on a clean tree a stray descent is now usually a no-op rather than real diff.
-That makes the trap read as less urgent than it is, which is the wrong direction for a trap.
-
-**Suggested amendment, yours to accept or ignore:** replace that final bullet with one saying the
-descent is silent either way, and that a clean tree makes it *harder* to notice, not safer — the
-diff that does appear is now the only signal, where before you might have caught it in the noise.
-I have not edited a character; say the word and I will make exactly that change.
-
-**Related sweep at the same gate:** I deleted the `cargo fmt` trap outright, under its own written
-exit condition ("drop this entry once #43 merges"). Flagging it here because it is a deletion from a
-shared churn list that you may go looking for.
-
-*#31 · raised 2026-08-06 14:05 — Michael, at the sir-objectives `/done` gate.*
-
-### 32. Two spec-named identifiers misname the unit of work: `evaluate_population` and `SirRun`
-
-**Needs a joint meeting, because both names are written into the sheet — and an issue once we
-agree.** Not blocking #18; I have used the right words in the `fitness.rs` comments and renamed
-only the identifiers the sheet does *not* name. Raising it rather than fixing it, per the rule at
-the top of `CLAUDE.md`.
-
-**The unit the engine scores together is a batch of graphs, and its size varies.** Generational
-hands over the whole population per cycle; steady-state hands over the **two new children** per
-mating event (`get/src/evolver/steady_state.rs:75-76`), plus its starting population once
-(`:194-195`). The sheet already says this at line 509 and §6.3. So "population" is right in exactly
-one of the three cases, and "generation" in none of the steady-state ones.
-
-Two names contradict that:
-
-- **`Fitness::evaluate_population`** — sheet line 221, again at 794 and 804. It is handed a batch of
-  two for most of a steady-state run. `evaluate_batch` is what it does.
-- **`SirRun`** — sheet line 368, the return of `sir_sim`. It is **one epidemic**, but "run" already
-  means a replicate (`run_seed`, §8.1) *and* the API call `GraphEvolver::run`. Three meanings, and
-  `run_seed` sits four lines from `|run| run.spread` in the same impl block. `Epidemic` is what it
-  is.
-
-**Why they are one item and not two:** identical shape — a spec-named identifier whose name
-describes something narrower or other than the concept, where the fix is mechanical but the
-authority is the sheet.
-
-**What changes if we agree**, so the issue can be scoped rather than discovered:
-
-| | `evaluate_population` → `evaluate_batch` | `SirRun` → `Epidemic` |
-|:--|:--|:--|
-| Sheet | lines 221, 794, 804 | line 368 |
-| Code | `fitness.rs` (trait + 3 overrides), `evolver/common.rs:244` | `sir.rs`, `fitness.rs` |
-| Prose | §5.1's "batch scorer" wording already agrees | §5.2's `SirRun { … }` block |
-
-**Already done on my side, needing no meeting** — these identifiers are ours, not the sheet's:
-`EpidemicScorer::mean_population` → `mean_batch`, `mean_from` → `mean_with_seed`, the counter field
-→ `batches_scored`, and the comments throughout `fitness.rs` now say "batch of graphs" and name all
-three shapes. That is on branch `mdube_epidemic_seeding`.
-
-**My ask:** agree or reject at the next meeting. If agreed, I will file one issue covering both
-renames and amend the sheet in the same PR. It is a pure rename with no behaviour change, so it
-wants to land between workstreams rather than on top of an open branch — #19 and #25 both touch
-these files.
-
-*#32 · raised 2026-08-07 12:38 — Michael, while writing #18's comments.*
-
-### 33. I restructured `fitness.rs` inside #18 — `EpidemicScorer` is 5 methods down to 2
-
-**Done, not proposed — read this before you start #19, which lands `PyFitness` in the same file.**
-On branch `mdube_epidemic_seeding`. No signature named in the sheet changed, so this needed no
-meeting; I am telling you because it moves code you are about to edit, and because the *reason* is
-worth having on the record.
-
-**Why it happened.** Reading #18's own comments back, I could not follow my own file. Three
-sub-agent reviews from different angles agreed on the split verdict, and it is not the one I
-expected:
-
-- **The seeding machinery is conventional and forced — untouched.** The counter-per-batch plus
-  `mix_seed` derivation is the standard common-random-numbers scheme from simulation-optimization,
-  and the counter-based seeding recommended for parallel reproducibility. The `AtomicU64` is not a
-  smell: `Fitness: Sync` is required for the rayon fan-out, `Cell` is not `Sync`, and a `Mutex` is
-  worse for something provably never contended. §8.1's reproducibility argument was checked and
-  holds.
-- **The wrapper layer above it was ours, and was earning nothing.** That is what I removed.
-
-**What changed, all inside `get/src/fitness.rs`:**
-
-| Before | After | Why |
-|:-:|:-:|:-|
-| `mean`, `mean_batch`, `mean_with_seed` | `mean_batch` alone | Three methods that all averaged; two were single-caller pass-throughs |
-| `pub fn epidemics(graph, seed)` | inlined | One-line forward to `simulate_epidemics`, one caller, no external user |
-| Drift between an objective's two entry points was silent | test `both_entry_points_use_the_same_reading` | Each objective still writes its reading twice, inline in `evaluate` and `evaluate_population` — a `reading` method was tried and reverted the same day, because the indirection cost more clarity than the duplication did for someone copying an objective to write their own. The test is the guard instead |
-| `evaluate` had its own path via `mean` | `evaluate` calls `mean_batch(slice::from_ref(graph))[0]` | A single graph is a batch of one; same tick, same seeding, one code path |
-
-**The trap I avoided, which is the part worth knowing if you touch this.** The obvious version is
-`evaluate` calling `self.evaluate_population(...)`. That is a latent stack overflow: the trait's
-**default** `evaluate_population` calls `evaluate`, so any objective forwarding without also
-overriding the batch method recurses until the stack dies. Routing through `mean_batch` on the
-scorer has no cycle. I also rejected a blanket `EpidemicReading` trait that would enforce the
-pairing at compile time — it works, but it puts the real code in a blanket impl where neither of us
-would think to grep, which cuts against our own "one owner does not write Rust" rule harder than the
-duplication it removes.
-
-**Evidence:** 162 tests green, `cargo fmt --check` clean. Two new tests lock in what the change
-bought — `scoring_one_graph_ticks_the_counter_once_like_any_other_batch`, and
-`both_entry_points_use_the_same_reading`, which fails if an objective's two entry points ever
-disagree. Nothing outside `fitness.rs` was touched by this item.
-
-**What it means for #19.** `PyFitness` overrides `evaluate_population` and does not use
-`EpidemicScorer` at all, so nothing here blocks you — but the bottom half of the file moved. Pull
-the branch before you start, or merge #18 first, rather than resolving it afterwards.
-
-**Related, still needing the meeting:** the renames in **#32** are untouched by this —
-`evaluate_population` and `SirRun` are sheet-named and stayed exactly as they are.
-
-*#33 · raised 2026-08-07 14:28 — Michael, during #18.*
-
-### 34. I pinned the five working-docs skills to sonnet — it changes execution on your machine
-
-**FYI, no action needed unless you disagree.** Pushed to `main` as `011480d`. `model: sonnet` added
-to the frontmatter of `done`, `load`, `save`, `setup` and `start`. They are bookkeeping skills —
-read the working docs, update a plan, archive a task — and none of them needs the larger model.
-
-**Why this is a `collab.md` entry rather than a silent push.** `CLAUDE.md` rule 2 requires a PR for
-`settings.json` and `hooks/` because they execute on your machine at session start without you
-reading them. `.claude/skills/` is not named in that rule and not in the routing table either, so a
-direct push is permitted — but the *reason* behind rule 2 applies to it just as much: on your next
-pull these five skills run under a different model than they did today, and nothing announces it.
-So: permitted, pushed, and logged rather than left to be discovered.
-
-**If you think skills belong under rule 2**, that is worth deciding rather than leaving to
-precedent, and it would be a `CLAUDE.md` amendment binding both of us. I have no strong view; I
-lean toward "yes, but only when the frontmatter changes", since the body of a skill is prose we both
-read anyway.
-
-**Revert is one line each** if any of them reads worse to you at this size — say so and I will drop
-it, or drop it yourself, no discussion needed.
-
-*#34 · raised 2026-08-07 16:52 — Michael, closing out #18.*
-
-### 35. §6.2 says "track the best"; generational reports the best of the final population
-
-**Decide — I think your code is right and the sheet's wording is stale, but the sheet is the
-authority so it is not mine to call.** Found reviewing PR #46 against §6.2 after merging it. Not
-urgent and nothing is broken at the settings we actually use.
-
-**The gap.** §6.2 reads "score the population, log a stats row, **track the best**, then advance",
-which reads as a running best carried across generations. `GenerationalEvolver::outcome`
-(`get/src/evolver/generational.rs:115`) instead takes the best of the **final** population.
-
-At `elite_count >= 1` the two nearly always agree, because the best is copied forward. At
-**`elite_count = 0` they can differ**, and §7 permits zero — its only constraint is
-`elite_count < population_size`, and `config.example.toml` happening to use 1 is not a guarantee.
-In that configuration a strong individual can appear in generation 40, fail to be selected, and the
-run reports something worse with no record that it existed. Your own test name concedes the edge:
-`the_logged_best_never_worsens_while_an_elite_is_carried`.
-
-**Why I think the code is right anyway, and this is the sheet's problem.** #18 landed the atomic
-batch counter, so fitness is now genuinely stochastic between batches. A running best under a
-stochastic objective is substantially a record of which generation drew lucky dice — and §6.2
-itself rejects exactly that reasoning two paragraphs later, when it says freezing an elite's old
-score would let a lucky draw persist (§5.2). Best-of-final is the more honest number, and it is
-what `SteadyStateEvolver::outcome` already reports, so the two strategies agree with each other.
-The sentence in §6.2 predates the seeding work.
-
-**Three ways to settle it, cheapest first:**
-
-- **Amend §6.2** to say the reported best is the best of the final population, for both strategies,
-  and say why. No code changes. My preference.
-- **Require `elite_count >= 1` in §7**, which makes the divergence unreachable rather than
-  resolving it. Cheap, but it removes a legitimate configuration to dodge a wording problem.
-- **Implement a running best**, and accept that under a stochastic objective the reported winner is
-  chosen partly by its luckiest sample. I would not.
-
-Either of the first two is a sheet change, so it needs the meeting — same one #32 is waiting on.
-
-*#35 · raised 2026-08-07 16:59 — Michael, reviewing PR #46 after merging it.*
+**Nothing is open.** Items 1–19 were settled at the joint meeting of 2026-08-04 and items 20–38 at
+the meeting of 2026-08-09; all of them sit under **Settled** below, bodies and stamps intact, behind
+their disposition tables. **Append the next item as 40**, numbering continuing across both sections.
+
+*(Item 39 — the trace of that meeting's self-merge, two direct spec pushes and the force-push — was
+raised and settled the same day, and sits at the very end of this file. It needed no decision once
+both owners had been through all three in the room.)*
 
 ## Settled
 
@@ -1039,3 +496,833 @@ because numbering is "one higher than the last" and neither of us had pulled. Yo
 numbered 20 and I have not renumbered it — that is your entry to change.
 
 *#23 · raised 2026-08-04 18:24 — James.*
+
+### Settled at the joint meeting of 2026-08-09
+
+Every item that was open going into this meeting is dispositioned below. Following the precedent
+set on 2026-08-04, this block is the disposition and the item bodies stay where they are under
+**Open** for now — relocating eighteen long entries in one pass is the operation that spliced items
+20 and 29 into each other, and the table below is what a reader needs.
+
+| # | Disposition agreed 2026-08-09 | Where it landed |
+|:---:|:----------|:----------|
+| 20 | **Fixed.** The last stale glob now names `decisions.md` and `collab.md` rather than all five | `CLAUDE.md`, "Pull requests" |
+| 21 | **Both extension routes supported.** Python for most users, a drop-in Rust objective for advanced ones — and it needs **no change to #26**, because `Evolver::run<F>` is generic so a Rust user never reaches dispatch | spec §5.3 (new); `decisions.md`; noted on GitHub #26 |
+| 23 | **Agreed.** `grep -n '^### [0-9]'` added beside the `uniq -d` audit in both front doors, since a splice duplicates no line | `CLAUDE.md`; this file's header |
+| 24 | **Inline `target_profile`, verbatim.** Replaces `target_profile_path`; **neither** C++ convention (patient-zero prepend, `/128` rescale) is reproduced | spec §8 amended; `decisions.md`; GitHub #53 |
+| 25 | **Closed** by the reply inside it — `reject_fitness_seed` in `from_toml_str` is the right home | `decisions.md` 2026-08-06 00:07 |
+| 26 | **Acknowledged**, no change. The commit-each-verified-step convention stands | `CLAUDE.md`, Conventions |
+| 27 | **Ratified as deliberate.** `Swap` keeps its degree floor of 3; no code and no sheet change | `decisions.md` 2026-08-09 |
+| 28 | **Acknowledged**, no change. `/done`'s sweep pushes direct regardless of an open code PR | `CLAUDE.md`, routing table |
+| 29 | **Rule widened to two cases** — the second being a strict deletion or one-line correction that removes something already false | `CLAUDE.md`; `decisions.md` 2026-08-09 |
+| 30 | **Settled.** Hook merged as PR #44 and reviewed; both halves complete | `decisions.md` 2026-08-06 |
+| 31 | **Already applied by James** on 2026-08-06. Michael must not re-apply it | `traps.md`, the rustfmt entry |
+| 32 | **Both renames agreed.** `evaluate_population` → `evaluate_batch`, `SirRun` → `Epidemic`; the sheet amendment rides in the same PR | GitHub #52 |
+| 33 | **FYI only**, verified intact. `EpidemicScorer` is `new` / `next_batch_seed` / `mean_batch` | `decisions.md`; no action |
+| 34 | **Frontmatter takes a PR, the body does not.** Written as a test — "does this change what runs", not "which directory is it in" | `CLAUDE.md`, routing table; `decisions.md` |
+| 35 | **§6.2 amended to best-of-final** for both strategies, with the `elite_count = 0` case stated | PR #50; `decisions.md` |
+| 36 | **Scoped down.** Only the argmin moves to `common::best_index`; the rest of `outcome` stays duplicated on purpose | GitHub #51 |
+| 37 | **Verified on Windows.** Linking is fine; the runtime failure is `STATUS_DLL_NOT_FOUND` and the fix is `PATH`, not `LD_LIBRARY_PATH`. James's cargo-feature fallback is **not** needed | `traps.md` |
+| 38 | **Stale and corrected** — #29 landed as PR #49, merged `0731aa6`, so its "not yet a PR" line no longer holds | see the note appended inside #38 |
+
+**Three things came out of the meeting that were not on the agenda.**
+
+1. **The spec status table was stale on four of nine rows** — `GenerationalEvolver`, the three SIR
+   objectives, `Config` parsing and the Python interface all read "designed, not built" for
+   components that had shipped. The sheet says status lives there "and nowhere else", so it was the
+   only signal a reader had. Corrected in PR #50.
+2. **Agent co-attribution was banned in this repo, not just in one home directory.** James wrote
+   the rule into `~/.claude/CLAUDE.md` on 2026-08-03, which is global and per-machine, so it bound
+   his sessions and reached nobody else; six commits made during this meeting carried a
+   `Co-Authored-By` trailer before it was caught. History was rewritten to strip them and the rule
+   now lives in the repo. **James: `git fetch origin; git reset --hard origin/main`** — `main` was
+   force-pushed, so `pull_main.sh` will decline the fast-forward and print rather than fixing it.
+3. **A correction to #25's reply, for James.** It states that a config built in Python "can still
+   carry a stray `seed` attribute harmlessly". That looks wrong: every pyclass in `py_config.rs` is
+   declared without `dict`, so a pyclass instance has no `__dict__` and `config.seed = 42` raises
+   `AttributeError` rather than being silently carried. Reasoned from the declarations, not
+   executed — worth two minutes to confirm before relying on either version.
+
+*Meeting block · #20-#38 dispositioned 2026-08-09 — Michael & James.*
+
+
+### Items 20–38, moved from Open on 2026-08-09 — Michael & James
+
+Full text, relocated intact once the joint meeting settled all eighteen. The disposition table
+directly above is the summary; these are the originals, every stamp preserved and nothing edited.
+Relocated at the meeting with both owners present, which is what the announce-first rule on
+in-place edits asks for.
+
+### 20. `CLAUDE.md` still says all five working docs are union-merged; only two are now
+
+**Decide — it is your amendment, so I have not touched it.** Not blocking; I am starting #14 and
+this changes no code. Found reviewing PR #33 before merging it, and worth fixing soon because the
+stale text is in the document every session loads first.
+
+PR #33 narrowed `merge=union` to `decisions.md` and `collab.md`. Confirmed on `main` after the
+merge, with `git check-attr merge -- .claude/work/*.md`: those two report `union`, and `traps.md`,
+`issues.md` and `hotfixes.md` report `unspecified`. That is exactly what the `.gitattributes`
+comment intends — the three churn lists take a normal 3-way merge so a delete can no longer be
+silently discarded.
+
+Three places in `.claude/CLAUDE.md` still describe the old, wider behaviour:
+
+- **"Two people, one `.claude/`", rule 1** — "`decisions.md`, `traps.md`, `hotfixes.md`,
+  `issues.md` and `collab.md` … `/.gitattributes` sets `merge=union` on them". Three of those five
+  no longer.
+- **The routing table**, `.claude/work/*.md` row — permits a direct push to `main` on the grounds
+  that the files are "append-only observations, **union-merged**". The permission is still right;
+  the reason given is now wrong for three of the five, and they are the three where a concurrent
+  append will genuinely conflict.
+- **"Pull requests"**, first bullet of the three silent failures — "Byte-identical lines in
+  `.claude/work/*.md` dedupe and interleave". True only of the two remaining files.
+
+Why I am raising it rather than editing: the fix reads as recording a fact, which the routing table
+permits me to push directly. But it is *your* amendment, one sentence of it is a live permission
+rather than a fact, and rule 5 as you have just written it makes an in-place edit of a shared
+document announce-first. Editing your text silently to fix the consequences of your own PR is
+exactly the shape that rule exists to stop.
+
+What I suggest, if you want me to take it: amend the three passages to name the two union files
+explicitly, keep the direct-push permission unchanged but re-justify it on the audit command rather
+than on union, and add one line saying the other three now conflict on concurrent appends — which
+is the behaviour change a reader most needs to know about. Say the word and I will do it; say
+nothing and it is yours.
+
+*#20 · raised 2026-08-04 15:28 — James.*
+
+**Merge repair, 2026-08-04 15:40 — James. This item is itself a worked example of item 19.** I
+raised it and pushed; the push was rejected because you had meanwhile pushed `7efdd79` (which fixes
+exactly what this item asks for) and `27c863a` (which relocates items 14–19 into **Settled**). The
+`git pull` that followed union-merged your relocation against my copy, which still had 14–19 under
+**Open**. Result, with no conflict and no warning:
+
+- `## Settled` and the whole 2026-08-04 meeting block appeared **twice** — your revised wording near
+  the top, my stale copy of the pre-relocation wording at the tail.
+- **This item was swallowed.** It landed inside your "Items 14–19, moved from Open" block, between
+  item 19 and the duplicate `## Settled` — an *open* item filed under settled ones, which is the
+  version a reader would have believed.
+
+The item bodies themselves were each intact and unduplicated; the damage was confined to the
+structural headings and the block you had edited in place. Repaired by hand: deleted the duplicate
+tail section, kept your wording, and moved this item back under **Open**. The `uniq -d` audit is
+clean, verified before pushing. The pre-repair file is kept out-of-tree in this session's scratchpad.
+
+**Nothing of yours was lost** — your wording is the copy that survived, and your "Nothing is open"
+placeholder was corrected rather than deleted, since item 20 makes it untrue. If you would rather it
+read differently, it is yours to reword.
+
+*#20 · merge repair 2026-08-04 15:40 — James.*
+
+**Mostly overtaken by your own fix, 2026-08-04 15:45 — James. Two of the three are already done.**
+Checked `.claude/CLAUDE.md` on `main` after the merge: `7efdd79` rewrote rule 1 to "The two
+append-only docs merge by union" and added the paragraph saying the other three are **not**, and it
+re-justified the routing-table row while keeping the direct-push permission. Both are exactly what
+this item asked for, and you had written them before I raised it — we found the same thing
+independently within the hour.
+
+**One line is still stale**, `CLAUDE.md` line 197 in the "Pull requests" section: "**`merge=union`
+never conflicts.** Byte-identical lines in `.claude/work/*.md` dedupe and interleave" — the glob
+still names all five, where only `decisions.md` and `collab.md` behave that way now. Trivial, and
+the surrounding point stands.
+
+**Narrowed ask:** just that one line, and it is a fact rather than a permission, so I am happy to
+push it directly if you would rather not bother. Say nothing and I will leave it to you.
+
+*#20 · narrowed 2026-08-04 15:45 — James.*
+
+### 29. PR #37 self-merged — the one-line spec status tidy
+
+**FYI, no action needed — this is the trace `CLAUDE.md` requires for an unreviewed merge.**
+
+PR #37 dropped a single caveat from the `sir_sim` row of the spec status table. The row had read
+"corrected by GitHub #34"; #34 closed when PR #36 merged, so the sheet was citing a closed issue as
+pending work. One line, `official_spec_sheet.md` only, no `.claude/work/*.md`, so union merge was
+not involved.
+
+Michael merged it himself at 2026-08-04 19:52 rather than waiting, because it was blocking the
+`/done` gate on the sir-conventions task and the change is a strict deletion of text that had become
+false. Reviewed by nobody, which is the reason this entry exists.
+
+**Worth noting against the rule as written:** the exception in `CLAUDE.md` is "the other owner is
+unavailable", and James was demonstrably available — he had merged #35 and #36 six minutes earlier.
+So this is a self-merge of convenience, not of necessity. Recording it honestly rather than dressing
+it as the documented case. If that reads as the rule being too tight for one-line doc corrections,
+that is worth deciding rather than repeating.
+
+*#29 (renumbered from the duplicate 20 on 2026-08-06 — see resolution note below) · raised
+2026-08-04 19:52 — Michael.*
+
+**Merge-repair note, 2026-08-04 16:31 — James. This item was spliced into the middle of my
+item 20 and I have lifted it back out.** Union merge concatenated your entry into the first
+bullet of my merge-repair note, so your heading lost its line and my sentence was torn in half.
+Neither entry was readable and yours was not a top-level item at all. Your text and stamp are
+reproduced here **exactly**; only the position changed, placed by your 19:52 stamp so it sits
+between my item 20 and your item 21.
+
+**The `uniq -d` audit did not catch this** — the splice duplicated no line, so the documented
+check came back clean on a corrupted file. That is new, and it is in `traps.md`.
+
+**We both numbered an item 20.** I have not renumbered yours, since renumbering your entry is
+your call — but the two need distinguishing, and mine is the earlier stamp (15:28 against your
+19:52). Say which you want and I will do it.
+
+*#20-collision · repair note 2026-08-04 16:31 — James.*
+
+**Renumbering resolved, 2026-08-06 — Michael.** Took the call James left open above: my item (the
+PR #37 self-merge trace, 19:52 stamp) is now **#29**, the next free number, rather than reusing 20.
+James's item keeps its original **20** unchanged — his text and stamp above are untouched. This is a
+heading and closing-stamp change only, on my own entry, so no meeting or further announcement was
+needed beyond this note.
+
+*#29-collision · renumbering resolved 2026-08-06 — Michael.*
+
+### 21. Do users supply their own Rust objective as a drop-in file? The sheet says no; Michael says yes
+
+**Decide at the next meeting — it changes #26 far more than it changes #17.** Raised while planning
+#17, when Michael said the intended model is that "people provide a Rust file for their own fitness
+functions if they want to add one". I could not find that anywhere in the sheet, so this item is to
+settle which of the two is the real intent before #26 is built to the wrong one.
+
+**What the sheet actually says.** The only user-extension route described for fitness is the
+**Python** adapter — §5's "a user-supplied Python objective declares its direction when the callable
+is registered", and §8's adapter, tracked as issue #19. §5.2 closes with *"keep hot objectives native
+in Rust. The Python adapter is for prototyping"*, which reads as guidance to **us** about where to
+implement the objectives we ship, not as a documented extension point for users. §10's non-goals do
+not mention drop-in objectives either way, so this is a genuine silence rather than a stated no.
+
+**Why it is not a cosmetic question.** Issue #26 erases the objective to `Box<dyn Fitness>` via a
+closed `match config.fitness` with one arm per objective — the amendment agreed at the 2026-08-04
+meeting, and the thing that took dispatch from 16 arms to 4. A closed match over a config enum
+cannot name a type that is not in the crate. So a user-supplied Rust objective means forking and
+recompiling, and at that point adding the match arm is the smaller edit — which makes the drop-in
+file mechanism buy nothing unless something more is intended, such as a registration API or a
+build-time hook. **If the drop-in model is real, #26's step 1 is designed wrong**, and it is far
+cheaper to know that before it is built than after.
+
+**Worth noting the Python adapter may already be the answer.** It is the documented route, it needs
+no recompilation, and §5.2's own guidance concedes it is slower — so the honest question may be
+whether "hot objective, no fork" is a real user need or a hypothetical one.
+
+**Not blocking #17.** I am building the three SIR objectives to the sheet as written: they go in
+`get/src/fitness.rs` beside the trait, which is also what a drop-in example would want to look like,
+so neither answer wastes the work.
+
+*#21 · raised 2026-08-04 22:00 — Michael.*
+
+### 24. What is in a `Profile*.dat`? The C++ loader adds patient zero and rescales by `verts / 128`
+
+**For you, before #26 reads one — not blocking #24, which only stores the path.** Raised while
+building the `config.rs` schema. `epi_prof_match` needs a target profile, and the sheet says only
+that it "adds a target" (§7); §7's TOML block does not show the field and issue #24's enum sketch
+omits it. James settled the config side on 2026-08-05: the variant carries
+**`target_profile_path`**, a path that `config.rs` never opens, so parsing stays pure
+deserialization. That leaves the question of what the file actually contains, and **whoever builds
+#26 has to answer it** — the dispatch is what turns a path into the `Vec<f64>` that
+`EpiProfMatch::new` (`get/src/fitness.rs:251`) requires.
+
+**What the C++ does, which is more than "one number per line"** — `legacy/main.cpp:370-388`, reading
+`./Profiles/Profile<n>.dat`:
+
+    for (int i = 0; i < PL; i++) { PD[i] = 0; }        // pre-fill
+    PD[0] = 1;                                         // patient zero is NOT in the file
+    for (int i = 0; i < PL; i++) {
+        inp.getline(buf, 19);  val = strtod(buf, nullptr);
+        PD[i + 1] = val * ((double) verts / 128);      // rescale to the network size
+    }
+
+So a stored profile **omits its own first element** and is **normalized to a 128-node network**.
+Two conventions, neither in the sheet, and both silent if got wrong: forget the prepend and every
+target is shifted one timestep; forget the rescale and a 512-node run is compared against
+128-node counts, which is a wrong number rather than an error.
+
+**The ask:** decide whether GET reproduces both conventions, one, or neither — and if the file
+format changes, say so before #26 is built rather than after. My own read is that reproducing both
+is right for comparability with the archived C++ results, which is the same argument that kept the
+short-epidemic re-roll (§5.2), but this is your issue and the profiles are your data.
+
+**Also worth noting the length interaction.** The 2026-08-04 amendment to §5.2 gave `profile` a
+terminating zero and made `length` one higher than before, so a target captured from older output is
+already one element out of step. `EpiProfMatch`'s doc comment at `fitness.rs:236-238` says as much.
+Whatever is decided here should say which convention a `.dat` on disk is in.
+
+*#24 · raised 2026-08-05 15:09 — James, while planning GitHub issue #24.*
+
+### 25. Unknown keys under `[fitness]` are silently ignored, and cannot be made to error
+
+**FYI, and one thing to not assume in #26 — no decision needed from you unless you disagree.**
+Measured while building GitHub #24 on 2026-08-05: a `[fitness]` block carrying a leftover
+`seed = 42` **parses clean and the key is discarded**. Issue #24's `Verify by` line asked for it to
+be rejected as an unknown key; that is not achievable. Serde deserializes a `#[serde(flatten)]`
+field through a buffered content map, so `deny_unknown_fields` never fires — confirmed by putting
+the attribute on `SirParams` itself, which changed nothing.
+
+Spec §7 requires the flatten in as many words, so the flatten stayed and the verify line is what
+gave. Reasoning and the rejected alternatives are in `decisions.md` 2026-08-05 15:47; the behaviour
+is pinned by `an_unknown_fitness_key_is_ignored_rather_than_rejected` in `get/src/config.rs`.
+
+**Why you may care, in #26.** The natural assumption when reading `config.rs` is that a typo in a
+`[fitness]` key is a parse error. It is not, for that table specifically — `[genome]`'s operation
+weights *do* reject unknown keys, because `EdgeEditOperationWeights` carries
+`deny_unknown_fields` and is not flattened (`get/src/genomes/edge_edit.rs:27`). So the two tables
+behave differently and neither is wrong.
+
+**Where I think the check belongs:** `Config::validate` (#23, mine), which can look at the raw text
+before it is deserialized and reject a `seed` under `[fitness]` by name. I will pick it up there
+unless you would rather it went somewhere else. Flagging it because the migration case is the
+silent kind — an old config keeps `seed = 42`, sees no error, and runs under a different seeding
+model than its author believes, since the master seed now comes from the `run` call.
+
+*#25 · raised 2026-08-05 15:47 — James, during GitHub issue #24.*
+
+**Done in #23, 2026-08-06 00:10 — James. One correction to what I said above, and it matters for
+where you look for the check.** I wrote that it belonged in `Config::validate`, "which can look at
+the raw text before it is deserialized". It cannot: `validate` takes `&self` on an already-parsed
+`Config`, by which point the key is gone. The check went into **`Config::from_toml_str`** instead,
+reading the raw text through a loose `toml::Value` parse before deserialization.
+
+Two consequences worth knowing in #26:
+
+- **It is TOML-only, by construction.** The Python front end has no text to inspect, so a config
+  built in Python can still carry a stray `seed` attribute harmlessly. Acceptable, because the
+  hazard is specifically an *old TOML file* — but do not assume the guarantee is universal.
+- **It is `seed` by name, not a general unknown-key sweep.** Any other unknown `[fitness]` key is
+  still silently ignored, exactly as before, and that narrowness is deliberate: a general sweep
+  hand-rolls what serde does everywhere else and would start rejecting keys as the schema grows.
+  Pinned by `an_unknown_fitness_key_other_than_seed_is_still_ignored`.
+
+The mechanism you were told before is unchanged — serde genuinely cannot do this through a
+`#[serde(flatten)]`. Reasoning and the rejected alternatives are in `decisions.md` 2026-08-06 00:07.
+This closes the item unless you want it somewhere else. *(Reply inside #25 · 2026-08-06 00:10 —
+James.)*
+
+### 26. Pushed a `CLAUDE.md` convention straight to `main` — commit each verified feature-branch step separately
+
+**FYI, no action needed — this is the trace for a direct push per the routing table's own
+exception.** `CLAUDE.md` says prefer a PR when a change binds the other owner's practice; I judged
+this one not worth a branch and review cycle, so it went direct, same as the two conventions in
+item 22.
+
+**The rule:** commit each verified task-list step on a feature branch separately — a lint-policy
+decision, a formatting sweep, one file of a readability pass — rather than batching everything into
+one commit at PR time. Landed live on issue #22's branch this session: the `needless_return` lint
+decision and the tree-wide `cargo fmt` sweep are already two separate commits rather than one.
+
+**Why now:** working through #22 file-by-file with the user surfaced the question directly — small
+reviewable commits make each step independently bisectable and reviewable, rather than one large
+diff to audit at PR time. Push back here if you'd rather this weren't standard.
+
+*#26 · raised 2026-08-05 23:45 — Michael.*
+
+### 27. `Swap`'s degree floor is `> 2` in the spec and code, but the original Java required only `>= 2`
+
+**Decide.** Found while explaining `operations.rs::swap` to Michael during the #22 readability pass —
+not blocking anything, but it's a real, checkable numeric discrepancy rather than a style question.
+
+**Where it's from.** `GraphEvolutionTool/src/Graph.java` and `GET.java`, a 2019-era Java
+predecessor kept locally in `OneDrive - University of Guelph/Coding Projects/Archive/`, not on
+GitHub. `swap(int a, int b, int k)` rejects when `nbr.get(v1).size() < k` — i.e. it requires
+**degree >= k** — and the only caller passes a named constant: `MIN_DEG_SWAP = 2`. So the original
+requirement was **degree >= 2**.
+
+**What we have now.** `official_spec_sheet.md` §3.1 says "two non-adjacent vertices of **degree >
+2**", and `get/src/genomes/edge_edit/operations.rs::swap` implements exactly that —
+`graph.degree(first_vertex) <= 2` rejects, i.e. requires **degree >= 3**. One higher than the
+original, on both vertices.
+
+**The other four checks match exactly**, verbatim in spirit — non-adjacent `v1,v2`, all four
+vertices distinct, and none of `v1-a2`, `v2-a1`, `a1-a2` already an edge. Only the degree floor
+differs, which is what makes it look deliberate rather than a slip — everything else was ported
+faithfully.
+
+**No comment in the Java explains why `2` was chosen**, so I can't tell if `> 2` here is an
+intentional tightening or an off-by-one from the port. Worth deciding: match the original (`>= 2`),
+or keep the current stricter `> 2` and drop a line into `decisions.md` saying so on purpose.
+
+*#27 · raised 2026-08-06 00:09 — Michael, transcribed by Claude during a readability-pass session.*
+
+### 28. Documented: `/done`'s doc sweep pushes to `main` directly, decoupled from the task's own code PR
+
+**FYI, no action needed — clarifying an existing rule, not creating one.** Came up closing out #22:
+the `/done` sweep (task-complete marker in `decisions.md`, `hotfixes.md`'s `Last checked` stamps,
+`traps.md` updates, the archive itself) was written while PR #43, carrying #22's code, was still
+open and unmerged. The question was whether that meant committing to `main` directly or waiting for
+the PR — the routing table already answered "direct push is fine" for `.claude/work/*.md`, but not
+the *timing* relative to an open PR, so it kept needing re-deriving mid-session instead of being
+looked up.
+
+Added one paragraph to `CLAUDE.md`'s routing table, right after the `.claude/work/*.md` row: `/done`'s
+sweep goes to `main` immediately regardless of whether the task's own code PR has merged. The code PR
+and the doc close-out are two independent tracks — the PR carries the code, the docs carry the record
+that the task is closed — and holding the docs for someone else's review schedule would recreate the
+exact stall `/done` exists to avoid.
+
+*#28 · raised 2026-08-06 — Michael.*
+
+### 30. New `SessionStart` hook: `pull_main.sh` fast-forwards `main` automatically — needs your review
+
+**Confirm — this runs on your machine too, at every session start.** Opened as a PR
+(`mdube_pull-main-hook`), not pushed direct, per the routing table's own rule that `settings.json`
+and `hooks/` changes always go through review.
+
+**What it does:** on `main` only, fetches and fast-forwards to `origin/main` if it can do so
+cleanly. On any other branch, or if `main` has diverged (local commits not on origin, or a dirty
+working tree the incoming commit would overwrite), it prints one line and touches nothing — no
+merge, no rebase, no discard. Verified all three paths in a scratch repo before opening the PR.
+
+**Why:** `.claude/work/*.md` and `CLAUDE.md` route around a PR by design, so a change one of us
+pushes direct only reaches the other's machine on their next `git pull main` — nothing was prompting
+that. That gap is exactly how the two independent `collab.md` item-**20**s happened (see
+#20-collision / #29-collision): both of us were reading our own stale copy when we each picked "the
+next number." This closes the stale-window case; it doesn't and can't close true same-minute
+concurrency.
+
+Full reasoning and rejected alternatives in `decisions.md` 2026-08-06, "`pull_main.sh`: a
+`SessionStart` hook fast-forwards `main` automatically." Please review the PR when you get a chance
+— it's the one place in this session's work that binds your session start, not just a doc you can
+skim later.
+
+*#30 · raised 2026-08-06 — Michael.*
+
+**Confirmed, 2026-08-06 00:55 — James. Reviewed and no objection; treat this as settled.** Read the
+merged script at `.claude/hooks/pull_main.sh` rather than only the PR description. What I checked:
+
+- **The guards do what the description says.** It exits 0 unless `git branch --show-current` is
+  exactly `main`, so any feature branch is untouched — which is the case that matters, since a
+  mid-task branch is where an unexpected move would hurt.
+- **`--ff-only`, and every failure path is non-destructive.** Unreachable origin, divergent local
+  `main`, dirty tree blocking the merge: each prints one line and exits 0. No merge, no rebase, no
+  discard, no reset.
+- **`set -uo pipefail` without `-e` is correct here, not an oversight.** The bare
+  `[[ "$local_sha" == "$remote_sha" ]] && exit 0` test returns non-zero when the shas differ, which
+  under `-e` would abort the script before the fast-forward it exists to perform.
+
+Two things worth stating rather than leaving implicit. First, **it moves `main` under a session
+that is sitting on `main`** — correct and wanted, but it means `git log` can differ between the
+start of a session and the middle of one, which is worth knowing before it surprises someone.
+Second, the item was **effectively already answered by PR #44 being merged**; this reply exists
+because a merge is not a review, and #30 asked for the review.
+
+Nothing to change. *(Reply inside #30 · 2026-08-06 00:55 — James.)*
+**Status from my second machine, 2026-08-06 — Michael. The hook has merged, and this session was
+the exact case it exists to prevent.** PR #44 is in as `e42ffde`, so `pull_main.sh` is live in both
+trees now; your confirmation on the behaviour is still the open half of this item.
+
+Worth recording because it is evidence rather than argument: I opened a session on my other machine
+to close out #17 and found `main` **40 commits behind `origin/main`** — it had never seen PR #40's
+merge, nor #41, #42, #43 or #44. The stale-window this hook closes is not hypothetical and is not
+small. Two concrete consequences in that one session, before any work started:
+
+- The local `decisions.md`, `traps.md`, `collab.md` and `hotfixes.md` were all two days stale. Since
+  #33 narrowed the union glob, `hotfixes.md` no longer merges by union — appending to that stale
+  base would have produced a genuine conflict, not a silent merge.
+- `traps.md` carried a `cargo fmt` entry whose own exit condition ("drop once #43 merges") had been
+  met on `origin/main` for hours. Working from the stale copy, I would have kept following a trap
+  that no longer exists.
+
+I re-read the script before pulling it in rather than trusting my own PR from the other machine, and
+the three paths hold as described: it exits unless `branch == main`, it only ever runs
+`merge --ff-only`, and the non-fast-forwardable case prints and returns 0 without touching anything.
+
+*#30 · status update 2026-08-06 14:05 — Michael, from the second machine.*
+
+### 31. One clause in your `rustfmt`-descends-into-submodules trap went stale when #22 shipped
+
+**Announcing before touching your text, per rule 5 — the trap itself is right and stays.** Your
+entry "Per-file `rustfmt` is not per-file on a `mod.rs`" closes with **"the tree is not currently
+rustfmt-clean (that is exactly what #22 exists to fix), so a stray descent produces *real* diff, not
+a no-op"**. #22 shipped as PR #43, and `cargo fmt -- --check` now reports zero offenders on `main` —
+verified on `ed198c4` at 2026-08-06.
+
+**What that changes and what it does not.** The mechanism is untouched: rustfmt still parses the
+module tree and still descends into every `mod x;`, so `--config skip_children=true` is still the
+right instruction and the `--skip-children` CLI note is still worth having. What changed is only the
+stated *consequence* — on a clean tree a stray descent is now usually a no-op rather than real diff.
+That makes the trap read as less urgent than it is, which is the wrong direction for a trap.
+
+**Suggested amendment, yours to accept or ignore:** replace that final bullet with one saying the
+descent is silent either way, and that a clean tree makes it *harder* to notice, not safer — the
+diff that does appear is now the only signal, where before you might have caught it in the noise.
+I have not edited a character; say the word and I will make exactly that change.
+
+**Related sweep at the same gate:** I deleted the `cargo fmt` trap outright, under its own written
+exit condition ("drop this entry once #43 merges"). Flagging it here because it is a deletion from a
+shared churn list that you may go looking for.
+
+*#31 · raised 2026-08-06 14:05 — Michael, at the sir-objectives `/done` gate.*
+
+**Accepted, 2026-08-06 21:06 — James. Your reading is right and I have made the edit myself**, since
+it is my entry and doing it from this side avoids the concurrent-edit case rule 5 exists to prevent
+— do not also apply it. The replacement bullet says what you proposed: the descent is silent either
+way, and a rustfmt-clean tree makes a stray one *harder* to notice rather than safer, because the
+diff that appears is now the only signal where before it might have been lost in the noise. The
+mechanism sentences are untouched, so `--config skip_children=true` still reads as the instruction.
+
+Noted on the `cargo fmt` deletion too: correct under its own exit condition, and I found it gone
+rather than went looking for it, which is the outcome the flag was for.
+
+*(Reply inside #31 · 2026-08-06 21:06 — James, at the generational-evolver save.)*
+
+### 36. Both evolvers now have their own `outcome`, and only one of them can be right about graphs
+
+**Not blocking #25 — this is a question about where the shared part should live**, raised because
+#25 shipped the second copy and the reason will otherwise leave with PR #46.
+
+`GenerationalEvolver::outcome` and `SteadyStateEvolver::outcome` are now ~10 similar lines each,
+differing on one point: steady-state re-expresses the winner with `best_genome.express(..)`, while
+generational moves the winner's graph out of the vector its final `express_and_score` already
+returned. That difference is deliberate and comes from the sheet — §6.2 asks generational not to
+re-express, because it is the strategy that has the graphs to hand. Both return the identical graph;
+`express` is deterministic, so it is a cost choice, not a behavioural one.
+
+**The ask:** whether the common part (rank the fitnesses, clone the winner, `mem::take` the history)
+should move into `common.rs` with the graph step left to each caller. I did not do it, because it
+means editing `steady_state.rs` and #25 is scoped out of that file — and `collab.md` #14 already
+records that overlapping edits to these files are how work gets silently overwritten here. Reasoning
+for the generational side is in `decisions.md` 2026-08-06 21:03.
+
+**Renumbered 2026-08-07 — James. This was written as #32 and is now #36.** Michael raised his own
+#32 (the `evaluate_population` / `SirRun` renames) on `main` at 2026-08-07 14:28, hours before this
+one was written, and mine sat uncommitted in the meantime so neither side could see the other. His
+is the published number — it is referenced from #33 and from an `issues.md` entry — so this one
+moved. Third collision after #20 and #29, and the first where the two items were *days* apart
+rather than minutes: an uncommitted entry ages badly in a way an unpushed commit does not.
+
+*#36 · raised 2026-08-06 21:07, renumbered from #32 on 2026-08-07 — James, at the generational-evolver save.*
+
+### 32. Two spec-named identifiers misname the unit of work: `evaluate_population` and `SirRun`
+
+**Needs a joint meeting, because both names are written into the sheet — and an issue once we
+agree.** Not blocking #18; I have used the right words in the `fitness.rs` comments and renamed
+only the identifiers the sheet does *not* name. Raising it rather than fixing it, per the rule at
+the top of `CLAUDE.md`.
+
+**The unit the engine scores together is a batch of graphs, and its size varies.** Generational
+hands over the whole population per cycle; steady-state hands over the **two new children** per
+mating event (`get/src/evolver/steady_state.rs:75-76`), plus its starting population once
+(`:194-195`). The sheet already says this at line 509 and §6.3. So "population" is right in exactly
+one of the three cases, and "generation" in none of the steady-state ones.
+
+Two names contradict that:
+
+- **`Fitness::evaluate_population`** — sheet line 221, again at 794 and 804. It is handed a batch of
+  two for most of a steady-state run. `evaluate_batch` is what it does.
+- **`SirRun`** — sheet line 368, the return of `sir_sim`. It is **one epidemic**, but "run" already
+  means a replicate (`run_seed`, §8.1) *and* the API call `GraphEvolver::run`. Three meanings, and
+  `run_seed` sits four lines from `|run| run.spread` in the same impl block. `Epidemic` is what it
+  is.
+
+**Why they are one item and not two:** identical shape — a spec-named identifier whose name
+describes something narrower or other than the concept, where the fix is mechanical but the
+authority is the sheet.
+
+**What changes if we agree**, so the issue can be scoped rather than discovered:
+
+| | `evaluate_population` → `evaluate_batch` | `SirRun` → `Epidemic` |
+|:--|:--|:--|
+| Sheet | lines 221, 794, 804 | line 368 |
+| Code | `fitness.rs` (trait + 3 overrides), `evolver/common.rs:244` | `sir.rs`, `fitness.rs` |
+| Prose | §5.1's "batch scorer" wording already agrees | §5.2's `SirRun { … }` block |
+
+**Already done on my side, needing no meeting** — these identifiers are ours, not the sheet's:
+`EpidemicScorer::mean_population` → `mean_batch`, `mean_from` → `mean_with_seed`, the counter field
+→ `batches_scored`, and the comments throughout `fitness.rs` now say "batch of graphs" and name all
+three shapes. That is on branch `mdube_epidemic_seeding`.
+
+**My ask:** agree or reject at the next meeting. If agreed, I will file one issue covering both
+renames and amend the sheet in the same PR. It is a pure rename with no behaviour change, so it
+wants to land between workstreams rather than on top of an open branch — #19 and #25 both touch
+these files.
+
+*#32 · raised 2026-08-07 12:38 — Michael, while writing #18's comments.*
+
+### 33. I restructured `fitness.rs` inside #18 — `EpidemicScorer` is 5 methods down to 2
+
+**Done, not proposed — read this before you start #19, which lands `PyFitness` in the same file.**
+On branch `mdube_epidemic_seeding`. No signature named in the sheet changed, so this needed no
+meeting; I am telling you because it moves code you are about to edit, and because the *reason* is
+worth having on the record.
+
+**Why it happened.** Reading #18's own comments back, I could not follow my own file. Three
+sub-agent reviews from different angles agreed on the split verdict, and it is not the one I
+expected:
+
+- **The seeding machinery is conventional and forced — untouched.** The counter-per-batch plus
+  `mix_seed` derivation is the standard common-random-numbers scheme from simulation-optimization,
+  and the counter-based seeding recommended for parallel reproducibility. The `AtomicU64` is not a
+  smell: `Fitness: Sync` is required for the rayon fan-out, `Cell` is not `Sync`, and a `Mutex` is
+  worse for something provably never contended. §8.1's reproducibility argument was checked and
+  holds.
+- **The wrapper layer above it was ours, and was earning nothing.** That is what I removed.
+
+**What changed, all inside `get/src/fitness.rs`:**
+
+| Before | After | Why |
+|:-:|:-:|:-|
+| `mean`, `mean_batch`, `mean_with_seed` | `mean_batch` alone | Three methods that all averaged; two were single-caller pass-throughs |
+| `pub fn epidemics(graph, seed)` | inlined | One-line forward to `simulate_epidemics`, one caller, no external user |
+| Drift between an objective's two entry points was silent | test `both_entry_points_use_the_same_reading` | Each objective still writes its reading twice, inline in `evaluate` and `evaluate_population` — a `reading` method was tried and reverted the same day, because the indirection cost more clarity than the duplication did for someone copying an objective to write their own. The test is the guard instead |
+| `evaluate` had its own path via `mean` | `evaluate` calls `mean_batch(slice::from_ref(graph))[0]` | A single graph is a batch of one; same tick, same seeding, one code path |
+
+**The trap I avoided, which is the part worth knowing if you touch this.** The obvious version is
+`evaluate` calling `self.evaluate_population(...)`. That is a latent stack overflow: the trait's
+**default** `evaluate_population` calls `evaluate`, so any objective forwarding without also
+overriding the batch method recurses until the stack dies. Routing through `mean_batch` on the
+scorer has no cycle. I also rejected a blanket `EpidemicReading` trait that would enforce the
+pairing at compile time — it works, but it puts the real code in a blanket impl where neither of us
+would think to grep, which cuts against our own "one owner does not write Rust" rule harder than the
+duplication it removes.
+
+**Evidence:** 162 tests green, `cargo fmt --check` clean. Two new tests lock in what the change
+bought — `scoring_one_graph_ticks_the_counter_once_like_any_other_batch`, and
+`both_entry_points_use_the_same_reading`, which fails if an objective's two entry points ever
+disagree. Nothing outside `fitness.rs` was touched by this item.
+
+**What it means for #19.** `PyFitness` overrides `evaluate_population` and does not use
+`EpidemicScorer` at all, so nothing here blocks you — but the bottom half of the file moved. Pull
+the branch before you start, or merge #18 first, rather than resolving it afterwards.
+
+**Related, still needing the meeting:** the renames in **#32** are untouched by this —
+`evaluate_population` and `SirRun` are sheet-named and stayed exactly as they are.
+
+*#33 · raised 2026-08-07 14:28 — Michael, during #18.*
+
+### 34. I pinned the five working-docs skills to sonnet — it changes execution on your machine
+
+**FYI, no action needed unless you disagree.** Pushed to `main` as `011480d`. `model: sonnet` added
+to the frontmatter of `done`, `load`, `save`, `setup` and `start`. They are bookkeeping skills —
+read the working docs, update a plan, archive a task — and none of them needs the larger model.
+
+**Why this is a `collab.md` entry rather than a silent push.** `CLAUDE.md` rule 2 requires a PR for
+`settings.json` and `hooks/` because they execute on your machine at session start without you
+reading them. `.claude/skills/` is not named in that rule and not in the routing table either, so a
+direct push is permitted — but the *reason* behind rule 2 applies to it just as much: on your next
+pull these five skills run under a different model than they did today, and nothing announces it.
+So: permitted, pushed, and logged rather than left to be discovered.
+
+**If you think skills belong under rule 2**, that is worth deciding rather than leaving to
+precedent, and it would be a `CLAUDE.md` amendment binding both of us. I have no strong view; I
+lean toward "yes, but only when the frontmatter changes", since the body of a skill is prose we both
+read anyway.
+
+**Revert is one line each** if any of them reads worse to you at this size — say so and I will drop
+it, or drop it yourself, no discussion needed.
+
+*#34 · raised 2026-08-07 16:52 — Michael, closing out #18.*
+
+**Agreed, and your lean is the right line, 2026-08-07 — James. Frontmatter yes, body no.** No
+objection to the sonnet pin itself; I have run `/load`, `/save` and `/done` under it this session
+and noticed nothing.
+
+The distinction that makes this workable is the one you already drew: **frontmatter changes what
+executes on my machine without my reading it, which is precisely rule 2's stated reason, while the
+body is prose we both read anyway.** `model:`, and any future `allowed-tools:` or hook-adjacent
+key, should take a PR. Rewording a step inside a skill should not — that would put a PR round-trip
+in front of typo fixes, and the rule would start being skipped, which is worse than not having it.
+
+I am not writing the `CLAUDE.md` amendment in this session, since it binds your practice as much as
+mine and the routing table is yours by authorship. If you write it, this reply is the agreement it
+can cite; the one thing worth spelling out in it is that the test is *"does this change what runs"*,
+not *"which directory is it in"* — otherwise the next person adds a fourth directory and we do this
+again.
+
+*(Reply inside #34 · 2026-08-07 — James, at the generational-evolver `/done` gate.)*
+
+### 35. §6.2 says "track the best"; generational reports the best of the final population
+
+**Decide — I think your code is right and the sheet's wording is stale, but the sheet is the
+authority so it is not mine to call.** Found reviewing PR #46 against §6.2 after merging it. Not
+urgent and nothing is broken at the settings we actually use.
+
+**The gap.** §6.2 reads "score the population, log a stats row, **track the best**, then advance",
+which reads as a running best carried across generations. `GenerationalEvolver::outcome`
+(`get/src/evolver/generational.rs:115`) instead takes the best of the **final** population.
+
+At `elite_count >= 1` the two nearly always agree, because the best is copied forward. At
+**`elite_count = 0` they can differ**, and §7 permits zero — its only constraint is
+`elite_count < population_size`, and `config.example.toml` happening to use 1 is not a guarantee.
+In that configuration a strong individual can appear in generation 40, fail to be selected, and the
+run reports something worse with no record that it existed. Your own test name concedes the edge:
+`the_logged_best_never_worsens_while_an_elite_is_carried`.
+
+**Why I think the code is right anyway, and this is the sheet's problem.** #18 landed the atomic
+batch counter, so fitness is now genuinely stochastic between batches. A running best under a
+stochastic objective is substantially a record of which generation drew lucky dice — and §6.2
+itself rejects exactly that reasoning two paragraphs later, when it says freezing an elite's old
+score would let a lucky draw persist (§5.2). Best-of-final is the more honest number, and it is
+what `SteadyStateEvolver::outcome` already reports, so the two strategies agree with each other.
+The sentence in §6.2 predates the seeding work.
+
+**Three ways to settle it, cheapest first:**
+
+- **Amend §6.2** to say the reported best is the best of the final population, for both strategies,
+  and say why. No code changes. My preference.
+- **Require `elite_count >= 1` in §7**, which makes the divergence unreachable rather than
+  resolving it. Cheap, but it removes a legitimate configuration to dodge a wording problem.
+- **Implement a running best**, and accept that under a stochastic objective the reported winner is
+  chosen partly by its luckiest sample. I would not.
+
+Either of the first two is a sheet change, so it needs the meeting — same one #32 is waiting on.
+
+*#35 · raised 2026-08-07 16:59 — Michael, reviewing PR #46 after merging it.*
+
+**Endorsed, 2026-08-07 — James: your first option, amend §6.2. Taking this to the meeting as a
+position rather than a question.** I wrote the code and I reached the same conclusion from the other
+direction — `decisions.md` 2026-08-06 21:04 records best-of-final and the running-best it rejected,
+written before your review and independently of it. Two people arriving at the same reading from
+opposite ends is the best evidence either of us has that the sheet's sentence is what is stale.
+
+**On `elite_count = 0`, which is the honest part of your objection:** you are right that §7 permits
+it and that the two readings genuinely diverge there. I do not think that argues for a running best.
+It argues that a non-elitist generational GA *can* lose its best individual, which is a true fact
+about the algorithm and not a reporting bug — the run really did end without that individual, and a
+report claiming otherwise describes a population that no longer exists. What the amendment should
+say is that the reported best is the best of the **final** population for both strategies, and that
+at `elite_count = 0` this is a property of the configuration rather than of the report.
+
+You are right that my test name concedes the edge; `the_logged_best_never_worsens_while_an_elite_is_carried`
+is named that way because the guarantee genuinely is conditional, and I would rather the name say so
+than have it read as unconditional and be quietly wrong at zero.
+
+**Not endorsing your option 2** — requiring `elite_count >= 1` in §7 removes a legitimate
+configuration to avoid amending a sentence, and non-elitist generational is a real thing people run
+deliberately. Two sheet changes are on the table for the same meeting now, this and #36.
+
+*(Reply inside #35 · 2026-08-07 — James, at the generational-evolver `/done` gate.)*
+
+### 37. #19 changes how `cargo test` builds — and I could only verify it on Linux
+
+**Heads-up before you pull, not a question.** PR for #19 moves `extension-module` out of
+`get/Cargo.toml`'s `[dependencies]` and adds a root `pyproject.toml` that supplies it instead. This
+changes your `cargo test`, and **I have verified none of it on Windows.**
+
+**Why it had to change.** `extension-module` suppresses linking libpython, leaving the Python C API
+symbols for the interpreter to resolve when it loads the module. Correct for the built wheel;
+**fatal for `cargo test`**, which links an ordinary executable with nothing behind it — the entire
+suite fails to *link*, with dozens of undefined `Py*` symbols, however few tests touch Python. #19
+needed real tests calling a real callable, so the feature had to come off the library build. It now
+lives in `pyproject.toml` as `[tool.maturin] features = ["pyo3/extension-module"]`, which is
+maturin's own idiom, and `cargo build -p get --features pyo3/extension-module` is the by-hand
+equivalent. Full mechanism in `.claude/reference/pyo3-maturin.md` §1.
+
+**What you may hit, in rough order of likelihood.** `[dev-dependencies] pyo3` now carries
+`auto-initialize`, so a test build wants a real Python that pyo3's build script can find. On Linux I
+also need `LD_LIBRARY_PATH` pointed at libpython (pyenv build, not on the loader path) or the test
+binary dies with `exit 127` before running anything:
+
+    export LD_LIBRARY_PATH="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"
+
+Windows resolves Python differently and I do not know whether you need an equivalent, nothing at
+all, or whether the cdylib link behaves differently without the feature. Two `traps.md` entries
+cover the Linux side and say plainly that Windows is unverified.
+
+**One measured thing that surprised me, so you do not draw the wrong conclusion from a green run.**
+Dropping the `features` line entirely and rebuilding produced a wheel that was, on Linux,
+indistinguishable — same 75 undefined `Py*` symbols, no libpython in `ldd`, and `import get` worked.
+An earlier version of my own comment claimed it would fail to import; testing it is what caught
+that. The line stays because macOS and Windows linkers reject undefined symbols by default, but **a
+passing import on Linux proves nothing about your machine.**
+
+**If it breaks for you, say so rather than working around it.** The fallback is to put the
+pyo3-touching tests behind a cargo feature so your default `cargo test` never builds them — cheap to
+do, and worth doing properly rather than you carrying a local edit. I would rather hear it than have
+you discover it mid-task on #26.
+
+*#37 · raised 2026-08-08 00:15 — James, before opening #19's PR.*
+
+### 38. What #29 leaves for #26, and the `lib.rs` region we will both have touched
+
+**Heads-up, not a question — worth reading before you start #26.** #29, the Python config front
+end, is six commits on `jsargant_python_config` and not yet a PR. It edits `get/src/lib.rs`, which
+is where #26 works, so this is the "source files genuinely overlap" case `CLAUDE.md` warns about
+rather than a courtesy note.
+
+**Where we collide, both in `lib.rs`:** `run`'s **docstring**, where I added the §8.1
+memory-multiplication note the 2026-08-04 meeting assigned to #29 — its *body* is untouched and
+still `todo!()`, so the textual conflict sits directly above the code you are replacing. And the
+`#[pymodule]` block, which gains seven `add_class` lines for the config builders.
+
+**Three things #29 hands you, each of which changes what #26 has to do:**
+
+1. **`from_config` gives you a validated `Config` by the same path as the file front end.** It
+   renders the Python objects to TOML and parses that through `Config::from_toml_str` and
+   `Config::validate`, so by the time dispatch runs there is no Python-specific config shape left to
+   handle — one `Config`, however it was built, and nothing in #26 needs to know which front end
+   produced it.
+2. **`python_fitness`'s `#[allow(dead_code)]` is still there and still yours to delete.** #29 did
+   not touch it, and `hotfixes.md`'s entry stands unchanged: it goes when #26's `python` arm calls
+   the method.
+3. **`run`'s new memory note names `max_cores`, which does not exist yet** — that parameter is
+   **#20**'s, mine. The note is written to spec §8.1 rather than to today's signature, so it
+   describes a `run` taking a replicate count and a core cap. If #26 lands first the note reads
+   slightly ahead of the code; that is deliberate, and #20 closes the gap.
+
+**One standing obligation #29 creates, worth knowing before you add anything to the config schema.**
+`config::FitnessConfig` and its neighbours now have a Python mirror in `get/src/py_config.rs`,
+because pyo3 and serde cannot both annotate the same fitness enum: pyo3 rejects a unit variant in a
+complex enum and directs you to an empty tuple variant, and serde's `tag` then rejects exactly that.
+So a new field or variant in `config.rs` needs a matching one in the mirror. **It fails loudly
+rather than silently** — the round-trip tests destructure `Config` exhaustively with no `..`, so an
+unmirrored field is a compile error, and a new validation check with no attribute mapping fails
+`every_validation_field_maps_to_a_python_attribute`, which scrapes `config.rs`'s own `invalid(...)`
+call sites. Both guards were verified by deliberately breaking them rather than assumed to work.
+
+*#38 · raised 2026-08-08 21:13 — James, closing out #29's implementation.*
+
+**One line is now stale, corrected at the 2026-08-09 meeting — Michael. Everything else in this
+item still holds and was re-verified.** The opening says #29 is "six commits on
+`jsargant_python_config` and not yet a PR." It landed as **PR #49, merged 2026-08-09 as
+`0731aa6`**, so the `lib.rs` overlap it warns about is a fact on `main` rather than a pending
+branch: #26 now works on top of it instead of around it. James's wording above is left exactly as
+written, per append-don't-edit.
+
+Re-checked on `main` at `0731aa6`, all three still true: `from_config` at `get/src/lib.rs:87` routes
+through `Config::from_toml_str` then `.validate()`; `python_fitness`'s `#[allow(dead_code)]` is
+still at `lib.rs:303` and still carried in `hotfixes.md` for #26 to delete; and `max_cores` appears
+only in `run`'s doc comments, never as a parameter, with `run`'s body still `todo!()`. The standing
+`config.rs` ↔ `py_config.rs` mirror obligation is unchanged and is about to be exercised by
+GitHub #53, which replaces `target_profile_path` with an inline array.
+
+*#38 · stale line corrected 2026-08-09 — Michael, at the joint meeting.*
+
+
+### 39. Trace: PR #50 was self-merged, and `main` was force-pushed — two things to know before you pull
+
+**FYI, and one action for James at the bottom.** Two departures from the written route happened at
+the 2026-08-09 meeting, both authorized by Michael in the room, both recorded here because the rules
+they depart from ask for a trace rather than silence.
+
+**1. PR #50 self-merged.** Michael's PR, merged by Michael, carrying spec §6.2's best-of-final
+amendment and the four stale status-table rows. Both halves were agreed at the joint meeting that
+produced them, so the review the PR rule exists to obtain had already happened; the status-table
+half is additionally a strict deletion of text that had become false, which is the second permitted
+case added to the self-merge rule earlier in that same meeting (#29). Merged **locally**, not with
+the GitHub button, because it touched `decisions.md` — the `uniq -d` audit and the entry-heading
+check were both clean after the merge.
+
+**2. Two spec sections went direct to `main` rather than through a PR.** §5.3 (the two extension
+routes) and §8's target-profile amendment. The routing table says the spec sheet takes a PR after a
+joint meeting; Michael directed the direct push during the meeting itself, and both commit messages
+say so explicitly rather than leaving it to be noticed.
+
+**3. `main` was force-pushed** — this is the part that affects your machine. Six commits made
+earlier in the meeting carried a `Co-Authored-By: Claude` trailer, because the rule banning it lived
+only in `~/.claude/CLAUDE.md` on James's machine and could not be seen from Michael's. History was
+rewritten to strip them, the rule now lives in the repo's `CLAUDE.md` where it binds both of us, and
+every commit on `main` is authored solely by Michael. Content is byte-identical to before the
+rewrite; only the messages changed.
+
+**James: `git fetch origin` then `git reset --hard origin/main`.** `pull_main.sh` will *decline* the
+fast-forward and print one line, which is correct behaviour and not a failure — it will not fix this
+for you. Check nothing of yours is unpushed on `main` first; the rewrite base is `0731aa6`, PR #49's
+merge, so anything before that is untouched.
+
+
+**Moved here from Open on 2026-08-09 — Michael & James.** Both owners went through all three
+departures in the room, so the item had no reader left waiting on it; it is kept in full rather
+than deleted because it is the only single place that states them together. The per-change traces
+also stand where they are load-bearing: PR #50's merge commit states the self-merge and why the
+review it substitutes for had already happened, and each of the two spec commits states its own
+route departure.
+
+*#39 · moved to Settled 2026-08-09 — Michael & James, at the close of the joint meeting.*

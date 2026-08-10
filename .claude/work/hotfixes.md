@@ -36,3 +36,33 @@ everybody's problem to remove.
 - **Remove when:** the concrete condition that makes it unnecessary.
 - **Added:** <YYYY-MM-DD>
 - **Last checked:** <YYYY-MM-DD>
+## Suppressions waiting on another issue
+
+### `#[allow(dead_code)]` on `GraphEvolver::python_fitness`
+- **Owner:** `James` — it is my #19, and the #26 that removes it is Michael's.
+- **Machine:** `branch jsargant_pyfitness` (PR for issue #19), so expect it in every tree once
+  that merges.
+- **Where:** `GraphEvolver::python_fitness` in `get/src/lib.rs`, in the non-`#[pymethods]` impl.
+- **What it does:** silences `dead_code` on a method nothing in non-test code calls yet.
+- **Why it's a hotfix:** the method is the seam **#26**'s config-to-concrete-type dispatch calls to
+  turn a registered callable into `Box<dyn Fitness>`. #19 builds the seam; #26 is the only caller,
+  and it is not written. Its own tests do exercise it, so the method is tested, not unused — but
+  `dead_code` looks at the lib target and fires anyway.
+- **Why it is not simply left warning:** #25 flipped `cargo clippy -p get --all-targets -- -D warnings`
+  to passing on `main` (see `traps.md`), and one unsuppressed warning takes that gate away again for
+  everyone.
+- **Real fix:** issue **#26** — its `python` arm calls this method, at which point the attribute is
+  deleted and nothing else changes.
+- **Remove when:** #26 lands and calls `python_fitness`. Deleting the attribute and re-running
+  `cargo clippy -p get --all-targets -- -D warnings` is the whole check.
+- **Added:** 2026-08-07 — allow-dead-code-on-graphevolver-python-fitness
+- **Last checked:** 2026-08-08 — James, at the `/done` gate for pyfitness. Verified on `main` at
+  `32ceb11`, not inferred: the attribute is **still present**, `#[allow(dead_code)]` directly above
+  `pub(crate) fn python_fitness` in `get/src/lib.rs`; and the `Remove when:` is **not met** —
+  GitHub #26 is still `open` and unstarted, with no branch for it. Note the `Machine:` line above
+  now understates the reach: PR #48 merged as `32ceb11` on 2026-08-08, so this is committed and in
+  **every** tree, not just the branch. First cycle.
+- **Last checked:** 2026-08-09 — James, at the `/done` gate for pyconfig (#29). Verified on `main`
+  post-merge (PR #49, `0731aa6`): the attribute is **still present** at `get/src/lib.rs:303`, and
+  `Remove when:` is still **not met** — GitHub #26 is `open`, unstarted. #29 deliberately did not
+  touch it (it only builds the config front end, not `run`'s dispatch). Unchanged since last check.

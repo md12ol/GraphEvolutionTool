@@ -1,0 +1,37 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "get"
+version = "0.1.0"
+description = "Graph Evolution Tool — a genetic algorithm over graph representations"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+
+[tool.maturin]
+# The crate is a workspace member, so the manifest is not beside this file.
+manifest-path = "get/Cargo.toml"
+
+# Re-enables what `get/Cargo.toml` deliberately leaves off.
+#
+# `extension-module` suppresses linking libpython, leaving the Python C API
+# symbols for the host interpreter to supply at load time. That is what a
+# distributable extension module wants, and it is fatal for `cargo test`, which
+# links an ordinary executable with no interpreter behind it — the suite then
+# fails to LINK, with dozens of undefined `Py*` symbols. Hence: off in
+# `[dependencies]`, on here, where the module is actually produced.
+#
+# **Measured 2026-08-07, and narrower than it sounds:** on this Linux/pyenv
+# setup, dropping this line changes nothing observable about the wheel — same 75
+# undefined `Py*` symbols, no libpython in `ldd`, and it imports fine either way.
+# The feature earns its place on macOS and Windows, whose linkers reject
+# undefined symbols by default, and as the configuration maturin and pyo3
+# document for a built module. Do not take a passing `import get` on Linux as
+# evidence it is unnecessary.
+#
+# See `.claude/reference/pyo3-maturin.md` §1 and `decisions.md` 2026-08-07 19:20.
+features = ["pyo3/extension-module"]

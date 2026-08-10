@@ -183,34 +183,26 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   just misreporting it.
 - **Added:** 2026-08-04 — githubs-pr-object-lags-the-branch
 
-### `cargo clippy -- -D warnings` cannot pass on `main`, so it is not a usable gate
-- **Bites when:** your task's `Verify by:` says "clippy passes" and you treat the failure as a
-  regression you introduced. Issue **#22**'s verify-by says exactly that, so this will bite whoever
-  picks it up.
-- **Measured 2026-08-04 22:05 by Michael**, on branch `mdube_sir_objectives` and again on `main`
-  with the branch stashed. Both produce the identical two errors, and nothing else:
-  `fields shared, context, population, and history are never read` and
-  `method advance_generation is never used`, both in `get/src/evolver/generational.rs`.
-- **Why:** `-D warnings` promotes `dead_code` to an error, and `GenerationalEvolver` is a built
-  shell whose `run` is still unimplemented — issue **#25**, James's. The dead code is the unbuilt
-  work, so this clears when #25 lands and not before.
-- **Do this instead:** compare against the baseline rather than expecting zero.
-  `git stash -u && cargo clippy --manifest-path get/Cargo.toml --all-targets -- -D warnings; git stash pop`
-  and check your branch adds nothing new. Say so explicitly in the PR — "fails identically to
-  `main`" is a reviewable claim, "clippy passes" would be false.
-- **Cheaper and safer: capture the baseline BEFORE you edit anything**, while the tree is still
-  clean, and diff against the saved file at the end — no stash, no `stash pop` to forget. Added
-  2026-08-06 by James after doing it this way on #23:
+### `cargo clippy -- -D warnings` IS a usable gate now, so a failure is yours
+- **Bites when:** you carry forward the old habit of diffing clippy against a non-empty baseline and
+  treat leftover warnings as pre-existing. They are not any more — **a warning on `main` is one you
+  introduced.**
+- **Measured 2026-08-07 — James, on `main` at `94a4679`:** `cargo clippy -p get --all-targets --
+  -D warnings` exits 0. This **supersedes** the entry that stood here from 2026-08-04 to
+  2026-08-07, which said the gate could not pass because `GenerationalEvolver` was an unbuilt shell
+  emitting two `dead_code` warnings. Issue #25 built it (PR #46), and both warnings went with it,
+  exactly as that entry predicted they would.
+- **Do this instead:** just run the gate. `cargo clippy -p get --all-targets -- -D warnings`.
+- **If a non-empty baseline ever comes back** — another shell landing ahead of its implementation —
+  capture it on the clean tree *before* editing, and diff at the end. Do not use `git stash -u`
+  for this: on a task that also changed `config.example.toml`, stashing leaves an example the
+  stashed code cannot parse, so the "baseline" is contaminated by unrelated failures (hit on #24).
 
       cargo clippy -p get --all-targets 2>&1 | grep -E '^(warning|error)' | sort > /tmp/clippy_base.txt
       # ... do the work ...
       cargo clippy -p get --all-targets 2>&1 | grep -E '^(warning|error)' | sort | diff /tmp/clippy_base.txt -
 
-  This also sidesteps the stash pitfall #24 hit: `git stash -u` on a task that changed
-  `config.example.toml` as well as `get/src/` leaves an example the stashed code cannot parse, so
-  the "baseline" is contaminated by unrelated failures. Stashing is only safe when you stash
-  **every** path the task touched, and knowing that set is exactly what is easy to get wrong.
-- **Added:** 2026-08-04 — cargo-clippy-d-warnings-cannot-pass-on-main
+- **Added:** 2026-08-07 — cargo-clippy-d-warnings-is-a-usable-gate-now
 
 ### Union merge can SPLICE two entries together without duplicating a line, so `uniq -d` says clean
 - **Bites when:** you and the other owner each append a new item to `collab.md` (or `decisions.md`)
@@ -262,9 +254,14 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
 - **`--skip-children` is NOT a CLI flag on this toolchain** — it exits `Unrecognized option`. It
   moved into the config system, so it must be passed as `--config skip_children=true`. The stale
   flag form is what most search results show.
-- **Why it matters here beyond tidiness:** the tree is not currently rustfmt-clean (that is exactly
-  what #22 exists to fix), so a stray descent produces *real* diff, not a no-op — and it lands in
-  whichever file the other owner has claimed.
+- **Why it matters here beyond tidiness:** the descent is silent either way, and a rustfmt-clean
+  tree makes a stray one **harder** to notice, not safer. ~~The tree is not currently rustfmt-clean
+  (that is exactly what #22 exists to fix), so a stray descent produces *real* diff, not a no-op.~~
+  Superseded 2026-08-06: #22 shipped as PR #43 and `cargo fmt -- --check` reports no offenders on
+  `main`, so most stray descents are now no-ops — which means the occasional one that *does* produce
+  diff is the only signal there is, where before it might have been lost in the noise. Whatever it
+  produces still lands in whichever file the other owner has claimed. Amendment proposed by Michael
+  in `collab.md` #31 and applied by James, its author.
 - **Added:** 2026-08-04 — rustfmt-descends-into-submodules-of-a-mod-rs
 
 ### `deny_unknown_fields` does nothing through a `#[serde(flatten)]`, and reports no error either
@@ -301,3 +298,113 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   no extra scope) is a working substitute for checking whether a specific commit's email resolves
   to a GitHub login.
 - **Added:** 2026-08-06 — gh-is-not-on-path-on-michaels-machine
+
+### A dirty working tree means `pull_main.sh` does not pull, and you may not see it say so
+- **Bites when:** you start a session on `main` with uncommitted changes to `decisions.md` or
+  `collab.md` — the normal state after a `/save` that was not committed — and then branch for new
+  work. `main` is silently whatever it was when you last pulled, and the branch is cut from there.
+- **Measured 2026-08-06 — James, at the start of the generational-evolver session.** Local `main`
+  was 7 commits behind `origin/main` (PR #45 merged, #17 archived, a trap deleted), with
+  `collab.md` and `decisions.md` modified in the tree. The hook is right to refuse — `merge
+  --ff-only` will not overwrite local changes, and refusing non-destructively is the design
+  (`collab.md` #30) — but **no `pull_main:` line appeared in the session's context**, only
+  `session_brief.sh`'s block. Whether the line was printed and not surfaced, or not printed, was
+  not established from inside the session; what is certain is that the warning did not arrive.
+- **Do this instead:** check for yourself before branching, rather than trusting that a silent
+  session start means an up-to-date `main`.
+
+      git fetch origin --dry-run     # prints nothing when you are actually current
+      git status --short             # a dirty tree is the condition that suppresses the pull
+
+  Then commit or stash the docs and `git pull` before cutting the branch. This session's plan named
+  a base commit that was two merges stale by the time it was acted on.
+- **Why:** `.claude/settings.json` runs the hook as `pull_main.sh 2>/dev/null || true`, and the
+  script exits 0 on every failure path by design, so nothing downstream distinguishes "pulled",
+  "refused", and "never ran".
+- **Added:** 2026-08-06 — dirty-tree-means-pull-main-does-not-pull
+
+### `cargo test` cannot link anything that touches Python, unless `extension-module` is off
+- **Bites when:** you write a `#[test]` that calls `Python::attach`/`with_gil`, or add any pyo3-based
+  test to `get/`. `extension-module` in `[dependencies]` tells pyo3 to leave the Python C API symbols
+  **unresolved** — correct for the built module, which the interpreter dlopens and supplies them for,
+  fatal for `cargo test`, which produces an ordinary binary with nothing to supply them. Failure is a
+  wall of `undefined symbol: PyObject_GetAttr`, `PyLong_AsLong`, `PyDict_Type`, … at **link** time,
+  and it takes down the **whole suite**, including tests that never mention Python.
+- **Measured 2026-08-07, during #19.** Confirmed both the failure and the fix on this repo before
+  writing `PyFitness`.
+- **Do this instead:** the fix is already in `get/Cargo.toml` as of #19 — `extension-module` is out
+  of `[dependencies]`, and `[dev-dependencies] pyo3` carries `auto-initialize`. The built module
+  supplies the feature from outside the manifest instead: maturin via
+  `[tool.maturin] features = ["pyo3/extension-module"]` (~~not yet set up — `issues.md`, the
+  `pyproject.toml` gap~~ — **set up 2026-08-08 in `7a3aa7f`; the root `pyproject.toml` carries it
+  along with `manifest-path = "get/Cargo.toml"`**), or by hand with
+  `cargo build -p get --features pyo3/extension-module`.
+  `fitness.rs`'s `the_test_harness_can_call_a_live_python_interpreter` is a permanent smoke test that
+  fails loudly if the manifest is ever reverted.
+- **The runtime half:** `cargo test` then needs `libpython3.*.so` at **run** time too. A pyenv-managed
+  Python is not on the default loader path — symptom is `error while loading shared libraries:
+  libpython3.11.so.1.0: cannot open shared object file`, exit code **127**, before any test runs.
+
+      export LD_LIBRARY_PATH="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"
+      cargo test -p get
+
+  ~~**Unverified on Windows** — Michael's machine links Python differently and this is Linux/pyenv
+  only; `collab.md` should carry a heads-up rather than this trap silently not applying to him.~~
+- **Windows half, measured 2026-08-09 on Michael's machine — the same trap, a different symptom
+  and a different fix.** Superseding the line above, which was written before anyone had run it
+  there. **Linking is fine on Windows**: `cargo test -p get --no-run` completes with exit 0 and no
+  undefined `Py*` symbols, so the link-time failure this entry opens with is Linux-specific in
+  practice. The **runtime** half does bite, as the exact analogue of exit 127: the test binary
+  cannot find `python3.dll` and dies with `exit code: 0xc0000135, STATUS_DLL_NOT_FOUND` before any
+  test runs. Fix is `PATH`, not `LD_LIBRARY_PATH` — put the Python install directory on it:
+
+      $env:PATH = "C:\Users\micha\AppData\Local\Programs\Python\Python312;$env:PATH"
+      cargo test -p get      # 213 passed, 0 failed
+
+  **The root cause is local, not #19's**, which is why this is a machine note rather than an
+  argument against the manifest change: bare `python` on that machine resolves to the Microsoft
+  Store stub, and the real interpreters are reachable only through the `py` launcher. James's
+  offered fallback — putting the pyo3-touching tests behind a cargo feature — is therefore **not
+  needed**. `collab.md` #37 is settled by this.
+- **Why:** full mechanism, and what transfers from `graph_refiner` versus what doesn't, in
+  `.claude/reference/pyo3-maturin.md` §1.
+- **Added:** 2026-08-07 — cargo-test-cannot-link-python-unless-extension-module-is-off
+
+### Calling Python from inside a rayon closure doesn't just run slow — it deadlocks
+- **Bites when:** a `Fitness` objective wraps a Python callable and its `evaluate_population` is
+  left at the trait default, or any future rayon-parallel path calls into pyo3 without first
+  releasing whatever GIL the calling thread holds.
+- **Measured 2026-08-07**, during #19, by deleting `PyFitness`'s `evaluate_population` override and
+  running the batching test. The default fans out over `par_iter()`; each worker calls
+  `Python::attach` while the calling thread already holds the GIL and is blocked waiting for rayon
+  to finish. The suite **hung** until killed at 2 minutes — no failure, no message, just silence.
+- **Do this instead:** every objective that wraps Python **must** override `evaluate_population`
+  and take the GIL exactly once per batch, never per graph. This is why
+  `impl Fitness for Box<dyn Fitness>` forwards it explicitly rather than relying on the trait
+  default — an unforwarded box reintroduces exactly this deadlock silently.
+- **Why:** spec §8 states the rule ("never call Python from inside a rayon closure") and argues it
+  on performance; the measured failure is stronger than the stated one. Full writeup in
+  `.claude/reference/pyo3-maturin.md` §2.
+- **Added:** 2026-08-07 — calling-python-from-a-rayon-closure-deadlocks
+
+### `#[pyclass]` cannot go on `config`'s fitness enum, so `py_config.rs` is not duplication to tidy away
+- **Bites when:** you look at `get/src/py_config.rs`, see it mirroring `get/src/config.rs` field for
+  field, and try to collapse the two — either by putting `#[pyclass]` on `config`'s own types or by
+  deriving `Serialize` on the mirror so the conversions can go. Both are dead ends, and the second
+  error only appears after you have rewritten the conversions.
+- **Do this instead:** leave the mirror in place. Add the field in **both** files; the tests below
+  will tell you if you forget.
+- **Why:** pyo3 and serde disagree about one variant. pyo3 rejects a **unit** variant in a complex
+  enum and directs you to an empty tuple variant (`Python()`); serde then rejects that with
+  `#[serde(tag = "...")] cannot be used with tuple variants`. The tag is what deserializes
+  `type = "python"` for the hand-written TOML path, so annotating `config::FitnessConfig` breaks the
+  file front end to serve the Python one. Measured 2026-08-08 on pyo3 0.27.2 and serde 1.0.228,
+  both directions, while building #29.
+- **The corollary, which looks like a bug and is not:** editing `config.rs` can break tests in
+  `py_config.rs` you never touched. That is the drift guard working. The round-trip tests
+  destructure `Config` with **no `..`**, so a new field fails to compile ("pattern does not mention
+  field"), and a new `invalid("<field>", ...)` check with no Python attribute mapping fails
+  `every_validation_field_maps_to_a_python_attribute`, which scrapes `config.rs`'s source. Both were
+  confirmed by deliberately breaking them, then reverting. Fix the mirror; do not weaken the test by
+  adding `..`.
+- **Added:** 2026-08-08 — pyclass-cannot-go-on-configs-fitness-enum

@@ -1210,3 +1210,440 @@ the graphs-batch sense everywhere else. Neither `sir.rs` name is in the sheet, s
 needed. `Fitness::evaluate_population` and `SirRun` have the same defect and **are** sheet-named —
 left untouched, raised as `collab.md` #32 for the joint meeting instead of changed here.
 *#18 vocabulary · recorded 2026-08-07 16:15 — Michael.*
+## 2026-08-06 21:03 — James — Generational's `outcome` takes the winner's graph from the final scoring pass
+**Chose:** `GenerationalEvolver::outcome` moves the winner's `Graph` out of the vector
+`express_and_score` returned on the last generation (`graphs.swap_remove(best)`), rather than
+calling `best_genome.express(..)` the way steady-state's `outcome` does. It is a second, local
+`outcome` method — not a shared helper.
+**Why:** spec §6.2 asks generational specifically to use "the graph that scoring already built, so
+the winner is never re-expressed", and generational is the strategy that has them: it scores every
+individual every generation, where steady-state scores only the two children of each mating event
+and so has nothing to reuse. Both paths return the identical graph — `Genome::express` takes
+`&self` and `&G::Context` with no RNG, so it is deterministic — which makes this purely a choice of
+which cost to pay: one extra expression per run, or one population's worth of `Graph`s held alive
+across the loop.
+**Rejected:** (a) Factoring the shared part of the two `outcome`s into `common.rs` — the right
+long-term shape, but it means editing `steady_state.rs`, which #25 is explicitly scoped out of.
+Raised as `collab.md` #36 instead of done unilaterally. (b) Re-expressing the winner like
+steady-state, for symmetry — simpler, and contradicts the sheet on the one point where the sheet
+speaks about generational in particular.
+**Affects:** `get/src/evolver/generational.rs` `outcome`; `collab.md` #36 (renumbered from #32).
+*#25 · recorded 2026-08-06 21:03 — James, during the generational implementation.*
+
+## 2026-08-06 21:04 — James — §6.2's "track the best" is the best of the final population, not a running best-ever
+**Chose:** the outcome reports the best individual of the **final** scored population. No best-ever
+is tracked across generations.
+**Why:** §6.2's phrase is a description of the per-generation loop, not a specification of the
+report, and the two readings only differ in cases the engine already handles. At `elite_count >= 1`
+under a deterministic objective they are identical, because the best is copied forward every
+generation and cannot be lost. Where they differ — a stochastic objective — best-ever is actively
+worse: it latches the luckiest sample of a genome, which is the same failure §6.2 gives as the
+reason elites are rescored rather than keeping their old number. It would also let
+`best_fitness_engine` disagree with the last row of `history`, and report a fitness no individual in
+the returned population currently has.
+**Rejected:** (a) A running best-ever genome/graph/fitness updated each generation — robust at
+`elite_count = 0`, which is the one case it buys anything, and the config default is 1. (b) Raising
+it as a `collab.md` item before implementing — the sheet is not contradicted by either reading, so
+there was nothing to ask; recorded here instead so the reading is visible and reversible.
+**Affects:** `get/src/evolver/generational.rs` `outcome` and `run`;
+`the_outcome_reports_the_actual_best_and_its_graph`.
+*#25 · recorded 2026-08-06 21:04 — James, during the generational implementation.*
+
+## 2026-08-06 21:05 — James — `advance_generation` does not take the objective
+**Chose:** dropped the `fitness: &F` parameter (and the `F: Fitness` bound) the `todo!()` stub
+carried, leaving `advance_generation(&mut self, fitnesses: &[f64], rng: &mut R)`.
+**Why:** generational rescores the whole population in `run` after advancing, so nothing inside
+`advance_generation` scores anything — it only needs the *previous* generation's fitnesses, to rank
+elites and to run selection. Keeping an unused `&F` would have meant keeping the stub's
+`let _ = (..)` discard alive, which is exactly the kind of line that reads as an oversight later.
+The asymmetry with steady-state's `mating_event`, which does take `fitness`, is real and correct:
+that strategy scores its two children in place, because it never rescores anyone else.
+**Rejected:** keeping the parameter for signature symmetry with `mating_event` — symmetry between
+two methods that genuinely do different work is worth nothing, and it would have hidden that
+generational scores in exactly one place.
+**Affects:** `get/src/evolver/generational.rs` `advance_generation` and its caller in `run`.
+*#25 · recorded 2026-08-06 21:05 — James, during the generational implementation.*
+
+## 2026-08-07 — James — The clippy trap was retired with a successor, not deleted
+**Chose:** replaced the `cargo clippy -- -D warnings cannot pass on main` entry with a shorter one
+saying the opposite — the gate passes as of `94a4679`, so a warning is now yours — which keeps two
+things the old entry carried: the `git stash -u` contamination pitfall hit on #24, and the
+capture-the-baseline-before-editing recipe for the next time a non-empty baseline exists.
+**Why:** #25's plan said "drop the entry once the warnings are gone", and dropping it outright would
+have been the literal reading. But the entry's *exit condition* was about the claim in its title,
+not about everything written underneath it, and the stash pitfall is still true and still expensive
+— it is a property of `git stash -u` and this repo's `config.example.toml`, not of the dead-code
+warnings. Deleting a churn-list entry also deletes whatever knowledge accreted in it, and this one
+had accreted a technique from a different task.
+**Rejected:** (a) Deleting it as written — loses the pitfall, and leaves nothing recording that the
+gate flipped, so the next person diffing against a baseline has no way to know they need not. (b)
+Keeping it and appending "no longer true" — a trap whose title contradicts its body is worse than
+either, and `traps.md` is read by `/load` on every session.
+**Affects:** `.claude/work/traps.md`; the `Verify by:` of any future task that says "clippy passes".
+*#25 · recorded 2026-08-07 — James, at the `/done` gate for generational-evolver.*
+
+## Task complete: generational-evolver — 2026-08-07
+Archived to `.claude/work/archive/2026-08_generational-evolver/`. GitHub **#25** shipped as
+**PR #46** (`349399e`, `ab68796`, `a30422e`, `7de4a66` — 2 files, +414/−17 on the test commit alone),
+**merged** by Michael as `74de0b5` on 2026-08-07T14:51:59Z; issue #25 closed by the body's
+`Closes #25.` `GenerationalEvolver::run` and `advance_generation` are implemented over their
+`todo!()`s, `new` gained the `elite_count` backstop, and the two cleanups folded into the issue
+landed with them. 176 tests green on the merged tree — verified *after* merging with Michael's
+#18 rewrite of `fitness.rs`, not only on the branch.
+The clippy gate flipped with this task: `cargo clippy -p get --all-targets -- -D warnings` exits 0
+on `main` for the first time, because the two dead-code warnings every task since 2026-08-04 diffed
+against **were** this evolver's unbuilt shell. The trap that recorded them is retired, with a
+successor — see the entry above.
+Two sheet questions leave this task **unresolved and pointed at the joint meeting**: `collab.md`
+**#35** (§6.2's "track the best" versus the best-of-final-population that shipped — endorsed
+Michael's amend-the-sheet option) and **#36** (whether the two evolvers' `outcome` methods should
+share a helper in `common.rs`). Neither blocks anything; both are sheet or cross-file changes that
+one owner may not make alone.
+Carried forward, not resolved: `issues.md`'s `evaluate_population`/`SirRun` rename, unfiled and
+blocked on the same meeting; `collab.md` **#27** (`Swap`'s degree floor), still James's, fifth gate.
+**`hotfixes.md` is empty of live entries for the first time** — Michael's #18 removed the SIR
+batch-seed hotfix after six cycles of carrying it. Entries below this line belong to later tasks.
+*Task marker · generational-evolver · recorded 2026-08-07 — James, at `/done`.*
+
+## 2026-08-07 19:20 — James — `extension-module` moves out of `[dependencies]`, gated behind the built module instead
+**Chose:** `get/Cargo.toml`'s `pyo3` drops `extension-module` from `[dependencies]` entirely;
+`[dev-dependencies] pyo3` carries `auto-initialize`. The built module supplies `extension-module`
+from outside the manifest — maturin via `[tool.maturin] features = ["pyo3/extension-module"]`, or
+`cargo build --features pyo3/extension-module` by hand.
+**Why:** `extension-module` tells pyo3 to leave the Python C API symbols unresolved, for the
+interpreter to supply at load time. `cargo test` produces an ordinary binary with no interpreter
+behind it, so with the feature always on the whole suite fails to **link** — dozens of undefined
+`Py*` symbols — however few tests touch Python. Measured on this repo before choosing the fix, not
+assumed from pyo3's docs. The alternative sketched first (a local `[features] extension-module =
+["pyo3/extension-module"]` passthrough) also worked, but the maturin-native form needs no such
+passthrough and is what a real build will use anyway once `pyproject.toml` exists (`issues.md`).
+**Rejected:** (a) The local `[features]` passthrough — functionally equivalent, verified working,
+but reinvents what maturin already does. (b) Leaving `extension-module` on and testing `PyFitness`
+only through a separate, non-`cargo test` harness — weaker verification, and this project's whole
+posture is that untested code is unverified code.
+**Affects:** `get/Cargo.toml`; every future pyo3-touching test; `traps.md` (new entry);
+`.claude/reference/pyo3-maturin.md` §1; the `pyproject.toml` issue staged in `issues.md`, which now
+must remember to set `[tool.maturin] features`.
+*#19 · recorded 2026-08-07 19:20 — James, fixing the test harness before writing PyFitness.*
+
+## 2026-08-07 19:50 — James — `PyFitness` routes both trait methods through one inherent `score_batch`
+**Chose:** neither `Fitness::evaluate` nor `Fitness::evaluate_population` calls the other on
+`PyFitness`; both call a private `score_batch`, which does the one call into Python.
+**Why:** the trait's default `evaluate_population` calls `evaluate`. Had `evaluate` been written to
+call `evaluate_population` — the seemingly natural "one graph is a batch of one" — deleting the
+override would turn that pair into infinite recursion instead of a compile error, exactly the trap
+`collab.md` #33 documents for `EpidemicScorer`. Routing both through an inherent method has no cycle
+to fall into regardless of which override is present or absent.
+**Rejected:** `evaluate` calling `evaluate_population` directly — reads more obviously correct and
+is the pattern `EpidemicScorer`'s own `evaluate` used to use, before #18 restructured it for the
+same reason.
+**Affects:** `get/src/fitness.rs` `PyFitness`.
+*#19 · recorded 2026-08-07 19:50 — James, writing PyFitness's evaluate/evaluate_population pair.*
+
+## 2026-08-07 20:20 — James — `set_fitness_function` rejects registration against a non-Python config
+**Chose:** `set_fitness_function` errors if `self.config.fitness` is not `FitnessConfig::Python`,
+rather than storing the callable regardless of what the config selected.
+**Why:** a stored-but-unused callable is indistinguishable, from Python, from a successfully
+registered one — the run would score with whatever the config actually selected (an SIR objective)
+while the user watched for their own function's numbers and never got them. Spec §8 already argues
+this shape for the reverse case (a `python` config with nothing registered); the config-mismatch
+direction is the same failure, just triggered from the other side. `FitnessConfig::type_name()` was
+added so the rejection message names the configured objective in the words the user actually typed,
+rather than a `Debug` dump of the variant's fields.
+**Rejected:** storing unconditionally and letting `python_fitness()` be the only gate — technically
+sufficient (the callable would simply never be read), but the config layer is meant to be the single
+source of truth for which objective a run uses, and letting registration silently succeed against
+the wrong config makes debugging "why isn't my function being called" a search through two files
+instead of one error at the point of the mistake.
+**Affects:** `get/src/lib.rs` `set_fitness_function`; `get/src/config.rs` `FitnessConfig::type_name`.
+*#19 · recorded 2026-08-07 20:20 — James, adding set_fitness_function to GraphEvolver.*
+
+## 2026-08-07 20:45 — James — `python_fitness` carries a temporary `#[allow(dead_code)]`, not a `#[cfg(test)]` hide
+**Chose:** the seam #26 will call (`GraphEvolver::python_fitness`) is `pub(crate)`, always compiled,
+and wears `#[allow(dead_code)]` with a comment and a matching `hotfixes.md` entry, rather than being
+`#[cfg(test)]`-gated or left to produce a clippy warning.
+**Why:** `#[cfg(test)]` would mean the method does not exist in the real build at all, so #26 could
+not call it without first un-gating it — a needless extra step at the exact moment #26 lands. Leaving
+the warning unsuppressed would break `cargo clippy -p get --all-targets -- -D warnings`, which #25
+spent an entire task restoring to a real gate (`traps.md`). The `#[allow]` is scoped to the one
+method, not the module, and both its removal condition and its owner are recorded.
+**Rejected:** `#[cfg(test)]` — cheaper today, worse for #26. A crate-wide or module-wide
+`#[allow(dead_code)]` — hides genuinely dead code elsewhere for the same span, which is a bigger
+blind spot than one method needs.
+**Affects:** `get/src/lib.rs` `python_fitness`; `hotfixes.md`.
+*#19 · recorded 2026-08-07 20:45 — James, adding the seam #26's dispatch will call.*
+
+## 2026-08-07 22:10 — James — GET gets a `pyproject.toml` at the workspace root, carrying the `extension-module` feature
+**Chose:** a `pyproject.toml` at the repo root with `build-backend = "maturin"`,
+`[tool.maturin] manifest-path = "get/Cargo.toml"` and `features = ["pyo3/extension-module"]`. Staged
+as an unfiled issue earlier the same day, then built instead of filed, on instruction.
+**Why:** the crate is a workspace member, so the manifest is not beside the pyproject and maturin has
+to be pointed at it; and `extension-module` is deliberately absent from `get/Cargo.toml`
+(2026-08-07 19:20) so `cargo test` can link, which means the build path is the only place left to
+supply it. Verified end to end rather than by inspection: `maturin build` reports "Using build
+options features from pyproject.toml", and the wheel installed into a throwaway venv imports,
+constructs a `GraphEvolver` against a `type = "python"` config, registers a callable, and returns
+both rejection paths to Python as `ValueError` with their messages intact. This is the first time
+anything in GET has been callable from Python.
+**Corrected in the doing:** the first version of the comment on that `features` line asserted that
+removing it yields a wheel that fails to import. **Measured false** — with the line dropped, the
+wheel has the same 75 undefined `Py*` symbols, no `libpython` in `ldd`, and imports fine on this
+Linux/pyenv setup. The line is kept for macOS/Windows linkers and because it is the documented
+configuration, and the comment now says exactly that, plus a warning not to read a green Linux
+import as evidence it is unnecessary. Recording the correction because the wrong version is the
+kind a later reader would reasonably trust.
+**Rejected:** (a) Filing it as a tracker issue and leaving the repo unable to build a wheel —
+overtaken by instruction, and the work turned out to be ~15 lines plus verification. (b) Putting the
+pyproject inside `get/` beside the crate — then `pip install .` from the repo root does not work,
+which is where a user would run it. (c) A `[features]` passthrough in `get/Cargo.toml` instead —
+already rejected on 2026-08-07 19:20 for reinventing what maturin does.
+**Affects:** `/pyproject.toml` (new); `.claude/reference/pyo3-maturin.md` §3, rewritten from "what
+GET does not have" to what it now has; `issues.md`, whose staged entry was removed as resolved
+rather than filed.
+*#19 · recorded 2026-08-07 22:10 — James, after the pyproject.toml verification.*
+
+## Task complete: pyfitness — 2026-08-08
+Archived to `.claude/work/archive/2026-08_pyfitness/`. GitHub **#19** shipped as **PR #48** (8
+commits, `6e2d262`..`b1f8557`), **merged** by Michael as `32ceb11` on 2026-08-08T13:57:26Z; issue
+#19 closed by the body's `Closes #19.` `PyFitness` adapts a registered Python callable to the
+`Fitness` trait on the batched contract, `impl Fitness for Box<dyn Fitness>` forwards every method
+including both defaulted ones, `set_fitness_function` registers callable + direction with three
+rejections, and `python_fitness` is the seam #26's dispatch calls. **198 tests**, up from 176 —
+the delta counted from the diff rather than carried forward as a remembered number.
+Two things landed that were not on the original plan. **`pyproject.toml`** (root, `manifest-path`
+into the workspace member, `features = ["pyo3/extension-module"]`) — built rather than filed, on
+instruction, making GET importable from Python for the first time. And **`.claude/reference/`**, a
+new documentation lifetime for notes about how a dependency behaves, deliberately outside `work/`
+so it cannot be mistaken for a churn list.
+Two measured findings outlived the code. Calling Python from inside a rayon closure **deadlocks**
+rather than merely running slowly — found by deleting the `evaluate_population` override to check a
+test was not vacuous, and watching the suite hang for two minutes with no failure message. And a
+claim written into `pyproject.toml`'s own comment was **measured false** the same session: a
+featureless wheel imports fine on Linux, identical undefined symbols. Both are in `traps.md` and
+`.claude/reference/pyo3-maturin.md`; the correction is in the 2026-08-07 22:10 entry above.
+Carried forward, not resolved: the `#[allow(dead_code)]` on `python_fitness`, now committed and in
+every tree, blocked on **#26** which is still open and unstarted; `issues.md`'s
+`evaluate_population`/`SirRun` rename, unfiled and blocked on the joint meeting; and `collab.md`
+**#35**, **#36**, **#37** all awaiting Michael, plus **#27** still awaiting James. Entries below
+this line belong to later tasks.
+*Task marker · pyfitness · recorded 2026-08-08 — James, at `/done`.*
+
+## 2026-08-08 21:15 — James — The Python config schema is a mirror in `py_config.rs`, not `#[pyclass]` on `config`'s own types
+**Chose:** `get/src/py_config.rs` holds a parallel set of `#[pyclass]` types — `PyConfig`,
+`PyEvolutionConfig`, `PySelectionConfig`, `PyGenomeConfig`, `PyFitnessConfig`, `PySirParams`,
+`PyOperationWeights` — mirroring `config.rs` field for field, and converts to TOML through explicit
+`to_toml_value` matches rather than a `Serialize` derive.
+**Why:** not a style preference — the two attribute sets are **mutually exclusive on the fitness
+enum**, measured on pyo3 0.27.2 and serde 1.0.228 while building #29. pyo3 refuses a unit variant in
+a complex enum ("not yet supported in a complex enum; change to an empty tuple variant instead"), so
+`FitnessConfig::Python` would have to become `Python()`; serde then refuses exactly that with
+"`#[serde(tag = "...")]` cannot be used with tuple variants". The tag is what deserializes
+`type = "python"` for the hand-written TOML path, so annotating `config`'s enum directly would break
+the file front end in order to serve the Python one. The same conflict rules out deriving
+`Serialize` on the mirror, hence the explicit conversions — which also suit a codebase one owner
+reads without writing Rust. Secondary benefit: every pyo3 attribute stays in one new file, which
+matters with two owners editing the crate at once and #26 due to touch `lib.rs`.
+**Rejected:** (a) `#[pyclass]` on `config.rs`'s types — impossible, above, and it was my first
+preference because it eliminates drift. (b) A `Serialize` derive on the mirror — same blocker.
+(c) Exposing config as plain dicts — loses the typed API #29 asks for and pushes schema errors to
+run time.
+**The cost is drift, and it is guarded rather than accepted:** the round-trip tests destructure the
+parsed `Config` **exhaustively with no `..`**, so a field added to `config.rs` and not to the mirror
+is a compile error in `py_config.rs`. Verified by adding a field and watching it fail with "pattern
+does not mention field", not assumed.
+**Affects:** `get/src/py_config.rs` (new); `get/src/lib.rs` `from_config` and the `#[pymodule]`
+block. Spec §8. GitHub #29.
+*#29 · recorded 2026-08-08 21:15 — James, building the Python config front end.*
+
+## 2026-08-08 21:18 — James — Validation errors reach Python as attribute paths, guarded by scraping `config.rs`
+**Chose:** `py_config::config_error_to_py` rewrites `ConfigError::Validation`'s field name into the
+Python attribute path that produced it — `num_epidemics` becomes `config.fitness.sir.num_epidemics`
+— leaving the constraint text untouched. A field with no Python equivalent keeps its original
+wording rather than being given an invented path.
+**Why:** spec §8 requires it in as many words: the Python front end reports against a TOML document
+the user never wrote, so a bare field name leaves them to work out which of the objects they
+assembled owns it. `Config::validate` is right to name the TOML field — that is the correct answer
+for the file front end — so the rewrite belongs at the Python boundary, not in `config.rs`.
+**The mapping is a hand-written match, so the real decision is how it is kept honest.**
+`every_validation_field_maps_to_a_python_attribute` scrapes `config.rs`'s own `invalid("<field>",
+...)` call sites out of `include_str!("config.rs")` and asserts each is mapped or explicitly exempt.
+A second test guards the scraper itself, because one that silently matched nothing would make the
+first pass while checking no fields at all. Verified by adding a `crossover_rate` check to
+`config.rs` and confirming the suite failed naming it; then reverted.
+**Rejected:** (a) A hand-maintained list of field names — the exact thing that goes stale, and the
+failure is silent: an unmapped field degrades to a bare name rather than erroring. (b) Changing
+`Config::validate` to emit Python paths — wrong for the TOML front end, which is the majority case
+and has no Python attributes. (c) Leaving the bare names — cheapest, and the thing §8 names as
+making errors useless.
+**One exemption exists:** `seed`, raised by `reject_fitness_seed` against raw TOML text, is
+unreachable from a front end that has no seed to write (spec §7). Exempt by name, so any *other*
+unmapped field still fails.
+**Affects:** `get/src/py_config.rs` `config_error_to_py` and `python_attribute_path`;
+`get/src/lib.rs` `from_config`. Spec §8. GitHub #29.
+*#29 · recorded 2026-08-08 21:18 — James, on the error-reporting half of #29.*
+
+## 2026-08-09 — Michael & James — Skill frontmatter takes a PR; a skill's body does not
+**Chose:** `.claude/skills/*/SKILL.md` splits across the routing table. Frontmatter — `model:`,
+`allowed-tools:`, any hook-adjacent key — goes through a feature branch and a PR. The body is a
+direct push. The governing test is written into `CLAUDE.md` as **"does this change what runs", not
+"which directory is it in"**.
+**Why:** rule 2 already sends `settings.json` and `hooks/` through review because they execute on
+the other owner's machine at session start, without them reading the diff. Skill frontmatter has
+exactly that property and was named nowhere — not in rule 2, not in the routing table — so a
+`model:` change was permitted to land silently. The body does not have that property: it is prose
+both owners read anyway, and putting a PR round-trip in front of a typo fix is how a rule stops
+being followed at all.
+**Stating it as a test rather than a directory list is the load-bearing part.** A table that names
+directories goes stale the moment someone adds a fourth one; a principle routes the new case on its
+own.
+**Rejected:** (a) Extending rule 2 to all of `.claude/skills/` — would cover prose edits and buy
+nothing. (b) Leaving it unwritten and relying on precedent — the thing that produced the situation
+this settles. (c) Reverting the sonnet pin, offered by Michael and declined by James, who had run
+`/load`, `/save` and `/done` under it without noticing a difference.
+**Origin:** Michael pinned `done`, `load`, `save`, `setup` and `start` to `model: sonnet` in
+`011480d` and pushed direct, logging it in `collab.md` #34 because the rule did not yet cover it.
+James agreed the same day and drew the frontmatter/body line; both positions are stamped inside
+that item. The amendment was written at the joint meeting of 2026-08-09.
+**Affects:** `.claude/CLAUDE.md` routing table. `collab.md` #34.
+*#34 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+
+## 2026-08-09 — Michael & James — §6.2's "track the best" amended to best-of-final population
+**Chose:** the reported best is the best of the **final** population, for both strategies. Spec
+§6.2's "track the best" wording is amended to say so, and to say that at `elite_count = 0` the
+divergence is a property of the configuration rather than of the report. **No code changes** —
+`GenerationalEvolver::outcome` and `SteadyStateEvolver::outcome` already do this.
+**Why:** the sentence read as a running best carried across generations, which neither evolver has
+ever implemented. Two arguments against building one. Fitness is stochastic between batches since
+the atomic batch counter landed (§8.1), so a running best is substantially a record of which
+generation drew the luckiest sample — and §6.2 already rejects exactly that reasoning three
+paragraphs later, where freezing an elite's old score is refused on the same grounds (§5.2). And a
+non-elitist generational GA really can lose its best individual; the run ended without it, so a
+report naming it describes a population that no longer exists.
+**Rejected:** (a) Requiring `elite_count >= 1` in §7 — removes a legitimate configuration to avoid
+amending a sentence, and non-elitist generational is deliberately run. James declined this
+explicitly. (b) Implementing a running best — both owners rejected it, for the reason above.
+**Arrived at independently from both ends**, which is the evidence the sentence rather than the
+code was stale: James recorded best-of-final and the running-best he rejected in `decisions.md`
+2026-08-06 21:04 while writing the generational evolver; Michael reached the same reading reviewing
+PR #46 against §6.2 the following day, without having seen it.
+**Affects:** `/official_spec_sheet.md` §6.2. No files under `get/src/`. `collab.md` #35.
+*#35 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+## 2026-08-09 — Michael & James — The self-merge exception widens to strict deletions of false text
+**Chose:** a second permitted case for merging your own PR — **a strict deletion, or a one-line
+correction, to a doc, where the change removes something already false.** The first case, "the other
+owner is unavailable and the change is blocking", is unchanged. The trace obligation applies to
+both: say it in the PR and in `collab.md`.
+**The test is that the change subtracts a falsehood rather than asserting anything.** Dropping a
+caveat that cites a closed issue, correcting a status row for a component that has shipped, fixing a
+glob that names files it no longer covers. A sentence adding a new claim is not this case however
+short it is, and that boundary is the whole reason the case can be safely widened — reviewing a
+deletion of something false is a check nobody was ever going to fail.
+**Why:** PR #37 was self-merged under case 1 when case 1 did not hold, and was logged honestly as a
+self-merge of convenience (`collab.md` #29). A rule that gets correctly broken is stated wrong,
+which is the same reasoning that reworded "an agent never merges a PR at all" on 2026-08-04. The
+cost was measured on 2026-08-09: `official_spec_sheet.md`'s status table had been stale on **four of
+nine rows** for days, each naming a shipped component as unbuilt, because correcting a fact needed
+the full branch-and-review cycle.
+**Rejected:** (a) Leaving the rule and treating #29 as a logged exception — precedent without a
+rule is how the exception quietly becomes the norm. (b) Widening only for the spec status table —
+too narrow to survive contact; the same argument applies to any doc, and a per-file carve-out
+invites a second one.
+**Affects:** `.claude/CLAUDE.md`, "Pull requests". `collab.md` #29.
+*#29 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+
+## 2026-08-09 — Michael & James — `Swap`'s degree floor stays at 3, one higher than the Java original
+**Chose:** keep `graph.degree(v) <= 2` as the rejection test in
+`get/src/genomes/edge_edit/operations.rs::swap` — both endpoints need **degree >= 3**. Spec §3.1's
+"two non-adjacent vertices of degree > 2" already says this, so **no code and no sheet change**.
+This entry exists only to stop the discrepancy being rediscovered and filed as an off-by-one.
+**The discrepancy is real and was checked.** The 2019 Java predecessor (`Graph.java`/`GET.java`, in
+Michael's OneDrive archive, not in this repo) rejects on `nbr.get(v1).size() < k` with its only
+caller passing `MIN_DEG_SWAP = 2`, so the original required **degree >= 2**. Every other check in
+the operation was ported verbatim — non-adjacent `v1,v2`, four distinct vertices, and none of
+`v1-a2`, `v2-a1`, `a1-a2` already an edge — which is what made the single differing number look
+like a slip rather than a choice. No comment in the Java explains why 2 was chosen.
+**Why keep the stricter floor:** Michael's call at the meeting. `Swap` firing on a degree-2 vertex
+strips a vertex to a single connection, and the stricter floor is what every run and every test in
+this repo has been built and tuned against. Loosening it would change search behaviour on all of
+them to match a number nobody can show was deliberate.
+**Rejected:** (a) Loosening to `>= 2` to match the original — would need §3.1 reworded,
+`operations.rs:169-170` changed, and new fixtures for
+`swap_rejects_low_degree_and_conflicting_quartets`, all to adopt an unexplained constant.
+(b) Parking it until the Java is readable by both owners — the current behaviour is not in doubt,
+only its ancestry, and leaving the item open invites the same re-derivation later.
+**Worth recording plainly:** the Java is **not verifiable from this repo** — `legacy/` holds only
+`main.cpp`, `Graph.cpp/h` and `SDA.cpp/h`, none of which contains a swap operation. James agreed to
+this on evidence only Michael can see. If the archive is ever added to the repo, this entry is what
+a re-check should start from.
+**Affects:** nothing. `get/src/genomes/edge_edit/operations.rs` and spec §3.1 both stand as written.
+`collab.md` #27.
+*#27 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+
+## 2026-08-09 — Michael & James — Drop-in Rust objectives are supported, via the library, not the config
+**Chose:** GET supports **two** user-extension routes for fitness. Python — register a callable
+with `set_fitness_function` — for most users and any prototype. **Rust** — depend on `get` as a
+crate, `impl Fitness` for your own type, and drive an evolver directly — for a hot native objective
+without forking GET. Spec gains §5.3.
+**The finding that made this cheap:** `Evolver::run<F: Fitness>` is generic over the objective and
+`Fitness` is public, so a caller holding a concrete `F` instantiates the evolver and **never
+touches §8's dispatch `match`**. The closed match turns a *config document* into concrete types; a
+Rust user is a library consumer, not a config consumer. So supporting drop-in Rust objectives
+required **no change to #26's design**, which was the thing `collab.md` #21 was raised to protect.
+**A user objective deliberately gets no `FitnessConfig` variant.** The obvious alternative, a
+string-keyed registry that config could name, would move validation out of serde — the exact
+failure GitHub #13 and #23 exist to prevent. Keeping user objectives out of the schema means
+nothing user-supplied is ever deserialized, so there is nothing new to validate.
+**The one obligation it puts on #26:** dispatch must not become the only way to construct a run.
+`Fitness`, `Direction`, the genome `Context` types, `SharedEvolutionContext`, each `TypeContext`,
+`Evolver::new`, `Evolver::run` and `EvolutionOutcome` stay public. Narrowing any of them kills the
+Rust route **silently** — there would be no compile error inside `get`. Noted on GitHub #26.
+**Rejected:** (a) Declaring Python the only route and adding a §10 non-goal — James's lean when he
+raised it, overtaken by the finding above, which removes the cost that made it attractive.
+(b) A registry keyed by name in the config — see the validation argument. (c) Literally dropping a
+`.rs` file into `get/src/` — that is a fork plus a match arm, which buys nothing over the library
+route and costs a rebuild of GET itself.
+**Open, deliberately:** the ergonomics of assembling a population and contexts by hand. A real cost
+of the Rust route, possibly a builder later, and explicitly not a reason to route user objectives
+through the config enum.
+**Affects:** `/official_spec_sheet.md` §5.3 (new). GitHub #26. `collab.md` #21.
+*#21 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+
+## 2026-08-09 — Michael & James — The target profile is an inline config value, verbatim, with no C++ conventions
+**Chose:** `epi_prof_match`'s target becomes **`target_profile`, an ordinary inline config value** —
+a TOML array for the file front end, a Python list on `FitnessConfig.EpiProfMatch` for the Python
+one. Both front ends hand over the same list of numbers and no setter is involved. It replaces
+`target_profile_path`, which is deleted. Validated non-empty and finite by `Config::validate`.
+**This reverses spec §8, which said the opposite** — "passed as a sequence of numbers through a
+setter rather than serialized into the generated TOML ... a long inline array makes the provenance
+document unreadable". Keeping it out of the document protected readability but cost the thing the
+document exists for: a run whose target lived outside the config could not be reproduced from the
+config alone, so `to_toml()`'s provenance was incomplete for exactly one objective. A verbose
+`[fitness]` block is the smaller price.
+**Neither C++ loading convention is reproduced.** `legacy/main.cpp:378-386` prepends patient zero,
+so a stored `.dat` omits its own first element, and multiplies every value by `verts / 128` because
+profiles were normalized to a 128-node network. Both dropped. The user supplies the profile they
+want at the size of the network they are building, and GET compares against it unchanged. A silent
+one-step shift and a silent rescale are two ways to produce a wrong number rather than an error,
+and archived runs are usually not at 128 nodes anyway.
+**Rejected:** (a) Keeping `target_profile_path` — a second file to lose, version separately and
+omit from provenance. (b) Accepting either a path or an inline array — two ways to say one thing,
+needing a new validation rule to reject both being set, and a provenance document whose shape
+depends on which was used. (c) Reproducing the prepend and rescale for comparability with archived
+C++ results — the argument that kept the short-epidemic re-roll (§5.2), rejected here because these
+two conventions are invisible when wrong where the re-roll is a documented sampling policy.
+**Note the sheet was the stale side and the code was too**, differently: §8 described a setter
+nobody built, and `config.rs:129` stored a path §8 never authorized. Neither matched the other and
+neither is what was agreed.
+**Affects:** `/official_spec_sheet.md` §8, two passages. `get/src/config.rs`, `get/src/py_config.rs`,
+`config.example.toml`, `examples/config_builder.py`. `collab.md` #24.
+*#24 · recorded 2026-08-09 — Michael & James, at the joint meeting.*
+
+## Task complete: pyconfig — 2026-08-09
+PR #49 merged (`0731aa6`), issue #29 closed. All five planned tasks plus the examples file landed
+and were verified on this machine across the task's sessions; see the archived
+`work/archive/2026-08_pyconfig/` for the full plan and history. No open items remained at the
+`/done` gate — both carry-forward issues (`sda.rs` doc-link warning; the
+`evaluate_population`/`SirRun` rename, blocked on collab.md #32) and the one hotfix
+(`python_fitness`'s `#[allow(dead_code)]`, blocked on #26) pre-date this task and are unaffected by
+its close.
+*Recorded 2026-08-09 23:46 — James, at the `/done pyconfig` gate.*
