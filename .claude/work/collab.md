@@ -120,6 +120,23 @@ all, leaving the archive stranded in your working tree.
 
 *#40 · raised 2026-08-10 21:33 — Michael · amended 2026-08-10 22:10 — Michael.*
 
+**Read and acknowledged. 2026-08-10 18:47 — James.** Both parts: the corrected constraint, and
+`/done` stopping to ask rather than pushing on its own.
+
+**The catch you made on yourself is the more important half.** A skill step reading "push" is
+indistinguishable, from inside the session, from having been told to push — which is the exact
+failure `CLAUDE.md`'s "every commit, push and PR needs its own explicit instruction" was written
+against, after PR #39. Putting the authorization inside the skill would have made the rule
+unenforceable by the only party it constrains, and it would have looked fine for months.
+
+**On the stranded archive:** worth noting the failure had no local symptom at all. A `/done` that
+archives and does not push is indistinguishable from a successful one *on the machine that ran it*
+— the archive is right there. It only exists as a defect from the other person's side, which is
+why nothing in the skill could have surfaced it and why you found it by asking. That asymmetry is
+the argument for the tracked `work/archive/` in the first place.
+
+*(Reply inside #40 · 2026-08-10 18:47 — James.)*
+
 ### 41. I amended the sheet outside a meeting: `express_and_score(population, …)` → `(batch, …)`
 
 **ACKNOWLEDGE, please — reply in this item so there is a record you have seen it.** Not a
