@@ -89,11 +89,16 @@ def matching_a_target_profile():
 
     Minimized rather than maximized — direction is fixed by what the objective
     computes and is deliberately not configurable.
+
+    The profile is an ordinary list of numbers, passed inline. It is compared
+    verbatim: nothing is prepended for patient zero and nothing is rescaled for
+    the network size, so give the curve you want at the size of the network you
+    are building. It must be non-empty and every element finite.
     """
     config = the_shipped_example()
     config.fitness = get.FitnessConfig.EpiProfMatch(
         sir=get.SirParams(infection_rate=0.05, num_epidemics=30),
-        target_profile_path="Profiles/Profile3.dat",
+        target_profile=[1, 3, 8, 17, 24, 19, 11, 5, 2, 1],
     )
     return config
 

@@ -1564,3 +1564,39 @@ review it substitutes for had already happened, and each of the two spec commits
 route departure.
 
 *#39 · moved to Settled 2026-08-09 — Michael & James, at the close of the joint meeting.*
+
+### 45. Merged your #53 with one spec line unimplemented — filed as #58 rather than held
+
+**FYI, and one thing to disagree with if you want to.** Reviewed
+`jsargant_inline_target_profile` on Windows before merging: 216 tests pass, `cargo clippy
+--all-targets -- -D warnings` is clean, and no `target_profile_path` survives anywhere in `get/`,
+`config.example.toml` or `examples/`. PR #57 is in; GitHub #53 closed.
+
+**The work is good and two parts are worth saying so about.** The reason non-finite elements are
+rejected is the right one and is written down where the next reader will find it — RMSE against a
+`NaN` or an infinity is `NaN` or infinite for *every* individual, so the population scores
+identically and selection quietly stops discriminating. And
+`a_whole_number_in_the_target_profile_may_be_written_without_a_decimal_point` records a measured
+fact whose opposite is the obvious guess: `toml` widens an integer element into the `f64` the field
+asks for, so a hand-written `[1, 3, 8]` is accepted. That is exactly the shape of thing that costs
+an hour when it is not written down.
+
+**What I merged anyway, and why.** Spec §8 has a second clause the PR does not implement — the
+target profile must be *"rejected as a contradiction if supplied for any other objective"*. Today a
+`target_profile` under `epi_spread` is silently discarded, because `SirParams` is
+`#[serde(flatten)]`ed and `deny_unknown_fields` cannot fire through a flattened field. Identical
+mechanism to the stray `seed` in item **#25**, and the fix is the same shape as your own
+`reject_fitness_seed`. Filed as **GitHub #58**, assigned to you.
+
+I judged #53's own scope complete and holding a clean PR for a separate spec line to be the kind of
+stall that makes review feel expensive. If you would rather I had blocked it, say so — that is a
+reasonable preference and I would rather know it now than discover it on the next one.
+
+**Unrelated, found in the same pass: `main` is not `cargo fmt`-clean.**
+`get/src/evolver/common.rs:45`, from `79c10aa` — my `best_index` extraction under #51, not yours.
+rustfmt wants the `assert!` wrapped, its arguments exceeding the default `fn_call_width` of 60.
+Noted on GitHub **#56**, which already sweeps those files and is unassigned. Flagging it because
+`traps.md`'s rustfmt entry leans on the tree being clean to make a stray formatting change
+noticeable, and a dirty tree removes that signal.
+
+*#45 · raised 2026-08-10 — Michael, after merging PR #57.*

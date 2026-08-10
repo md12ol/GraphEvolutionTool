@@ -50,8 +50,6 @@
 //! the place to add a new one — not this comment, which cannot be executed and
 //! so cannot be caught going stale.
 
-use std::path::PathBuf;
-
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use toml::Value;
@@ -257,12 +255,12 @@ pub enum PyFitnessConfig {
     #[pyo3(constructor = (sir))]
     EpiLength { sir: PySirParams },
     /// RMSE against a target profile. Minimized.
-    #[pyo3(constructor = (sir, target_profile_path))]
+    #[pyo3(constructor = (sir, target_profile))]
     EpiProfMatch {
         sir: PySirParams,
-        /// File holding the target profile. Stored, never opened here —
-        /// validating a config stays pure (spec §7).
-        target_profile_path: PathBuf,
+        /// The target profile itself, as a Python list of numbers (spec §8).
+        /// Compared verbatim — see [`crate::config::FitnessConfig`].
+        target_profile: Vec<f64>,
     },
     /// A Python callable registered before the run, via
     /// `GraphEvolver.set_fitness_function`. Its direction is declared at
@@ -427,6 +425,9 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         "min_epidemic_length" => Some("config.fitness.sir.min_epidemic_length"),
         "max_epidemic_retries" => Some("config.fitness.sir.max_epidemic_retries"),
         "patient_zero" => Some("config.fitness.sir.patient_zero"),
+        // On the objective itself rather than the shared SIR block — only
+        // `epi_prof_match` has one.
+        "target_profile" => Some("config.fitness.target_profile"),
         _ => None,
     }
 }
@@ -621,22 +622,18 @@ impl PyFitnessConfig {
             }
             PyFitnessConfig::EpiProfMatch {
                 sir,
-                target_profile_path,
+                target_profile,
             } => {
                 table.insert(
                     "type".to_string(),
                     Value::String("epi_prof_match".to_string()),
                 );
                 sir.flatten_into(&mut table)?;
-                // `display()` rather than `to_string_lossy()`: a path that is
-                // not valid UTF-8 cannot be written into a TOML string at all,
-                // and lossy replacement would silently point at a file that
-                // does not exist. Non-UTF-8 paths are out of scope until a
-                // config carries one.
-                table.insert(
-                    "target_profile_path".to_string(),
-                    Value::String(target_profile_path.display().to_string()),
-                );
+                let mut profile = Vec::with_capacity(target_profile.len());
+                for value in target_profile {
+                    profile.push(Value::Float(*value));
+                }
+                table.insert("target_profile".to_string(), Value::Array(profile));
             }
             PyFitnessConfig::Python() => {
                 table.insert("type".to_string(), Value::String("python".to_string()));
@@ -862,15 +859,15 @@ mod tests {
 
         config.fitness = PyFitnessConfig::EpiProfMatch {
             sir: sir.clone(),
-            target_profile_path: PathBuf::from("Profiles/Profile3.dat"),
+            target_profile: vec![0.0, 2.5, 7.0, 1.25],
         };
         match round_trip(&config).fitness {
             FitnessConfig::EpiProfMatch {
                 sir,
-                target_profile_path,
+                target_profile,
             } => {
                 assert_sir(&sir, 0.05, 30, Some(7), 1, 9);
-                assert_eq!(target_profile_path, PathBuf::from("Profiles/Profile3.dat"));
+                assert_eq!(target_profile, vec![0.0, 2.5, 7.0, 1.25]);
             }
             other => panic!("expected epi_prof_match, got {other:?}"),
         }
