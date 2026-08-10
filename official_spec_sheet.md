@@ -254,7 +254,7 @@ worse because it stays silently comparable.
 ### 5.1 Where the conversion happens — one gate, named `express_and_score`
 
 ```
-common::express_and_score(population, context, fitness) -> (Vec<Graph>, Vec<f64>)
+common::express_and_score(batch, context, fitness) -> (Vec<Graph>, Vec<f64>)
 ```
 
 Expresses every genome in parallel, scores the batch, and **applies the direction conversion
@@ -271,7 +271,7 @@ is not converging.
 It is also the `NaN` gate above. Orientation and rejection share one door by design.
 
 **Invariant: the engine never calls `Fitness::evaluate` or `Fitness::evaluate_batch`
-directly.** `express_and_score` is the sole path from a population to a set of fitnesses —
+directly.** `express_and_score` is the sole path from a batch of genomes to a set of fitnesses —
 generational scoring, steady-state child scoring, everything. The two trait methods exist to be
 *implemented* by an objective and to be *called by* `express_and_score`, never by the engine.
 
@@ -331,7 +331,7 @@ both ways, and the entire design is about calling it in exactly two places.
                        Fitness::evaluate  →  1470.0
                                    │
   ══════════════ common::express_and_score ══════════════════════════════
-     express population in parallel  ·  score the batch
+     express the batch in parallel  ·  score the batch
      reject NaN  ·  ORIENT — the one and only flip inward
                                    │
                           1470.0  ──→  −1470.0

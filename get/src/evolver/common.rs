@@ -183,7 +183,7 @@ where
 
 /// Express every genome against the shared context and score the whole batch,
 /// returning the expressed graphs alongside their fitnesses. Index `i` of both
-/// vectors refers to `population[i]`.
+/// vectors refers to `batch[i]`.
 ///
 /// The returned fitnesses are **oriented**: lower is better, whatever the
 /// objective's own direction. This is the one place that conversion happens, so
@@ -192,8 +192,8 @@ where
 /// # This is the engine's sole scoring entry
 ///
 /// **The engine never calls [`Fitness::evaluate`] or
-/// [`Fitness::evaluate_batch`] directly.** Every path from a population to a
-/// set of fitnesses goes through here — generational scoring, steady-state child
+/// [`Fitness::evaluate_batch`] directly.** Every path from a batch of genomes
+/// to a set of fitnesses goes through here — generational scoring, steady-state child
 /// scoring, the final outcome, all of it. Those two trait methods exist to be
 /// *implemented* by an objective and *called by this function*.
 ///
@@ -211,7 +211,7 @@ where
 ///
 /// Both doors are the same door by design. This is also why the alternative — a
 /// direction-aware comparator — was rejected: it needs the direction at every
-/// comparison site, and a missed one is invisible. Scoring the whole population
+/// comparison site, and a missed one is invisible. Scoring the whole batch
 /// in one place is what lets "exactly once" be *guaranteed* rather than
 /// remembered. Spec §5.1.
 ///
@@ -228,7 +228,7 @@ where
 /// If the objective returns `NaN` for any individual — see
 /// [`crate::fitness::Direction::orient`].
 pub fn express_and_score<G, F>(
-    population: &[G],
+    batch: &[G],
     context: &G::Context,
     fitness: &F,
 ) -> (Vec<Graph>, Vec<f64>)
@@ -237,7 +237,7 @@ where
     F: Fitness,
 {
     // Expression is parallel; `Genome::Context: Send + Sync` exists for this.
-    let graphs: Vec<Graph> = population.par_iter().map(|g| g.express(context)).collect();
+    let graphs: Vec<Graph> = batch.par_iter().map(|g| g.express(context)).collect();
 
     let direction = fitness.direction();
     let fitnesses = fitness
@@ -521,7 +521,7 @@ mod tests {
     }
 
     #[test]
-    fn express_and_score_of_an_empty_population_yields_empty_vectors() {
+    fn express_and_score_of_an_empty_batch_yields_empty_vectors() {
         let (graphs, fitnesses) =
             express_and_score::<IndexGenome, _>(&[], &(), &NodeCount(Direction::Minimize));
         assert!(graphs.is_empty());
