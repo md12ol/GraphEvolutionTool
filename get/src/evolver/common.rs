@@ -36,6 +36,26 @@ pub(super) fn rank(fitnesses: &[f64], a: usize, b: usize) -> Ordering {
     fitnesses[a].total_cmp(&fitnesses[b]).then(a.cmp(&b))
 }
 
+/// Index of the best individual in `fitnesses`, ties broken by lower index.
+///
+/// The same ordering as [`rank`], applied across the whole slice. Both evolvers
+/// need this to package their outcome, so it lives here rather than being
+/// written twice.
+///
+/// Panics if `fitnesses` is empty. Both callers construct a non-empty
+/// population and never shrink it, so an empty slice is a bug, not an input.
+pub(super) fn best_index(fitnesses: &[f64]) -> usize {
+    assert!(!fitnesses.is_empty(), "cannot pick a best of no individuals");
+
+    let mut best = 0;
+    for candidate in 1..fitnesses.len() {
+        if rank(fitnesses, candidate, best) == Ordering::Less {
+            best = candidate;
+        }
+    }
+    best
+}
+
 impl Selection {
     /// Select `count` parents, sampling **with** replacement — the same
     /// individual may be returned more than once. Callers needing distinct
