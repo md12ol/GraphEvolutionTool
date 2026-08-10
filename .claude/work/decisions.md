@@ -1701,3 +1701,15 @@ either: it *adds* a naming claim rather than subtracting a falsehood.
 **Affects:** `get/src/evolver/common.rs`, `/official_spec_sheet.md` §5.1. `collab.md` #41 asks
 James to acknowledge; the PR body repeats it.
 *Recorded 2026-08-10 22:15 — Michael, pending James's acknowledgement in `collab.md` #41.*
+
+## Task complete: rename-evaluate-batch — 2026-08-10
+Issue #52 closed. PR #54 merged to `main` at `260f541` (2026-08-10T20:21:36Z), carrying both agreed
+renames (`evaluate_population`→`evaluate_batch`, `SirRun`→`Epidemic`) and the third,
+out-of-scope-but-isolated rename (`express_and_score`'s `population`→`batch`, `8a8ed1b`). Verified
+on `main` post-merge: `grep -rn 'evaluate_population\|SirRun' get/src/ official_spec_sheet.md`
+empty, 213 tests green. See `work/archive/2026-08_rename-evaluate-batch/` for the full plan and
+history. Carried forward, not resolved: `collab.md` #41 still awaits James's acknowledgement of the
+out-of-scope commit, and #40 awaits his acknowledgement of the `/done` push-behaviour change;
+neither blocks this task's own close. `hotfixes.md`'s `python_fitness` suppression and the parked
+`sda.rs` cargo-doc warning both pre-date this task and are unaffected by its close.
+*Recorded 2026-08-10 — Michael, at the `/done rename-evaluate-batch` gate.*
