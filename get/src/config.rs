@@ -331,10 +331,8 @@ impl Config {
     /// Runs before anything is built — no population, no graph — so everything
     /// downstream may assume a valid config.
     ///
-    /// Two things it deliberately does not do: it never opens
-    /// `target_profile_path` (validating a config stays pure, and the file's
-    /// format is unsettled — `collab.md` item 24), and it does not check the
-    /// base graph, which belongs to `set_base_graph`.
+    /// One thing it deliberately does not do: it does not check the base
+    /// graph, which belongs to `set_base_graph`.
     pub fn validate(&self) -> Result<(), ConfigError> {
         self.validate_top_level()?;
         self.validate_evolution_and_selection()?;
@@ -484,6 +482,32 @@ impl Config {
                     self.network_size
                 ),
             ));
+        }
+
+        // `epi_prof_match` only — the other two epidemic objectives have no
+        // target, and `python` returned above. These two checks are the reason
+        // the profile is an inline config value rather than a path: a file
+        // could not be checked here without `validate` opening it (spec §8).
+        if let FitnessConfig::EpiProfMatch { target_profile, .. } = &self.fitness {
+            if target_profile.is_empty() {
+                return Err(invalid(
+                    "target_profile",
+                    "must have at least one element; there is nothing to score against otherwise",
+                ));
+            }
+
+            // NaN and both infinities. RMSE against any of them is NaN or
+            // infinite for *every* individual, so the whole population scores
+            // identically and selection stops discriminating — a run that
+            // looks like it is working and is searching nothing.
+            for (index, value) in target_profile.iter().enumerate() {
+                if !value.is_finite() {
+                    return Err(invalid(
+                        "target_profile",
+                        format!("element {index} is {value}; every element must be finite"),
+                    ));
+                }
+            }
         }
         Ok(())
     }
@@ -978,6 +1002,40 @@ num_epidemics  = 30
         config_with_fitness(&format!("{SIR_BASE}patient_zero = 99\n"))
             .validate()
             .expect("the last node is a legal patient zero");
+    }
+
+    /// An otherwise-valid `epi_prof_match` config carrying the given profile,
+    /// written as TOML so the array goes through deserialization first.
+    fn config_with_profile(profile: &str) -> Config {
+        config_with_fitness(&format!(
+            "[fitness]\ntype = \"epi_prof_match\"\ninfection_rate = 0.05\nnum_epidemics = 30\n\
+             target_profile = {profile}\n"
+        ))
+    }
+
+    #[test]
+    fn an_empty_target_profile_is_rejected() {
+        assert_eq!(
+            validation_field(&config_with_profile("[]")),
+            "target_profile"
+        );
+    }
+
+    #[test]
+    fn a_non_finite_target_profile_element_is_rejected() {
+        // All three of TOML's non-finite floats, each in second position so the
+        // check is seen to scan past the first element.
+        for profile in ["[1.0, nan]", "[1.0, inf]", "[1.0, -inf]"] {
+            assert_eq!(
+                validation_field(&config_with_profile(profile)),
+                "target_profile",
+                "{profile} should be rejected"
+            );
+        }
+
+        config_with_profile("[0.0, 2.5, 7.0]")
+            .validate()
+            .expect("a finite profile is legal");
     }
 
     #[test]

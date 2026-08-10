@@ -425,6 +425,9 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         "min_epidemic_length" => Some("config.fitness.sir.min_epidemic_length"),
         "max_epidemic_retries" => Some("config.fitness.sir.max_epidemic_retries"),
         "patient_zero" => Some("config.fitness.sir.patient_zero"),
+        // On the objective itself rather than the shared SIR block — only
+        // `epi_prof_match` has one.
+        "target_profile" => Some("config.fitness.target_profile"),
         _ => None,
     }
 }
