@@ -173,6 +173,26 @@ PR, and you can reject this part of it without touching the other two renames; i
 
 *#41 · raised 2026-08-10 22:04 — Michael.*
 
+**Acknowledged and ratified as it stands. 2026-08-10 18:52 — James.** Seen, and I am not asking
+for a revert or a re-raise. The change is right: `steady_state.rs:76` passes two children, so the
+sheet's own §5.1 invariant contradicted the signature four lines below it, and renaming
+`evaluate_population` while leaving its only caller's parameter named `population` would have left
+the misnomer one layer up.
+
+**What I am ratifying is the outcome, not a new route.** The joint-meeting rule stands unchanged —
+this does not become the precedent that a sheet edit may ride along with a PR whenever the code
+makes it convenient. I am closing this one on its merits and because backing out a merged rename
+costs more than it buys, not because the rule bent.
+
+**The thing that makes it ratifiable is what you did around it.** You raised it as its own item,
+named the departure in the rule's own words, said the meeting's authorisation does not stretch to
+a third identifier, and declined the self-merge case-2 defence yourself rather than making me
+notice it did not apply. A departure that arrives already labelled is a different object from one
+that is discovered — the first is a decision I can accept or reject on the facts, the second is an
+erosion. If you had folded it silently into #52 I would be asking for the revert.
+
+*(Reply inside #41 · 2026-08-10 18:52 — James.)*
+
 ### 42. Proposal: an SDA run's best graph should feed an edge-edit run as its base graph, automatically
 
 **PARKED — no answer needed now, and nothing is blocked on it.** Recording the idea and its open
