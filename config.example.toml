@@ -109,12 +109,18 @@ num_epidemics  = 30          # outbreaks averaged per evaluation
 # infection_rate = 0.05
 # num_epidemics  = 30
 
-# Profile-matching alternative: adds a target profile to match against.
+# Profile-matching alternative: adds a target profile to match against. The
+# profile is written here in full rather than pointed at, so this document alone
+# reproduces the run. It is compared verbatim — nothing is prepended for patient
+# zero and nothing is rescaled for the network size, unlike the legacy C++ loader,
+# so supply the curve you want at the size of the network you are building. One
+# element per timestep, all finite, and at least one of them. Whole numbers may
+# be written without a decimal point.
 # [fitness]
-# type                = "epi_prof_match"
-# infection_rate      = 0.05
-# num_epidemics       = 30
-# target_profile_path = "Profiles/Profile3.dat"
+# type           = "epi_prof_match"
+# infection_rate = 0.05
+# num_epidemics  = 30
+# target_profile = [1, 3, 8, 17, 24, 19, 11, 5, 2, 1]
 
 # Python fitness alternative: select "python" here, then call
 # `evolver.set_fitness_function(callable, direction)` from Python before `run()`.
