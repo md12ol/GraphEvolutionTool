@@ -1713,3 +1713,32 @@ out-of-scope commit, and #40 awaits his acknowledgement of the `/done` push-beha
 neither blocks this task's own close. `hotfixes.md`'s `python_fitness` suppression and the parked
 `sda.rs` cargo-doc warning both pre-date this task and are unaffected by its close.
 *Recorded 2026-08-10 — Michael, at the `/done rename-evaluate-batch` gate.*
+
+## 2026-08-10 23:05 — Michael — `common::best_index` panics on an empty slice; #51 didn't ask for that
+**Chose:** `best_index` (`get/src/evolver/common.rs:47`) opens with
+`assert!(!fitnesses.is_empty(), "cannot pick a best of no individuals")`, and both callers carry a
+comment stating why the slice can't in fact be empty at their call site.
+**Why:** steady-state's old `.expect("population is non-empty, checked at construction")` was the
+*only* thing guarding that case there. Generational's old loop had no such guard — an empty slice
+would have silently returned `0`, then panicked one statement later on `self.population[0]` with a
+message that says nothing about why. Moving both call sites onto one shared function meant picking
+one behaviour; keeping the named panic was the smaller surprise, and it's the same reasoning
+`generation_stats` already applies (`common.rs:289`, rejects an empty population).
+**Rejected:** dropping the guard entirely to keep the extraction a pure move — decided against,
+since it would have made generational's failure mode *worse* than before the refactor, not neutral.
+**Affects:** `get/src/evolver/common.rs`, `get/src/evolver/generational.rs`,
+`get/src/evolver/steady_state.rs`. Flagged in PR #55's body for review rather than assumed.
+**Supersedes:** nothing — #51's own decisions.md entry described only the move, not this guard.
+*Recorded 2026-08-10 23:05 — Michael, closing out `mdube_best_index`.*
+
+## Task complete: best-index — 2026-08-10
+Issue #51 closed. PR #55 merged by James (`9274f38`, 2026-08-10T20:52:32Z) — a real review merge,
+not a self-merge. `common::best_index` replaces the two evolvers' separate argmin spellings;
+verified on `main` post-merge: `cargo test -p get` 213/213, `cargo clippy -p get --all-targets --
+-D warnings` clean. See `work/archive/2026-08_best-index/` for the full plan and history. One
+follow-up filed rather than left loose: GitHub **#56** (sweep both evolvers for further divergence
+and duplication), staged behind the currently open issue set, unassigned; raised as `collab.md`
+**#43**. Carried forward, not resolved by this task: the `python_fitness` `#[allow(dead_code)]`
+hotfix (blocked on #26), the parked `sda.rs` cargo-doc warning, and `collab.md` #40/#41 still
+awaiting James's acknowledgement — all pre-date this task.
+*Recorded 2026-08-10 — Michael, at the `/done best-index` gate.*

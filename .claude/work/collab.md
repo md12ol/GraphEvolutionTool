@@ -224,6 +224,50 @@ reasoning is fresh, not to interrupt #52 or #51.
 
 *#42 · raised 2026-08-10 22:06 — Michael.*
 
+### 43. Filed GitHub #56 — sweep both evolvers for divergent style and duplication. Open to anyone
+
+**FYI, one open assignment, and one question for the next meeting.** No action needed before then.
+
+**Why it exists.** #51 (PR #55) fixed **one** instance of a pattern rather than the pattern: both
+`outcome` methods asked "which index is best?" in two different spellings, and the fix was a shared
+`common::best_index`. While scoping that, it became clear the rest of `generational.rs` and
+`steady_state.rs` have the same problem in several more places, so #56 is the sweep — two questions
+asked of every parallel site: same job different spelling (unify, or say why not), and same job
+same code (delete one, share it).
+
+**It is evidenced, not a hunch.** Verified with `diff` on `mdube_best_index` at `79c10aa`:
+`best_of` and `mean_of` are **byte-identical** twenty-line test helpers in both files; so is the
+four-line `ChaCha8Rng` rationale comment in both `run` methods; so is the `Self { .. }` tail of
+both `new` methods. The `Val` and `Walk` test genomes match in code and differ only in doc-comment
+wording. History row 0 is seeded by the same two lines but from `run` in one file and `evolve` in
+the other, for no stated reason.
+
+**The standard #56 asks for already exists in these files**, so nobody needs to invent one — both
+`new` methods do it right, and generational's says outright that it has no matching
+`population.len() >= tournament_size` assert *because* it samples with replacement. Either match,
+or differ and say why, naming the other file.
+
+**Assignment: deliberately unassigned, take it if you want it.** It has no dependency on either
+owner's in-flight work once the current set is clear.
+
+**Sequencing: staged behind the currently open issues**, per Michael's instruction when raising it.
+It is a cleanup pass over two files that several open issues still touch, so rebasing it underneath
+them is wasted work. It also wants to land after PR #55, which removes one divergence it would
+otherwise re-find. Note this staging lives only in #56's body and in this item — no milestone was
+set, since Projects (classic) is half-broken on this repo and a label would have been invented as a
+side effect.
+
+**The meeting question — this is the part that needs both of us.** Are there other file pairs that
+deserve their own version of #56? The two evolvers are the obvious pair because they implement one
+trait two ways, but they are unlikely to be the only place two files answer one question in two
+spellings. Two candidates to discuss, neither investigated: `config.rs` and `py_config.rs`, which
+mirror each other by construction — though `traps.md` already records that the mirror **cannot** be
+collapsed, which makes it a different situation worth separating explicitly rather than assuming;
+and the genome implementations. If the answer is yes, each pair gets its own issue rather than
+being folded into #56.
+
+*#43 · raised 2026-08-10 22:55 — Michael.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
