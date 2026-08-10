@@ -1658,3 +1658,46 @@ plus the batch/reading renames and the `mix_seed` derivation landed; see
 blocked on Michael's #26) and the `sda.rs` doc-link warning pre-date this task and are unaffected
 by its close.
 *Recorded 2026-08-10 — Michael, at the `/done epidemic-seeding` gate.*
+
+## 2026-08-10 22:14 — Michael & James — The sheet's scoring unit is a batch, and `SirRun` becomes `Epidemic`
+**Chose:** `Fitness::evaluate_population` → `evaluate_batch`, and `SirRun` → `Epidemic`, in the
+code and in `official_spec_sheet.md` (lines 225, 273, 372, 847, 857) in the same PR. Agreed at the
+joint meeting of 2026-08-09, raised as `collab.md` #32 on 2026-08-07, filed as GitHub #52.
+**Why:** the unit the engine scores together is a **batch whose size varies** — generational hands
+over a whole population per cycle, steady-state hands over exactly two children per mating event
+(`steady_state.rs:76`) plus its starting population once. "Population" was accurate in one of the
+three cases and "generation" in none of the steady-state ones, while §5.1's prose already called it
+a "batch scorer"; only the identifier disagreed. Separately, `sir_sim` returns **one epidemic**,
+but "run" already meant a replicate (`run_seed`, §8.1) *and* the `GraphEvolver::run` API call —
+three senses of one word, with `run_seed` sitting four lines from `|run| run.spread` in the same
+impl block. No type named `Epidemic` existed, so the name was free.
+**Rejected:** leaving the sheet and code to disagree until a later cleanup — the sheet is the
+authority, so a rename that stops at the code makes the sheet wrong rather than stale. Also
+rejected: renaming `sir.rs`'s test-local `run` bindings in a separate pass, since the helper rename
+forced the loop bindings anyway and a half-swept file reads worse than either end state.
+**Affects:** `get/src/fitness.rs`, `get/src/sir.rs`, `get/src/evolver/common.rs`,
+`get/src/evolver/generational.rs`, `get/src/lib.rs`, `/official_spec_sheet.md` §3/§5.1/§8. Commit
+`028440a` on `mdube_rename_evaluate_batch`.
+*Recorded 2026-08-10 22:14 — Michael, stamped for both owners under the 2026-08-09 joint meeting
+that agreed it.*
+
+## 2026-08-10 22:15 — Michael — `express_and_score`'s `population` parameter becomes `batch`, outside the agreed scope
+**Chose:** rename the parameter to `batch` and amend three further sheet lines (257, 274, 334),
+committed separately as `8a8ed1b` so it can be dropped without disturbing the entry above.
+**Why:** it is the same defect one layer up. `express_and_score` is the sole caller of the method
+just renamed to `evaluate_batch`, and §5.1's invariant sentence had it mapping "a population" to
+fitnesses four lines above a signature that `steady_state.rs:76` contradicts on every mating event
+by passing two children. Renaming the trait method while leaving its only caller's parameter named
+`population` fixes the identifier and leaves the misnomer sitting on top of it.
+**Rejected:** renaming the code only and leaving the sheet — `CLAUDE.md` resolves a code/sheet
+disagreement in the sheet's favour, so that tells the next reader the code is wrong. Also rejected:
+deferring it to its own issue, which was the agent's recommendation; Michael judged the round-trip
+not worth it for a parameter name already being renamed one call away.
+**This entry deliberately carries ONE name, unlike the entry above.** The 2026-08-09 meeting
+enumerated and verified **two** identifiers, so its authorisation does not stretch to a third, and
+`CLAUDE.md` says the sheet changes only at a joint meeting — "not by one owner mid-task". This is a
+departure, recorded as one rather than dressed as covered. It is not the self-merge rule's case 2
+either: it *adds* a naming claim rather than subtracting a falsehood.
+**Affects:** `get/src/evolver/common.rs`, `/official_spec_sheet.md` §5.1. `collab.md` #41 asks
+James to acknowledge; the PR body repeats it.
+*Recorded 2026-08-10 22:15 — Michael, pending James's acknowledgement in `collab.md` #41.*
