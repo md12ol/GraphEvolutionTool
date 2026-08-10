@@ -5,7 +5,7 @@
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use super::common::{Selection, express_and_score, generation_stats, mutate_child, rank};
+use super::common::{Selection, best_index, express_and_score, generation_stats, mutate_child};
 use super::{
     EvolutionOutcome, Evolver, GenerationStats, SharedEvolutionContext, SteadyStateContext,
 };
@@ -128,9 +128,9 @@ impl<G: Genome> SteadyStateEvolver<G> {
     /// `direction` is stored, not applied: the outcome leaves here in engine
     /// orientation and the boundary converts it once. Spec §5.1.
     fn outcome(&mut self, fitnesses: &[f64], direction: Direction) -> EvolutionOutcome<G> {
-        let best = (0..fitnesses.len())
-            .min_by(|&a, &b| rank(fitnesses, a, b))
-            .expect("population is non-empty, checked at construction");
+        // Non-empty: the population is built at construction and every mating
+        // event replaces two members rather than removing any.
+        let best = best_index(fitnesses);
         let best_genome = self.population[best].clone();
 
         EvolutionOutcome {

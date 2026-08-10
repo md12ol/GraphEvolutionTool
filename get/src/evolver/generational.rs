@@ -1,12 +1,10 @@
 //! Generational evolution: the whole population is replaced each generation,
 //! carrying a configurable number of elites forward unchanged.
 
-use std::cmp::Ordering;
-
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use super::common::{express_and_score, generation_stats, mutate_child, rank};
+use super::common::{best_index, express_and_score, generation_stats, mutate_child, rank};
 use super::{
     EvolutionOutcome, Evolver, GenerationStats, GenerationalContext, SharedEvolutionContext,
 };
@@ -120,12 +118,7 @@ impl<G: Genome> GenerationalEvolver<G> {
     ) -> EvolutionOutcome<G> {
         // Non-empty: `new` asserts elite_count is smaller than the population,
         // and generational replaces individuals without ever removing one.
-        let mut best = 0;
-        for candidate in 1..fitnesses.len() {
-            if rank(fitnesses, candidate, best) == Ordering::Less {
-                best = candidate;
-            }
-        }
+        let best = best_index(fitnesses);
 
         EvolutionOutcome {
             best_genome: self.population[best].clone(),
@@ -321,7 +314,7 @@ mod tests {
 
         // Overridden rather than left to the default rayon fan-out: the counter
         // has to advance once per generation, not once per individual.
-        fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+        fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
             let pass = self.passes.fetch_add(1, AtomicOrdering::SeqCst);
             let bump = (pass % 2) as f64;
 
