@@ -1140,3 +1140,73 @@ James recorded in his task marker exactly, so nothing regressed across the merge
 open (#15, #24, #23), and the archive README is written at archive time and never revisited. Without
 a note on this side, the durable record of #23 would say "awaiting Michael" forever.
 *Merge record · #23 / PR #45 · recorded 2026-08-06 16:06 — Michael.*
+
+## 2026-08-07 — Michael — Batch seeds derive via `mix_seed` (SplitMix64), not a `ChaCha8Rng` stream position
+**Chose:** `EpidemicScorer::next_batch_seed` derives a batch's seed as `mix_seed(run_seed, counter)`,
+a small hand-written SplitMix64 (add a constant, two multiply-xor-shift rounds) — resolving the open
+question left in `work/current/plan.md` when task 2 was written.
+**Why:** the plan's own framing was right — the mix is O(1) and stateless, where a `ChaCha8Rng`
+positioned by stream offset would need either replaying `counter` draws (O(counter) per batch, and
+counter grows for the whole run) or an RNG whose implementation exposes exact stream positioning,
+which `ChaCha8Rng` does not promise to keep stable across `rand_chacha` releases. §8.1 forbids
+`run_seed ^ counter` outright — neighbouring run seeds would collide across batch numbers — and
+explicitly permits `hash(master, i)` as the equivalent of its stream scheme applied to a different
+index; SplitMix64 is exactly that hash.
+**Rejected:** `run_seed ^ counter` (ruled out by §8.1, tested directly by
+`neighbouring_run_seeds_share_no_batch_seed`); seeding a persistent `ChaCha8Rng` from `run_seed` and
+drawing `counter` throwaway values to reach the batch's position (correct but O(counter) and adds a
+second RNG type to the file for no benefit over the mix).
+**Affects:** `get/src/fitness.rs` `mix_seed`, `EpidemicScorer::next_batch_seed`.
+*#18 seed-derivation · recorded 2026-08-07 16:15 — Michael.*
+
+## 2026-08-07 — Michael — `EpidemicScorer` restructured from five methods to two; per-objective duplication kept, not abstracted away
+**Chose:** `EpidemicScorer` exposes only `next_batch_seed` and `mean_batch`. `mean`,
+`mean_with_seed` and the `pub fn epidemics` pass-through — all added earlier the same session while
+building #18 — were removed the same day, once the shape was actually exercised: each was a
+single-caller wrapper, and three independent reviews (spawned specifically to test whether the
+seeding machinery's complexity was forced or accidental) agreed the wrapper layer was the accidental
+part. A second change went the opposite direction: a private `reading` method was added to each
+objective to write its epidemic-reading closure once instead of twice, then **reverted the same
+session** on request — the indirection cost more clarity for a reader copying an objective to write
+their own than the duplication it removed. The duplication is guarded instead, by the test
+`both_entry_points_use_the_same_reading`.
+**Why:** the seeding mechanism itself (the atomic counter, `mix_seed`, one-seed-per-batch) was
+independently confirmed to match the standard common-random-numbers pattern from
+simulation-optimization and the counter-based-RNG recommendation for parallel reproducibility — not
+a workaround, and left untouched. What was ours to simplify was the code built *around* it, and the
+three-review process (constraint audit, refactor proposals, external-convention comparison) is what
+distinguished the two rather than guessing. The `reading`-method reversal is a readability call, not
+a correctness one: `evaluate` calling `self.evaluate_population(...)` directly was rejected earlier
+in the same pass as a latent stack overflow, since the trait's *default* `evaluate_population` calls
+`evaluate`.
+**Rejected:** a blanket `EpidemicReading` trait enforcing the once-written reading at compile time —
+works, but hides the real per-objective code inside a blanket impl, which cuts against the project's
+"one owner does not write Rust" convention harder than three inline duplicated closures do.
+**Affects:** `get/src/fitness.rs`, all of `EpidemicScorer` and the three `Fitness` impls.
+**Detail:** `collab.md` #33 carries the full before/after and the sub-agent findings.
+*#18 scorer-restructure · recorded 2026-08-07 16:15 — Michael.*
+
+## 2026-08-07 — Michael — "Batch of graphs" and "original / oriented" are now `fitness.rs`'s stated vocabulary
+**Chose:** two terminology fixes, both comment-and-naming only, no logic change. First, "batch of
+graphs" is now used throughout for what an evolver scores in one call — explicitly **not** "a
+generation", since a steady-state mating event scores only its two new children (§6.3), so
+"generation" was wrong for the majority of a steady-state run. Second, `Direction`'s doc now names
+**original** (what an objective's `evaluate` returns) and **oriented** (the value after
+`Direction::orient`) as the two forms every fitness number takes, replacing prose that only
+described a sign flip without naming either side of it.
+**Why:** raised independently by the user reading the file cold and getting the wrong mental model
+each time ("do these mean the same thing?", "is the run seed shared throughout evolution?") — both
+questions the old wording invited. "Oriented" was picked over an invented term ("comparison score")
+specifically because `orient`, "engine orientation" and `best_fitness_engine` already exist in
+`evolver/common.rs`, `evolver/mod.rs` and `evolver/steady_state.rs` and in the sheet itself — so
+`fitness.rs` now explains the codebase's existing vocabulary rather than adding a competing one.
+**Rejected:** "comparison score" as the paired term for "original" — accurate, but would have made
+`fitness.rs` the one file not using the word every other file and the sheet already use for the same
+concept.
+**Affects:** `get/src/fitness.rs` (comments and test names only); `get/src/sir.rs` — separately,
+`batch_epidemics`/`SirBatchParams`/`coin_flip_batch` renamed to `simulate_epidemics`/
+`SirSampleParams`/`coin_flip_sample`, since "batch" there meant one graph's epidemics, colliding with
+the graphs-batch sense everywhere else. Neither `sir.rs` name is in the sheet, so no meeting was
+needed. `Fitness::evaluate_population` and `SirRun` have the same defect and **are** sheet-named —
+left untouched, raised as `collab.md` #32 for the joint meeting instead of changed here.
+*#18 vocabulary · recorded 2026-08-07 16:15 — Michael.*
