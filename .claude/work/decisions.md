@@ -1647,3 +1647,14 @@ and were verified on this machine across the task's sessions; see the archived
 (`python_fitness`'s `#[allow(dead_code)]`, blocked on #26) pre-date this task and are unaffected by
 its close.
 *Recorded 2026-08-09 23:46 — James, at the `/done pyconfig` gate.*
+
+## Task complete: epidemic-seeding — 2026-08-10
+Issue #18 done and merged (PR #47, `fd0d920`) since 2026-08-07; this task's own record was only
+archived now, on a session that did no new work — `/load` re-verified every claim in the prior
+handoff against the repo (main clean at `d28dcc3`) and found nothing had moved. All planned tasks
+plus the batch/reading renames and the `mix_seed` derivation landed; see
+`work/archive/2026-08_epidemic-seeding/` for the full plan and history. No open items at the
+`/done` gate — the one carry-forward hotfix (`python_fitness`'s `#[allow(dead_code)]`, James's,
+blocked on Michael's #26) and the `sda.rs` doc-link warning pre-date this task and are unaffected
+by its close.
+*Recorded 2026-08-10 — Michael, at the `/done epidemic-seeding` gate.*
