@@ -518,7 +518,7 @@ mod tests {
             // the erasure keeps both the callable and its direction.
             assert_eq!(objective.direction(), Direction::Maximize);
             assert_eq!(
-                objective.evaluate_population(&[Graph::new(3, 1), Graph::new(7, 1)]),
+                objective.evaluate_batch(&[Graph::new(3, 1), Graph::new(7, 1)]),
                 vec![3.0, 7.0],
             );
         });

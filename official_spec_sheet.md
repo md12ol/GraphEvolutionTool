@@ -222,7 +222,7 @@ mutation semantics the way they did on selection sampling (§6.1).
 pub trait Fitness: Send + Sync {
     fn evaluate(&self, graph: &Graph) -> f64;
     fn direction(&self) -> Direction { Direction::Minimize }
-    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> { /* par_iter over evaluate */ }
+    fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> { /* par_iter over evaluate */ }
 }
 ```
 
@@ -270,7 +270,7 @@ is not converging.
 
 It is also the `NaN` gate above. Orientation and rejection share one door by design.
 
-**Invariant: the engine never calls `Fitness::evaluate` or `Fitness::evaluate_population`
+**Invariant: the engine never calls `Fitness::evaluate` or `Fitness::evaluate_batch`
 directly.** `express_and_score` is the sole path from a population to a set of fitnesses —
 generational scoring, steady-state child scoring, everything. The two trait methods exist to be
 *implemented* by an objective and to be *called by* `express_and_score`, never by the engine.
@@ -369,7 +369,7 @@ The expensive part is the epidemic; all three objectives want the same one. So a
 simulation returns everything, and each objective is a thin reading of it.
 
 ```
-sir_sim(graph, params, rng) -> SirRun { length, spread, profile }
+sir_sim(graph, params, rng) -> Epidemic { length, spread, profile }
 ```
 
 **The model:** SIR with a **one-timestep infectious period**. A node infected during a step
@@ -844,7 +844,7 @@ Three things this requires, each of which fails silently if missed:
 - **A forwarding `impl Fitness for Box<dyn Fitness>`**, which must live beside the trait — the
   orphan rule rejects it anywhere else. It exists because `Evolver::run<F>` needs `F: Fitness`, and
   a `Box` holding a `Fitness` is not itself one until said so.
-- **Every method forwarded, including the defaulted ones.** `direction` and `evaluate_population`
+- **Every method forwarded, including the defaulted ones.** `direction` and `evaluate_batch`
   both have defaults, so omitting either compiles and is wrong: a maximizing objective would
   silently run backwards, and a Python objective would fall back to the per-individual rayon
   fan-out that §8 exists to prevent.
@@ -854,7 +854,7 @@ Three things this requires, each of which fails silently if missed:
 
 The cost is one virtual call per `evaluate`, which for an SIR objective sits behind
 `num_epidemics` complete epidemics and is not measurable. The parallelism story is unaffected:
-`dyn Fitness` is `Send + Sync`, and `PyFitness`'s `evaluate_population` override is still reached
+`dyn Fitness` is `Send + Sync`, and `PyFitness`'s `evaluate_batch` override is still reached
 through the box.
 
 **The entry point cannot be generic.** `#[pyclass]` types cannot carry a type parameter, but

@@ -11,7 +11,7 @@
 //! If it is epidemic-based, build it on [`EpidemicScorer`] rather than calling
 //! the simulator yourself. It owns the seeding, and wrong seeding still gives
 //! numbers that look fine. Copy the shape [`EpiSpread`] uses: both `evaluate`
-//! and `evaluate_population` hand [`EpidemicScorer::mean_batch`] a closure
+//! and `evaluate_batch` hand [`EpidemicScorer::mean_batch`] a closure
 //! saying what to read off one epidemic. Write the same reading in both — the
 //! test `both_entry_points_use_the_same_reading` fails if they disagree.
 
@@ -22,7 +22,7 @@ use pyo3::prelude::*;
 use rayon::prelude::*;
 
 use crate::graph::Graph;
-use crate::sir::{SirRun, SirSampleParams, simulate_epidemics};
+use crate::sir::{Epidemic, SirSampleParams, simulate_epidemics};
 
 /// Whether an objective wants its value small or large.
 ///
@@ -88,7 +88,7 @@ impl Direction {
 /// orients it exactly once, so logs and results keep the original units and
 /// sign (§5.1). See [`Direction`] for both terms.
 ///
-/// `Send + Sync` lets [`Fitness::evaluate_population`] score across rayon
+/// `Send + Sync` lets [`Fitness::evaluate_batch`] score across rayon
 /// threads.
 ///
 /// # Implement these; never call them
@@ -128,7 +128,7 @@ pub trait Fitness: Send + Sync {
     /// **A stochastic objective must override it as well** — the default would
     /// draw a fresh seed per graph, so scores would no longer be comparable
     /// inside the batch. See [`EpidemicScorer::mean_batch`].
-    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+    fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
         graphs
             .par_iter()
             .map(|graph| self.evaluate(graph))
@@ -151,7 +151,7 @@ pub trait Fitness: Send + Sync {
 ///
 /// This is the whole point, and both omissions **compile**:
 ///
-/// - **`evaluate_population`** — without it the box inherits the trait's
+/// - **`evaluate_batch`** — without it the box inherits the trait's
 ///   default, which fans out over rayon and calls `evaluate` per graph. For a
 ///   Python objective that means one GIL acquisition per individual from inside
 ///   a rayon closure, which is what [`PyFitness`]'s batching exists to prevent —
@@ -173,8 +173,8 @@ impl Fitness for Box<dyn Fitness> {
         (**self).direction()
     }
 
-    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
-        (**self).evaluate_population(graphs)
+    fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
+        (**self).evaluate_batch(graphs)
     }
 }
 
@@ -266,7 +266,7 @@ impl EpidemicScorer {
     ///
     /// This is the only way to score, and the method that delivers common
     /// random numbers. It is why each objective overrides
-    /// [`Fitness::evaluate_population`] rather than letting the default score
+    /// [`Fitness::evaluate_batch`] rather than letting the default score
     /// the graphs one at a time (§5.2). It does not care whether the batch is
     /// a generation, a starting population or two steady-state children — a
     /// single graph is a batch of one.
@@ -277,7 +277,7 @@ impl EpidemicScorer {
     /// The division is safe — [`simulate_epidemics`] rejects an empty batch.
     ///
     /// `+ Sync` on `read` lets rayon call it from several threads at once.
-    pub fn mean_batch(&self, graphs: &[Graph], read: impl Fn(&SirRun) -> f64 + Sync) -> Vec<f64> {
+    pub fn mean_batch(&self, graphs: &[Graph], read: impl Fn(&Epidemic) -> f64 + Sync) -> Vec<f64> {
         // Taken once, here, and handed to every graph below. Taking it inside
         // the loop would give each graph its own dice — see next_batch_seed.
         let seed = self.next_batch_seed();
@@ -334,7 +334,7 @@ impl Fitness for EpiSpread {
             .mean_batch(slice::from_ref(graph), |epidemic| epidemic.spread as f64)[0]
     }
 
-    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+    fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
         self.scorer
             .mean_batch(graphs, |epidemic| epidemic.spread as f64)
     }
@@ -367,7 +367,7 @@ impl Fitness for EpiLength {
             .mean_batch(slice::from_ref(graph), |epidemic| epidemic.length as f64)[0]
     }
 
-    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+    fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
         self.scorer
             .mean_batch(graphs, |epidemic| epidemic.length as f64)
     }
@@ -422,7 +422,7 @@ impl EpiProfMatch {
     /// that ends early is penalised for the whole remaining target, while one
     /// that outlasts the target is not penalised at all. This rewards matching
     /// *or exceeding* the tail. See `decisions.md` 2026-08-04 18:13.
-    fn rmse(&self, epidemic: &SirRun) -> f64 {
+    fn rmse(&self, epidemic: &Epidemic) -> f64 {
         let mut total = 0.0;
 
         for (step, wanted) in self.target.iter().enumerate() {
@@ -443,7 +443,7 @@ impl Fitness for EpiProfMatch {
             .mean_batch(slice::from_ref(graph), |epidemic| self.rmse(epidemic))[0]
     }
 
-    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+    fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
         self.scorer
             .mean_batch(graphs, |epidemic| self.rmse(epidemic))
     }
@@ -475,7 +475,7 @@ impl Fitness for EpiProfMatch {
 /// remains.
 ///
 /// **And "slower" understates it: the per-graph arrangement deadlocks.**
-/// Measured 2026-08-07 by deleting the `evaluate_population` override below and
+/// Measured 2026-08-07 by deleting the `evaluate_batch` override below and
 /// running the batching test. The trait's default then fans out over rayon and
 /// each worker tries to take the GIL, while the calling thread is holding it and
 /// blocking on rayon to finish. The suite hung until it was killed — it did not
@@ -528,8 +528,8 @@ impl PyFitness {
     /// The one call into Python, which both trait methods route through.
     ///
     /// Inherent rather than having [`Fitness::evaluate`] call
-    /// [`Fitness::evaluate_population`] directly: that arrangement is a latent
-    /// stack overflow, because the trait's **default** `evaluate_population`
+    /// [`Fitness::evaluate_batch`] directly: that arrangement is a latent
+    /// stack overflow, because the trait's **default** `evaluate_batch`
     /// calls `evaluate`, so removing the override below turns the pair into
     /// infinite recursion instead of a compile error. Routing both through here
     /// has no cycle to fall into (`collab.md` #33).
@@ -595,7 +595,7 @@ impl Fitness for PyFitness {
         self.direction
     }
 
-    fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+    fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
         self.score_batch(graphs)
     }
 }
@@ -622,7 +622,7 @@ mod tests {
             Direction::Maximize
         }
 
-        fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+        fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
             self.batch_sizes
                 .lock()
                 .expect("no test panics while holding this")
@@ -641,7 +641,7 @@ mod tests {
         // The erasure in §8 hands the evolver a Box<dyn Fitness>. If the
         // forwarding impl omits either defaulted method it still compiles, and
         // both failures are silent: `direction` reports Minimize and runs the
-        // search backwards, `evaluate_population` reverts to the per-graph
+        // search backwards, `evaluate_batch` reverts to the per-graph
         // rayon fan-out that deadlocks a Python objective.
         let batch_sizes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let boxed: Box<dyn Fitness> = Box::new(Instrumented {
@@ -655,7 +655,7 @@ mod tests {
         );
 
         let graphs = [path_graph(3), path_graph(5), path_graph(8)];
-        let scores = boxed.evaluate_population(&graphs);
+        let scores = boxed.evaluate_batch(&graphs);
 
         assert_eq!(scores, vec![3.0, 5.0, 8.0]);
         assert_eq!(
@@ -732,7 +732,7 @@ def fitness(batch):
             let (objective, module) = py_objective(py, COUNTING_OBJECTIVE, Direction::Minimize);
             let graphs = [path_graph(3), path_graph(5), path_graph(8)];
 
-            let scores = objective.evaluate_population(&graphs);
+            let scores = objective.evaluate_batch(&graphs);
 
             assert_eq!(scores, vec![3.0, 5.0, 8.0], "scores, in population order");
             assert_eq!(
@@ -761,7 +761,7 @@ def fitness(batch):
         Python::attach(|py| {
             let (objective, module) = py_objective(py, COUNTING_OBJECTIVE, Direction::Minimize);
 
-            assert!(objective.evaluate_population(&[]).is_empty());
+            assert!(objective.evaluate_batch(&[]).is_empty());
             assert!(
                 batch_sizes(py, &module).is_empty(),
                 "an empty batch should not have called Python at all",
@@ -853,7 +853,7 @@ def fitness(batch):
 ";
         Python::attach(|py| {
             let (objective, _module) = py_objective(py, RETURNS_ONE, Direction::Minimize);
-            objective.evaluate_population(&[path_graph(3), path_graph(4)]);
+            objective.evaluate_batch(&[path_graph(3), path_graph(4)]);
         });
     }
 
@@ -866,7 +866,7 @@ def fitness(batch):
 ";
         Python::attach(|py| {
             let (objective, _module) = py_objective(py, RETURNS_NAN, Direction::Minimize);
-            objective.evaluate_population(&[path_graph(3), path_graph(4)]);
+            objective.evaluate_batch(&[path_graph(3), path_graph(4)]);
         });
     }
 
@@ -971,7 +971,7 @@ def fitness(batch):
     #[test]
     fn epi_prof_match_minimizes_and_scores_an_exact_match_at_zero() {
         let objective = profile_match(vec![1.0, 1.0, 1.0, 0.0]);
-        let epidemic = SirRun {
+        let epidemic = Epidemic {
             length: 3,
             spread: 3,
             profile: vec![1, 1, 1, 0],
@@ -985,7 +985,7 @@ def fitness(batch):
     #[test]
     fn an_epidemic_shorter_than_the_target_is_penalised_for_the_remainder() {
         let objective = profile_match(vec![1.0, 2.0, 3.0, 4.0]);
-        let epidemic = SirRun {
+        let epidemic = Epidemic {
             length: 1,
             spread: 3,
             profile: vec![1, 2],
@@ -999,12 +999,12 @@ def fitness(batch):
     #[test]
     fn an_epidemic_longer_than_the_target_is_not_penalised_for_the_surplus() {
         let objective = profile_match(vec![1.0, 2.0]);
-        let short = SirRun {
+        let short = Epidemic {
             length: 1,
             spread: 3,
             profile: vec![1, 2],
         };
-        let long = SirRun {
+        let long = Epidemic {
             length: 3,
             spread: 17,
             profile: vec![1, 2, 5, 9, 0],
@@ -1023,7 +1023,7 @@ def fitness(batch):
         // One matching step out of four. Were the divisor the overlap (2), the
         // score would be sqrt(9/2); it must be sqrt(9/4).
         let objective = profile_match(vec![1.0, 3.0, 0.0, 0.0]);
-        let epidemic = SirRun {
+        let epidemic = Epidemic {
             length: 1,
             spread: 1,
             profile: vec![1, 0],
@@ -1147,7 +1147,7 @@ def fitness(batch):
     fn one_batch_ticks_the_counter_once_however_many_graphs_it_holds() {
         let objective = EpiSpread::new(chancy_batch(3), 2026);
 
-        objective.evaluate_population(&identical_batch(6));
+        objective.evaluate_batch(&identical_batch(6));
 
         assert_eq!(
             objective.scorer.batches_scored.load(Ordering::Relaxed),
@@ -1169,7 +1169,7 @@ def fitness(batch):
         );
     }
 
-    /// `evaluate` and `evaluate_population` must read the same thing off an
+    /// `evaluate` and `evaluate_batch` must read the same thing off an
     /// epidemic. Each objective writes that reading twice, once per entry
     /// point, so this is what catches the two drifting apart.
     #[test]
@@ -1181,19 +1181,19 @@ def fitness(batch):
         let spread = EpiSpread::new(certain_batch(2), 7);
         assert_eq!(
             spread.evaluate(&graph),
-            spread.evaluate_population(slice::from_ref(&graph))[0],
+            spread.evaluate_batch(slice::from_ref(&graph))[0],
         );
 
         let length = EpiLength::new(certain_batch(2), 7);
         assert_eq!(
             length.evaluate(&graph),
-            length.evaluate_population(slice::from_ref(&graph))[0],
+            length.evaluate_batch(slice::from_ref(&graph))[0],
         );
 
         let profile = profile_match(vec![1.0, 1.0, 1.0]);
         assert_eq!(
             profile.evaluate(&graph),
-            profile.evaluate_population(slice::from_ref(&graph))[0],
+            profile.evaluate_batch(slice::from_ref(&graph))[0],
         );
     }
 
@@ -1201,7 +1201,7 @@ def fitness(batch):
     fn every_graph_in_one_batch_faces_the_same_epidemics() {
         let objective = EpiSpread::new(chancy_batch(3), 2026);
 
-        let scores = objective.evaluate_population(&identical_batch(6));
+        let scores = objective.evaluate_batch(&identical_batch(6));
 
         for (i, score) in scores.iter().enumerate() {
             assert_eq!(
@@ -1216,8 +1216,8 @@ def fitness(batch):
         let objective = EpiSpread::new(chancy_batch(3), 2026);
         let population = identical_batch(6);
 
-        let first = objective.evaluate_population(&population);
-        let second = objective.evaluate_population(&population);
+        let first = objective.evaluate_batch(&population);
+        let second = objective.evaluate_batch(&population);
 
         assert_ne!(
             first, second,
@@ -1241,8 +1241,8 @@ def fitness(batch):
 
         for batch in 0..5 {
             assert_eq!(
-                first_run.evaluate_population(&population),
-                second_run.evaluate_population(&population),
+                first_run.evaluate_batch(&population),
+                second_run.evaluate_batch(&population),
                 "batch {batch} differed between two runs at the same seed",
             );
         }
@@ -1253,8 +1253,8 @@ def fitness(batch):
         let this_seed = EpiSpread::new(chancy_batch(3), 4242);
         let other_seed = EpiSpread::new(chancy_batch(3), 4243);
         assert_ne!(
-            this_seed.evaluate_population(&population),
-            other_seed.evaluate_population(&population),
+            this_seed.evaluate_batch(&population),
+            other_seed.evaluate_batch(&population),
         );
     }
 

@@ -321,7 +321,7 @@ mod tests {
 
         // Overridden rather than left to the default rayon fan-out: the counter
         // has to advance once per generation, not once per individual.
-        fn evaluate_population(&self, graphs: &[Graph]) -> Vec<f64> {
+        fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
             let pass = self.passes.fetch_add(1, AtomicOrdering::SeqCst);
             let bump = (pass % 2) as f64;
 
