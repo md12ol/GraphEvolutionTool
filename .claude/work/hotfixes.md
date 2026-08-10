@@ -74,3 +74,8 @@ everybody's problem to remove.
   `main` post-merge (PR #55, `9274f38`): attribute still present at `get/src/lib.rs:303`, GitHub
   #26 still `open`, unstarted. #51 only touched `get/src/evolver/`, nowhere near `lib.rs`.
   Unchanged since last check.
+- **Last checked:** 2026-08-10 — James, at the `/done` gate for inline-target-profile (#53).
+  Verified on `main` post-merge (PR #57, `f25e33d`): `#[allow(dead_code)]` still present directly
+  above `pub(crate) fn python_fitness` at `get/src/lib.rs:303-304`, and GitHub #26 is still `open`,
+  `unstarted` per `gh issue view 26 --json state`. #53 only touched `config.rs` and `py_config.rs`,
+  nowhere near `lib.rs`. Unchanged since last check.

@@ -1763,3 +1763,20 @@ and duplication), staged behind the currently open issue set, unassigned; raised
 hotfix (blocked on #26), the parked `sda.rs` cargo-doc warning, and `collab.md` #40/#41 still
 awaiting James's acknowledgement — all pre-date this task.
 *Recorded 2026-08-10 — Michael, at the `/done best-index` gate.*
+
+## Task complete: inline-target-profile — 2026-08-10
+GitHub #53 closed via PR #57 (`f25e33d`, Michael's merge, reviewed on Windows). All nine planned
+tasks landed and were verified on this machine across the task's two sessions: `cargo test -p get`
+216/216, `cargo clippy -p get --all-targets -- -D warnings` clean, and `examples/config_builder.py`
+run end to end against a `maturin develop` build. See `work/archive/2026-08_inline-target-profile/`
+for the full plan and history.
+
+One follow-up filed rather than left loose: GitHub **#58** (reject `target_profile` under a
+non-`epi_prof_match` objective — spec §8's contradiction clause, same flatten mechanism as the
+stray `seed` check in #25), assigned to James, raised as `collab.md` **#45**. Carried forward, not
+resolved by this task: the `python_fitness` `#[allow(dead_code)]` hotfix (blocked on #26), the
+parked `sda.rs` cargo-doc warning, `main`'s `cargo fmt -- --check` failure in `common.rs:45`
+(pre-existing, tracked on GitHub #56, not this task's to fix), and `collab.md` #44's open
+sub-question to Michael about where the practice-binding-skill-body rule gets written down — all
+pre-date this task or fall outside it.
+*Recorded 2026-08-10 — James, at the `/done inline-target-profile` gate.*
