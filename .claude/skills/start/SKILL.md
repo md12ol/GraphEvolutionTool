@@ -86,6 +86,13 @@ Rules for tasks:
 - One task = one reviewable change. If a task can't be verified on its own, split it.
 - **Every task needs a `Verify by:`** — the command, the log line, the run to inspect. A task with
   no verification method is how `[~]` items become false `[x]`s later.
+- **If any task touches something `CLAUDE.md`'s routing table sends through a PR, the first task is
+  creating the branch** — `<owner>_<short-description>`, with `git rev-parse --abbrev-ref HEAD` as
+  its `Verify by:`. Added 2026-08-10 after a plan for GitHub #26 was written with six tasks under
+  `get/src/` and no branch among them (`collab.md` #44). The routing table is not the mechanism that
+  catches this: it governs *committing*, which is several steps later, so a plan can satisfy every
+  rule in this file and still put the first edit on `main`. The branch is part of the task list or it
+  is nowhere.
 - Say where it happens (`path` or `path:line`) whenever it's known.
 - **Keep it short.** An open item is ≤ 20 lines; reasoning goes in `decisions.md` and the plan links
   to it. The plan is a task list, not a record — see `CLAUDE.md`, "Keep `plan.md` small".

@@ -66,3 +66,11 @@ everybody's problem to remove.
   post-merge (PR #49, `0731aa6`): the attribute is **still present** at `get/src/lib.rs:303`, and
   `Remove when:` is still **not met** — GitHub #26 is `open`, unstarted. #29 deliberately did not
   touch it (it only builds the config front end, not `run`'s dispatch). Unchanged since last check.
+- **Last checked:** 2026-08-10 — Michael, at the `/done` gate for rename-evaluate-batch (#52).
+  Verified on `main` post-merge (PR #54, `260f541`): attribute still present at
+  `get/src/lib.rs:303`, GitHub #26 still `open`, unstarted. #52 was a pure rename and did not touch
+  `python_fitness`. Unchanged since last check.
+- **Last checked:** 2026-08-10 — Michael, at the `/done` gate for best-index (#51). Verified on
+  `main` post-merge (PR #55, `9274f38`): attribute still present at `get/src/lib.rs:303`, GitHub
+  #26 still `open`, unstarted. #51 only touched `get/src/evolver/`, nowhere near `lib.rs`.
+  Unchanged since last check.

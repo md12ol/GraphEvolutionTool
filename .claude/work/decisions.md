@@ -1141,6 +1141,75 @@ open (#15, #24, #23), and the archive README is written at archive time and neve
 a note on this side, the durable record of #23 would say "awaiting Michael" forever.
 *Merge record · #23 / PR #45 · recorded 2026-08-06 16:06 — Michael.*
 
+## 2026-08-07 — Michael — Batch seeds derive via `mix_seed` (SplitMix64), not a `ChaCha8Rng` stream position
+**Chose:** `EpidemicScorer::next_batch_seed` derives a batch's seed as `mix_seed(run_seed, counter)`,
+a small hand-written SplitMix64 (add a constant, two multiply-xor-shift rounds) — resolving the open
+question left in `work/current/plan.md` when task 2 was written.
+**Why:** the plan's own framing was right — the mix is O(1) and stateless, where a `ChaCha8Rng`
+positioned by stream offset would need either replaying `counter` draws (O(counter) per batch, and
+counter grows for the whole run) or an RNG whose implementation exposes exact stream positioning,
+which `ChaCha8Rng` does not promise to keep stable across `rand_chacha` releases. §8.1 forbids
+`run_seed ^ counter` outright — neighbouring run seeds would collide across batch numbers — and
+explicitly permits `hash(master, i)` as the equivalent of its stream scheme applied to a different
+index; SplitMix64 is exactly that hash.
+**Rejected:** `run_seed ^ counter` (ruled out by §8.1, tested directly by
+`neighbouring_run_seeds_share_no_batch_seed`); seeding a persistent `ChaCha8Rng` from `run_seed` and
+drawing `counter` throwaway values to reach the batch's position (correct but O(counter) and adds a
+second RNG type to the file for no benefit over the mix).
+**Affects:** `get/src/fitness.rs` `mix_seed`, `EpidemicScorer::next_batch_seed`.
+*#18 seed-derivation · recorded 2026-08-07 16:15 — Michael.*
+
+## 2026-08-07 — Michael — `EpidemicScorer` restructured from five methods to two; per-objective duplication kept, not abstracted away
+**Chose:** `EpidemicScorer` exposes only `next_batch_seed` and `mean_batch`. `mean`,
+`mean_with_seed` and the `pub fn epidemics` pass-through — all added earlier the same session while
+building #18 — were removed the same day, once the shape was actually exercised: each was a
+single-caller wrapper, and three independent reviews (spawned specifically to test whether the
+seeding machinery's complexity was forced or accidental) agreed the wrapper layer was the accidental
+part. A second change went the opposite direction: a private `reading` method was added to each
+objective to write its epidemic-reading closure once instead of twice, then **reverted the same
+session** on request — the indirection cost more clarity for a reader copying an objective to write
+their own than the duplication it removed. The duplication is guarded instead, by the test
+`both_entry_points_use_the_same_reading`.
+**Why:** the seeding mechanism itself (the atomic counter, `mix_seed`, one-seed-per-batch) was
+independently confirmed to match the standard common-random-numbers pattern from
+simulation-optimization and the counter-based-RNG recommendation for parallel reproducibility — not
+a workaround, and left untouched. What was ours to simplify was the code built *around* it, and the
+three-review process (constraint audit, refactor proposals, external-convention comparison) is what
+distinguished the two rather than guessing. The `reading`-method reversal is a readability call, not
+a correctness one: `evaluate` calling `self.evaluate_population(...)` directly was rejected earlier
+in the same pass as a latent stack overflow, since the trait's *default* `evaluate_population` calls
+`evaluate`.
+**Rejected:** a blanket `EpidemicReading` trait enforcing the once-written reading at compile time —
+works, but hides the real per-objective code inside a blanket impl, which cuts against the project's
+"one owner does not write Rust" convention harder than three inline duplicated closures do.
+**Affects:** `get/src/fitness.rs`, all of `EpidemicScorer` and the three `Fitness` impls.
+**Detail:** `collab.md` #33 carries the full before/after and the sub-agent findings.
+*#18 scorer-restructure · recorded 2026-08-07 16:15 — Michael.*
+
+## 2026-08-07 — Michael — "Batch of graphs" and "original / oriented" are now `fitness.rs`'s stated vocabulary
+**Chose:** two terminology fixes, both comment-and-naming only, no logic change. First, "batch of
+graphs" is now used throughout for what an evolver scores in one call — explicitly **not** "a
+generation", since a steady-state mating event scores only its two new children (§6.3), so
+"generation" was wrong for the majority of a steady-state run. Second, `Direction`'s doc now names
+**original** (what an objective's `evaluate` returns) and **oriented** (the value after
+`Direction::orient`) as the two forms every fitness number takes, replacing prose that only
+described a sign flip without naming either side of it.
+**Why:** raised independently by the user reading the file cold and getting the wrong mental model
+each time ("do these mean the same thing?", "is the run seed shared throughout evolution?") — both
+questions the old wording invited. "Oriented" was picked over an invented term ("comparison score")
+specifically because `orient`, "engine orientation" and `best_fitness_engine` already exist in
+`evolver/common.rs`, `evolver/mod.rs` and `evolver/steady_state.rs` and in the sheet itself — so
+`fitness.rs` now explains the codebase's existing vocabulary rather than adding a competing one.
+**Rejected:** "comparison score" as the paired term for "original" — accurate, but would have made
+`fitness.rs` the one file not using the word every other file and the sheet already use for the same
+concept.
+**Affects:** `get/src/fitness.rs` (comments and test names only); `get/src/sir.rs` — separately,
+`batch_epidemics`/`SirBatchParams`/`coin_flip_batch` renamed to `simulate_epidemics`/
+`SirSampleParams`/`coin_flip_sample`, since "batch" there meant one graph's epidemics, colliding with
+the graphs-batch sense everywhere else. Neither `sir.rs` name is in the sheet, so no meeting was
+needed. `Fitness::evaluate_population` and `SirRun` have the same defect and **are** sheet-named —
+left untouched, raised as `collab.md` #32 for the joint meeting instead of changed here.
+*#18 vocabulary · recorded 2026-08-07 16:15 — Michael.*
 ## 2026-08-06 21:03 — James — Generational's `outcome` takes the winner's graph from the final scoring pass
 **Chose:** `GenerationalEvolver::outcome` moves the winner's `Graph` out of the vector
 `express_and_score` returned on the last generation (`graphs.swap_remove(best)`), rather than
@@ -1578,3 +1647,119 @@ and were verified on this machine across the task's sessions; see the archived
 (`python_fitness`'s `#[allow(dead_code)]`, blocked on #26) pre-date this task and are unaffected by
 its close.
 *Recorded 2026-08-09 23:46 — James, at the `/done pyconfig` gate.*
+
+## 2026-08-10 17:48 — James — A stray `seed` on a Python-built config raises `AttributeError`, so collab #25's reply is wrong
+**Measured, not reasoned.** `config.seed = 42` on a `get.Config` raises
+`AttributeError: 'builtins.Config' object has no attribute 'seed'`. Run on this machine against a
+`maturin develop` build of `de970ea` plus the working-tree changes for GitHub #53.
+**What this corrects:** the reply inside `collab.md` #25 (2026-08-06 00:10, mine) says "a config
+built in Python can still carry a stray `seed` attribute harmlessly", and offers that as a caveat
+to be careful about in #26. It is false, and it is false in the *safe* direction: every `#[pyclass]`
+in `py_config.rs` is declared without `dict`, so Python cannot set an attribute the class does not
+declare. There is no silent carry to worry about. The 2026-08-09 meeting suspected this (meeting
+note 3) but nobody had executed it; this is the execution.
+**Why the original claim was plausible.** The mechanism it described is real and unchanged — the
+`seed` check in `Config::from_toml_str` reads raw TOML text, and the Python front end has no text to
+read, so the *check* genuinely does not run there. The error came from assuming that leaves the
+Python side unguarded. A different guard covers it: pyo3's default attribute model, which is not
+part of the config schema at all and so was not in view when the caveat was written.
+**No code changes.** Both front ends reject a stray `seed`, by unrelated mechanisms, and the
+narrowness recorded in `decisions.md` 2026-08-06 00:07 still holds for every *other* unknown
+`[fitness]` key on the TOML side. What changes is one sentence of guidance for #26.
+**Affects:** nothing in `get/src/`. Supersedes one claim in `collab.md` #25's reply; GitHub #26
+should not plan around a Python-side stray-attribute hazard, because there is not one.
+*#25 · recorded 2026-08-10 17:48 — James, while closing out GitHub #53's task list.*
+## Task complete: epidemic-seeding — 2026-08-10
+Issue #18 done and merged (PR #47, `fd0d920`) since 2026-08-07; this task's own record was only
+archived now, on a session that did no new work — `/load` re-verified every claim in the prior
+handoff against the repo (main clean at `d28dcc3`) and found nothing had moved. All planned tasks
+plus the batch/reading renames and the `mix_seed` derivation landed; see
+`work/archive/2026-08_epidemic-seeding/` for the full plan and history. No open items at the
+`/done` gate — the one carry-forward hotfix (`python_fitness`'s `#[allow(dead_code)]`, James's,
+blocked on Michael's #26) and the `sda.rs` doc-link warning pre-date this task and are unaffected
+by its close.
+*Recorded 2026-08-10 — Michael, at the `/done epidemic-seeding` gate.*
+
+## 2026-08-10 22:14 — Michael & James — The sheet's scoring unit is a batch, and `SirRun` becomes `Epidemic`
+**Chose:** `Fitness::evaluate_population` → `evaluate_batch`, and `SirRun` → `Epidemic`, in the
+code and in `official_spec_sheet.md` (lines 225, 273, 372, 847, 857) in the same PR. Agreed at the
+joint meeting of 2026-08-09, raised as `collab.md` #32 on 2026-08-07, filed as GitHub #52.
+**Why:** the unit the engine scores together is a **batch whose size varies** — generational hands
+over a whole population per cycle, steady-state hands over exactly two children per mating event
+(`steady_state.rs:76`) plus its starting population once. "Population" was accurate in one of the
+three cases and "generation" in none of the steady-state ones, while §5.1's prose already called it
+a "batch scorer"; only the identifier disagreed. Separately, `sir_sim` returns **one epidemic**,
+but "run" already meant a replicate (`run_seed`, §8.1) *and* the `GraphEvolver::run` API call —
+three senses of one word, with `run_seed` sitting four lines from `|run| run.spread` in the same
+impl block. No type named `Epidemic` existed, so the name was free.
+**Rejected:** leaving the sheet and code to disagree until a later cleanup — the sheet is the
+authority, so a rename that stops at the code makes the sheet wrong rather than stale. Also
+rejected: renaming `sir.rs`'s test-local `run` bindings in a separate pass, since the helper rename
+forced the loop bindings anyway and a half-swept file reads worse than either end state.
+**Affects:** `get/src/fitness.rs`, `get/src/sir.rs`, `get/src/evolver/common.rs`,
+`get/src/evolver/generational.rs`, `get/src/lib.rs`, `/official_spec_sheet.md` §3/§5.1/§8. Commit
+`028440a` on `mdube_rename_evaluate_batch`.
+*Recorded 2026-08-10 22:14 — Michael, stamped for both owners under the 2026-08-09 joint meeting
+that agreed it.*
+
+## 2026-08-10 22:15 — Michael — `express_and_score`'s `population` parameter becomes `batch`, outside the agreed scope
+**Chose:** rename the parameter to `batch` and amend three further sheet lines (257, 274, 334),
+committed separately as `8a8ed1b` so it can be dropped without disturbing the entry above.
+**Why:** it is the same defect one layer up. `express_and_score` is the sole caller of the method
+just renamed to `evaluate_batch`, and §5.1's invariant sentence had it mapping "a population" to
+fitnesses four lines above a signature that `steady_state.rs:76` contradicts on every mating event
+by passing two children. Renaming the trait method while leaving its only caller's parameter named
+`population` fixes the identifier and leaves the misnomer sitting on top of it.
+**Rejected:** renaming the code only and leaving the sheet — `CLAUDE.md` resolves a code/sheet
+disagreement in the sheet's favour, so that tells the next reader the code is wrong. Also rejected:
+deferring it to its own issue, which was the agent's recommendation; Michael judged the round-trip
+not worth it for a parameter name already being renamed one call away.
+**This entry deliberately carries ONE name, unlike the entry above.** The 2026-08-09 meeting
+enumerated and verified **two** identifiers, so its authorisation does not stretch to a third, and
+`CLAUDE.md` says the sheet changes only at a joint meeting — "not by one owner mid-task". This is a
+departure, recorded as one rather than dressed as covered. It is not the self-merge rule's case 2
+either: it *adds* a naming claim rather than subtracting a falsehood.
+**Affects:** `get/src/evolver/common.rs`, `/official_spec_sheet.md` §5.1. `collab.md` #41 asks
+James to acknowledge; the PR body repeats it.
+*Recorded 2026-08-10 22:15 — Michael, pending James's acknowledgement in `collab.md` #41.*
+
+## Task complete: rename-evaluate-batch — 2026-08-10
+Issue #52 closed. PR #54 merged to `main` at `260f541` (2026-08-10T20:21:36Z), carrying both agreed
+renames (`evaluate_population`→`evaluate_batch`, `SirRun`→`Epidemic`) and the third,
+out-of-scope-but-isolated rename (`express_and_score`'s `population`→`batch`, `8a8ed1b`). Verified
+on `main` post-merge: `grep -rn 'evaluate_population\|SirRun' get/src/ official_spec_sheet.md`
+empty, 213 tests green. See `work/archive/2026-08_rename-evaluate-batch/` for the full plan and
+history. Carried forward, not resolved: `collab.md` #41 still awaits James's acknowledgement of the
+out-of-scope commit, and #40 awaits his acknowledgement of the `/done` push-behaviour change;
+neither blocks this task's own close. `hotfixes.md`'s `python_fitness` suppression and the parked
+`sda.rs` cargo-doc warning both pre-date this task and are unaffected by its close.
+*Recorded 2026-08-10 — Michael, at the `/done rename-evaluate-batch` gate.*
+
+## 2026-08-10 23:05 — Michael — `common::best_index` panics on an empty slice; #51 didn't ask for that
+**Chose:** `best_index` (`get/src/evolver/common.rs:47`) opens with
+`assert!(!fitnesses.is_empty(), "cannot pick a best of no individuals")`, and both callers carry a
+comment stating why the slice can't in fact be empty at their call site.
+**Why:** steady-state's old `.expect("population is non-empty, checked at construction")` was the
+*only* thing guarding that case there. Generational's old loop had no such guard — an empty slice
+would have silently returned `0`, then panicked one statement later on `self.population[0]` with a
+message that says nothing about why. Moving both call sites onto one shared function meant picking
+one behaviour; keeping the named panic was the smaller surprise, and it's the same reasoning
+`generation_stats` already applies (`common.rs:289`, rejects an empty population).
+**Rejected:** dropping the guard entirely to keep the extraction a pure move — decided against,
+since it would have made generational's failure mode *worse* than before the refactor, not neutral.
+**Affects:** `get/src/evolver/common.rs`, `get/src/evolver/generational.rs`,
+`get/src/evolver/steady_state.rs`. Flagged in PR #55's body for review rather than assumed.
+**Supersedes:** nothing — #51's own decisions.md entry described only the move, not this guard.
+*Recorded 2026-08-10 23:05 — Michael, closing out `mdube_best_index`.*
+
+## Task complete: best-index — 2026-08-10
+Issue #51 closed. PR #55 merged by James (`9274f38`, 2026-08-10T20:52:32Z) — a real review merge,
+not a self-merge. `common::best_index` replaces the two evolvers' separate argmin spellings;
+verified on `main` post-merge: `cargo test -p get` 213/213, `cargo clippy -p get --all-targets --
+-D warnings` clean. See `work/archive/2026-08_best-index/` for the full plan and history. One
+follow-up filed rather than left loose: GitHub **#56** (sweep both evolvers for further divergence
+and duplication), staged behind the currently open issue set, unassigned; raised as `collab.md`
+**#43**. Carried forward, not resolved by this task: the `python_fitness` `#[allow(dead_code)]`
+hotfix (blocked on #26), the parked `sda.rs` cargo-doc warning, and `collab.md` #40/#41 still
+awaiting James's acknowledgement — all pre-date this task.
+*Recorded 2026-08-10 — Michael, at the `/done best-index` gate.*

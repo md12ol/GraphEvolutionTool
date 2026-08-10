@@ -1,6 +1,6 @@
 # Issues — work not yet in the tracker
 
-**8 issues are open in the tracker** at `md12ol/GraphEvolutionTool` — that is the source of
+**7 issues are open in the tracker** at `md12ol/GraphEvolutionTool` — that is the source of
 truth for anything filed. `gh issue list` is the way to read them; they are deliberately **not**
 mirrored here, because a second copy drifts and this file would become a private fork of the
 tracker.
@@ -27,6 +27,11 @@ as **#34** (assigned to md12ol), same obligation. Open count refreshed from the 
 was already a stale fork: #52 found occurrences in `lib.rs` and `generational.rs`, and sheet line
 269, that the staged entry did not list. Open count corrected 17 → 8, counted from
 `gh issue list --state open --json number -q 'length'`.*
+
+*Synced 2026-08-10 22:55 — Michael: no staged entry involved this cycle — #51 closed by PR #55's
+merge, and its follow-up sweep went straight to the tracker as **#56** (unassigned) rather than
+being staged here first, since it was already root-caused while scoping #51. Open count 8 → 7,
+recounted the same way.*
 
 ---
 

@@ -107,7 +107,11 @@ pub fn epidemic_seeds(
 /// If `num_epidemics` or `max_epidemic_retries` is zero. Config validation
 /// rejects both (§7), and no epidemics at all would leave the objective averaging
 /// nothing, producing the `NaN` the `Fitness` contract forbids.
-pub fn simulate_epidemics(graph: &Graph, params: &SirSampleParams, batch_seed: u64) -> Vec<SirRun> {
+pub fn simulate_epidemics(
+    graph: &Graph,
+    params: &SirSampleParams,
+    batch_seed: u64,
+) -> Vec<Epidemic> {
     assert!(
         params.num_epidemics > 0,
         "num_epidemics must be at least 1; spec 7 validates this at config load",
@@ -152,7 +156,7 @@ pub fn simulate_epidemics(graph: &Graph, params: &SirSampleParams, batch_seed: u
 /// Everything the three SIR objectives read from one epidemic.
 ///
 /// The epidemic is the expensive part and all three objectives want the same
-/// one, so a single run reports all three readings (spec §5.2).
+/// one, so a single epidemic reports all three readings (spec §5.2).
 ///
 /// The three are consistent by construction: `profile[0]` is patient zero and
 /// the profile ends in a terminating zero, so `spread` is the sum of the
@@ -164,7 +168,7 @@ pub fn simulate_epidemics(graph: &Graph, params: &SirSampleParams, batch_seed: u
 /// comparable with the archived C++ results. See `decisions.md` 2026-08-04
 /// 17:40; the sheet previously specified the other convention.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SirRun {
+pub struct Epidemic {
     /// Timesteps the epidemic occupied, **including** the final one in which
     /// the last infectious node recovers without transmitting.
     pub length: usize,
@@ -206,10 +210,10 @@ enum State {
 // trait object — `?Sized` opts out of Rust's default "must have a known
 // size" requirement, which a trait object doesn't satisfy. Same bound, same
 // reason, on `transmits` below.
-pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) -> SirRun {
+pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) -> Epidemic {
     let num_nodes = graph.num_nodes;
     if num_nodes == 0 {
-        return SirRun {
+        return Epidemic {
             length: 0,
             spread: 0,
             profile: Vec::new(),
@@ -221,7 +225,7 @@ pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) 
         None => rng.random_range(0..num_nodes),
     };
     if patient_zero >= num_nodes {
-        return SirRun {
+        return Epidemic {
             length: 0,
             spread: 0,
             profile: Vec::new(),
@@ -284,7 +288,7 @@ pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) 
         profile.push(currently_infectious);
     }
 
-    SirRun {
+    Epidemic {
         length: profile.len() - 1,
         spread: profile.iter().sum(),
         profile, // shorthand for `profile: profile` — the local var name matches the field name
@@ -329,14 +333,14 @@ mod tests {
             patient_zero: Some(0),
         };
 
-        let run = sir_sim(&graph, &params, &mut rng());
+        let epidemic = sir_sim(&graph, &params, &mut rng());
 
-        assert_eq!(run.profile, vec![1, 1, 1, 1, 1, 1, 0]);
+        assert_eq!(epidemic.profile, vec![1, 1, 1, 1, 1, 1, 0]);
         assert_eq!(
-            run.length, 6,
+            epidemic.length, 6,
             "one step per edge of the path, plus the burnout step",
         );
-        assert_eq!(run.spread, 6, "every node is reached");
+        assert_eq!(epidemic.spread, 6, "every node is reached");
     }
 
     #[test]
@@ -347,14 +351,14 @@ mod tests {
             patient_zero: Some(2),
         };
 
-        let run = sir_sim(&graph, &params, &mut rng());
+        let epidemic = sir_sim(&graph, &params, &mut rng());
 
         assert_eq!(
-            run.length, 1,
+            epidemic.length, 1,
             "spec 5.2: the burnout step counts, so no transmission is length 1",
         );
-        assert_eq!(run.spread, 1, "patient zero alone");
-        assert_eq!(run.profile, vec![1, 0]);
+        assert_eq!(epidemic.spread, 1, "patient zero alone");
+        assert_eq!(epidemic.profile, vec![1, 0]);
     }
 
     #[test]
@@ -365,11 +369,11 @@ mod tests {
             patient_zero: Some(0),
         };
 
-        let run = sir_sim(&graph, &params, &mut rng());
+        let epidemic = sir_sim(&graph, &params, &mut rng());
 
-        assert_eq!(run.length, 1, "same shape as an isolated patient zero");
-        assert_eq!(run.spread, 1);
-        assert_eq!(run.profile, vec![1, 0]);
+        assert_eq!(epidemic.length, 1, "same shape as an isolated patient zero");
+        assert_eq!(epidemic.spread, 1);
+        assert_eq!(epidemic.profile, vec![1, 0]);
     }
 
     #[test]
@@ -384,15 +388,15 @@ mod tests {
             patient_zero: Some(0),
         };
 
-        let run = sir_sim(&graph, &params, &mut rng());
+        let epidemic = sir_sim(&graph, &params, &mut rng());
 
-        assert_eq!(run.spread, 3, "the far triangle is unreachable");
+        assert_eq!(epidemic.spread, 3, "the far triangle is unreachable");
         assert_eq!(
-            run.profile,
+            epidemic.profile,
             vec![1, 2, 0],
             "both neighbours infected at once, then burnout",
         );
-        assert_eq!(run.length, 2);
+        assert_eq!(epidemic.length, 2);
     }
 
     #[test]
@@ -451,8 +455,8 @@ mod tests {
 
         let mut rng = rng();
         for _ in 0..200 {
-            let run = sir_sim(&graph, &params, &mut rng);
-            assert_eq!(run.spread, 1);
+            let epidemic = sir_sim(&graph, &params, &mut rng);
+            assert_eq!(epidemic.spread, 1);
         }
 
         // The draw consumes RNG state, so two epidemics from one generator are
@@ -460,18 +464,23 @@ mod tests {
         let mut first = ChaCha8Rng::seed_from_u64(7);
         let mut second = ChaCha8Rng::seed_from_u64(7);
         let path = path_graph(4);
-        let runs_a: Vec<_> = (0..8)
+        let epidemics_a: Vec<_> = (0..8)
             .map(|_| sir_sim(&path, &params, &mut first))
             .collect();
-        let runs_b: Vec<_> = (0..8)
+        let epidemics_b: Vec<_> = (0..8)
             .map(|_| sir_sim(&path, &params, &mut second))
             .collect();
-        assert_eq!(runs_a, runs_b, "one seed replays the same epidemics");
+        assert_eq!(
+            epidemics_a, epidemics_b,
+            "one seed replays the same epidemics"
+        );
         // At rate 1.0 the whole path is always reached, so `spread` cannot
         // distinguish the draws — `length` is what varies, since it measures
         // the distance from patient zero to the far end.
         assert!(
-            runs_a.iter().any(|run| run.length != runs_a[0].length),
+            epidemics_a
+                .iter()
+                .any(|epidemic| epidemic.length != epidemics_a[0].length),
             "a fresh patient zero should not give identical outbreaks"
         );
     }
@@ -507,7 +516,7 @@ mod tests {
 
     /// The epidemic one pool seed produces — what `simulate_epidemics` must be
     /// shown to have used.
-    fn run_from_seed(graph: &Graph, params: &SirSampleParams, seed: u64) -> SirRun {
+    fn epidemic_from_seed(graph: &Graph, params: &SirSampleParams, seed: u64) -> Epidemic {
         sir_sim(
             graph,
             &params.epidemic,
@@ -532,12 +541,12 @@ mod tests {
         let (graph, params) = coin_flip_sample(4, 1, 5);
         let seeds = epidemic_seeds(2026, params.num_epidemics, params.max_epidemic_retries);
 
-        let runs = simulate_epidemics(&graph, &params, 2026);
+        let epidemics = simulate_epidemics(&graph, &params, 2026);
 
-        assert_eq!(runs.len(), 4, "one run per epidemic");
-        for (epidemic, run) in runs.iter().enumerate() {
-            let expected = run_from_seed(&graph, &params, seeds[slot(&params, epidemic, 0)]);
-            assert_eq!(*run, expected, "epidemic {epidemic} used the wrong draw");
+        assert_eq!(epidemics.len(), 4, "one epidemic per slot");
+        for (index, epidemic) in epidemics.iter().enumerate() {
+            let expected = epidemic_from_seed(&graph, &params, seeds[slot(&params, index, 0)]);
+            assert_eq!(*epidemic, expected, "epidemic {index} used the wrong draw");
         }
     }
 
@@ -548,16 +557,22 @@ mod tests {
         let path = path_graph(5);
         let seeds = epidemic_seeds(4242, params.num_epidemics, params.max_epidemic_retries);
 
-        let pair_runs = simulate_epidemics(&pair, &params, 4242);
-        let path_runs = simulate_epidemics(&path, &params, 4242);
+        let pair_epidemics = simulate_epidemics(&pair, &params, 4242);
+        let path_epidemics = simulate_epidemics(&path, &params, 4242);
 
-        for epidemic in 0..params.num_epidemics {
-            let seed = seeds[slot(&params, epidemic, 0)];
-            assert_eq!(pair_runs[epidemic], run_from_seed(&pair, &params, seed));
-            assert_eq!(path_runs[epidemic], run_from_seed(&path, &params, seed));
+        for index in 0..params.num_epidemics {
+            let seed = seeds[slot(&params, index, 0)];
+            assert_eq!(
+                pair_epidemics[index],
+                epidemic_from_seed(&pair, &params, seed)
+            );
+            assert_eq!(
+                path_epidemics[index],
+                epidemic_from_seed(&path, &params, seed)
+            );
         }
         assert_ne!(
-            pair_runs, path_runs,
+            pair_epidemics, path_epidemics,
             "common dice, but the graphs should still score differently",
         );
     }
@@ -582,14 +597,14 @@ mod tests {
         let (graph, params) = coin_flip_sample(20, 1, 5);
         let seeds = epidemic_seeds(11, params.num_epidemics, params.max_epidemic_retries);
 
-        let runs = simulate_epidemics(&graph, &params, 11);
+        let epidemics = simulate_epidemics(&graph, &params, 11);
 
-        for (epidemic, run) in runs.iter().enumerate() {
-            let first_attempt = run_from_seed(&graph, &params, seeds[slot(&params, epidemic, 0)]);
-            assert_eq!(*run, first_attempt);
+        for (index, epidemic) in epidemics.iter().enumerate() {
+            let first_attempt = epidemic_from_seed(&graph, &params, seeds[slot(&params, index, 0)]);
+            assert_eq!(*epidemic, first_attempt);
         }
         assert!(
-            runs.iter().any(|run| run.length == 1),
+            epidemics.iter().any(|epidemic| epidemic.length == 1),
             "vacuous unless some epidemic was short enough to reject",
         );
     }
@@ -597,24 +612,25 @@ mod tests {
     #[test]
     fn an_unreachable_min_length_exhausts_the_retries_and_keeps_the_last() {
         // `length` is at most 2 here, so nothing ever satisfies 3 and every
-        // epidemic runs all five attempts. The kept run must be the last.
+        // epidemic runs all five attempts. The kept epidemic must be the last.
         let (graph, params) = coin_flip_sample(12, 3, 5);
         let seeds = epidemic_seeds(5150, params.num_epidemics, params.max_epidemic_retries);
 
-        let runs = simulate_epidemics(&graph, &params, 5150);
+        let epidemics = simulate_epidemics(&graph, &params, 5150);
 
-        for (epidemic, run) in runs.iter().enumerate() {
-            let last = slot(&params, epidemic, params.max_epidemic_retries - 1);
-            let final_attempt = run_from_seed(&graph, &params, seeds[last]);
+        for (index, epidemic) in epidemics.iter().enumerate() {
+            let last = slot(&params, index, params.max_epidemic_retries - 1);
+            let final_attempt = epidemic_from_seed(&graph, &params, seeds[last]);
             assert_eq!(
-                *run, final_attempt,
-                "epidemic {epidemic} kept the wrong attempt"
+                *epidemic, final_attempt,
+                "epidemic {index} kept the wrong attempt"
             );
         }
         assert!(
-            runs.iter()
-                .any(|run| run.length < params.min_epidemic_length),
-            "a short run must be kept rather than looped on forever",
+            epidemics
+                .iter()
+                .any(|epidemic| epidemic.length < params.min_epidemic_length),
+            "a short epidemic must be kept rather than looped on forever",
         );
     }
 
@@ -623,24 +639,24 @@ mod tests {
         let (graph, params) = coin_flip_sample(12, 2, 5);
         let seeds = epidemic_seeds(31337, params.num_epidemics, params.max_epidemic_retries);
 
-        let runs = simulate_epidemics(&graph, &params, 31337);
+        let epidemics = simulate_epidemics(&graph, &params, 31337);
 
         let mut stopped_early = 0;
-        for (epidemic, run) in runs.iter().enumerate() {
+        for (index, epidemic) in epidemics.iter().enumerate() {
             // Replay every attempt this epidemic could have made.
             let mut attempts = Vec::new();
             for attempt in 0..params.max_epidemic_retries {
-                let seed = seeds[slot(&params, epidemic, attempt)];
-                attempts.push(run_from_seed(&graph, &params, seed));
+                let seed = seeds[slot(&params, index, attempt)];
+                attempts.push(epidemic_from_seed(&graph, &params, seed));
             }
 
             // It should have kept the first long-enough one, or the last.
             let first_ok = attempts
                 .iter()
-                .position(|run| run.length >= params.min_epidemic_length);
+                .position(|candidate| candidate.length >= params.min_epidemic_length);
             let expected = first_ok.unwrap_or(params.max_epidemic_retries - 1);
 
-            assert_eq!(*run, attempts[expected], "epidemic {epidemic}");
+            assert_eq!(*epidemic, attempts[expected], "epidemic {index}");
             if first_ok == Some(0) {
                 stopped_early += 1;
             }
@@ -676,10 +692,10 @@ mod tests {
             patient_zero: None,
         };
 
-        let run = sir_sim(&graph, &params, &mut rng());
+        let epidemic = sir_sim(&graph, &params, &mut rng());
 
-        assert_eq!(run.length, 0);
-        assert_eq!(run.spread, 0);
-        assert!(run.profile.is_empty());
+        assert_eq!(epidemic.length, 0);
+        assert_eq!(epidemic.spread, 0);
+        assert!(epidemic.profile.is_empty());
     }
 }
