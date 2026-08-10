@@ -33,6 +33,15 @@ merge, and its follow-up sweep went straight to the tracker as **#56** (unassign
 being staged here first, since it was already root-caused while scoping #51. Open count 8 → 7,
 recounted the same way.*
 
+*Withdrawn 2026-08-10 23:20 — James: I staged `best_index`'s `cargo fmt` failure here and Michael
+had already put the same finding on **#56** as a comment, reviewing PR #57 in the same hour. Two
+people root-caused it independently within minutes, which the staging area cannot detect — the
+tracker is the only place that can. Removed under the sync obligation rather than left as a
+private second copy, and his diagnosis supersedes mine on the mechanism: it is rustfmt's
+`fn_call_width` of 60, not the line's overall length, which my entry gave wrongly as 84 characters.
+Open count still 7, recounted the same way; **#58** is assigned to me and not staged here because
+it was filed directly.*
+
 ---
 
 ## Parked — noticed, not investigated
@@ -65,29 +74,3 @@ recounted the same way.*
   is what union merge folds together. See CLAUDE.md, "Formatting for union merge".>
   What's wrong, the mechanism with `path:line`, evidence, how to reproduce, candidate fixes.
 
-
-### Reformat `best_index` — `cargo fmt -- --check` fails on `main`
-- **For:** Michael — it is #51's code, and the fix is one `assert!`.
-- **Project:** `md12ol/GraphEvolutionTool`.
-- **Filed:** not yet — staged 2026-08-10 by James, during GitHub #53.
-- **Component:** `get/src/evolver/common.rs:45`, the `assert!` at the top of `best_index`.
-- **Body:** `cargo fmt -- --check` exits non-zero on `main`, and has since `79c10aa`. rustfmt wants
-  the one-line `assert!(!fitnesses.is_empty(), "cannot pick a best of no individuals");` split
-  across four lines; it is 84 characters, four past the default width. One file, one hunk, no
-  other diff in the workspace.
-- **Why it matters more than its size:** it is a **gate that is now red for everyone**, and the
-  repo treats these as binary — `traps.md` records #25 flipping
-  `cargo clippy -p get --all-targets -- -D warnings` to passing precisely so a single new warning
-  would stand out. A permanently failing `cargo fmt -- --check` trains people to skip the check,
-  and then the next real formatting drift arrives invisibly.
-- **How it was found and bounded:** running the verify sweep for #53 on a branch merged up to
-  `6552d25`. Confirmed **not** mine by running `cargo fmt -- --check` on `79c10aa`, `9274f38` and
-  `6552d25` with #53 not checked out — fails at all three, and was clean at `9bba043` immediately
-  before Michael's push. `79c10aa` is the commit that introduced the `assert!`, inside PR #55.
-- **Fix:** `cargo fmt` and commit; the diff is the four lines rustfmt already prints. Nothing to
-  design.
-- **Relationship to #56:** adjacent but not the same, and it should not wait for it. #56 sweeps
-  `generational.rs` and `steady_state.rs` for divergent style and duplication — a judgement task
-  over two other files. This is a mechanical reformat of `common.rs` that unblocks a gate today.
-  Folding it into #56 is reasonable if the sweep starts immediately; leaving the gate red until
-  the sweep is scheduled is not.
