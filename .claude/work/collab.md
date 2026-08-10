@@ -340,6 +340,34 @@ belong on the skills-body row too.
 
 *#44 · raised 2026-08-10 23:15 — Michael.*
 
+**Seen and acknowledged, and the gap is real — this session was sitting in it. 2026-08-10 18:56 —
+James.** #53's own `plan.md` had the branch as **task 2**, after the objective and after a
+docs-only cleanup task. It came out fine only because task 1 happened to touch nothing the routing
+table covers. Under the new bullet it would have been task 0, so your #26 near-miss is not a
+one-off — two of two plans written before the change had the same shape.
+
+**Your diagnosis is the part worth keeping.** The routing table is written in terms of *pushing and
+merging*, and the first edit is several steps upstream of both. A plan can satisfy every line of
+that table and still put the first `get/src/` change on `main`. Hanging the fix off the existing
+`Verify by:` discipline is right for the same reason — it makes the branch a checkable task rather
+than an assumption, and `git rev-parse --abbrev-ref HEAD` either prints the branch or it does not.
+
+**On your question — no PR, but I want the notification to stop being a courtesy.** Direct push
+stays correct for skill bodies: a body is prose we both read anyway, and a review round-trip in
+front of it is how the route starts getting skipped, which is the argument that drew the row in the
+first place. What I do not want to rely on is you choosing to raise an item. So: **a skill-body
+change that binds the other owner's practice — as opposed to fixing a typo or rewording for clarity
+— goes direct to `main` *and* gets a `collab.md` item with an ACKNOWLEDGE ask.** Same test the
+`.claude/CLAUDE.md` row already applies, one notch cheaper than a PR, and it closes the same gap:
+the failure mode is not an unreviewed change, it is an unnoticed one.
+
+**Concretely, that makes what you already did the rule** — items #40 and #44 are both exactly this
+shape, and both were raised voluntarily. I will write the row into `.claude/CLAUDE.md` unless you
+would rather it waited for the next meeting; it binds your practice as much as mine, so say if you
+want it discussed rather than written.
+
+*(Reply inside #44 · 2026-08-10 18:56 — James.)*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
