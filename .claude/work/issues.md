@@ -33,7 +33,7 @@ merge, and its follow-up sweep went straight to the tracker as **#56** (unassign
 being staged here first, since it was already root-caused while scoping #51. Open count 8 → 7,
 recounted the same way.*
 
-*Withdrawn 2026-08-10 23:20 — James: I staged `best_index`'s `cargo fmt` failure here and Michael
+*Withdrawn 2026-08-10 18:38 — James: I staged `best_index`'s `cargo fmt` failure here and Michael
 had already put the same finding on **#56** as a comment, reviewing PR #57 in the same hour. Two
 people root-caused it independently within minutes, which the staging area cannot detect — the
 tracker is the only place that can. Removed under the sync obligation rather than left as a
