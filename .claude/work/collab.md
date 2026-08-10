@@ -268,6 +268,41 @@ being folded into #56.
 
 *#43 · raised 2026-08-10 22:55 — Michael.*
 
+### 44. `/start` now requires the branch as task 0 — please acknowledge, it changes your `/start` too
+
+**Acknowledgement wanted, not a decision.** This is a skill *body* change, so the routing table
+permits the direct push it went in on, but it binds how your `/start` behaves on your next pull and
+you did not read the diff. Hence this item rather than silence.
+
+**What happened.** Starting GitHub #26 on 2026-08-10, the agent wrote a `plan.md` whose six tasks
+all edit `get/src/` — and no task created a branch. The tree was still clean and on `main` when I
+caught it, so nothing was lost, but the next step in that plan was an edit to `config.rs` on `main`,
+which the routing table forbids outright.
+
+**Why the existing rules did not catch it.** The routing table in `CLAUDE.md` is written in terms of
+**pushing and merging**, which are several steps downstream of the first edit. A plan can therefore
+comply with every line of that table and still put the first `get/src/` change on `main`, because
+nothing in the planning step asks the question. `/start`'s body went straight from "agree the
+objective" to "write the plan" and mentioned branches nowhere. That is a gap in the *skill*, not a
+rule anybody broke.
+
+**The change.** One bullet added to `/start`'s §3 task rules, beside the existing "every task needs
+a `Verify by:`": if any task touches something the routing table sends through a PR, the **first
+task is creating the branch**, with `git rev-parse --abbrev-ref HEAD` as its verify-by. Put beside
+the verify-by rule deliberately — it rides a discipline we already have rather than adding a new
+one, and it makes the branch a checkable task instead of an assumption.
+
+**Nothing else changed** — no frontmatter, no `allowed-tools`, no `model:`, so what executes is
+unchanged and this needed no PR under the 2026-08-09 split in `collab.md` #34. Only the prose the
+agent reads is different.
+
+**For you:** just say you have seen it. If you would rather this had gone through a PR anyway, say
+so and I will route body changes that bind practice — as opposed to fixing typos — that way in
+future; the `.claude/CLAUDE.md` row already draws exactly that distinction for itself, and it may
+belong on the skills-body row too.
+
+*#44 · raised 2026-08-10 23:15 — Michael.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
