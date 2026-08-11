@@ -408,3 +408,18 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   confirmed by deliberately breaking them, then reverting. Fix the mirror; do not weaken the test by
   adding `..`.
 - **Added:** 2026-08-08 — pyclass-cannot-go-on-configs-fitness-enum
+
+### "Shared config→engine code goes in evolver/common.rs" is the wrong reflex
+- **Bites when:** dispatch grows new config→concrete-type machinery (a population builder, an
+  objective factory, a config-to-context mapping) and `common.rs` looks like the obvious shared
+  home because it already holds cross-evolver helpers.
+- **Do this instead:** put it in `get/src/dispatch.rs`. That module exists precisely to be the one
+  place that knows both the config schema and pyo3, so the engine underneath does not have to.
+- **Why:** `evolver/common.rs` is genome-*agnostic* generics over `G: Genome`, and the whole engine
+  (`evolver/`, `genomes/`, `sir.rs`, `graph.rs`) deliberately has zero references to `pyo3` or
+  `crate::config` — verified with `rg -ln 'pyo3|crate::config'` over those paths, empty. Config-aware
+  helpers name concrete types (`EdgeEditGenome`, `SdaGenome`) and return `PyResult`; dropping them
+  into `common.rs` drags both dependencies into the engine core and costs the ability to test the
+  engine without a config or a Python interpreter. Reasoning in `decisions.md` 2026-08-11 11:26,
+  the rejected-option writeup in `collab.md` #47.
+- **Added:** 2026-08-11 — dispatch-goes-in-dispatch-rs-not-common-rs, while building #26's dispatch.

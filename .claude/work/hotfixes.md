@@ -80,7 +80,10 @@ everybody's problem to remove.
   `unstarted` per `gh issue view 26 --json state`. #53 only touched `config.rs` and `py_config.rs`,
   nowhere near `lib.rs`. Unchanged since last check.
 - **Last checked:** 2026-08-11 — Michael, mid-#26. **`Remove when:` is now met on a branch, not yet
-  on `main`.** `mdube_run_dispatch` at `36ae59d` deletes the attribute, because
+  on `main`.** `mdube_run_dispatch` deletes the attribute in its "Erase the objective" commit
+  (hash corrected 2026-08-11 after later rebases moved it: `e1b97f5` at time of writing, not
+  `36ae59d` as first recorded — rebasing rewrites hashes, so pin to the commit *message* when citing
+  a commit still on an open branch), because
   `GraphEvolver::objective`'s `python` arm calls `python_fitness` — the exact caller this entry has
   been waiting for since 2026-08-07. `cargo clippy -p get --all-targets -- -D warnings` is clean
   there without the suppression, which is the whole check this entry asked for. **The entry stays
