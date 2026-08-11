@@ -1807,3 +1807,22 @@ read the registered callable too.
 True until this lands, false after. Not corrected here because James is editing that file for
 GitHub #58 — flagged in `collab.md` instead of risking a conflict mid-flight.
 *Recorded 2026-08-11 11:26 — Michael, mid-#26.*
+
+## Task complete: run-dispatch — 2026-08-11
+GitHub #26 closed via PR #60 (`97d9e02`, merged by James 2026-08-11T16:00:19Z — a real review merge,
+not a self-merge). `GraphEvolver::run` is no longer `todo!()`: the objective erases to
+`Box<dyn Fitness>` first, then genome × strategy dispatches through the new `get/src/dispatch.rs` in
+2 + 2 arms rather than 4. Verified on `main` post-merge on this machine: `cargo test -p get`
+231/231. All plan tasks landed; see `work/archive/2026-08_run-dispatch/` for the full plan and
+history, and the 2026-08-11 11:26 entry above for why dispatch got its own module.
+
+One hotfix **removed** rather than carried: #19's `#[allow(dead_code)]` on `python_fitness`, whose
+`Remove when:` this task was the condition for — the method's caller now exists, and the attribute
+is gone from `get/src/dispatch.rs:160`. One follow-up staged rather than left loose: `run`'s doc
+comment at `get/src/lib.rs:219-232` still carries #19's "for whoever implements the dispatch (#26)"
+instructions and cites the deleted attribute, staged in `issues.md` as ready-to-file, assigned to
+Michael. Carried forward, not resolved by this task: `collab.md` #47's stale `config.rs` module-doc
+line (James's to take in #58, still `open`), `collab.md` #48 (what `config.example.toml` should
+demonstrate) and #49 (pip-installability as a v1 requirement) both parked for a joint meeting, the
+`config.example.toml` flat-search finding in `issues.md`, and the parked `sda.rs` cargo-doc warning.
+*Recorded 2026-08-11 — Michael, at the `/done run-dispatch` gate.*

@@ -33,6 +33,14 @@ merge, and its follow-up sweep went straight to the tracker as **#56** (unassign
 being staged here first, since it was already root-caused while scoping #51. Open count 8 → 7,
 recounted the same way.*
 
+*Synced 2026-08-11 17:20 — Michael: `run`'s stale #26-era doc comment removed from here once it
+was filed as **#61** (`(1)`, assigned to md12ol), per the sync obligation. It was staged and filed
+in the same `/done run-dispatch` gate rather than carried forward, since the text it corrects went
+false the moment PR #60 merged. Open count **6 → 7**, counted from
+`gh issue list --state open --json number -q 'length'`. The header's "7" above was stale, not
+stable: #26 closing had already taken the true count to 6, and filing #61 has now put it back to 7
+by coincidence. Recount, never carry the number forward.*
+
 *Withdrawn 2026-08-10 18:38 — James: I staged `best_index`'s `cargo fmt` failure here and Michael
 had already put the same finding on **#56** as a comment, reviewing PR #57 in the same hour. Two
 people root-caused it independently within minutes, which the staging area cannot detect — the

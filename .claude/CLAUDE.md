@@ -319,6 +319,28 @@ Problems noticed during work go to `issues.md` first; filing is a separate, deli
 **Pass no labels.** GitHub silently creates an unknown label as a side effect of using it, so the
 safe default is none — let the owner triage.
 
+**Issue titles carry a dependency level, `(N)`, and it is not a priority.** Every title in the
+tracker opens with one — `(1) Rename common::evaluate ...`, `(7) Sweep generational and
+steady_state ...`. The scale is topological, not editorial:
+
+> **`(1)` depends on nothing. `(2)` depends on one or more `(1)`s. `(3)` depends on one or more
+> `(2)`s**, and so on.
+
+So the level is a fact about the issue's blockers, derived from the issue set — not a judgement
+about how much anyone wants it. A `(1)` can be a cosmetic doc fix and a `(6)` can be the most
+wanted feature in the project; `(6)` only says five layers of work stand in front of it.
+
+**Give every issue a level when you file it, and derive it — never guess.** Name the issues it
+depends on, take the highest level among them, add one. If it depends on nothing open, it is `(1)`.
+
+**Written down 2026-08-11 — Michael.** This lived only in the owners' heads for 28 issues. A cold
+session read the same 28 titles and inferred "priority, 1 = do first", which fits the visible
+evidence almost perfectly — every `(1)` is closed, the big features sit at 4–6 — and is wrong.
+The correlation is real and the causation is backwards: `(1)`s are all closed *because* nothing
+blocked them, not because anyone ranked them first. An undocumented convention that a careful
+reader can confidently misread is worse than one they would have to ask about, which is why it is
+here now.
+
 **Verify after filing; don't trust the exit code.** Re-read the issue with `gh issue view <n>` and
 confirm the body survived — collapsed blocks, code fences and tables are what get mangled. A filed
 issue with a broken body is worse than an unfiled one.
