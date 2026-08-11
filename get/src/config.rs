@@ -4,7 +4,7 @@
 //! types: [`crate::evolver::SharedEvolutionContext`] is generic over the genome
 //! and carries a non-deserializable `Genome::Context`, so configuration is
 //! parsed into this plain shape and then mapped onto concrete engine types by
-//! the dispatch layer in `lib.rs`.
+//! the dispatch layer in `dispatch.rs`.
 //!
 //! Plain data types that carry no such baggage are deserialized directly rather
 //! than mirrored — [`EdgeEditOperationWeights`] is nine `f64`s with a `Default`,
