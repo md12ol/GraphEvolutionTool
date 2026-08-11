@@ -10,11 +10,12 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::config::{Config, FitnessConfig};
-use crate::fitness::{Direction, Fitness, PyFitness};
+use crate::fitness::{Direction, EpiLength, EpiProfMatch, EpiSpread, Fitness, PyFitness};
 use crate::py_config::{
     PyConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig, PyOperationWeights,
     PySelectionConfig, PySirParams, config_error_to_py,
 };
+use crate::sir::SirSampleParams;
 
 /// Python-facing entry point to the graph-evolution engine.
 ///
@@ -242,10 +243,20 @@ impl GraphEvolver {
     /// Spec §8 has the surrounding argument; `.claude/reference/pyo3-maturin.md`
     /// §2 has the measured deadlock that motivates the GIL discipline.
     fn run(&mut self, seed: u64) -> PyResult<Vec<(usize, usize, u32)>> {
-        let _ = (seed, &self.config, &mut self.best_fitness);
+        // Step 1 of two (§8): erase the objective before any strategy or genome
+        // is chosen. Built here rather than inside the dispatch match so it
+        // happens exactly once per run, per §8.1's per-run-instance rule.
+        //
+        // Deliberately fallible-first: a config selecting Python with no
+        // callable registered is reported before any population is built, which
+        // is cheaper than discovering it at the first scoring call.
+        let fitness = self.objective(seed)?;
+
+        let _ = (&fitness, &self.config, &mut self.best_fitness);
         todo!(
-            "dispatch on config (evolution x genome x fitness), run the evolver, \
-             cache best_fitness, and return the best graph's edge list"
+            "step 2: match (evolution, genome), build the population and contexts, \
+             run the evolver against `fitness`, cache best_fitness, and return the \
+             best graph's edge list"
         )
     }
 
@@ -270,6 +281,60 @@ impl GraphEvolver {
 /// Rust-only, so deliberately outside the `#[pymethods]` block above: these
 /// take and return engine types that have no Python representation.
 impl GraphEvolver {
+    /// Build the objective for one run, erased to `Box<dyn Fitness>`.
+    ///
+    /// **Step 1 of the two-step dispatch** (§1, §8, GitHub #26). The objective
+    /// is erased *before* any strategy or genome is chosen, which is what keeps
+    /// dispatch at 2 strategies × 2 genomes = 4 arms instead of 16: nothing
+    /// downstream knows which objective it holds. Adding a fifth objective is
+    /// one arm here and touches nothing else.
+    ///
+    /// The asymmetry is not an oversight. `Fitness` erases cleanly — no generic
+    /// methods, no `Self` in argument position, and `Send + Sync` through its
+    /// supertrait, so rayon is unaffected. `Genome` cannot, for four
+    /// independent reasons (see `GraphEvolver::run`), so that axis stays a
+    /// match.
+    ///
+    /// **Call this once per run, never once per evolver.** Every SIR objective
+    /// owns an `EpidemicScorer` holding a per-run counter, and two replicates
+    /// sharing one would let thread scheduling decide which run saw which seed
+    /// — reproducibility goes with it (§8.1). Taking `run_seed` by argument
+    /// rather than reading a field is what makes that misuse awkward.
+    ///
+    /// # Errors
+    ///
+    /// `ValueError` if the config selected Python and no callable was
+    /// registered, or if `epi_prof_match`'s target profile is unusable.
+    /// `Config::validate` already rejects an empty or non-finite profile, so
+    /// that second case is a backstop for a `Config` built in Rust without
+    /// going through validation — not a path a Python caller can reach.
+    fn objective(&self, run_seed: u64) -> PyResult<Box<dyn Fitness>> {
+        match &self.config.fitness {
+            FitnessConfig::EpiSpread { sir } => {
+                Ok(Box::new(EpiSpread::new(sir_sample_params(sir), run_seed)))
+            }
+            FitnessConfig::EpiLength { sir } => {
+                Ok(Box::new(EpiLength::new(sir_sample_params(sir), run_seed)))
+            }
+            FitnessConfig::EpiProfMatch {
+                sir,
+                target_profile,
+            } => {
+                // Cloned because the objective owns its target and the config
+                // outlives it — a run must not be able to mutate the profile it
+                // is being scored against.
+                let objective =
+                    EpiProfMatch::new(sir_sample_params(sir), run_seed, target_profile.clone())
+                        .map_err(PyValueError::new_err)?;
+                Ok(Box::new(objective))
+            }
+            // The one arm that is not built from config alone: the callable
+            // arrived through a setter, so `python_fitness` owns the "nothing
+            // registered" error and this stays one call.
+            FitnessConfig::Python => self.python_fitness(),
+        }
+    }
+
     /// The objective for one run, when the config selected Python.
     ///
     /// This is the seam the dispatch in **#26** calls: it turns the registered
@@ -284,9 +349,10 @@ impl GraphEvolver {
     /// because it is the *scorer* state that must stay per-run and this has
     /// none.
     ///
-    /// The other three variants are not built here: they need
+    /// The other three variants are not built here — they need
     /// `config::SirParams` mapped onto [`crate::sir::SirSampleParams`] plus the
-    /// run seed, which is #26's to write.
+    /// run seed. [`GraphEvolver::objective`] is that match, and this is its
+    /// `python` arm.
     ///
     /// # Errors
     ///
@@ -296,11 +362,6 @@ impl GraphEvolver {
     /// config did not select Python, which is a caller mistake rather than a
     /// user one, but is reported rather than asserted so it cannot become a
     /// panic in a release build.
-    // TEMPORARY — remove when #26 lands. This is the seam #26's dispatch calls,
-    // so until that match exists nothing in non-test code calls it and
-    // `dead_code` fires, which would break the `-D warnings` gate that #25 just
-    // made usable. Its tests do exercise it. Recorded in `hotfixes.md`.
-    #[allow(dead_code)]
     pub(crate) fn python_fitness(&self) -> PyResult<Box<dyn Fitness>> {
         if !matches!(self.config.fitness, FitnessConfig::Python) {
             return Err(PyValueError::new_err(format!(
@@ -317,6 +378,35 @@ impl GraphEvolver {
                  registered; call set_fitness_function(callable, direction) before run()",
             )),
         }
+    }
+}
+
+/// Map the `[fitness]` block onto the simulator's own sampling parameters.
+///
+/// Two types with overlapping names and neither is redundant:
+/// [`crate::config::SirParams`] is the deserializable config block, and
+/// [`SirSampleParams`] is what the simulator takes — deliberately independent
+/// of the config schema, so `sir.rs` does not depend on `[fitness]`'s spelling.
+/// This function is the seam, and it lives in the dispatch layer because that
+/// is where `config.rs`'s module doc says config becomes engine types.
+///
+/// Note the nesting changes shape: the config block is flat, while
+/// [`SirSampleParams`] separates the epidemic's own two parameters into a nested
+/// [`sir::SirParams`] from the batch settings around them.
+///
+/// **No seed is mapped.** One master seed reaches `run` and every objective
+/// derives from it (§7, §8.1), so a seed in the config would be a second,
+/// competing source — `Config::from_toml_str` rejects a stray `seed` key
+/// outright rather than ignoring it.
+fn sir_sample_params(params: &config::SirParams) -> SirSampleParams {
+    SirSampleParams {
+        epidemic: sir::SirParams {
+            infection_rate: params.infection_rate,
+            patient_zero: params.patient_zero,
+        },
+        num_epidemics: params.num_epidemics,
+        min_epidemic_length: params.min_epidemic_length,
+        max_epidemic_retries: params.max_epidemic_retries,
     }
 }
 
@@ -387,6 +477,116 @@ mod tests {
     const PYTHON_FITNESS: &str = "[fitness]\ntype = \"python\"\n";
     const SIR_FITNESS: &str =
         "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.05\nnum_epidemics = 30\n";
+
+    /// The `[fitness]` block for `objective`'s remaining two SIR arms.
+    fn sir_block(type_name: &str, extra: &str) -> String {
+        format!(
+            "[fitness]\ntype = \"{type_name}\"\ninfection_rate = 0.05\n\
+             num_epidemics = 30\n{extra}"
+        )
+    }
+
+    #[test]
+    fn each_objective_erases_to_a_box_carrying_its_own_direction() {
+        // The failure this exists for is silent. `Fitness::direction` has a
+        // default of `Minimize`, so a boxed objective whose direction is not
+        // forwarded reports "minimize" whatever it holds — and both maximizing
+        // objectives then run the search backwards while merely looking
+        // unconverged (§5.1). Nothing panics and no number looks wrong.
+        let cases = [
+            (sir_block("epi_spread", ""), Direction::Maximize),
+            (sir_block("epi_length", ""), Direction::Maximize),
+            (
+                sir_block("epi_prof_match", "target_profile = [1, 3, 7, 2]\n"),
+                Direction::Minimize,
+            ),
+        ];
+
+        for (block, expected) in cases {
+            let evolver = evolver_with(&block);
+            let objective = evolver
+                .objective(7)
+                .unwrap_or_else(|err| panic!("{block} should build an objective: {err}"));
+
+            assert_eq!(
+                objective.direction(),
+                expected,
+                "wrong direction erased for: {block}",
+            );
+        }
+    }
+
+    #[test]
+    fn the_sir_block_reaches_the_simulator_field_for_field() {
+        // `config::SirParams` and `sir::SirSampleParams` are two types with
+        // overlapping names and a different shape — the config block is flat,
+        // the simulator's nests the epidemic's own parameters. A field mapped to
+        // the wrong place still compiles when the types agree, so this checks
+        // each one rather than trusting the mapping to be obvious.
+        let config = config_with(&sir_block(
+            "epi_spread",
+            "patient_zero = 4\nmin_epidemic_length = 2\nmax_epidemic_retries = 9\n",
+        ));
+
+        let block = match &config.fitness {
+            FitnessConfig::EpiSpread { sir } => sir,
+            other => panic!("expected epi_spread, got {other:?}"),
+        };
+        let mapped = sir_sample_params(block);
+
+        assert_eq!(mapped.epidemic.infection_rate, 0.05);
+        assert_eq!(mapped.epidemic.patient_zero, Some(4));
+        assert_eq!(mapped.num_epidemics, 30);
+        assert_eq!(mapped.min_epidemic_length, 2);
+        assert_eq!(mapped.max_epidemic_retries, 9);
+    }
+
+    #[test]
+    fn an_omitted_patient_zero_stays_unpinned_through_the_mapping() {
+        // `None` means "draw a fresh node per epidemic" (§5.2). Defaulting it to
+        // node 0 instead would seed every outbreak from the same vertex and
+        // quietly change what the objective measures.
+        let config = config_with(SIR_FITNESS);
+        let block = match &config.fitness {
+            FitnessConfig::EpiSpread { sir } => sir,
+            other => panic!("expected epi_spread, got {other:?}"),
+        };
+
+        assert_eq!(sir_sample_params(block).epidemic.patient_zero, None);
+    }
+
+    #[test]
+    fn each_call_builds_a_fresh_sir_objective() {
+        // §8.1: replicates must not share an objective, because every SIR
+        // objective owns an `EpidemicScorer` whose counter is per-run state.
+        // Sharing one lets thread scheduling decide which run sees which seed.
+        let evolver = evolver_with(SIR_FITNESS);
+
+        let first = evolver.objective(1).expect("first objective");
+        let second = evolver.objective(1).expect("second objective");
+
+        // Same seed, so the two agree — what matters is that both are live at
+        // once, which a shared or moved-out instance could not manage.
+        let graph = Graph::new(6, 1);
+        assert_eq!(first.evaluate(&graph), second.evaluate(&graph));
+    }
+
+    #[test]
+    fn a_python_objective_with_no_callable_fails_before_anything_is_built() {
+        // `run` calls `objective` first precisely so this is reported before a
+        // population exists, rather than at the first scoring call.
+        let evolver = evolver_with(PYTHON_FITNESS);
+
+        let err = evolver
+            .objective(1)
+            .map(|_| ())
+            .expect_err("a python config with no callable cannot build an objective");
+
+        assert!(
+            err.to_string().contains("set_fitness_function"),
+            "says what to do about it: {err}",
+        );
+    }
 
     /// `lambda batch: [float(n) for (n, edges) in batch]`, as a bound object.
     fn scoring_lambda(py: Python<'_>) -> Bound<'_, PyAny> {
