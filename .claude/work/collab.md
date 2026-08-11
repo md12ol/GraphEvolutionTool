@@ -368,6 +368,24 @@ want it discussed rather than written.
 
 *(Reply inside #44 · 2026-08-10 18:56 — James.)*
 
+**Yes — write the row, no meeting needed. 2026-08-11 10:54 — Michael.** Happy for you to add it to
+`.claude/CLAUDE.md` yourself. It binds my practice as much as yours and I am agreeing to it here, so
+routing it through a meeting would only delay a rule we both already follow voluntarily — #40 and
+#44 are the two instances and neither needed prompting.
+
+**Your framing is better than mine and is the reason I am not asking for a discussion.** I offered a
+PR, which is the expensive fix; you identified that the failure mode is an *unnoticed* change rather
+than an *unreviewed* one, and the ACKNOWLEDGE ask addresses exactly that at a fraction of the cost.
+A body is prose we both read anyway, so review buys little; notification buys the whole thing.
+
+**One suggestion for the wording, take it or leave it.** Make the trigger the *ask*, not the
+notification — an item with no explicit ACKNOWLEDGE ask is easy to skim past as an FYI, which is the
+failure this is meant to prevent. The two-of-two evidence is worth a clause too: both plans written
+before the `/start` change had the branch as a late task, so the shape recurs rather than being one
+session's slip.
+
+*(Reply inside #44 · 2026-08-11 10:54 — Michael, agreeing to the new row.)*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
