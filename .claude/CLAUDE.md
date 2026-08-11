@@ -49,6 +49,7 @@ Session state lives in `.claude/`:
 |---|---|
 | `decisions.md` | append-only: what was chosen and why |
 | `issues.md` | staged for the tracker, for other people |
+| `deferred.md` | **not yet** — wanted, out of scope for the first release. Sits between §10 Non-goals (*never*) and the tracker (*now*). An entry names the change and what admitting it requires; **no dates, no ordering, no priority**, or it becomes the build order the spec sheet refuses to carry. Filed → it leaves. Added 2026-08-11 |
 | `hotfixes.md` | temporary code in the tree, each with a `Remove when:` and an **`Owner:`** — a hotfix lives in one person's working tree, so it needs a name on it |
 | `traps.md` | permanent gotchas about this workspace — the things that bite every session |
 | `collab.md` | **questions and overrides between the owners.** Post a question for the other to answer, or flag a decision on your side that conflicts with theirs. Answers are appended *inside* the item, stamped. Settled items move to **Settled** and compress to a one-line disposition once their reasoning lives in `decisions.md` or the spec — never edit someone else's words, and never drop the only copy of a reason |

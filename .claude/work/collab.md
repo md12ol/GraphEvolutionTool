@@ -474,6 +474,51 @@ question about mirrored file pairs is adjacent.
 
 *#48 · raised 2026-08-11 16:56 — Michael, parked behind the current issue set.*
 
+### 49. `pip install` is a v1 requirement and the sheet does not say so — §8 needs a packaging clause
+
+**The ask:** agree at a meeting that being pip-installable is in scope for version 1, and amend
+§8 to say it. I am raising this rather than editing, per the sheet rule — but flagging that this
+one is not a nice-to-have I am parking. Everything we want to demo runs through it.
+
+**What the sheet says now.** §8 opens "A pyo3 extension module (`abi3-py38`)" and describes the
+class surface, the config builders, the TOML round-trip and the batched objective. It never says
+how a user *obtains* the module. That is not an oversight in the design sense — the interface is
+fully specified — but it means the one step between "GET exists" and "someone else runs GET" is
+written down nowhere, so it belongs to nobody.
+
+**What is actually missing, and it is small.** There is no `pyproject.toml` in the tree. The note
+in `reference/pyo3-maturin.md` already identifies this as the gap, and the manifest comment in
+`get/Cargo.toml` names the exact incantation the built module needs — `[tool.maturin] features =
+["pyo3/extension-module"]` — because that feature must be switched on from *outside* the manifest
+or `cargo test` fails to link. So the missing file's most important line is already written down
+in a comment next to the reason for it. `abi3-py38` is likewise already chosen, which is the
+decision that makes one built wheel work across Python versions.
+
+**Why I think it is v1 rather than deferred.** I nearly put this in the new `deferred.md` and it
+was the wrong file. Deferred means "wanted, out of scope for the first release", and this fails
+that test twice over: the demo layer we want — replicate runs plotted as boxplots, plus the best
+graph rendered — is a Python program that has to `import get` on a machine that is not one of
+ours, and every §8 usability argument in the sheet is about "most users will write Python" and
+"no Rust, no compilation". A tool that requires the user to run `cargo build` and place a `.so` by
+hand has not delivered that, however complete the interface behind it is.
+
+**What I would like the clause to settle,** since these are the parts I do not want to decide
+alone:
+
+- **Wheels, or source-only?** Building wheels for the three platforms costs CI setup we do not
+  have; source-only means every user needs a Rust toolchain, which contradicts "no compilation".
+- **Where the demo layer lives.** If it ships inside the package, matplotlib and networkx become
+  real dependencies and the wheel stops being self-contained. If it stays an `examples/` script,
+  they are documented extras. `examples/` already exists and carries `config_builder.py`.
+- **Distribution.** PyPI, or a GitHub release people install from a URL? Different names to
+  reserve, different commitments to keep.
+
+**What I have done meanwhile:** nothing to the sheet. `deferred.md` carries the demo layer as an
+entry and names this as its open dependency, so the two do not drift apart while this waits.
+
+*#49 · raised 2026-08-11 18:33 — Michael, splitting packaging out of the new `deferred.md`
+because it failed the "not for v1" test.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in

@@ -25,5 +25,10 @@
 # Deliberately NOT covered: work/current/ (gitignored, per-person) and work/archive/ (write-once
 # per task directory, so it cannot collide). Note gitattributes globs do not cross `/`, so
 # `.claude/work/*.md` reaches only files directly in work/ — confirm with `git check-attr merge -- <path>`.
+#
+# Also deliberately absent, added 2026-08-11: `deferred.md`. Stated here because "not listed" and
+# "nobody considered it" look identical in this file. It is a churn list by the same test as the
+# three narrowed above — an entry is DELETED when it graduates to a GitHub issue — so it takes the
+# normal 3-way merge and a concurrent append conflicts. Do not add a union line for it.
 .claude/work/decisions.md merge=union
 .claude/work/collab.md merge=union
