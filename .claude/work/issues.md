@@ -63,6 +63,27 @@ it was filed directly.*
   Confirmed **pre-existing** by stashing the #29 changes and re-running — same two warnings, so it
   is not something #29 introduced.
 
+
+### `config.example.toml`'s epidemic parameters give the search nothing to climb
+
+- **Where:** `config.example.toml`, the active `[fitness]` block — `infection_rate = 0.05` with
+  `network_size = 100` and an edge-edit genome.
+- **Impact:** the shipped example runs 500 generations and does not improve. Measured 2026-08-11 on
+  `mdube_run_dispatch` once `run` worked: best fitness at 0 / 5 / 50 / 300 generations is
+  1.20 / 1.30 / 1.27 / 1.20, while the edge count climbs 74 → 116. At that infection rate an
+  outbreak on a sparse graph dies almost immediately whatever the topology, so every individual
+  scores about the same and selection has no gradient. **The engine is fine** — the same
+  configuration at `infection_rate = 0.5` climbs 11.5 → 22 → 52 → 71.5 across 0 / 10 / 100 / 400
+  generations. So this is a documentation and example-parameter problem, not a defect.
+- **Why it matters more than it looks:** this is the first thing a new user runs, and the honest
+  reading of a flat 500-generation run is "the tool does not work". It also gives the misleading
+  impression that `epi_spread` is a weak objective.
+- **Not investigated:** what the example *should* say. Raising the rate makes the example converge
+  but stops it resembling a realistic epidemic; keeping it needs a comment saying the run is
+  deliberately hard and why. That choice is `collab.md` #48, parked behind the current issue set.
+- **Noticed:** 2026-08-11, verifying #26's dispatch end to end rather than trusting the four arms
+  to compile.
+
 ## Ready to file — root-caused and evidenced
 
 ### <title — imperative, issue-ready>

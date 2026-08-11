@@ -443,6 +443,37 @@ will.
 
 *#47 · raised 2026-08-11 11:26 — Michael, from the #26 branch.*
 
+### 48. Discussion, parked: what should `config.example.toml` actually demonstrate?
+
+**For a meeting after the current issue set — not now, and not blocking #26.** Raising it while the
+evidence is fresh rather than losing it.
+
+**What prompted it.** With `run` finally working, the shipped example turns out to evolve nothing:
+500 generations, best fitness 1.20 → 1.30 → 1.27 → 1.20 across 0/5/50/300 generations while the edge
+count climbs 74 → 116. At `infection_rate = 0.05` on a 100-node sparse graph an outbreak dies almost
+immediately whatever the topology, so every individual scores alike and selection has no gradient.
+The engine is fine — the same config at `0.5` climbs 11.5 → 22 → 52 → 71.5. Staged in `issues.md`.
+
+**The question is what an example is *for*, and I do not think it is obvious.** Two defensible
+answers pulling opposite ways:
+
+- **A realistic parameter set.** `0.05` is a plausible per-contact transmission probability, and the
+  example doubles as documentation of what these numbers mean. Changing it to make the demo converge
+  teaches a rate nobody would use.
+- **A working demonstration.** The first thing a new user runs should visibly *do* something. A flat
+  500-generation run reads as "the tool is broken", and the honest fix is parameters with a gradient
+  plus a comment saying so.
+
+**A third option worth considering:** keep `0.05` and add a comment stating the run is deliberately
+hard and will not visibly converge, then ship a second worked example that does. `examples/` already
+carries `config_builder.py`, so there is somewhere for it to live.
+
+**Related and probably the same conversation:** `examples/config_builder.py`'s
+`the_shipped_example()` mirrors this file, so whatever we decide applies to both — and #56's open
+question about mirrored file pairs is adjacent.
+
+*#48 · raised 2026-08-11 16:56 — Michael, parked behind the current issue set.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
