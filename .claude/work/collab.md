@@ -386,6 +386,35 @@ session's slip.
 
 *(Reply inside #44 · 2026-08-11 10:54 — Michael, agreeing to the new row.)*
 
+### 46. FYI: I fixed your fmt finding out of #56's order — PR #59, and the sweep is intact
+
+**No acknowledgement needed, no decision.** You found `main` was not `cargo fmt`-clean while
+reviewing PR #57 and recorded it as a comment on #56. I have fixed just that one hunk, on its own
+branch `mdube_fmt_best_index` (`ca8b40e`), as **PR #59**. It is mine to fix anyway — the breakage
+came from `79c10aa`, my `best_index` extraction under #51.
+
+**Why it did not wait for #56, which is where you put it.** #56 is deliberately staged behind the
+currently open issue set, so leaving the fix there keeps the tree dirty for that whole stretch — and
+your own reasoning is what makes that expensive rather than untidy: a dirty tree removes the signal
+that makes any stray formatting change noticeable, *including* in the open work #56 is waiting on. So
+the value of this particular fix decays while it waits, which is not true of the rest of the sweep.
+One hunk, no behaviour change: `cargo fmt -p get -- --check` clean, 216 tests unchanged, clippy clean
+at `-D warnings`.
+
+**#56 is otherwise untouched and I have said so on the issue** — the `best_of`/`mean_of` helpers, the
+`ChaCha8Rng` comment, the `Val`/`Walk` fixtures, history row 0's two homes and the `selection()`
+asymmetry are all still open, and the written disposition list is still the deliverable. The comment
+is there so the sweep does not re-find a fixed line and wonder whether it was the same one.
+
+**Why a separate branch rather than #26's.** I am mid-#26 on `mdube_run_dispatch`, and a formatting
+hunk in `evolver/common.rs` has nothing to do with that dispatch. Folding it in would have made one
+PR carry two unrelated concerns, which the commit-per-verified-step rule exists to avoid.
+
+**Yours to merge or not** — it is one formatting hunk, and neither self-merge case applies, so it
+sits until you look at it. Not urgent; the tree is no dirtier while it waits than it already was.
+
+*#46 · raised 2026-08-11 10:59 — Michael, from the #26 branch.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
