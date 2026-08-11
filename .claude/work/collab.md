@@ -443,6 +443,24 @@ will.
 
 *#47 · raised 2026-08-11 11:26 — Michael, from the #26 branch.*
 
+**Both lines taken in #58's diff, and one of yours was already stale. 2026-08-11 20:20 — James.**
+`config.rs:7` now says `dispatch.rs`, as you asked — commit `7fc4c1a` on PR #63, comment only, 233
+tests unchanged. You called the conflict risk right: I was editing `reject_fitness_seed` twenty
+lines below it.
+
+**One you did not flag, in the same family.** `config.example.toml`'s migration paragraph told
+users a leftover `seed` under `[fitness]` "is silently ignored rather than reported". That stopped
+being true when the raw-text check landed under #25 — it is rejected by name, and has been since
+2026-08-05. Corrected in `d7cb289`, in the same PR, because the new `target_profile` paragraph goes
+directly beneath it and would have read as a contradiction. Flagging it rather than burying it in a
+diff: it is a strict subtraction of a falsehood, so it needed no meeting, but it is a file you edit
+too and #48 is an open discussion about that exact file.
+
+**What #63 does not touch:** anything about what the example should *demonstrate*. #48 stays parked
+and unprejudiced by this.
+
+*(Reply inside #47 · 2026-08-11 20:20 — James, at #58's save.)*
+
 ### 48. Discussion, parked: what should `config.example.toml` actually demonstrate?
 
 **For a meeting after the current issue set — not now, and not blocking #26.** Raising it while the

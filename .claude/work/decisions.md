@@ -1838,3 +1838,29 @@ have produced a second copy of a comment the method already carries a few lines 
 **Rejected:** rewriting the block as present-tense documentation — the option #61 led with. Would
 have been pure duplication, not documentation.
 **Affects:** `get/src/lib.rs:219-246`. Closes GitHub #61. Branch `mdube_stale_run_doc`.
+## 2026-08-11 20:15 — James — #58's contradiction check joins the `seed` sweep, and three smaller calls under it
+**Chose:** one raw-text pass over both `[fitness]` keys serde's flatten hides — `reject_fitness_seed`
+renamed `reject_stray_fitness_keys` (`get/src/config.rs:262`) — rather than a second function beside
+it. Three calls sit under that:
+1. A missing, misspelled or non-string `type` **falls through to the real parse** rather than being
+   caught here.
+2. The condition is an edition-2024 **let-chain**, not nested `if`s.
+3. The three rejection cases share **one `for` loop** in one test, not three near-identical tests.
+**Why:** the sweep shape was already agreed in `collab.md` #45 and needs no re-arguing. On (1), a
+message about the profile would bury the real problem, and the function already hands invalid TOML
+back to the real parse two branches above, so this is the existing behaviour rather than a new
+policy. On (2), clippy's `collapsible_if` rejects the nested form under `-D warnings`, and every
+flat alternative needed an `unwrap_or_default` to get the objective's name into the error message —
+the let-chain is the only form that keeps the name and passes the gate, so it is documented with a
+four-line plain-words comment above it for the owner who does not write Rust. On (3), GitHub #56 is
+an open sweep for exactly the duplication three copies would add.
+**Rejected:** catching a bad `type` here (loses the better error); a helper function taking the
+parsed `fitness` table (flat and clippy-clean, but reintroduces the second function the issue warned
+against); three separate rejection tests (names the failing objective slightly better, at the cost
+of the duplication #56 exists to remove — the loop's assert message names it anyway).
+**Affects:** `get/src/config.rs:262-330`, its two tests at `config.rs:840` and `config.rs:872`, and
+the renamed narrowness test `an_unknown_fitness_key_outside_the_two_named_ones_is_still_ignored`.
+Commits `bfa515b`, `d7cb289`, `7fc4c1a` on `jsargant_reject_stray_target_profile`; PR #63.
+**Not decided here:** whether `config.example.toml` should demonstrate a converging run — that is
+`collab.md` #48, untouched.
+*Recorded 2026-08-11 20:15 — James, at #58's save.*
