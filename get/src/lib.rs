@@ -6,11 +6,20 @@ pub mod graph;
 pub mod py_config;
 pub mod sir;
 
+use std::sync::Arc;
+
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 
 use crate::config::{Config, FitnessConfig};
 use crate::fitness::{Direction, EpiLength, EpiProfMatch, EpiSpread, Fitness, PyFitness};
+use crate::genomes::edge_edit::EdgeEditOperators;
+use crate::genomes::{
+    EdgeEditContext, EdgeEditGenome, EdgeEditOperationWeights, SdaContext, SdaGenome,
+};
+use crate::graph::Graph;
 use crate::py_config::{
     PyConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig, PyOperationWeights,
     PySelectionConfig, PySirParams, config_error_to_py,
@@ -252,11 +261,46 @@ impl GraphEvolver {
         // is cheaper than discovering it at the first scoring call.
         let fitness = self.objective(seed)?;
 
-        let _ = (&fitness, &self.config, &mut self.best_fitness);
+        // Everything random in a run derives from this one generator, so the
+        // single `seed` argument reproduces the whole thing (§7, §8.1). ChaCha8
+        // for the reason both evolvers give: `StdRng`'s algorithm may change
+        // between `rand` releases, which would silently break that guarantee.
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+
+        // Genome-specific: the starting population and the context it expresses
+        // against. Split per genome because `Genome` has no uniform random
+        // constructor — see `edge_edit_start` and `sda_start`.
+        match &self.config.genome {
+            config::GenomeConfig::EdgeEdit {
+                gene_length,
+                operation_weights,
+            } => {
+                let (context, population) =
+                    self.edge_edit_start(*gene_length, *operation_weights, &mut rng)?;
+                let _ = (context, population);
+            }
+            config::GenomeConfig::Sda {
+                num_states,
+                max_resp_len,
+                init_state,
+            } => {
+                let (context, population) =
+                    self.sda_start(*num_states, *max_resp_len, *init_state, &mut rng)?;
+                let _ = (context, population);
+            }
+        }
+
+        // Drawn from the same stream rather than reusing `seed`: the evolver
+        // seeds its own ChaCha8 from whatever it is given, so handing it `seed`
+        // would have it replay the exact draws that just built the population.
+        // One master seed, two non-overlapping streams.
+        let evolution_seed = rng.random::<u64>();
+
+        let _ = (&fitness, evolution_seed, &mut self.best_fitness);
         todo!(
-            "step 2: match (evolution, genome), build the population and contexts, \
-             run the evolver against `fitness`, cache best_fitness, and return the \
-             best graph's edge list"
+            "step 3: match the evolution strategy, build SharedEvolutionContext and \
+             the strategy context, run the evolver against `fitness` with \
+             `evolution_seed`, cache best_fitness, and return the best graph's edges"
         )
     }
 
@@ -333,6 +377,110 @@ impl GraphEvolver {
             // registered" error and this stays one call.
             FitnessConfig::Python => self.python_fitness(),
         }
+    }
+
+    /// The edge-edit starting population and the context it expresses against.
+    ///
+    /// **Why the dispatch layer builds the population at all.** `Evolver::new`
+    /// takes a ready-made `Vec<G>` because `Genome` has no uniform random
+    /// constructor: this one needs a gene length and an operation mix, the SDA
+    /// one needs three dimensions and is fallible. A generic evolver cannot call
+    /// either, so the knowledge lives here, where genome-specific detail already
+    /// is — and a bad dimension surfaces as a config error at startup instead of
+    /// an `.expect()` mid-run inside a generic.
+    ///
+    /// The operation mix is built **once** and shared across the population
+    /// behind the `Arc`: `EdgeEditOperators::new` compiles the weights into a
+    /// `WeightedIndex` sampler, and doing that per individual would rebuild the
+    /// same table `population_size` times.
+    ///
+    /// The base graph is empty here. `set_base_graph` (GitHub #28) is what will
+    /// let a previous run's output seed it; until then every edge-edit run starts
+    /// from nothing, which matters because **five of the nine opcodes are inert
+    /// on an empty graph** — `Swap`, `Hop` and the three `Local*` all need
+    /// existing structure to walk, so early generations do nothing until
+    /// `Add`/`Toggle` have built something. Self-correcting, and stated here so
+    /// it is not read as a defect.
+    ///
+    /// # Errors
+    ///
+    /// `ValueError` if the operation weights are unusable — all zero, negative,
+    /// or non-finite. `Config::validate` already rejects those, so this is a
+    /// backstop for a `Config` assembled in Rust without validation.
+    fn edge_edit_start<R: Rng + ?Sized>(
+        &self,
+        gene_length: usize,
+        weights: EdgeEditOperationWeights,
+        rng: &mut R,
+    ) -> PyResult<(EdgeEditContext, Vec<EdgeEditGenome>)> {
+        let operators = EdgeEditOperators::new(weights).map_err(PyValueError::new_err)?;
+
+        let mut population = Vec::with_capacity(self.config.population_size);
+        for _ in 0..self.config.population_size {
+            population.push(EdgeEditGenome::random_with_operators(
+                gene_length,
+                Arc::clone(&operators),
+                rng,
+            ));
+        }
+
+        let context = EdgeEditContext {
+            base_graph: Graph::new(self.config.network_size, self.config.max_edge_multiplicity),
+        };
+        Ok((context, population))
+    }
+
+    /// The SDA starting population and the context it expresses against.
+    ///
+    /// **`num_chars` is derived, never configured** (§3.2): the alphabet is
+    /// `max_edge_multiplicity + 1`, so every character the automaton can emit is
+    /// a legal edge weight and none is silently clamped away by
+    /// `Graph::set_edge`. The same cap goes into the context, so the genome and
+    /// the graph it expresses against agree by construction rather than by the
+    /// caller remembering to pass the same number twice.
+    ///
+    /// # Errors
+    ///
+    /// `ValueError` if `init_state >= num_states`, or if the dimensions do not
+    /// fit `SdaGenome`'s storage types (`num_states` up to 65536, the derived
+    /// `num_chars` up to 256, `max_resp_len` at least 1).
+    ///
+    /// Both are backstops rather than the primary guard — `Config::validate`
+    /// rejects the `init_state` case (`config.rs`, `validate_genome`) and both
+    /// front ends validate before constructing. Kept because the alternative is
+    /// worse than redundant: `SdaGenome::run` indexes its response table with
+    /// `init_state`, so an out-of-range value **panics during expression**,
+    /// which crosses the FFI as an opaque `PanicException` (§7). Reporting beats
+    /// asserting for anything that can reach a release build.
+    fn sda_start<R: Rng + ?Sized>(
+        &self,
+        num_states: usize,
+        max_resp_len: usize,
+        init_state: usize,
+        rng: &mut R,
+    ) -> PyResult<(SdaContext, Vec<SdaGenome>)> {
+        if init_state >= num_states {
+            return Err(PyValueError::new_err(format!(
+                "init_state ({init_state}) must be less than num_states ({num_states}); \
+                 SdaGenome::run indexes its response table with it",
+            )));
+        }
+
+        let cap = self.config.max_edge_multiplicity;
+        let mut population = Vec::with_capacity(self.config.population_size);
+        for _ in 0..self.config.population_size {
+            let genome =
+                SdaGenome::random_with_edge_multiplicity_cap(num_states, cap, max_resp_len, rng)
+                    .map_err(PyValueError::new_err)?;
+            population.push(genome);
+        }
+
+        let context = SdaContext {
+            num_nodes: self.config.network_size,
+            init_state,
+            max_edge_multiplicity: cap,
+        };
+        Ok((context, population))
     }
 
     /// The objective for one run, when the config selected Python.
@@ -431,6 +579,8 @@ mod tests {
 
     use crate::config::{EvolutionConfig, GenomeConfig, SelectionConfig};
     use crate::fitness::Fitness;
+    // Only the tests express a genome directly; `run` goes through the evolver.
+    use crate::genomes::Genome;
     use crate::graph::Graph;
 
     /// A config whose `[fitness]` block is exactly `fitness_block`, with the
@@ -569,6 +719,166 @@ mod tests {
         // once, which a shared or moved-out instance could not manage.
         let graph = Graph::new(6, 1);
         assert_eq!(first.evaluate(&graph), second.evaluate(&graph));
+    }
+
+    /// A config whose `[genome]` block is `genome_block`, everything else fixed.
+    fn config_with_genome(genome_block: &str) -> Config {
+        let text = format!(
+            "population_size = 4\n\
+             network_size = 8\n\
+             max_edge_multiplicity = 3\n\
+             crossover_rate = 0.8\n\
+             mutation_rate = 0.2\n\
+             \n\
+             [evolution]\n\
+             type = \"generational\"\n\
+             num_generations = 5\n\
+             \n\
+             [selection]\n\
+             type = \"tournament\"\n\
+             tournament_size = 4\n\
+             \n\
+             {genome_block}\n\
+             {SIR_FITNESS}"
+        );
+        Config::from_toml_str(&text).expect("the test config parses")
+    }
+
+    fn evolver_with_genome(genome_block: &str) -> GraphEvolver {
+        GraphEvolver {
+            config: config_with_genome(genome_block),
+            best_fitness: None,
+            fitness_function: None,
+        }
+    }
+
+    fn test_rng() -> ChaCha8Rng {
+        ChaCha8Rng::seed_from_u64(11)
+    }
+
+    #[test]
+    fn the_edge_edit_start_sizes_the_population_and_the_empty_base_graph() {
+        let evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+        let weights = EdgeEditOperationWeights::default();
+
+        let (context, population) = evolver
+            .edge_edit_start(16, weights, &mut test_rng())
+            .expect("default weights are usable");
+
+        assert_eq!(population.len(), 4, "one individual per population_size");
+        for genome in &population {
+            assert_eq!(genome.genes.len(), 16, "each genome gets gene_length genes");
+        }
+
+        // The base graph comes from config, and is empty until `set_base_graph`
+        // (GitHub #28) exists to seed it.
+        assert_eq!(context.base_graph.num_nodes, 8);
+        assert_eq!(
+            context.base_graph.get_edge_list().len(),
+            0,
+            "no edges to start",
+        );
+    }
+
+    #[test]
+    fn the_sda_start_derives_its_alphabet_from_the_edge_multiplicity_cap() {
+        // §3.2: `num_chars` is never configured, it is `max_edge_multiplicity + 1`
+        // — the cap is 3 in this fixture, so the alphabet is 4. Configuring it
+        // separately would let the automaton emit a character that
+        // `Graph::set_edge` then clamps, losing structure with nothing reported.
+        let evolver = evolver_with_genome(
+            "[genome]\ntype = \"sda\"\nnum_states = 6\nmax_resp_len = 3\ninit_state = 2\n",
+        );
+
+        let (context, population) = evolver
+            .sda_start(6, 3, 2, &mut test_rng())
+            .expect("valid SDA dimensions");
+
+        assert_eq!(population.len(), 4);
+        assert_eq!(context.num_nodes, 8);
+        assert_eq!(context.init_state, 2);
+        assert_eq!(
+            context.max_edge_multiplicity, 3,
+            "the context carries the same cap the alphabet was derived from",
+        );
+
+        // Every genome must be expressible against that context — this is what
+        // would fail if the two disagreed about the cap.
+        for genome in &population {
+            let graph = genome.express(&context);
+            assert_eq!(graph.num_nodes, 8);
+        }
+    }
+
+    #[test]
+    fn an_out_of_range_init_state_is_reported_rather_than_panicking() {
+        // `SdaGenome::run` indexes its response table with `init_state`, so this
+        // panics during expression if it gets through — and a panic crossing the
+        // FFI reaches the user as an opaque `PanicException` (§7). `run` is the
+        // path that matters, so the check is exercised through it.
+        let mut evolver = evolver_with_genome(
+            "[genome]\ntype = \"sda\"\nnum_states = 4\nmax_resp_len = 3\ninit_state = 9\n",
+        );
+
+        let err = evolver
+            .run(1)
+            .expect_err("init_state 9 with num_states 4 must be rejected");
+
+        let message = err.to_string();
+        assert!(message.contains("init_state"), "names the field: {message}");
+        assert!(message.contains('4'), "names num_states: {message}");
+    }
+
+    #[test]
+    fn the_same_seed_builds_the_same_starting_population() {
+        // The whole point of `run(seed)`: one master seed reproduces everything.
+        let evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 12\n");
+        let weights = EdgeEditOperationWeights::default();
+
+        let (_, first) = evolver
+            .edge_edit_start(12, weights, &mut ChaCha8Rng::seed_from_u64(5))
+            .expect("first build");
+        let (_, second) = evolver
+            .edge_edit_start(12, weights, &mut ChaCha8Rng::seed_from_u64(5))
+            .expect("second build");
+        let (_, different) = evolver
+            .edge_edit_start(12, weights, &mut ChaCha8Rng::seed_from_u64(6))
+            .expect("third build");
+
+        for (a, b) in first.iter().zip(second.iter()) {
+            assert_eq!(a.genes, b.genes, "same seed, same population");
+        }
+        assert_ne!(
+            first[0].genes, different[0].genes,
+            "a different seed must give a different population",
+        );
+    }
+
+    #[test]
+    fn population_construction_does_not_replay_the_evolvers_stream() {
+        // `run` draws the population and then draws the evolver's seed from the
+        // same generator. Handing the evolver the master `seed` instead would
+        // have it replay the exact values that just built the population —
+        // correlating initial genomes with the first mutations, which looks like
+        // nothing at all in the output.
+        let mut rng = ChaCha8Rng::seed_from_u64(3);
+        let evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 8\n");
+
+        let (_, population) = evolver
+            .edge_edit_start(8, EdgeEditOperationWeights::default(), &mut rng)
+            .expect("build");
+        let evolution_seed = rng.random::<u64>();
+
+        // The evolver's seed must not be the master seed, and must not be a
+        // value the population already consumed.
+        assert_ne!(evolution_seed, 3, "not the master seed");
+        let mut fresh = ChaCha8Rng::seed_from_u64(3);
+        let first_draw = fresh.random::<u64>();
+        assert_ne!(
+            evolution_seed, first_draw,
+            "the population consumed the stream ahead of the evolver's seed",
+        );
+        assert_eq!(population.len(), 4);
     }
 
     #[test]
