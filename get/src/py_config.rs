@@ -399,7 +399,7 @@ impl PyConfig {
 ///
 /// Returns `None` for a field with no Python equivalent, and the caller then
 /// falls back to the unmapped name rather than inventing a path. Today the only
-/// such field is `seed`, which `reject_fitness_seed` raises against raw TOML
+/// such field is `seed`, which `reject_stray_fitness_keys` raises against raw TOML
 /// text and which this front end cannot produce — [`PyConfig`] has no seed to
 /// write (spec §7: one master seed, supplied to `run`).
 ///
@@ -988,7 +988,7 @@ mod tests {
 
     #[test]
     fn every_validation_field_maps_to_a_python_attribute() {
-        // `seed` is raised by `reject_fitness_seed` against raw TOML text and
+        // `seed` is raised by `reject_stray_fitness_keys` against raw TOML text and
         // is unreachable from this front end, which has no seed to write. It is
         // exempt by name so that adding any OTHER unmapped field still fails.
         const NOT_REACHABLE_FROM_PYTHON: [&str; 1] = ["seed"];
