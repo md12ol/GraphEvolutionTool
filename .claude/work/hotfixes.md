@@ -79,3 +79,11 @@ everybody's problem to remove.
   above `pub(crate) fn python_fitness` at `get/src/lib.rs:303-304`, and GitHub #26 is still `open`,
   `unstarted` per `gh issue view 26 --json state`. #53 only touched `config.rs` and `py_config.rs`,
   nowhere near `lib.rs`. Unchanged since last check.
+- **Last checked:** 2026-08-11 — Michael, mid-#26. **`Remove when:` is now met on a branch, not yet
+  on `main`.** `mdube_run_dispatch` at `36ae59d` deletes the attribute, because
+  `GraphEvolver::objective`'s `python` arm calls `python_fitness` — the exact caller this entry has
+  been waiting for since 2026-08-07. `cargo clippy -p get --all-targets -- -D warnings` is clean
+  there without the suppression, which is the whole check this entry asked for. **The entry stays
+  until #26's PR merges**: `main` still carries the attribute at `get/src/lib.rs:303`, so deleting
+  this now would describe a tree nobody has. Whoever closes #26 deletes it then; James, it is yours
+  by `Owner:` but it anticipates me removing it, so either of us doing it is fine.
