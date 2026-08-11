@@ -1826,3 +1826,15 @@ line (James's to take in #58, still `open`), `collab.md` #48 (what `config.examp
 demonstrate) and #49 (pip-installability as a v1 requirement) both parked for a joint meeting, the
 `config.example.toml` flat-search finding in `issues.md`, and the parked `sda.rs` cargo-doc warning.
 *Recorded 2026-08-11 — Michael, at the `/done run-dispatch` gate.*
+
+## 2026-08-11 — Michael — Delete #61's stale doc block outright, don't rewrite it
+**Chose:** delete `GraphEvolver::run`'s "For whoever implements the dispatch (#26)" doc block
+(`get/src/lib.rs:219-246`, 29 lines) rather than rewriting it into present-tense documentation.
+**Why:** issue #61 offered both, but checked first whether either instruction in the block said
+anything not already stated elsewhere in the same method — it doesn't. `run`'s body already calls
+`self.objective(seed)` (reaching `python_fitness`) and releases the GIL at `lib.rs:257-265` with
+its own inline comment covering the identical argument, deadlock reference and all. Rewriting would
+have produced a second copy of a comment the method already carries a few lines below.
+**Rejected:** rewriting the block as present-tense documentation — the option #61 led with. Would
+have been pure duplication, not documentation.
+**Affects:** `get/src/lib.rs:219-246`. Closes GitHub #61. Branch `mdube_stale_run_doc`.
