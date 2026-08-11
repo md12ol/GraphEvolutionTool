@@ -1780,3 +1780,30 @@ parked `sda.rs` cargo-doc warning, `main`'s `cargo fmt -- --check` failure in `c
 sub-question to Michael about where the practice-binding-skill-body rule gets written down — all
 pre-date this task or fall outside it.
 *Recorded 2026-08-10 — James, at the `/done inline-target-profile` gate.*
+
+## 2026-08-11 11:26 — Michael — The dispatch layer is its own module, not `evolver/common.rs`
+**Chose:** `get/src/dispatch.rs`, private to the crate, holding `objective`, `python_fitness`, the
+two population builders and `sir_sample_params`. `lib.rs` keeps only the `#[pyclass]` surface and
+falls from 1312 to 772 lines.
+**Why:** this layer is the only place that knows both sides — it reads `crate::config` and returns
+`PyResult`, so it depends on the config schema *and* on pyo3. The engine below it (`evolver/`,
+`genomes/`, `sir`, `graph`) currently depends on neither, verified with
+`rg -ln 'pyo3|crate::config'` over those paths returning nothing, and `sir.rs:32` states the
+principle for its own params type. A dedicated module is what keeps that true while giving #26's
+growing match a home. The spec never names a file for this — it says "the dispatch layer" at
+§8 lines 552, 578 and 838 and nowhere gives a path — so this contradicts nothing and needed no
+joint meeting; `config.rs`'s module doc had already named the layer.
+**Rejected:** `evolver/common.rs`, which is the obvious candidate and the reason this entry exists.
+It would invert the dependency above, dragging config and pyo3 into the engine core and costing the
+ability to test the engine without a config or a Python interpreter. It is also the wrong *shape*:
+`common.rs` is genome-agnostic generics over `G: Genome`, while these functions name
+`EdgeEditGenome` and `SdaGenome` concretely. "Shared things go in common" is the trap here.
+**Also chose:** the two population builders are free functions over `&Config` rather than methods,
+so they are testable from a bare config; `objective` and `python_fitness` stay methods because they
+read the registered callable too.
+**Affects:** `get/src/dispatch.rs` (new), `get/src/lib.rs`. Commit `543b211` on
+`mdube_run_dispatch`; pure move, test count unchanged at 226.
+**Stale line left for #58:** `config.rs`'s module doc still says the mapping happens "in `lib.rs`".
+True until this lands, false after. Not corrected here because James is editing that file for
+GitHub #58 — flagged in `collab.md` instead of risking a conflict mid-flight.
+*Recorded 2026-08-11 11:26 — Michael, mid-#26.*

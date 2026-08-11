@@ -415,6 +415,34 @@ sits until you look at it. Not urgent; the tree is no dirtier while it waits tha
 
 *#46 · raised 2026-08-11 10:59 — Michael, from the #26 branch.*
 
+### 47. #26's dispatch went into a new `dispatch.rs`, not `evolver/common.rs` — and one stale line is yours
+
+**FYI plus one line for you to fix in #58.** `#26`'s config→concrete-type layer got its own module
+rather than joining `evolver/common.rs`. Recording the rejected option, because "shared things go in
+common" is the obvious call and the next person will make it.
+
+**Option A — `evolver/common.rs`.** Rejected. That layer reads `crate::config` and returns
+`PyResult`, so it depends on the config schema and on pyo3. The engine below — `evolver/`,
+`genomes/`, `sir`, `graph` — depends on **neither** today (checked:
+`rg -ln 'pyo3|crate::config'` over those paths returns nothing), and `sir.rs:32` states the
+principle for its own params type. Folding dispatch in would invert that and cost the ability to
+test the engine without a config or a Python interpreter. `common.rs` is also genome-*agnostic*
+generics over `G: Genome`, where these functions name `EdgeEditGenome` and `SdaGenome` concretely.
+
+**Option B — `get/src/dispatch.rs`, private.** Taken. It is the layer the sheet calls "the dispatch
+layer" (§8, three places, never with a path) and the one `config.rs`'s module doc already named, so
+it contradicted nothing and did not need a meeting. `lib.rs` drops 1312 → 772 lines and keeps only
+the `#[pyclass]` surface. Pure move, test count unchanged at **226**. Commit `543b211`; full
+reasoning in `decisions.md` 2026-08-11 11:26.
+
+**The line for you.** `config.rs`'s module doc says configuration is "mapped onto concrete engine
+types by the dispatch layer **in `lib.rs`**". True until this merges, false after. I did not correct
+it because you are editing `config.rs` for **#58** and a one-line doc fix is not worth a conflict
+mid-flight — please take it in that diff. If you would rather I did it in #26's PR, say so and I
+will.
+
+*#47 · raised 2026-08-11 11:26 — Michael, from the #26 branch.*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
