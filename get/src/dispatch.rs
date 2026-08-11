@@ -25,17 +25,47 @@ use std::sync::Arc;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 
 use crate::GraphEvolver;
-use crate::config::{self, Config, FitnessConfig};
+use crate::config::{self, Config, EvolutionConfig, FitnessConfig, GenomeConfig, SelectionConfig};
+use crate::evolver::common::Selection;
+use crate::evolver::{
+    EvolutionOutcome, Evolver, GenerationalContext, GenerationalEvolver, SharedEvolutionContext,
+    SteadyStateContext, SteadyStateEvolver,
+};
 use crate::fitness::{EpiLength, EpiProfMatch, EpiSpread, Fitness};
 use crate::genomes::edge_edit::EdgeEditOperators;
 use crate::genomes::{
-    EdgeEditContext, EdgeEditGenome, EdgeEditOperationWeights, SdaContext, SdaGenome,
+    EdgeEditContext, EdgeEditGenome, EdgeEditOperationWeights, Genome, SdaContext, SdaGenome,
 };
 use crate::graph::Graph;
 use crate::sir::{self, SirSampleParams};
+
+/// One run's result, with the genome type erased.
+///
+/// `#[pyclass]` cannot carry a type parameter but [`EvolutionOutcome<G>`] does,
+/// so every dispatch arm erases `G` before returning (§8). What survives is what
+/// a caller can use without knowing the representation.
+///
+/// GitHub **#27** replaces this with the full result object — adding the genome's
+/// `print()` string and the convergence history, and returning it to Python
+/// instead of the bare edge list `run` currently promises. Kept minimal until
+/// then rather than growing fields nothing reads.
+pub(crate) struct ErasedOutcome {
+    /// Best fitness in the objective's **own units and sign**, not engine
+    /// orientation.
+    ///
+    /// The engine compares in oriented values throughout, so a maximizing
+    /// objective's numbers are negative in there (§5.1). Converting once here is
+    /// what keeps that an engine-internal detail: `Direction::orient` is its own
+    /// inverse, so the same call that oriented the value on the way in undoes it
+    /// on the way out.
+    pub best_fitness: f64,
+    /// The best individual's expressed network as `(u, v, multiplicity)`.
+    pub best_edges: Vec<(usize, usize, u32)>,
+}
 
 /// The parts of dispatch that need the evolver itself, not just its config.
 ///
@@ -248,6 +278,140 @@ pub(crate) fn sda_start<R: Rng + ?Sized>(
         max_edge_multiplicity: cap,
     };
     Ok((context, population))
+}
+
+/// Run one evolution and hand back its result with the genome type erased.
+///
+/// **Step 2 of the dispatch** (§1, §8). The objective has already been erased to
+/// `Box<dyn Fitness>`, so only strategy × genome is left — and this is arranged
+/// as genome outside, strategy inside [`run_strategy`], which is why there are
+/// two arms here and two there rather than four copies of the same body. Adding
+/// a third genome is one arm here; a third strategy is one arm there.
+///
+/// **All randomness derives from `seed`.** The population is drawn first, then
+/// the evolver's own seed is drawn from the same stream — never `seed` itself,
+/// which the evolver would use to re-seed its own ChaCha8 and thereby replay the
+/// exact draws that just built the population.
+///
+/// # Errors
+///
+/// `ValueError` for any dimension the genome constructors reject. `Config::validate`
+/// has already run at construction, so these are backstops rather than the first
+/// line of defence — see [`sda_start`].
+pub(crate) fn evolve<F: Fitness>(
+    config: &Config,
+    fitness: &F,
+    seed: u64,
+) -> PyResult<ErasedOutcome> {
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    let selection = selection(&config.selection);
+
+    // Genome outside, strategy inside: `Genome` cannot be a trait object, so the
+    // concrete type has to be settled before an evolver can be named at all.
+    match &config.genome {
+        GenomeConfig::EdgeEdit {
+            gene_length,
+            operation_weights,
+        } => {
+            let (genome_context, population) =
+                edge_edit_start(config, *gene_length, *operation_weights, &mut rng)?;
+            Ok(run_strategy(
+                config,
+                genome_context,
+                population,
+                selection,
+                fitness,
+                rng.random::<u64>(),
+            ))
+        }
+        GenomeConfig::Sda {
+            num_states,
+            max_resp_len,
+            init_state,
+        } => {
+            let (genome_context, population) =
+                sda_start(config, *num_states, *max_resp_len, *init_state, &mut rng)?;
+            Ok(run_strategy(
+                config,
+                genome_context,
+                population,
+                selection,
+                fitness,
+                rng.random::<u64>(),
+            ))
+        }
+    }
+}
+
+/// Pick the evolution strategy and run it, for a genome type already settled.
+///
+/// Generic over `G`, so both genomes share this body instead of the strategy
+/// match being written once per genome. That is the whole reason dispatch is
+/// 2 + 2 arms rather than 2 × 2.
+fn run_strategy<G: Genome, F: Fitness>(
+    config: &Config,
+    genome_context: G::Context,
+    population: Vec<G>,
+    selection: Selection,
+    fitness: &F,
+    seed: u64,
+) -> ErasedOutcome {
+    let shared = SharedEvolutionContext {
+        genome_context,
+        crossover_rate: config.crossover_rate,
+        mutation_rate: config.mutation_rate,
+        max_mutations: config.max_mutations,
+        selection,
+    };
+
+    match &config.evolution {
+        EvolutionConfig::Generational {
+            num_generations,
+            elite_count,
+        } => {
+            let type_context = GenerationalContext {
+                num_generations: *num_generations,
+                elite_count: *elite_count,
+            };
+            let mut evolver = GenerationalEvolver::new(shared, type_context, population);
+            erase(evolver.run(fitness, seed))
+        }
+        EvolutionConfig::SteadyState { num_mating_events } => {
+            let type_context = SteadyStateContext {
+                num_mating_events: *num_mating_events,
+            };
+            let mut evolver = SteadyStateEvolver::new(shared, type_context, population);
+            erase(evolver.run(fitness, seed))
+        }
+    }
+}
+
+/// Drop the genome type, converting the fitness back to the objective's units.
+///
+/// One generic function rather than the same three lines in each arm. The
+/// conversion is the part that matters: everything inside the engine is
+/// lower-is-better, and this is the boundary where that stops being true (§5.1).
+/// `Direction::orient` is its own inverse, so it is also what undoes itself.
+///
+/// The convergence history is dropped for now — GitHub **#21** defines the log
+/// format and **#27** the result object that carries it out to Python.
+fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
+    ErasedOutcome {
+        best_fitness: outcome.direction.orient(outcome.best_fitness_engine),
+        best_edges: outcome.best_graph.get_edge_list(),
+    }
+}
+
+/// Map the `[selection]` block onto the engine's own selection strategy.
+///
+/// One variant each today. Kept as a function rather than inlined so a second
+/// selection strategy is one arm here and touches neither evolver.
+fn selection(config: &SelectionConfig) -> Selection {
+    match config {
+        SelectionConfig::Tournament { tournament_size } => Selection::Tournament {
+            tournament_size: *tournament_size,
+        },
+    }
 }
 
 /// Map the `[fitness]` block onto the simulator's own sampling parameters.
@@ -614,6 +778,235 @@ mod tests {
         assert!(
             err.to_string().contains("set_fitness_function"),
             "says what to do about it: {err}",
+        );
+    }
+
+    /// A whole runnable config: `evolution_block` × `genome_block`, small enough
+    /// that four end-to-end runs stay fast. Two epidemics per evaluation, not the
+    /// realistic thirty — this asserts the wiring, not the search quality.
+    ///
+    /// `tournament_size = 4` is not arbitrary: `Config::validate` requires at
+    /// least 4 under steady-state (`config.rs`, `validate_evolution_and_selection`),
+    /// which needs two parents *and* two individuals to replace. Generational has
+    /// no such floor, but one fixture serving both keeps the four combinations
+    /// comparable.
+    fn runnable(evolution_block: &str, genome_block: &str) -> Config {
+        let text = format!(
+            "population_size = 6\n\
+             network_size = 8\n\
+             max_edge_multiplicity = 2\n\
+             crossover_rate = 0.8\n\
+             mutation_rate = 0.5\n\
+             \n\
+             {evolution_block}\n\
+             [selection]\n\
+             type = \"tournament\"\n\
+             tournament_size = 4\n\
+             \n\
+             {genome_block}\n\
+             [fitness]\n\
+             type = \"epi_spread\"\n\
+             infection_rate = 0.3\n\
+             num_epidemics = 2\n"
+        );
+        let config = Config::from_toml_str(&text).expect("the runnable config parses");
+        config.validate().expect("the runnable config validates");
+        config
+    }
+
+    const GENERATIONAL: &str = "[evolution]\ntype = \"generational\"\nnum_generations = 3\n";
+    const STEADY_STATE: &str = "[evolution]\ntype = \"steady_state\"\nnum_mating_events = 12\n";
+    const EDGE_EDIT: &str = "[genome]\ntype = \"edge_edit\"\ngene_length = 12\n";
+    const SDA: &str = "[genome]\ntype = \"sda\"\nnum_states = 5\nmax_resp_len = 3\n";
+
+    #[test]
+    fn every_strategy_by_genome_combination_runs_end_to_end() {
+        // #26's verify-by: all four arms of the dispatch complete a real run.
+        // Before this, three of the four had never been executed at all — the
+        // types line up whether or not the arms are wired to the right evolver.
+        let combinations = [
+            ("generational × edge_edit", GENERATIONAL, EDGE_EDIT),
+            ("generational × sda", GENERATIONAL, SDA),
+            ("steady_state × edge_edit", STEADY_STATE, EDGE_EDIT),
+            ("steady_state × sda", STEADY_STATE, SDA),
+        ];
+
+        for (name, evolution, genome) in combinations {
+            let config = runnable(evolution, genome);
+            let objective: Box<dyn Fitness> =
+                Box::new(EpiSpread::new(sir_sample_params(sir_of(&config)), 1));
+
+            let outcome = evolve(&config, &objective, 1)
+                .unwrap_or_else(|err| panic!("{name} should complete: {err}"));
+
+            // `epi_spread` counts ever-infected and patient zero always counts,
+            // so any real run scores at least 1 — and it is **maximized**, so a
+            // negative value here would mean the engine's orientation leaked out
+            // rather than being undone at this boundary.
+            assert!(
+                outcome.best_fitness >= 1.0,
+                "{name}: fitness should be a positive spread in the objective's own \
+                 units, got {}",
+                outcome.best_fitness,
+            );
+            assert!(
+                outcome.best_fitness.is_finite(),
+                "{name}: fitness must be finite",
+            );
+
+            // Every edge must be inside the configured network and within the cap.
+            for &(u, v, weight) in &outcome.best_edges {
+                assert!(
+                    u < 8 && v < 8,
+                    "{name}: edge ({u},{v}) outside network_size 8"
+                );
+                assert!(
+                    (1..=2).contains(&weight),
+                    "{name}: weight {weight} outside 1..=max_edge_multiplicity",
+                );
+            }
+        }
+    }
+
+    /// The `[fitness]` block of a config known to be `epi_spread`.
+    fn sir_of(config: &Config) -> &config::SirParams {
+        match &config.fitness {
+            FitnessConfig::EpiSpread { sir } => sir,
+            other => panic!("expected epi_spread, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn one_seed_reproduces_a_whole_run_and_another_changes_it() {
+        // The guarantee the single `seed` argument exists to give (§7, §8.1).
+        // It covers the population, the evolution and the epidemics at once,
+        // since all three derive from it.
+        let config = runnable(GENERATIONAL, EDGE_EDIT);
+        let run = |seed: u64| {
+            let objective: Box<dyn Fitness> =
+                Box::new(EpiSpread::new(sir_sample_params(sir_of(&config)), seed));
+            evolve(&config, &objective, seed).expect("run completes")
+        };
+
+        let first = run(4);
+        let again = run(4);
+        let other = run(5);
+
+        assert_eq!(
+            first.best_fitness, again.best_fitness,
+            "same seed, same score"
+        );
+        assert_eq!(
+            first.best_edges, again.best_edges,
+            "same seed, same network"
+        );
+        assert!(
+            other.best_fitness != first.best_fitness || other.best_edges != first.best_edges,
+            "a different seed should not reproduce the same run",
+        );
+    }
+
+    #[test]
+    fn steady_state_and_generational_do_not_produce_the_same_run() {
+        // Guards against both arms of `run_strategy` reaching the same evolver —
+        // which would compile, run, and return plausible numbers.
+        let generational = runnable(GENERATIONAL, EDGE_EDIT);
+        let steady = runnable(STEADY_STATE, EDGE_EDIT);
+
+        let first: Box<dyn Fitness> =
+            Box::new(EpiSpread::new(sir_sample_params(sir_of(&generational)), 2));
+        let second: Box<dyn Fitness> =
+            Box::new(EpiSpread::new(sir_sample_params(sir_of(&steady)), 2));
+
+        let a = evolve(&generational, &first, 2).expect("generational runs");
+        let b = evolve(&steady, &second, 2).expect("steady-state runs");
+
+        assert_ne!(
+            a.best_edges, b.best_edges,
+            "the two strategies should not be producing identical runs",
+        );
+    }
+
+    #[test]
+    fn run_caches_the_best_fitness_and_returns_the_edges() {
+        // Through the Python entry point, so this also exercises the GIL release
+        // and the caching `best_fitness()` reports.
+        let mut evolver = GraphEvolver {
+            config: runnable(GENERATIONAL, EDGE_EDIT),
+            best_fitness: None,
+            fitness_function: None,
+        };
+        assert_eq!(
+            evolver.best_fitness(),
+            f64::INFINITY,
+            "nothing meaningful before a run",
+        );
+
+        let edges = evolver.run(8).expect("a full config run completes");
+
+        assert!(evolver.best_fitness().is_finite(), "the score was cached");
+        assert!(
+            evolver.best_fitness() >= 1.0,
+            "cached in the objective's own units, got {}",
+            evolver.best_fitness(),
+        );
+        for &(u, v, _) in &edges {
+            assert!(u < 8 && v < 8);
+        }
+    }
+
+    #[test]
+    fn a_maximizing_objective_actually_climbs_through_the_dispatch() {
+        // The failure this catches is the loudest-consequence, quietest-symptom
+        // one in the whole layer: if the direction is lost anywhere between the
+        // config and the evolver, the search *minimizes* ever-infected and every
+        // number it reports still looks like a plausible spread.
+        //
+        // `infection_rate` is high here on purpose. At the shipped example's 0.05
+        // an outbreak on a sparse graph dies immediately whatever the topology,
+        // so every individual scores about the same and there is no gradient to
+        // climb — measured 2026-08-11, see `issues.md`. This test needs a signal,
+        // not a realistic parameter.
+        let evolved = "[evolution]\ntype = \"generational\"\nnum_generations = 25\n";
+        let unevolved = "[evolution]\ntype = \"generational\"\nnum_generations = 0\n";
+
+        let spread_after = |evolution: &str| {
+            let text = format!(
+                "population_size = 20\n\
+                 network_size = 20\n\
+                 max_edge_multiplicity = 1\n\
+                 crossover_rate = 0.9\n\
+                 mutation_rate = 0.3\n\
+                 \n\
+                 {evolution}\n\
+                 [selection]\n\
+                 type = \"tournament\"\n\
+                 tournament_size = 4\n\
+                 \n\
+                 [genome]\n\
+                 type = \"edge_edit\"\n\
+                 gene_length = 64\n\
+                 \n\
+                 [fitness]\n\
+                 type = \"epi_spread\"\n\
+                 infection_rate = 0.6\n\
+                 num_epidemics = 5\n"
+            );
+            let config = Config::from_toml_str(&text).expect("parses");
+            config.validate().expect("validates");
+            let objective: Box<dyn Fitness> =
+                Box::new(EpiSpread::new(sir_sample_params(sir_of(&config)), 3));
+            evolve(&config, &objective, 3).expect("runs").best_fitness
+        };
+
+        let start = spread_after(unevolved);
+        let end = spread_after(evolved);
+
+        assert!(
+            end > start,
+            "25 generations of maximizing ever-infected should beat 0 generations, \
+             got {end} against {start} — if this reversed, the objective's direction \
+             is being lost between the config and the evolver",
         );
     }
 }

@@ -10,17 +10,14 @@ pub mod graph;
 pub mod py_config;
 pub mod sir;
 
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
-use rand::{Rng, SeedableRng};
-use rand_chacha::ChaCha8Rng;
-
 use crate::config::{Config, FitnessConfig};
 use crate::fitness::{Direction, PyFitness};
 use crate::py_config::{
     PyConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig, PyOperationWeights,
     PySelectionConfig, PySirParams, config_error_to_py,
 };
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
 
 /// Python-facing entry point to the graph-evolution engine.
 ///
@@ -257,56 +254,21 @@ impl GraphEvolver {
         // is cheaper than discovering it at the first scoring call.
         let fitness = self.objective(seed)?;
 
-        // Everything random in a run derives from this one generator, so the
-        // single `seed` argument reproduces the whole thing (§7, §8.1). ChaCha8
-        // for the reason both evolvers give: `StdRng`'s algorithm may change
-        // between `rand` releases, which would silently break that guarantee.
-        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        // The GIL is held on entry to any `#[pymethods]` function, and holding it
+        // across the run buys nothing: everything between scoring calls is pure
+        // Rust, and `PyFitness` re-acquires it per batch on its own. Keeping it
+        // would block every other Python thread for the whole run and serialize
+        // rayon against any Python caller — a run that works and is inexplicably
+        // slow, or a host application that freezes, neither pointing back here.
+        // `.claude/reference/pyo3-maturin.md` §2 has the measured deadlock.
+        let outcome =
+            Python::attach(|py| py.detach(|| dispatch::evolve(&self.config, &fitness, seed)))?;
 
-        // Genome-specific: the starting population and the context it expresses
-        // against. Split per genome because `Genome` has no uniform random
-        // constructor — see `edge_edit_start` and `sda_start`.
-        match &self.config.genome {
-            config::GenomeConfig::EdgeEdit {
-                gene_length,
-                operation_weights,
-            } => {
-                let (context, population) = dispatch::edge_edit_start(
-                    &self.config,
-                    *gene_length,
-                    *operation_weights,
-                    &mut rng,
-                )?;
-                let _ = (context, population);
-            }
-            config::GenomeConfig::Sda {
-                num_states,
-                max_resp_len,
-                init_state,
-            } => {
-                let (context, population) = dispatch::sda_start(
-                    &self.config,
-                    *num_states,
-                    *max_resp_len,
-                    *init_state,
-                    &mut rng,
-                )?;
-                let _ = (context, population);
-            }
-        }
-
-        // Drawn from the same stream rather than reusing `seed`: the evolver
-        // seeds its own ChaCha8 from whatever it is given, so handing it `seed`
-        // would have it replay the exact draws that just built the population.
-        // One master seed, two non-overlapping streams.
-        let evolution_seed = rng.random::<u64>();
-
-        let _ = (&fitness, evolution_seed, &mut self.best_fitness);
-        todo!(
-            "step 3: match the evolution strategy, build SharedEvolutionContext and \
-             the strategy context, run the evolver against `fitness` with \
-             `evolution_seed`, cache best_fitness, and return the best graph's edges"
-        )
+        // Cached in the objective's own units, which is what `best_fitness()`
+        // reports. GitHub #27 removes both this field and that getter in favour
+        // of the returned result object.
+        self.best_fitness = Some(outcome.best_fitness);
+        Ok(outcome.best_edges)
     }
 
     /// Best fitness found so far, or infinity before any run completes.
