@@ -45,7 +45,10 @@ pub(super) fn rank(fitnesses: &[f64], a: usize, b: usize) -> Ordering {
 /// Panics if `fitnesses` is empty. Both callers construct a non-empty
 /// population and never shrink it, so an empty slice is a bug, not an input.
 pub(super) fn best_index(fitnesses: &[f64]) -> usize {
-    assert!(!fitnesses.is_empty(), "cannot pick a best of no individuals");
+    assert!(
+        !fitnesses.is_empty(),
+        "cannot pick a best of no individuals"
+    );
 
     let mut best = 0;
     for candidate in 1..fitnesses.len() {
