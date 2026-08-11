@@ -1,4 +1,8 @@
 pub mod config;
+// Crate-internal: the config → concrete-type layer `run` dispatches through.
+// Not `pub`, because it is machinery rather than API — the Rust route uses the
+// engine types directly (spec §5.3).
+mod dispatch;
 pub mod evolver;
 pub mod fitness;
 pub mod genomes;
@@ -6,15 +10,14 @@ pub mod graph;
 pub mod py_config;
 pub mod sir;
 
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
-
 use crate::config::{Config, FitnessConfig};
-use crate::fitness::{Direction, Fitness, PyFitness};
+use crate::fitness::{Direction, PyFitness};
 use crate::py_config::{
     PyConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig, PyOperationWeights,
     PySelectionConfig, PySirParams, config_error_to_py,
 };
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
 
 /// Python-facing entry point to the graph-evolution engine.
 ///
@@ -242,11 +245,30 @@ impl GraphEvolver {
     /// Spec §8 has the surrounding argument; `.claude/reference/pyo3-maturin.md`
     /// §2 has the measured deadlock that motivates the GIL discipline.
     fn run(&mut self, seed: u64) -> PyResult<Vec<(usize, usize, u32)>> {
-        let _ = (seed, &self.config, &mut self.best_fitness);
-        todo!(
-            "dispatch on config (evolution x genome x fitness), run the evolver, \
-             cache best_fitness, and return the best graph's edge list"
-        )
+        // Step 1 of two (§8): erase the objective before any strategy or genome
+        // is chosen. Built here rather than inside the dispatch match so it
+        // happens exactly once per run, per §8.1's per-run-instance rule.
+        //
+        // Deliberately fallible-first: a config selecting Python with no
+        // callable registered is reported before any population is built, which
+        // is cheaper than discovering it at the first scoring call.
+        let fitness = self.objective(seed)?;
+
+        // The GIL is held on entry to any `#[pymethods]` function, and holding it
+        // across the run buys nothing: everything between scoring calls is pure
+        // Rust, and `PyFitness` re-acquires it per batch on its own. Keeping it
+        // would block every other Python thread for the whole run and serialize
+        // rayon against any Python caller — a run that works and is inexplicably
+        // slow, or a host application that freezes, neither pointing back here.
+        // `.claude/reference/pyo3-maturin.md` §2 has the measured deadlock.
+        let outcome =
+            Python::attach(|py| py.detach(|| dispatch::evolve(&self.config, &fitness, seed)))?;
+
+        // Cached in the objective's own units, which is what `best_fitness()`
+        // reports. GitHub #27 removes both this field and that getter in favour
+        // of the returned result object.
+        self.best_fitness = Some(outcome.best_fitness);
+        Ok(outcome.best_edges)
     }
 
     /// Best fitness found so far, or infinity before any run completes.
@@ -264,59 +286,6 @@ impl GraphEvolver {
     fn save_results(&self, filename: &str) -> PyResult<()> {
         let _ = filename;
         todo!("write the best genome and edge list to `filename`")
-    }
-}
-
-/// Rust-only, so deliberately outside the `#[pymethods]` block above: these
-/// take and return engine types that have no Python representation.
-impl GraphEvolver {
-    /// The objective for one run, when the config selected Python.
-    ///
-    /// This is the seam the dispatch in **#26** calls: it turns the registered
-    /// callable into the erased `Box<dyn Fitness>` that §8 hands the evolver,
-    /// so the `python` arm of that match is one call rather than a second place
-    /// that knows how registration works.
-    ///
-    /// **A fresh instance per call, not a shared one.** Replicate runs each
-    /// need their own objective (§8.1), so the erasing step is re-run per
-    /// replicate rather than cloning one box. The Python callable itself is
-    /// shared by refcount — see [`PyFitness::clone_ref`] — which is right,
-    /// because it is the *scorer* state that must stay per-run and this has
-    /// none.
-    ///
-    /// The other three variants are not built here: they need
-    /// `config::SirParams` mapped onto [`crate::sir::SirSampleParams`] plus the
-    /// run seed, which is #26's to write.
-    ///
-    /// # Errors
-    ///
-    /// `ValueError` if no callable has been registered — the case spec §8 and
-    /// issue #19 both call out, since a run that reached scoring with nothing
-    /// registered would otherwise panic deep inside the engine. Also if the
-    /// config did not select Python, which is a caller mistake rather than a
-    /// user one, but is reported rather than asserted so it cannot become a
-    /// panic in a release build.
-    // TEMPORARY — remove when #26 lands. This is the seam #26's dispatch calls,
-    // so until that match exists nothing in non-test code calls it and
-    // `dead_code` fires, which would break the `-D warnings` gate that #25 just
-    // made usable. Its tests do exercise it. Recorded in `hotfixes.md`.
-    #[allow(dead_code)]
-    pub(crate) fn python_fitness(&self) -> PyResult<Box<dyn Fitness>> {
-        if !matches!(self.config.fitness, FitnessConfig::Python) {
-            return Err(PyValueError::new_err(format!(
-                "python_fitness is only for a \"python\" objective, but [fitness] type \
-                 is \"{}\"",
-                self.config.fitness.type_name(),
-            )));
-        }
-
-        match self.fitness_function {
-            Some(ref registered) => Ok(Box::new(registered.clone_ref())),
-            None => Err(PyValueError::new_err(
-                "[fitness] type is \"python\" but no fitness function has been \
-                 registered; call set_fitness_function(callable, direction) before run()",
-            )),
-        }
     }
 }
 
@@ -387,7 +356,6 @@ mod tests {
     const PYTHON_FITNESS: &str = "[fitness]\ntype = \"python\"\n";
     const SIR_FITNESS: &str =
         "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.05\nnum_epidemics = 30\n";
-
     /// `lambda batch: [float(n) for (n, edges) in batch]`, as a bound object.
     fn scoring_lambda(py: Python<'_>) -> Bound<'_, PyAny> {
         py.eval(
