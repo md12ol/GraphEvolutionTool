@@ -85,8 +85,13 @@ gene_length = 256            # number of edit operations per genome
 # it, so replicates differ in their epidemics as well as their evolution.
 #
 # Migrating an older config: delete its `seed` line. A leftover `seed` under
-# [fitness] is silently ignored rather than reported, so it would otherwise look
-# like it still controls the epidemics when it no longer does.
+# [fitness] is rejected by name — silently ignoring it would look like it still
+# controls the epidemics when it no longer does.
+#
+# `target_profile` is rejected the same way when the objective is not
+# epi_prof_match. These two keys are named checks, not a general unknown-key
+# sweep: any other unrecognized key under [fitness] is still ignored without a
+# word, so check spelling against this file.
 
 [fitness]
 type           = "epi_spread"
@@ -115,7 +120,9 @@ num_epidemics  = 30          # outbreaks averaged per evaluation
 # zero and nothing is rescaled for the network size, unlike the legacy C++ loader,
 # so supply the curve you want at the size of the network you are building. One
 # element per timestep, all finite, and at least one of them. Whole numbers may
-# be written without a decimal point.
+# be written without a decimal point. The profile belongs to this objective
+# alone: leaving it behind after switching `type` back is an error, not a
+# silently discarded key.
 # [fitness]
 # type           = "epi_prof_match"
 # infection_rate = 0.05
