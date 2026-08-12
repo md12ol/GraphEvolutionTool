@@ -11,15 +11,37 @@ Started 2026-08-12.
 ## Running it
 
 ```bash
-cd documentation
-./serve.sh            # http://localhost:8000
+git clone https://github.com/md12ol/GraphEvolutionTool.git
+cd GraphEvolutionTool/documentation
+./serve.sh            # then open http://localhost:8000
 ./serve.sh 9000       # a different port
 ```
 
-`serve.sh` is a two-line wrapper around `python3 -m http.server`. Any static server works, and
-`file://` works too — opening `documentation/index.html` directly in a browser is fully functional,
-because nothing on the site uses `fetch`, a CDN, or a module import. The server is only nicer
-because history and relative links behave the way you expect.
+Ctrl-C stops it.
+
+### Dependencies: a browser, and Python 3 if you want a server
+
+That is the whole list. **Nothing is installed, nothing is compiled, and nothing is fetched from
+the network.** In particular you do **not** need Rust, maturin, the `get` extension module, npm,
+or any documentation generator — the site is hand-written HTML and does not read the codebase at
+runtime.
+
+| To do this | You need |
+|---|---|
+| Read the site | Any modern browser. Open `documentation/index.html` directly — `file://` works fully, because nothing on the site uses `fetch`, a CDN, or a module import. |
+| Serve it locally | Python 3.x, already present on macOS and every Linux distribution. `./serve.sh` is a wrapper around `python3 -m http.server`; any static server works equally well. |
+| Edit it | A text editor. There is no build step — save the file and reload the page. |
+
+JavaScript must be enabled: the sidebar, the on-page contents and the prev/next links are built at
+load time by `assets/site.js`. With scripts blocked, each page still renders its own content
+readably, but you lose the navigation between pages.
+
+**On Windows**, `serve.sh` is a shell script; run `python -m http.server 8000` from inside
+`documentation/` instead, or just open `index.html`.
+
+**If you edit and the change does not appear**, it is the browser cache — `assets/site.js` and
+`assets/style.css` are aggressively cached, and a stale `site.js` looks exactly like a broken fix.
+Hard-reload (Ctrl-Shift-R, or Cmd-Shift-R).
 
 ---
 
@@ -32,7 +54,8 @@ documentation/
 ├── design-notes.html     the decisions behind the design, and the non-goals
 ├── _template.html        page skeleton — copy this to add a page
 ├── serve.sh
-├── README.md             this file
+├── README.md             this file — how the site works
+├── HANDOFF.md            what has been done and what to do next, for a new session
 ├── assets/
 │   ├── style.css         the entire stylesheet. Tokens, layout, components
 │   └── site.js           the entire behaviour. Nav, TOC, pager, theme, code blocks
