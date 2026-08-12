@@ -1913,3 +1913,14 @@ merged → both copies are left alone and the report names the branch as waiting
 Commits: `0a95d44` (trap + `CLAUDE.md`), `8753156` (step 7), `083ed6a` (ordering correction).
 Raised to James as `collab.md` #48, which can compress once this entry is on `main`.
 *Recorded 2026-08-12 15:30 — Michael, after merging PR #63.*
+
+## Task complete: reject-stray-target-profile — 2026-08-12
+**Chose:** GitHub #58 done. `reject_stray_fitness_keys` (`get/src/config.rs:262`) rejects a
+`target_profile` supplied under any objective but `epi_prof_match`, completing spec §8's
+contradiction clause alongside the existing stray-`seed` check. 233 tests, clippy and fmt clean.
+**Affects:** `get/src/config.rs`, `get/src/py_config.rs`, `config.example.toml`. PR #63, merged by
+Michael as `b225f30` on 2026-08-12.
+**Note on this gate:** the `#[allow(dead_code)]` hotfix on `python_fitness` this task expected to
+find here had already been removed by Michael at the `/done run-dispatch` gate (2026-08-11, #26) —
+checked and confirmed rather than assumed.
+*Recorded 2026-08-12 — James, at the `/done` gate.*

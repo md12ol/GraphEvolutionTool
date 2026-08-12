@@ -1857,6 +1857,14 @@ that objective never reads one.
 
 *(Reply inside #45 · 2026-08-10 18:45 — James.)*
 
+**Closed the loop: #58 merged. 2026-08-12 14:10 — James.** PR #63 landed
+`reject_stray_fitness_keys`, the same raw-text sweep as `reject_fitness_seed` extended to cover
+`target_profile` under a non-`epi_prof_match` objective. 233 tests, clippy and fmt clean; full
+record in `work/archive/2026-08_reject-stray-target-profile/`. Spec §8's contradiction clause is
+now fully implemented; nothing outstanding from this item.
+
+*(Reply inside #45 · 2026-08-12 14:10 — James.)*
+
 ### 48. FYI: auto-delete-on-merge is on, and it will not clean up your local merges
 
 **FYI, no answer needed — 2026-08-12 14:20 — Michael.** I enabled `delete_branch_on_merge` on the
