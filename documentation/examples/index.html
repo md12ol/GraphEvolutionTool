@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Examples · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="examples/index.html">
+<main>
+
+<p class="page-kicker">Using GET</p>
+<h1>Examples</h1>
+<p class="lede">
+  Complete, runnable experiments. Each one is a whole file — copy it, change the numbers, run it.
+  The repository also ships <code>examples/config_builder.py</code>, which covers every
+  configuration combination in one script.
+</p>
+
+<h2>1. The simplest useful run</h2>
+
+<p>Maximise how far an epidemic spreads, on a 100-node network, using edge-edit genomes.</p>
+
+<pre><code class="language-python">import get
+
+config = get.Config(
+    evolution       = get.EvolutionConfig.Generational(num_generations=500, elite_count=1),
+    population_size = 200,
+    network_size    = 100,
+    crossover_rate  = 0.9,
+    mutation_rate   = 0.2,
+    selection       = get.SelectionConfig.Tournament(tournament_size=5),
+    genome          = get.GenomeConfig.EdgeEdit(gene_length=256),
+    fitness         = get.FitnessConfig.EpiSpread(
+        sir = get.SirParams(infection_rate=0.05, num_epidemics=30)
+    ),
+)
+
+evolver = get.GraphEvolver.from_config(config)
+edges   = evolver.run(20260812)
+
+print(f"infected {evolver.best_fitness():.1f} of {config.network_size} nodes")
+print(f"network has {len(edges)} edges")
+
+# Keep the provenance record. This document plus the seed reproduces the run exactly.
+with open("run.toml", "w") as f:
+    f.write(config.to_toml())</code></pre>
+
+<h2>2. The same experiment as a file</h2>
+
+<pre><code class="language-toml"># spread.toml
+population_size = 200
+network_size    = 100
+crossover_rate  = 0.9
+mutation_rate   = 0.2
+
+[evolution]
+type            = "generational"
+num_generations = 500
+elite_count     = 1
+
+[selection]
+type            = "tournament"
+tournament_size = 5
+
+[genome]
+type        = "edge_edit"
+gene_length = 256
+
+[fitness]
+type           = "epi_spread"
+infection_rate = 0.05
+num_epidemics  = 30</code></pre>
+
+<pre><code class="language-python">import get
+evolver = get.GraphEvolver("spread.toml")     # reads, parses AND validates
+edges   = evolver.run(20260812)</code></pre>
+
+<h2>3. SDA genomes, building networks from scratch</h2>
+
+<p>
+  Where edge-edit refines, SDA <a href="../guide/genomes.html#sda">writes a graph from nothing</a>.
+  Note there is no alphabet setting — it is derived from the edge cap.
+</p>
+
+<pre><code class="language-python">import get
+
+config = get.Config(
+    evolution       = get.EvolutionConfig.Generational(num_generations=500, elite_count=2),
+    population_size = 200,
+    network_size    = 100,
+    crossover_rate  = 0.9,
+    mutation_rate   = 0.3,
+    selection       = get.SelectionConfig.Tournament(tournament_size=5),
+
+    # 12 states; each transition emits up to 4 characters; start in state 0.
+    genome          = get.GenomeConfig.Sda(num_states=12, max_resp_len=4, init_state=0),
+
+    fitness         = get.FitnessConfig.EpiLength(
+        sir = get.SirParams(infection_rate=0.04, num_epidemics=50)
+    ),
+
+    # A multigraph: weights up to 3, which makes the SDA alphabet {0,1,2,3}.
+    max_edge_multiplicity = 3,
+    max_mutations         = 2,
+)
+
+evolver = get.GraphEvolver.from_config(config)
+edges   = evolver.run(7)
+print(f"epidemic lasted {evolver.best_fitness():.2f} timesteps on average")</code></pre>
+
+<h2>4. Matching a real epidemic curve</h2>
+
+<p>
+  <code>epi_prof_match</code> minimises the RMSE between the simulated infection curve and one you
+  supply. Two things to get right: the profile is compared <b>verbatim</b>, and it should end in a
+  zero.
+</p>
+
+<pre><code class="language-python">import get
+
+# Newly-infected counts per day, starting with patient zero and ending in a 0.
+target = [1, 2, 5, 11, 19, 26, 24, 17, 9, 4, 2, 1, 0]
+
+config = get.Config(
+    evolution       = get.EvolutionConfig.Generational(num_generations=800, elite_count=1),
+    population_size = 300,
+    network_size    = 128,
+    crossover_rate  = 0.9,
+    mutation_rate   = 0.25,
+    selection       = get.SelectionConfig.Tournament(tournament_size=6),
+    genome          = get.GenomeConfig.EdgeEdit(gene_length=512),
+    fitness         = get.FitnessConfig.EpiProfMatch(
+        sir = get.SirParams(
+            infection_rate       = 0.06,
+            num_epidemics        = 50,
+            patient_zero         = 0,     # pin it, so the curve is comparable across runs
+            min_epidemic_length  = 3,
+            max_epidemic_retries = 5,
+        ),
+        target_profile = target,
+    ),
+)
+
+evolver = get.GraphEvolver.from_config(config)
+edges   = evolver.run(20260812)
+print(f"RMSE against the target: {evolver.best_fitness():.4f}")   # lower is better here</code></pre>
+
+<div class="warn">
+  <b>Do not paste a profile from a legacy C++ run.</b> The old loader prepended patient zero and
+  rescaled by <code>verts / 128</code>; GET does neither. Supply the curve you actually want, at
+  the size of the network you are building.
+</div>
+
+<h2>5. Steady-state, for a long slow search</h2>
+
+<p>
+  One mate-and-replace event at a time. Note <code>tournament_size ≥ 4</code> is <b>required</b>
+  here, and that <code>num_mating_events</code> is not comparable to
+  <code>num_generations</code> — 100,000 events at a population of 200 is 500 generation
+  equivalents.
+</p>
+
+<pre><code class="language-python">import get
+
+config = get.Config(
+    evolution       = get.EvolutionConfig.SteadyState(num_mating_events=100_000),
+    population_size = 200,
+    network_size    = 100,
+    crossover_rate  = 0.9,
+    mutation_rate   = 0.2,
+    selection       = get.SelectionConfig.Tournament(tournament_size=6),   # >= 4 required
+    genome          = get.GenomeConfig.EdgeEdit(gene_length=256),
+    fitness         = get.FitnessConfig.EpiSpread(
+        sir = get.SirParams(infection_rate=0.05, num_epidemics=30)
+    ),
+)
+
+evolver = get.GraphEvolver.from_config(config)
+edges   = evolver.run(20260812)</code></pre>
+
+<div class="note">
+  <b>With a stochastic objective, prefer generational.</b> Steady-state scores only the two new
+  children per event, so the population carries fitnesses computed under different dice — and an
+  individual that drew lucky keeps its inflated score. All three SIR objectives are stochastic.
+  <a href="../guide/evolvers.html#steady-state">The full argument</a>.
+</div>
+
+<h2>6. Tuning the edit mix</h2>
+
+<p>
+  The nine <a href="../guide/genomes.html#operations">edge-edit operations</a> are drawn from a
+  weighted mix. Weights are <b>relative</b>, not percentages.
+</p>
+
+<pre><code class="language-python">import get
+
+weights = get.OperationWeights(
+    add          = 3.0,   # bias early exploration toward building structure
+    toggle       = 2.0,
+    delete       = 1.0,
+    hop          = 1.0,
+    swap         = 0.5,   # 2-opt rewiring is powerful but needs degree > 2 to fire
+    local_add    = 1.0,
+    local_delete = 1.0,
+    local_toggle = 1.0,
+    null         = 0.0,   # no gene is a deliberate no-op
+)
+
+config = get.Config(
+    evolution       = get.EvolutionConfig.Generational(num_generations=500),
+    population_size = 200,
+    network_size    = 100,
+    crossover_rate  = 0.9,
+    mutation_rate   = 0.2,
+    selection       = get.SelectionConfig.Tournament(tournament_size=5),
+    genome          = get.GenomeConfig.EdgeEdit(gene_length=256, operation_weights=weights),
+    fitness         = get.FitnessConfig.EpiSpread(
+        sir = get.SirParams(infection_rate=0.05, num_epidemics=30)
+    ),
+)</code></pre>
+
+<p>
+  Weighting <code>add</code> and <code>toggle</code> up is worth doing on a from-scratch edge-edit
+  run: five of the nine operations are inert until some structure exists.
+</p>
+
+<h2>7. Your own objective, in Python</h2>
+
+<p>
+  Score by something other than an epidemic. The callable takes the <b>whole population</b> and
+  returns one number per individual, in order.
+</p>
+
+<pre><code class="language-python">import get
+import numpy as np
+
+def even_degrees(batch):
+    """Reward networks whose nodes have similar degrees. Lower is better."""
+    scores = np.empty(len(batch))
+    for i, (n, edges) in enumerate(batch):
+        deg = np.zeros(n)
+        for (u, v, w) in edges:
+            deg[u] += w
+            deg[v] += w
+        scores[i] = deg.std()
+    return scores
+
+config = get.Config(
+    evolution       = get.EvolutionConfig.Generational(num_generations=200),
+    population_size = 100,
+    network_size    = 60,
+    crossover_rate  = 0.9,
+    mutation_rate   = 0.2,
+    selection       = get.SelectionConfig.Tournament(tournament_size=5),
+    genome          = get.GenomeConfig.EdgeEdit(gene_length=128),
+    fitness         = get.FitnessConfig.Python(),        # note the empty parentheses
+)
+
+evolver = get.GraphEvolver.from_config(config)
+evolver.set_fitness_function(even_degrees, "minimize")  # direction is declared HERE
+edges = evolver.run(1)</code></pre>
+
+<p>Full contract, and the traps, on <a href="../guide/new-fitness.html">Add an objective</a>.</p>
+
+<h2>8. Stacking: SDA first, then edge-edit <span class="badge badge-planned">planned</span></h2>
+
+<p>
+  The two representations compose with no new data format, because a run returns exactly the
+  <code>(u, v, multiplicity)</code> triples an edge-edit run wants as its base graph. Discover a
+  topology, then refine it.
+</p>
+
+<pre><code class="language-python">import get
+
+common = dict(
+    population_size = 200,
+    network_size    = 100,
+    crossover_rate  = 0.9,
+    mutation_rate   = 0.2,
+    selection       = get.SelectionConfig.Tournament(tournament_size=5),
+    fitness         = get.FitnessConfig.EpiSpread(
+        sir = get.SirParams(infection_rate=0.05, num_epidemics=30)
+    ),
+    max_edge_multiplicity = 3,          # KEEP THIS THE SAME IN BOTH STAGES
+)
+
+# Stage 1 — discover a topology from scratch.
+stage1 = get.Config(
+    evolution = get.EvolutionConfig.Generational(num_generations=400),
+    genome    = get.GenomeConfig.Sda(num_states=12, max_resp_len=4),
+    **common,
+)
+topology = get.GraphEvolver.from_config(stage1).run(20260812)
+
+# Stage 2 — refine it with an edit script.
+stage2 = get.Config(
+    evolution = get.EvolutionConfig.Generational(num_generations=400),
+    genome    = get.GenomeConfig.EdgeEdit(gene_length=256),
+    **common,
+)
+refiner = get.GraphEvolver.from_config(stage2)
+refiner.set_base_graph(100, topology)
+refined = refiner.run(20260813)</code></pre>
+
+<div class="warn">
+  <b>The trap in stacking is the edge cap.</b> Setting edges <b>clamps</b> rather than rejecting,
+  so piping a cap-3 result into a cap-1 run silently collapses every weight to 1 and you get a
+  plausible-looking network that has quietly lost its weighting. Keep
+  <code>max_edge_multiplicity</code> identical, or raise it — never narrow it.
+</div>
+
+<div class="plan-note">
+  <b>Today:</b> there is no <code>set_base_graph</code>, so an edge-edit run always starts from an
+  empty graph and stacking is not yet possible. Stage 1 works exactly as written.
+</div>
+
+<h2>9. Replicates, and reading the convergence log
+    <span class="badge badge-planned">planned</span></h2>
+
+<p>Research use: <code>n</code> runs at identical parameters from one master seed.</p>
+
+<pre><code class="language-python">import get, csv
+
+config  = get.Config(...)                 # as above
+evolver = get.GraphEvolver.from_config(config)
+
+results = evolver.run(seed=20260812, runs=30, max_cores=8)
+
+# epi_spread maximizes, so the best replicate is the largest
+best = max(results, key=lambda r: r.best_fitness)
+print(best.best_fitness, len(best.best_edges))
+print(best.best_genome)                   # the winning genome, printed
+
+with open("convergence.csv", "w", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["run", "seed", "iteration", "best_fitness", "mean_fitness", "std_dev", "ci_95"])
+    for r in results:
+        for row in r.history:
+            w.writerow([r.run_index, r.seed, row.iteration, row.best_fitness,
+                        row.mean_fitness, row.std_dev, row.ci_95])
+
+evolver.save_logs("convergence.csv")      # or just let GET write it</code></pre>
+
+<div class="tip">
+  Asking for 50 runs later reproduces these first 30 <b>exactly</b> — run <code>i</code>'s seed is
+  draw <code>i</code> from a stream seeded by the master, so it does not depend on how many runs you
+  requested. <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a>
+</div>
+
+<div class="plan-note">
+  <b>Today:</b> <code>run(seed)</code> performs a single run and returns the edge list; the
+  convergence history does not reach Python, and <code>save_logs</code> raises. Looping in Python
+  gives you replicates now — but record every seed you use, since you are not getting the stream
+  property above.
+</div>
+
+<h2>10. A parameter sweep</h2>
+
+<p>
+  Config objects are mutable, so a sweep is a loop. Vary one thing, hold the seed fixed, and you
+  are comparing configurations rather than dice.
+</p>
+
+<pre><code class="language-python">import get
+
+def build(infection_rate):
+    return get.Config(
+        evolution       = get.EvolutionConfig.Generational(num_generations=300),
+        population_size = 150,
+        network_size    = 80,
+        crossover_rate  = 0.9,
+        mutation_rate   = 0.2,
+        selection       = get.SelectionConfig.Tournament(tournament_size=5),
+        genome          = get.GenomeConfig.EdgeEdit(gene_length=256),
+        fitness         = get.FitnessConfig.EpiSpread(
+            sir = get.SirParams(infection_rate=infection_rate, num_epidemics=30)
+        ),
+    )
+
+for rate in (0.02, 0.04, 0.06, 0.08, 0.10):
+    config  = build(rate)
+    evolver = get.GraphEvolver.from_config(config)
+    evolver.run(20260812)                      # same seed across the sweep
+    print(f"rate={rate:.2f}  spread={evolver.best_fitness():8.2f}")
+
+    with open(f"sweep_{rate:.2f}.toml", "w") as f:
+        f.write(config.to_toml())</code></pre>
+
+<div class="note">
+  <b>Holding the seed fixed across a sweep is a feature, not laziness.</b> It is the same
+  common-random-numbers argument GET applies internally: differences between the rows then reflect
+  the parameter you changed rather than which dice each run happened to draw.
+</div>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>
