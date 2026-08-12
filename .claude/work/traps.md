@@ -423,3 +423,18 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   engine without a config or a Python interpreter. Reasoning in `decisions.md` 2026-08-11 11:26,
   the rejected-option writeup in `collab.md` #47.
 - **Added:** 2026-08-11 — dispatch-goes-in-dispatch-rs-not-common-rs, while building #26's dispatch.
+
+### GitHub's auto-delete does not fire on a PR you merged locally
+- **Bites when:** you finish a PR the way this repo requires — `git merge --no-ff` locally, then
+  `git push origin main` — and assume the repo setting cleaned the branch up, because GitHub does
+  show the PR as merged.
+- **Do this instead:** delete both copies yourself, as the last step of the merge:
+  `git push origin --delete <branch> && git branch -d <branch>`. It is in `CLAUDE.md`'s merge
+  snippet for that reason.
+- **Why:** `delete_branch_on_merge` (enabled on this repo 2026-08-12) is a setting on *GitHub's own
+  merge action*. A local merge reaches `main` as an ordinary push; GitHub notices the PR's commits
+  are now on the base branch and flips its state to merged, but no merge action ran, so no cleanup
+  runs either. Since every PR touching `.claude/work/*.md` **must** be merged locally — the
+  `merge=union` driver is absent on GitHub's servers — the setting misses exactly the merges this
+  repo does most.
+- **Added:** 2026-08-12 — auto-delete-does-not-fire-on-a-locally-merged-pr, found after merging #63.

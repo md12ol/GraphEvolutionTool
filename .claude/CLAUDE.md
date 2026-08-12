@@ -278,10 +278,18 @@ servers, so `merge=union` does not run on the website. The same PR merges clean 
 git checkout main && git pull && git merge --no-ff origin/<branch>
 git diff HEAD~1 -- .claude/work/    # union never reports a problem; read the tail yourself
 git push origin main
+git push origin --delete <branch> && git branch -d <branch>
 ```
 
 This is not a footnote to the rule above — the rule sends people to the merge button, and that is
 exactly where the driver is absent. Full mechanism in `traps.md`.
+
+**Delete the branch yourself after a local merge — added 2026-08-12, Michael.** The repo's
+`delete_branch_on_merge` was turned on 2026-08-12 and does **not** cover this path: it fires only
+when GitHub itself performs the merge, and a locally-merged PR is marked merged after the fact
+without the cleanup running. So the last line above is part of the merge, not an optional tidy-up.
+An agent that merges when told to merge deletes the branch in the same breath, remote then local.
+Mechanism in `traps.md`, `auto-delete-does-not-fire-on-a-locally-merged-pr`.
 
 ## Workflow
 

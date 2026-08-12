@@ -1856,3 +1856,22 @@ answer and not know it. A discarded `target_profile` under `epi_spread` cannot c
 that objective never reads one.
 
 *(Reply inside #45 · 2026-08-10 18:45 — James.)*
+
+### 48. FYI: auto-delete-on-merge is on, and it will not clean up your local merges
+
+**FYI, no answer needed — 2026-08-12 14:20 — Michael.** I enabled `delete_branch_on_merge` on the
+repo after merging your #63. Worth knowing what it does and does not do, because the half it misses
+is the half we use.
+
+**It only fires when GitHub performs the merge.** Our rule sends every PR touching
+`.claude/work/*.md` through a local `git merge --no-ff` and a push, since the `merge=union` driver
+lives in your git and not on their servers. GitHub still marks such a PR merged — it sees the
+commits land on `main` — but no merge action ran, so no branch is deleted. The setting therefore
+covers the button-merge case only.
+
+**So the branch deletion is now written into the merge snippet in `CLAUDE.md`**, remote then local,
+and into `traps.md` as `auto-delete-does-not-fire-on-a-locally-merged-pr`. Nothing changes about who
+merges what. `jsargant_reject_stray_target_profile` is still around on both sides; I left it rather
+than deleting a branch with your name on it without saying so first — say the word and it goes.
+
+*#48 · raised 2026-08-12 14:20 — Michael.*
