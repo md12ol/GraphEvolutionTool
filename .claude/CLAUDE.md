@@ -408,6 +408,16 @@ reach for `--json` on reads and the REST API on writes:
   person's home directory protects one person — the same argument that puts traps on `main`. The
   precedent was also in plain sight and went unchecked: every one of the 40 commits before that day
   carries no trailer. **Check `git log` before inventing a commit convention.**
+- **When a `planned` feature ships, de-badge its documentation in the same PR.** Added
+  2026-08-13 — Michael. `documentation/` describes GET as `official_spec_sheet.md` designs it, so
+  anything designed but not yet built is written in the present tense carrying a
+  `badge-planned` span and a `.plan-note` callout, with `documentation/status.html` indexing every
+  one. That convention is only honest while someone maintains it: shipping the feature and leaving
+  the badge turns "not built yet" into a lie, and shipping it while leaving `status.html`'s row
+  makes the one page people check for the answer wrong. So the PR that lands the code also greps
+  `documentation/` for `badge-planned`, drops the badge and its callout, and removes the
+  `status.html` row. Reasoning in `decisions.md` 2026-08-12 18:52. **Contingent on `collab.md` #50**
+  — if the present-tense convention is dropped, this rule goes with it.
 - **Never mark work `[x]` that you have not seen verified.** If it only compiled, or only ran
   somewhere that doesn't count, it is `[~]`. Work that looks done and isn't is the most expensive
   failure mode this system has.
