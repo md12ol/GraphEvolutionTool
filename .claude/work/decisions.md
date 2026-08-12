@@ -2112,3 +2112,21 @@ rather than overwritten. Cleanup is GitHub #68 for `get/src` and #67 for `docume
 tier (8), behind #20, #21, #28 and #56. FYI to James in `collab.md` #54.
 **Supersedes, in part:** 2026-08-04 22:12 — the comment convention. Only the linking clause.
 *Recorded 2026-08-13 02:16 — Michael, pushed direct to `main` under collab #52(a)'s practice.*
+
+## 2026-08-13 02:45 — Michael — `dispatch.rs` confirmed to fail the new comment rule; fix stays with #68
+
+**Chose:** measured `dispatch.rs` against the 2026-08-13 comment amendment rather than assume it
+passes because it predates the rule. It does not pass: the non-test region is **214 comment lines
+against 210 of code** — more comment than code — with small functions worst affected (`selection`,
+4 doc lines for a 6-line pass-through; `erase`, 9 for 5). Decided to leave the fix to GitHub #68
+rather than pull it into PR #65 or cut it standalone.
+
+**Why leaving it to #68 rather than fixing now:** offered as an option and declined. The case for
+fixing now was that James is about to read this exact file for review; the case against, which
+stood, is that #68 already owns the whole-crate pass and a one-file cut ahead of it risks a second,
+inconsistent pass later.
+
+**Affects:** `get/src/dispatch.rs` (unchanged). GitHub #68's body should carry the sharper
+non-test figure in place of the diluted 29% currently cited — queued in `plan.md`, not yet pushed
+to the tracker.
+*Recorded 2026-08-13 02:45 — Michael.*
