@@ -1988,3 +1988,8 @@ Michael as `b225f30` on 2026-08-12.
 find here had already been removed by Michael at the `/done run-dispatch` gate (2026-08-11, #26) —
 checked and confirmed rather than assumed.
 *Recorded 2026-08-12 — James, at the `/done` gate.*
+
+## Task complete: initial-doc-site — 2026-08-13
+Archived to `.claude/work/archive/2026-08_initial-doc-site/`. The documentation site shipped in one
+session and merged as PR #64 (`d420b3e`). Entries below this line belong to a later task.
+*Marker written 2026-08-13 00:47 — Michael.*
