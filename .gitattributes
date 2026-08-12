@@ -32,3 +32,12 @@
 # normal 3-way merge and a concurrent append conflicts. Do not add a union line for it.
 .claude/work/decisions.md merge=union
 .claude/work/collab.md merge=union
+
+# Shell scripts are checked out with LF regardless of core.autocrlf. Added 2026-08-13 — Michael,
+# after `sudo ./serve.sh` in WSL failed with `/usr/bin/env: 'bash\r': No such file or directory`.
+# Both owners' Windows clones have core.autocrlf=true, which rewrites every .sh to CRLF on
+# checkout; the shebang then names an interpreter called `bash\r`, which does not exist. The
+# hooks in .claude/hooks/ dodged this only because the harness invokes them as `bash <script>`,
+# where the shebang is never read — they were CRLF too. Without this line the fix is not durable:
+# the next checkout, merge or stash puts the CRs straight back.
+*.sh text eol=lf
