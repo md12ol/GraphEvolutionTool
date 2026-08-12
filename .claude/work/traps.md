@@ -438,3 +438,17 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   `merge=union` driver is absent on GitHub's servers — the setting misses exactly the merges this
   repo does most.
 - **Added:** 2026-08-12 — auto-delete-does-not-fire-on-a-locally-merged-pr, found after merging #63.
+
+### A fix to `documentation/assets/site.js` that "did not work" is almost always the browser cache
+- **Bites when:** you edit `site.js` or `style.css`, reload the docs site, and the old behaviour is
+  still there — so you go back and "fix" code that was already correct.
+- **Do this instead:** hard-reload (Ctrl-Shift-R / Cmd-Shift-R). When screenshotting headlessly,
+  use a **fresh profile directory** per run: `firefox --headless --profile <new-dir> --screenshot
+  out.png <url>` — a reused profile caches across invocations and will hand you a stale page with
+  no warning.
+- **Why:** both asset files are served with ordinary caching headers by `python3 -m http.server`
+  and are requested by every page, so they are the two files a browser is most eager to keep. The
+  failure is silent and looks exactly like a broken edit, because the HTML *is* current and only
+  the behaviour is old. Hit 2026-08-12 while fixing the on-page contents: the fix was correct and
+  two screenshots in a row showed it as not applied.
+- **Added:** 2026-08-12 — docs-site-asset-caching-hides-your-edit.

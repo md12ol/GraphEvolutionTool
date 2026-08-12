@@ -1986,3 +1986,49 @@ items 1 and 2 run the opposite way to everything else there. If we amend the she
 no change for 1 and 2 and a small one for 3.
 
 *#51 · raised 2026-08-12 18:39 — Michael.*
+
+### 52. Two agenda items for the next meeting: direct-push for practice-binding `CLAUDE.md` edits, and nudging unanswered collab items
+
+Michael, raising both for the joint meeting — he said "tomorrow" on 2026-08-13, so this is for
+whichever sitting comes next. Neither is urgent and neither blocks anything.
+
+**(a) Let a practice-binding `CLAUDE.md` change go direct to `main` with a note here, instead of
+preferring a PR.** Today the routing table says direct push is permitted for `.claude/CLAUDE.md`
+but to "prefer a PR when the change binds the other owner's practice rather than recording a
+fact". The ask is to replace that preference with: **push direct, and raise a `collab.md` item
+saying what changed and why**, in the same session.
+
+- **The case for it.** The rule as written has been departed from several times, and a rule that is
+  routinely and correctly broken is stated wrong rather than being broken — the same reasoning that
+  already reworded the agent-merge rule and widened the self-merge cases. A `CLAUDE.md` bullet
+  carries no behaviour: nothing executes, and the other owner reads the file at the start of every
+  session anyway, so the round trip mostly delays the moment the rule starts applying.
+- **The case against, stated fairly.** "Binds the other owner's practice" is exactly the category
+  where a second reader is worth having, and a `collab.md` note is weaker than a review because it
+  can be skimmed. If we do change it, the note should be mandatory rather than encouraged, or the
+  rule quietly becomes "push direct".
+- **Live example.** The bullet added 2026-08-13 — de-badge a `planned` feature's documentation in
+  the same PR that ships it — went direct to `main` on Michael's instruction, under this proposed
+  practice rather than the current one. It is itself contingent on #50.
+
+**(b) Have the agent chase unanswered `collab.md` items rather than leaving them to lapse.** The
+proposal is that `/load` and `/save` surface open items that have had no reply — oldest first — and
+that when an answer is given in conversation, the agent appends it *inside* the item, stamped, so
+the item updates rather than the answer living only in a transcript.
+
+- **Why it is worth doing.** The mechanism already assumes answers are appended inside items, but
+  nothing prompts anyone to do it, so the failure is silent: an item stays technically Open forever
+  and the decision either never happens or happens verbally and is never written down. #50 is a
+  current instance — PR #64 was merged without ruling on the question the item asks, so the
+  convention now stands unopposed rather than agreed.
+- **What it would need.** A pass over `collab.md` for items with no appended answer, some notion of
+  how old is old enough to chase, and the discipline that a conversational answer gets written back
+  into the item in the same session. The last part is the one that actually matters; the first two
+  are cheap.
+
+**One thing to correct me on if I have read it wrong:** Michael's note said "I've done that several
+times so an exception should be made", and I have taken that as evidence for **(a)** — direct pushes
+already happening in practice — rather than for (b). If it was meant the other way round, say so and
+the framing above flips.
+
+*#52 · raised 2026-08-13 00:34 — Michael.*

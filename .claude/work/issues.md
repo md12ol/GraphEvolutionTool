@@ -60,6 +60,19 @@ it was filed directly.*
 - **Noticed:** <YYYY-MM-DD>, in <what you were doing when you hit it>
 
 
+### Three probabilities are unvalidated — negatives and values above 1 parse and run
+
+- **Where:** `get/src/config.rs` — `crossover_rate` and `mutation_rate` at the top level,
+  `infection_rate` on `SirParams`. None of the four `validate_*` helpers touches them.
+- **Impact:** a `mutation_rate = 2.0` or a negative `infection_rate` is accepted silently and the
+  run produces numbers that look plausible. It is the first thing a new user gets wrong, and there
+  is no error to lead them back. Suggested constraint is `0.0 <= v <= 1.0` on all three.
+- **Blocked on the sheet, not on effort.** §7's constraint list omits them too, so this is a gap in
+  the design before it is one in the code — fixing `config.rs` alone would make the code stricter
+  than the sheet it is built to. Raised as `collab.md` #51 item 3, for a joint meeting; parked here
+  so it survives if that meeting slips. Once §7 is amended this is a small, self-contained change.
+- **Noticed:** 2026-08-12, surveying `config.rs` to write the documentation site's config reference.
+
 ### `cargo doc` warns twice on a private intra-doc link in `sda.rs`
 
 - **Where:** `get/src/genomes/sda.rs`, the doc comment referencing [`INIT_CHAR_MUTATION_RATE`].

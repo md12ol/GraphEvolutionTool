@@ -1913,3 +1913,68 @@ merged → both copies are left alone and the report names the branch as waiting
 Commits: `0a95d44` (trap + `CLAUDE.md`), `8753156` (step 7), `083ed6a` (ordering correction).
 Raised to James as `collab.md` #48, which can compress once this entry is on `main`.
 *Recorded 2026-08-12 15:30 — Michael, after merging PR #63.*
+
+## 2026-08-12 18:52 — Michael — The documentation site describes the sheet, not the code, and badges the gap
+
+**Chose:** `documentation/` documents GET **as `official_spec_sheet.md` designs it**. Features that
+are designed and agreed but not yet in `get/src/` are written in the present tense, as though they
+work, and carry two markers: a `planned` badge where they appear, and a `.plan-note` callout naming
+what happens today. `status.html` indexes every one in a single table — replicates and `max_cores`,
+the result object, the convergence log reaching Python, `ci_95` and the per-row seed,
+`save_logs`/`save_results`, and the base-graph setter.
+
+**Why:** it follows this repo's existing rule — where the sheet and the code disagree, the sheet is
+the intent — so the site does not need rewriting each time a designed feature lands, only
+de-badging. It was also an explicit instruction when the work was commissioned.
+
+**Rejected:** documenting only what exists today. That produces a site that is correct on the day it
+is written and silently wrong afterwards, and it would have omitted the replicate layer, which is
+how research actually uses GET. Also rejected: writing the future tense throughout ("will support"),
+which reads as a roadmap rather than documentation and ages just as badly.
+
+**The risk, stated plainly:** "written as though implemented" is one bad edit away from
+"indistinguishable from implemented". The badge, the callout and `status.html` are the three guards,
+and all three must survive any future edit. Anyone removing a badge without shipping the feature has
+broken the contract.
+
+**The opposite case exists and is not badged.** Several places where the sheet's status claims are
+stale and the code is *ahead* are documented from the code, with no badge; `status.html` records
+them separately. Check which way a disagreement runs before badging anything.
+
+**Affects:** `documentation/` — every `badge-planned`, `documentation/status.html`,
+`documentation/README.md`, `documentation/HANDOFF.md`.
+
+**Open:** raised to James as `collab.md` #50. He merged PR #64 without ruling on it, so the
+convention stands unopposed rather than agreed.
+*Recorded 2026-08-12 18:52 — Michael, after PR #64 merged as `d420b3e`.*
+
+## 2026-08-12 18:54 — Michael — No build step for the docs site, and one NAV table instead of a generator
+
+**Chose:** hand-written static HTML with a single stylesheet and a single script. `assets/site.js`
+holds the site map in one `NAV` array and builds the sidebar, the on-page contents, the prev/next
+pager, the copy buttons and the theme toggle at load time; a page file contains only its `<main>`
+plus a `data-page` attribute tying it to its `NAV` entry. Dependencies are a browser, and Python 3
+only if you want a server.
+
+**Why:** the brief was that a clone can launch it locally. Anything with a build step turns that
+into "install the toolchain first", and a documentation generator that reads the codebase would put
+the guide pages — which come from the sheet, not the code — outside its reach. Doing the chrome in
+JS keeps 38 page files free of duplicated navigation, so adding a page is one `NAV` line rather than
+38 edits.
+
+**Rejected:** `cargo doc` (documents the code, cannot express the design, and says nothing about
+config or the Python front end); mdBook or a static-site generator (a toolchain to install, and a
+second source of truth for the nav); server-side includes or `fetch`-ing a nav fragment (breaks
+`file://`, which is the cheapest way to read the site).
+
+**The cost, accepted:** JavaScript is required for navigation between pages — each page still reads
+fine without it, but the sidebar and pager vanish. And `data-page` is silently load-bearing: get it
+wrong and the page renders while every sidebar link on it 404s. The verification script in
+`documentation/README.md` exists to catch exactly that, along with broken links and anchors.
+
+**Also decided:** `documentation/HANDOFF.md` is checked in, because `.claude/work/current/` is
+gitignored and so the task's own state never reaches the other owner.
+
+**Affects:** `documentation/assets/site.js`, `documentation/assets/style.css`,
+`documentation/_template.html`, `documentation/serve.sh`.
+*Recorded 2026-08-12 18:54 — Michael, alongside the sheet-versus-code entry above.*
