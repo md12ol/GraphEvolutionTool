@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- PAGE TEMPLATE. Copy this file, fill in the four marked spots, delete this comment.
+
+     1. <title>            — "Page name · GET docs"
+     2. href="..."         — depth-correct path to assets/ (../ per directory level)
+     3. data-page="..."    — the page's path relative to documentation/, and it MUST
+                             match an entry in the NAV table in assets/site.js, or the
+                             sidebar highlight and the prev/next pager go missing
+     4. the <main> body
+
+     Everything else — sidebar, table of contents, prev/next, copy buttons, theme
+     toggle — is built by site.js at load time. Do not hand-write any of it.
+
+     Conventions used across the site are documented in documentation/README.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PAGE NAME · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="section/page.html">
+<main>
+
+<p class="page-kicker">Section name</p>
+<h1>Page name</h1>
+<p class="lede">One or two sentences saying what this page is for and who should read it.</p>
+
+<h2>A section</h2>
+
+<p>Body text. Link to other pages with ordinary relative links: <a href="../index.html">Overview</a>.</p>
+
+<!-- an API item -->
+<div class="api-item">
+  <div class="api-sig">pub fn example(&amp;self, n: usize) -&gt; f64</div>
+  <div class="api-body">
+    <span class="src">graph.rs:120</span>
+    <p>What it does, in one or two sentences.</p>
+  </div>
+</div>
+
+<!-- a callout: .note (blue) · .tip (green) · .warn (amber) · .plan-note (violet, for
+     anything designed but not yet in the code) -->
+<div class="note"><b>Lead-in.</b> The point.</div>
+
+<!-- a status badge, used inline in headings and tables -->
+<p><span class="badge badge-built">built</span>
+   <span class="badge badge-partial">partial</span>
+   <span class="badge badge-planned">planned</span></p>
+
+<!-- a wide table always goes in a scroll wrapper -->
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Column</th><th>Column</th></tr></thead>
+  <tbody><tr><td>cell</td><td>cell</td></tr></tbody>
+</table>
+</div>
+
+<pre><code class="language-rust">let x = 1;</code></pre>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>
