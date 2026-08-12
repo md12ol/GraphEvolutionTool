@@ -1895,3 +1895,17 @@ legitimately runs while the PR is still open, and deleting that branch would clo
 Not merged → both copies are left alone and the report names the branch as waiting.
 
 *(Appended inside #48 · 2026-08-12 14:52 — Michael, after `8753156`.)*
+
+**Second append to #48 · 2026-08-12 15:18 — Michael.** Corrected step 7 after walking a real task
+through it: the *remote* branch is almost always gone before `/done` ever runs, because you merge my
+PR and delete it in the same breath. What survives is my **local** copy, on my machine only — which
+is the actual argument for the step existing in `/done` at all, rather than being covered by the
+merge snippet you run.
+
+So the order flipped: `git fetch --prune`, then `git branch -d`, then the remote delete as a
+tolerated no-op. `remote ref does not exist` is the expected outcome there, not a fault, and the
+report now says "deleted locally, remote already gone at merge" rather than treating it as an error.
+The `--merged` gate is unchanged, and `git branch -d` refuses an unmerged branch on its own, so
+there are two guards in front of the open-PR case.
+
+*(Second append inside #48 · 2026-08-12 15:18 — Michael.)*

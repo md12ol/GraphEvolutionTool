@@ -149,19 +149,29 @@ git push origin main
 The docs are staged from `.claude/` only. **Never** add the task's source changes here — they
 belong to their own branch and PR, and the two tracks stay separate.
 
-**Then delete the task's branch, but only once it is merged.** `/done` legitimately runs while the
-PR is still open (`collab.md` #28), and deleting the branch of an open PR closes it unmerged, which
-is destructive and not what anyone asked for. So test, don't assume:
+**Then delete the task's branch, but only once it is merged — and expect the remote copy to be
+gone already.** Nobody merges their own PR here, so by the time you close your own task the other
+owner has usually merged it and deleted the remote branch in the same breath. **The copy that
+reliably survives is the local one**, and it survives on *your* machine only, which is why this
+belongs in `/done` rather than in the merge snippet. A `remote ref does not exist` error here is
+the normal case, not a fault:
 
 ```bash
-git branch --merged main | grep -x '  <branch>'   # empty output = NOT merged, stop
-git push origin --delete <branch> && git branch -d <branch>
+git fetch --prune                                 # drop remote-tracking refs already deleted
+git branch --merged main | grep -qx "  <branch>" || echo "NOT merged — stop"
+git branch -d <branch>                            # the copy that is usually still here
+git push origin --delete <branch>                 # no-op if they already deleted it; ignore the error
 ```
 
-If it is not merged, leave both copies alone and **say so in the report** — name the branch and say
-the deletion is waiting on its PR. GitHub's `delete_branch_on_merge` will not do it for you later
-either, because this repo merges locally; see `traps.md`,
-`auto-delete-does-not-fire-on-a-locally-merged-pr`.
+Two ways to end up not deleting, and both are reported rather than fixed:
+
+- **Not merged.** `/done` legitimately runs while the PR is still open (`collab.md` #28), and
+  deleting an open PR's branch closes it unmerged — destructive, and nobody asked for it. Leave
+  both copies, name the branch in the report, say the deletion is waiting on its PR.
+- **Already fully gone.** Say that too, in one clause. It means the merge path did its job.
+
+GitHub's `delete_branch_on_merge` will not clean up later either, because this repo merges locally;
+see `traps.md`, `auto-delete-does-not-fire-on-a-locally-merged-pr`.
 
 **8. Report.** Say what was archived and where, the disposition of every item from the gate,
 which hotfixes and issues carried forward into the next task, whether the task's branch was deleted
