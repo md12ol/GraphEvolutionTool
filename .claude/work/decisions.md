@@ -1864,3 +1864,10 @@ Commits `bfa515b`, `d7cb289`, `7fc4c1a` on `jsargant_reject_stray_target_profile
 **Not decided here:** whether `config.example.toml` should demonstrate a converging run — that is
 `collab.md` #48, untouched.
 *Recorded 2026-08-11 20:15 — James, at #58's save.*
+## Task complete: stale-run-doc — 2026-08-12
+GitHub #61 closed via PR #62 (`ffb0c9b`, merged 2026-08-11T17:38:31Z — a real review merge, not a
+self-merge). `GraphEvolver::run`'s stale "for whoever implements the dispatch (#26)" doc block
+(`get/src/lib.rs:219-246`, 29 lines) is deleted; nothing else in the method changed. Verified on
+`main`: `cargo test -p get` 231/231, clippy and fmt clean. No hotfixes or issues touched by this
+task; nothing carried forward.
+*Recorded 2026-08-12 — Michael, at the `/done mdube_stale_run_doc` gate.*
