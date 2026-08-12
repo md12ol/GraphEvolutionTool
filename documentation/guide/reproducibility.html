@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seeds &amp; reproducibility · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/reproducibility.html">
+<main>
+
+<p class="page-kicker">How it works</p>
+<h1>Seeds &amp; reproducibility</h1>
+<p class="lede">
+  One number reproduces an entire experiment. Getting that right under a stochastic objective and
+  parallel execution takes more care than it sounds like, and this page is the whole scheme.
+</p>
+
+<h2>One seed, and it is not in the config</h2>
+
+<p>
+  <b>There is exactly one seed for the whole experiment</b>, supplied to the
+  <a href="python-api.html"><code>run</code></a> call, and everything derives from it: the starting
+  population, the evolution loop, and the epidemics.
+</p>
+
+<p>
+  It lives on <code>run</code> rather than in the config because the seed describes <i>this
+  invocation</i>, while the config describes <i>the experiment</i>. The same reasoning puts the
+  replicate count and the core cap there too. A <code>[fitness] seed</code> key is
+  <b>rejected by name</b> — it existed in an older schema, and a separately configured fitness seed
+  would mean replicate runs at different evolution seeds still faced <i>identical</i> epidemic
+  draws, which is exactly the thing replicates exist to vary.
+</p>
+
+<div class="note">
+  <b>The generator is pinned, deliberately.</b> Both strategies seed <code>ChaCha8Rng</code>, not
+  the library's default generator — whose algorithm may change between releases, which would defeat
+  the entire purpose of a seed argument. The same seed must mean the same thing in both strategies,
+  on every machine, indefinitely.
+</div>
+
+<h2>How the seed spreads</h2>
+
+<figure>
+<svg viewBox="0 0 700 340" role="img" aria-label="One master seed feeds a stream of per-replicate seeds; each run's seed builds the population and then the evolver; the evolver's batches derive epidemic seeds from a run seed and a counter.">
+  <defs>
+    <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g style="color:var(--border-firm)">
+    <rect x="250" y="16" width="200" height="44" rx="8" class="d-fill-acc"/>
+    <rect x="250" y="16" width="200" height="44" rx="8" class="d-stroke"/>
+    <text x="350" y="43" class="d-text" text-anchor="middle" font-weight="600">master seed</text>
+
+    <path d="M350 62 L350 86" class="d-stroke" stroke-width="1.5" marker-end="url(#ap)"/>
+    <rect x="215" y="90" width="270" height="42" rx="8" class="d-fill-box"/>
+    <rect x="215" y="90" width="270" height="42" rx="8" class="d-stroke"/>
+    <text x="350" y="110" class="d-text" text-anchor="middle">seeds a generator whose output stream</text>
+    <text x="350" y="126" class="d-text" text-anchor="middle"><tspan font-weight="600">is</tspan> the per-run seed list</text>
+
+    <path d="M350 134 L350 152" class="d-stroke" stroke-width="1.5"/>
+    <path d="M120 152 L580 152" class="d-stroke" stroke-width="1.5"/>
+    <path d="M120 152 L120 172" class="d-stroke" stroke-width="1.5" marker-end="url(#ap)"/>
+    <path d="M350 152 L350 172" class="d-stroke" stroke-width="1.5" marker-end="url(#ap)"/>
+    <path d="M580 152 L580 172" class="d-stroke" stroke-width="1.5" marker-end="url(#ap)"/>
+
+    <rect x="60"  y="176" width="120" height="36" rx="7" class="d-fill-good"/>
+    <rect x="60"  y="176" width="120" height="36" rx="7" class="d-stroke"/>
+    <text x="120" y="199" class="d-text-sm" text-anchor="middle">run 0 — draw 0</text>
+    <rect x="290" y="176" width="120" height="36" rx="7" class="d-fill-good"/>
+    <rect x="290" y="176" width="120" height="36" rx="7" class="d-stroke"/>
+    <text x="350" y="199" class="d-text-sm" text-anchor="middle">run i — draw i</text>
+    <rect x="520" y="176" width="120" height="36" rx="7" class="d-fill-good"/>
+    <rect x="520" y="176" width="120" height="36" rx="7" class="d-stroke"/>
+    <text x="580" y="199" class="d-text-sm" text-anchor="middle">run n — draw n</text>
+
+    <path d="M350 214 L350 236" class="d-stroke" stroke-width="1.5" marker-end="url(#ap)"/>
+
+    <rect x="150" y="240" width="400" height="86" rx="8" class="d-fill-bg"/>
+    <rect x="150" y="240" width="400" height="86" rx="8" class="d-stroke" stroke-dasharray="4 3"/>
+    <text x="350" y="262" class="d-text-acc" text-anchor="middle">inside one run</text>
+    <text x="350" y="284" class="d-text-sm" text-anchor="middle">1. the starting population is drawn</text>
+    <text x="350" y="302" class="d-text-sm" text-anchor="middle">2. the evolver's own seed is drawn next, from the same stream</text>
+    <text x="350" y="320" class="d-text-sm" text-anchor="middle">3. each scoring batch derives an epidemic seed from (run seed, batch counter)</text>
+  </g>
+</svg>
+<figcaption>Each layer draws <i>from</i> the previous one rather than reusing it — so the evolver
+never replays the exact draws that just built its population.</figcaption>
+</figure>
+
+<h2>Replicate seeding <span class="badge badge-planned">planned</span></h2>
+
+<p>
+  Research use is <code>n</code> runs at identical parameters. The master seed seeds a generator
+  whose output stream <i>is</i> the per-run seed list — run <code>i</code> takes draw
+  <code>i</code>. One parameter, fully reproducible, and with one property worth preserving
+  deliberately:
+</p>
+
+<div class="tip">
+  <b>A run's seed does not depend on how many runs you asked for.</b> Drawing from a stream gives
+  that for free: asking for 50 runs reproduces the first 30 exactly, so extending an experiment
+  never invalidates the replicates you already have.
+</div>
+
+<p>
+  Deriving from <code>master + i</code> or <code>hash(master, i)</code> would work equally well.
+  <code>master ^ i</code> would <b>not</b>, because nearby masters collide across run indices —
+  master 4 run 1 and master 5 run 0 would be the same run.
+</p>
+
+<div class="plan-note">
+  <b>Today:</b> <code>run</code> performs a single run from a single seed. If you loop in Python to
+  get replicates, you are choosing the seeds yourself and do not get the stream property above —
+  so <b>record every seed you used</b>, or your experiment will not be extensible later.
+</div>
+
+<h2>The epidemic dice</h2>
+
+<p>
+  This is where a stochastic objective gets subtle. Two requirements pull in opposite directions,
+  and both matter:
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Requirement</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><b>Within one evaluation</b>, every population member must face the <i>same</i>
+        epidemic draws.</td>
+        <td>This is <b>common random numbers</b>. Fitness differences then reflect the graph rather
+            than the dice, which is what makes selection meaningful at all under a noisy
+            objective.</td></tr>
+    <tr><td><b>Across evaluations</b>, the same network must <i>not</i> keep getting the same
+        epidemic.</td>
+        <td>Otherwise the run optimizes against one frozen sample of the disease rather than
+            against the disease.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>The mechanism is forced by the trait — an objective cannot carry a mutable generator across a
+   parallel population — so:</p>
+
+<blockquote class="note">
+  The objective holds a <b>run seed</b> plus an <b>atomic evaluation counter</b>. Each call to the
+  batch scorer increments the counter once and derives that batch's epidemic seed from
+  <code>(run_seed, counter)</code>. Every graph in the batch is simulated from that one derived
+  seed; the next batch gets a different one. Reproducible, shared within a batch, fresh across
+  batches.
+</blockquote>
+
+<p>
+  <b>The counter is per-run state, not shared.</b> Each run owns its own objective instance and
+  therefore its own counter. A counter shared across concurrently executing runs would let thread
+  scheduling decide which run sees which epidemic seed — and reproducibility would evaporate in a
+  way that only shows up under load, which is the worst possible failure mode.
+</p>
+
+<div class="warn">
+  <b>Deriving the seed from the graph's contents or its index would satisfy neither
+  requirement.</b> It reintroduces exactly the between-individual noise that common random numbers
+  removes, <i>and</i> freezes each network's epidemic forever.
+</div>
+
+<h3>Position-indexed epidemics, and why the re-roll survives</h3>
+
+<p>
+  Inside one evaluation, the batch seed seeds a generator whose output stream is the epidemic seed
+  list, and epidemic <code>i</code>, attempt <code>a</code>, takes draw
+  <code>i × max_epidemic_retries + a</code>. This is not a second mechanism — it is the identical
+  one applied to a different index.
+</p>
+
+<p>
+  It is also what keeps the <a href="sir.html#reroll">short-epidemic re-roll</a> compatible with
+  common random numbers. Drawing epidemics sequentially from one stream would not: whether a graph
+  re-rolls depends on its own outcome, so a graph that retries consumes extra draws — and every
+  subsequent epidemic in that evaluation would then be offset from the graphs that did not retry,
+  for the rest of the batch. Position-indexed seeds resynchronise at the next epidemic index.
+</p>
+
+<div class="note">
+  <b>"The re-roll breaks CRN" is the easy misreading, and it is wrong.</b> Every graph in the batch
+  draws from an <b>identical pool of dice</b> — the same
+  <code>h(batch, i, 1) … h(batch, i, max_epidemic_retries)</code> for all of them, none of it
+  graph-specific. What differs between graphs is only <i>which</i> of those common draws each one
+  stops on, and that is what a retry <b>is</b>. The randomness is common; the stopping rule is
+  outcome-dependent, deliberately.
+</div>
+
+<p>
+  Position-indexing is also what makes scoring <b>order-independent</b>: a population evaluated
+  across parallel workers reproduces exactly regardless of which worker reaches which graph first.
+</p>
+
+<h2>What can still differ between two runs</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Change</th><th>Same result?</th></tr></thead>
+  <tbody>
+    <tr><td>Same seed, same config, different machine</td><td><b>Yes.</b></td></tr>
+    <tr><td>Same seed, same config, different <code>max_cores</code></td>
+        <td><b>Yes</b> — parallelism never affects the outcome, by design.</td></tr>
+    <tr><td>Same seed, asking for more replicates</td>
+        <td><b>Yes</b> for the replicates you already had.</td></tr>
+    <tr><td>Same seed, a different <a href="evolvers.html">strategy</a></td>
+        <td>No — and it should not. The seed means "the same dice", not "the same run".</td></tr>
+    <tr><td>Same seed, one config value changed</td>
+        <td>No. Every downstream draw shifts.</td></tr>
+    <tr><td>Same seed, a <a href="new-fitness.html">Python objective</a> that is itself
+        random</td>
+        <td><b>No.</b> GET cannot seed your callable. If you want reproducibility, seed it
+            yourself from something deterministic.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Provenance</h2>
+
+<p>
+  The seed alone is not enough to reproduce an experiment — you also need the exact config. That is
+  what <code>config.to_toml()</code> is for: the Python objects serialize to TOML and <i>that</i>
+  document is what Rust parses, so writing it next to your results gives you a record that re-runs
+  verbatim. Store the seed beside it and the pair is complete.
+</p>
+
+<p>
+  The design also carries <b>the seed and the run index on every log row</b>
+  <span class="badge badge-planned">planned</span>, so 30 replicate logs can be concatenated into
+  one file and still be separable — which is what makes an across-run convergence band computable
+  later. See <a href="output.html">Logs &amp; results</a>.
+</p>
+
+<h2>One accepted limitation</h2>
+
+<p>
+  <a href="evolvers.html#steady-state">Steady-state</a> carries stale fitnesses: it scores only the
+  two new children per event, so the population's recorded fitnesses were computed under different
+  dice than the children being compared against them. An individual that drew lucky dice keeps its
+  inflated score for the rest of the run. This is reproducible — it is not a randomness bug — but
+  it does mean the comparison is not fair. <b>Prefer generational when the objective is stochastic
+  and the comparison needs to be fair.</b>
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Genomes · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/genomes.html">
+<main>
+
+<p class="page-kicker">How it works</p>
+<h1>Genomes</h1>
+<p class="lede">
+  A genome is a compact recipe that <b>expresses</b> into a graph. GET ships two, and they are
+  genuinely different ideas about how to describe a network — one edits an existing graph, the
+  other writes one from nothing.
+</p>
+
+<h2>Why not just evolve the graph directly?</h2>
+
+<p>
+  You could store a 100-node graph as its 4,950 possible edges and mutate those bits. It works, but
+  it explores badly: a random bit-flip is almost always a tiny local change, and there is no
+  structure a crossover can meaningfully recombine. Both of GET's representations are <b>indirect
+  encodings</b> — small objects whose local changes produce structured, sometimes large, changes in
+  the resulting graph.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th></th><th><a href="#edge-edit">edge-edit</a></th><th><a href="#sda">SDA</a></th></tr></thead>
+  <tbody>
+    <tr><td>Is</td><td>A script of edit operations</td><td>A finite-state machine</td></tr>
+    <tr><td>Starts from</td><td>A base graph you supply (or an empty one)</td><td>Nothing</td></tr>
+    <tr><td>Good at</td><td>Refining a network you already have</td>
+        <td>Discovering structure from scratch</td></tr>
+    <tr><td>Config</td><td><code>gene_length</code>, operation weights</td>
+        <td><code>num_states</code>, <code>max_resp_len</code>, <code>init_state</code></td></tr>
+    <tr><td>One mutation is</td><td>Rerolling one gene</td>
+        <td>Redrawing one transition, one response, or the initial character</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="tip">
+  <b>They stack.</b> Because a run returns <code>(u, v, multiplicity)</code> triples and an
+  edge-edit run starts from a graph, you can evolve a topology with SDA and then refine it with
+  edge-edit, with no new data format in between. See
+  <a href="python-api.html#base-graph">supplying a base graph</a>.
+</div>
+
+<h2>The contract both satisfy</h2>
+
+<pre><code class="language-rust">pub trait Genome: Clone + Send + Sync {
+    type Context: Send + Sync;
+    fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph;
+    fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R);
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, rng: &amp;mut R);
+    fn print(&amp;self) -&gt; String;
+}</code></pre>
+
+<p>Four things to notice, because each one is load-bearing:</p>
+
+<ul>
+  <li><b><code>crossover</code> recombines in place</b>, leaving one child in each parent. It
+      inherently produces two children, and an engine that kept only one would waste half of every
+      crossover.</li>
+  <li><b><code>mutate</code> applies exactly one mutation per call.</b> This is a trait-level
+      contract, not a per-representation choice — see
+      <a href="variation.html">Crossover &amp; mutation</a> for why.</li>
+  <li><b><code>print</code> is the type-erasure hook.</b> It lets the non-generic Python entry
+      point record <i>which individual won</i> without knowing its representation.</li>
+  <li><b><code>Context</code> carries run-level configuration</b> and is the authority on graph
+      size and edge cap. It is shared by reference across every worker during expression, which is
+      why it must be <code>Send + Sync</code>.</li>
+</ul>
+
+<h2 id="edge-edit">Edge-edit — a script over a base graph</h2>
+
+<p>
+  An edge-edit genome is a list of encoded operations: "add an edge between these two vertices",
+  "delete that one", "rewire this pair". Expression clones the base graph and applies every gene in
+  order.
+</p>
+
+<div class="note">
+  <b>It is a script, not a graph.</b> The same genome expressed against a different base graph
+  gives a different result. That is the point of the representation — it encodes a
+  <i>transformation</i>, which is what makes it good at refinement.
+</div>
+
+<h3>How a gene is packed</h3>
+
+<p>
+  Each gene is a single 64-bit integer: an <b>opcode in the low 4 bits</b> and a <b>32-bit payload
+  above it</b>. Expression decodes the payload mixed-radix into four vertex parameters, using the
+  node count <code>n</code> as the base:
+</p>
+
+<pre><code class="language-text" data-no-tint>v1 = payload % n
+v2 = payload / n   % n
+v3 = payload / n²  % n
+v4 = payload / n³  % n</code></pre>
+
+<p>
+  Different operations use different numbers of those four. Nothing is validated: a decoded pair
+  that names a self-loop or an impossible edit simply does nothing, because
+  <a href="graph.html">the graph ignores those silently</a>.
+</p>
+
+<div class="warn">
+  <b>The payload cannot address the whole space evenly, and this is inherited deliberately.</b>
+  Four base-<code>n</code> digits need <code>n⁴</code> values but the payload has only 32 bits. At
+  <code>n = 1000</code> the fourth parameter only ever takes values <code>0..=4</code>; at
+  <code>n = 257</code> it never exceeds 252. The bias comes from the legacy implementation GET
+  reproduces, and it is pinned by a test — but it means the fourth vertex parameter of an operation
+  is far from uniform on large networks.
+</div>
+
+<h3 id="operations">The nine operations</h3>
+
+<p>All of them are <b>no-ops when their preconditions fail</b>. Nothing errors, nothing is
+   retried.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Operation</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td><code>Add</code> / <code>Delete</code></td>
+        <td>Add or remove one edge copy between <code>v1</code> and <code>v2</code>.</td></tr>
+    <tr><td><code>Toggle</code></td>
+        <td>Absent → add. At the cap → remove. Otherwise <code>v3</code>'s parity decides.</td></tr>
+    <tr><td><code>LocalAdd</code> / <code>LocalDelete</code> / <code>LocalToggle</code></td>
+        <td>The same three, but the far endpoint is reached by a <b>two-hop walk</b> from
+            <code>v1</code> — to neighbour <code>v2</code>, then to <i>its</i> neighbour
+            <code>v3</code>. A walk that returns to the start, or passes through a degree-1 node,
+            is rejected.</td></tr>
+    <tr><td><code>Hop</code></td>
+        <td>Move an edge: connect <code>v1</code> to its two-hop endpoint, then drop the edge to
+            the intermediate neighbour — but only if the new edge actually took.</td></tr>
+    <tr><td><code>Swap</code></td>
+        <td>A 2-opt rewire. Given two non-adjacent vertices of degree &gt; 2 and one neighbour
+            each, cut both edges and cross-connect — only if all four vertices are distinct and
+            none of the would-be edges already exists. Needs at least 4 nodes.</td></tr>
+    <tr><td><code>Null</code></td>
+        <td>A deliberate no-op. Weight it to <code>0</code> to make every gene do something.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Exact preconditions, and precisely how each one fails, are on the
+   <a href="../reference/edge-edit-operations.html">operations reference page</a>.</p>
+
+<div class="warn">
+  <b>Five of the nine are inert on an empty base graph.</b> <code>Swap</code>, <code>Hop</code> and
+  the three <code>Local*</code> operations all need existing structure to walk. A from-scratch
+  edge-edit run therefore appears to do nothing until <code>Add</code> and <code>Toggle</code> have
+  built something. This is self-correcting and is not a bug — but if you are watching an early log
+  wondering why nothing is happening, this is why.
+</div>
+
+<h3>Operation weights</h3>
+
+<p>
+  The nine operations are drawn from a weighted mix you set in
+  <a href="configuration.html">config</a>. The weights are <b>relative, not percentages</b> — they
+  need not sum to anything. <code>0.0</code> disables an operation outright, and at least one must
+  be positive.
+</p>
+
+<p>
+  They are validated once at startup and compiled into a prebuilt sampler that the whole population
+  shares by pointer, rather than each individual carrying a copy. Two benefits: a weight error
+  surfaces from config rather than mid-run, and sampling costs nothing per gene.
+</p>
+
+<h3>Crossover</h3>
+
+<p>
+  <b>Two-point, over genes.</b> Draw a segment within the shorter genome's length and swap it. A
+  genome shorter than two genes is left alone.
+</p>
+
+<h2 id="sda">SDA — an automaton that writes a graph</h2>
+
+<p>
+  A Self-Driving Automaton is a small finite-state machine. It has states, and for each
+  (state, character) pair it knows two things: which state to move to, and which characters to
+  emit. What makes it <i>self-driving</i> is that it reads back its own output as the tape that
+  drives it.
+</p>
+
+<p>It carries three pieces of data:</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Piece</th><th>Is</th></tr></thead>
+  <tbody>
+    <tr><td><code>init_char</code></td><td>The first character, which starts everything.</td></tr>
+    <tr><td>transition table</td><td><code>[state][char] → next state</code></td></tr>
+    <tr><td>response table</td><td><code>[state][char] → a short list of characters to emit</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>How the graph comes out</h3>
+
+<p>
+  <b>Expression emits one character per upper-triangle vertex pair, and each character's raw value
+  <i>is</i> that edge's weight.</b> That is the whole mapping — there is no decoding step.
+</p>
+
+<ul>
+  <li>Output length is <code>n(n-1)/2</code>, one per pair.</li>
+  <li>Index <code>i</code> maps onto the <code>i</code>-th pair in row-major order —
+      <code>(0,1), (0,2), …, (0,n-1), (1,2), …</code> — the same order
+      <code>get_edge_list</code> uses.</li>
+  <li>So <code>output[0]</code> is <code>init_char</code>, and the initial character directly sets
+      edge <code>(0,1)</code>.</li>
+  <li>The run starts in <code>init_state</code> and consumes its own output as the driving tape:
+      the character at the read head selects a transition, that transition's response is appended
+      (truncated if it would overshoot), the state advances, and the head moves on.</li>
+  <li>Every response is at least one character long, so the output always grows and the run always
+      terminates. No step cap is needed.</li>
+  <li>Fewer than two nodes yields an empty graph without running the automaton at all.</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 700 300" role="img" aria-label="An SDA reading its own output tape: the read head consumes a character, the machine emits a response, and the tape grows until it holds one character per vertex pair.">
+  <g style="color:var(--border-firm)">
+    <text x="20" y="24" class="d-text-acc">the tape — it is both the output and the input</text>
+
+    <g>
+      <rect x="20"  y="40" width="46" height="40" rx="5" class="d-fill-acc"/>
+      <rect x="20"  y="40" width="46" height="40" rx="5" class="d-stroke"/>
+      <rect x="70"  y="40" width="46" height="40" rx="5" class="d-fill-box"/>
+      <rect x="70"  y="40" width="46" height="40" rx="5" class="d-stroke"/>
+      <rect x="120" y="40" width="46" height="40" rx="5" class="d-fill-box"/>
+      <rect x="120" y="40" width="46" height="40" rx="5" class="d-stroke"/>
+      <rect x="170" y="40" width="46" height="40" rx="5" class="d-fill-box"/>
+      <rect x="170" y="40" width="46" height="40" rx="5" class="d-stroke"/>
+      <rect x="220" y="40" width="46" height="40" rx="5" class="d-fill-box"/>
+      <rect x="220" y="40" width="46" height="40" rx="5" class="d-stroke"/>
+      <rect x="270" y="40" width="46" height="40" rx="5" class="d-fill-box"/>
+      <rect x="270" y="40" width="46" height="40" rx="5" class="d-stroke"/>
+      <rect x="320" y="40" width="46" height="40" rx="5" class="d-stroke" stroke-dasharray="4 3"/>
+      <rect x="370" y="40" width="46" height="40" rx="5" class="d-stroke" stroke-dasharray="4 3"/>
+      <g class="d-text-mono" text-anchor="middle" font-size="15">
+        <text x="43"  y="66">1</text><text x="93"  y="66">0</text><text x="143" y="66">2</text>
+        <text x="193" y="66">1</text><text x="243" y="66">1</text><text x="293" y="66">0</text>
+      </g>
+      <text x="43" y="98" class="d-text-sm" text-anchor="middle">init_char</text>
+      <path d="M143 112 L143 86" class="d-stroke-acc" stroke-width="1.8" style="color:var(--accent)"/>
+      <text x="143" y="128" class="d-text-acc" text-anchor="middle">read head</text>
+      <text x="393" y="66" class="d-text-sm" text-anchor="middle">…</text>
+    </g>
+
+    <rect x="450" y="34" width="230" height="52" rx="8" class="d-fill-warn"/>
+    <rect x="450" y="34" width="230" height="52" rx="8" class="d-stroke"/>
+    <text x="565" y="55" class="d-text" text-anchor="middle" font-weight="600">state 2, reading '2'</text>
+    <text x="565" y="74" class="d-text-sm" text-anchor="middle">→ go to state 0, emit "1 1"</text>
+
+    <text x="20" y="176" class="d-text-acc">the same tape, read as edges</text>
+    <g class="d-text-mono" font-size="13">
+      <text x="20"  y="204">(0,1) = 1</text>
+      <text x="130" y="204">(0,2) = 0</text>
+      <text x="240" y="204">(0,3) = 2</text>
+      <text x="350" y="204">(1,2) = 1</text>
+      <text x="460" y="204">(1,3) = 1</text>
+      <text x="570" y="204">(2,3) = 0</text>
+    </g>
+    <text x="20" y="234" class="d-text-sm">Four nodes need 4×3/2 = 6 characters. The automaton stops the moment it has them.</text>
+    <text x="20" y="258" class="d-text-sm">Weight 2 on (0,3) means two parallel edges — legal here because the cap is at least 2.</text>
+    <text x="20" y="282" class="d-text-sm">Every character is a legal weight by construction, so nothing is ever clamped.</text>
+  </g>
+</svg>
+<figcaption>The automaton writes characters; the characters are edge weights, in
+<code>get_edge_list</code> order.</figcaption>
+</figure>
+
+<h3 id="alphabet">The alphabet is derived, not configured</h3>
+
+<p>
+  <code>num_chars = max_edge_multiplicity + 1</code>. So the characters are exactly
+  <code>0..=cap</code>, and every character is a legal edge weight the graph will never clamp.
+  There is no <code>num_chars</code> config key, and that is deliberate — it closes two silent
+  failures:
+</p>
+
+<ul>
+  <li>An alphabet <b>larger</b> than the cap biases the graph toward the cap, as surplus characters
+      clamp down onto it.</li>
+  <li>An alphabet <b>smaller</b> than the cap makes the upper weights unreachable, quietly
+      exploring less space than you configured.</li>
+</ul>
+
+<p>
+  Unweighted (<code>cap = 1</code>) gives a binary alphabet that reads as absent/present, which is
+  the common case. The consequence for validation is that
+  <code>1 ≤ max_edge_multiplicity ≤ 255</code>: <code>0</code> would give a one-character alphabet
+  and a permanently empty graph, and <code>256</code> exceeds the storage the response table uses.
+</p>
+
+<div class="warn">
+  <b>This invariant holds by convention, not by type.</b> The dispatch layer always derives the
+  alphabet from the cap, but the underlying constructor still accepts an arbitrary
+  <code>num_chars</code>, and expression does not check a genome's alphabet against its context's
+  cap. If you assemble a population by hand via the <a href="new-fitness.html#rust-route">Rust
+  route</a>, you can silently reintroduce exactly the clamping bias this design exists to prevent.
+</div>
+
+<h3><code>init_state</code> is configuration, not genome data</h3>
+
+<p>
+  It lives on the run context rather than in the genome, because mutation and crossover never touch
+  it. It must be <code>&lt; num_states</code>: expression indexes the response table with it, so an
+  out-of-range value would panic. Note that graphs of two nodes never run the loop at all, so this
+  particular bug hides at small sizes.
+</p>
+
+<h3>Crossover</h3>
+
+<p>
+  <b>Two-point over states</b> — swap a contiguous band of states, transitions and responses
+  together. Swapping state 0 also swaps <code>init_char</code>, since together they determine the
+  automaton's first transition.
+</p>
+
+<h2>Adding a third representation</h2>
+
+<p>
+  Implement <code>Genome</code>, add one config variant, and add one startup function and one
+  dispatch arm. The strategy match is generic, so evolvers are untouched. Full recipe on
+  <a href="new-genome.html">Add a genome</a>.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>
