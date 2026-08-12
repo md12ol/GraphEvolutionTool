@@ -132,8 +132,40 @@ outlived the task.
 **6. Leave `work/current/` empty.** Do **not** write a stub `plan.md` or seed `history.md` — `/start`
 scaffolds the next task, and an empty directory makes it obvious there isn't one.
 
-**7. Report.** Say what was archived and where, the disposition of every item from the gate,
-which hotfixes and issues carried forward into the next task, and that the next step is `/start`.
+**7. Land the close-out on `main` — and check where you are standing first.** Added 2026-08-12,
+Michael. The Constraints section already said the close-out belongs on `main`; it never said how to
+get there, and the sweep runs at the end of a task, which is exactly when the task's own code branch
+is the checked-out one. Committing there puts the archive on the feature branch, where it waits for
+someone else's review — the stall the two-independent-tracks rule exists to prevent.
+
+Ask for the OK first (Constraints below — every time, no exceptions), then:
+
+```bash
+git checkout main && git pull          # even if you think you are already on it
+git add .claude && git commit          # archive, decisions marker, hotfix stamps, traps
+git push origin main
+```
+
+The docs are staged from `.claude/` only. **Never** add the task's source changes here — they
+belong to their own branch and PR, and the two tracks stay separate.
+
+**Then delete the task's branch, but only once it is merged.** `/done` legitimately runs while the
+PR is still open (`collab.md` #28), and deleting the branch of an open PR closes it unmerged, which
+is destructive and not what anyone asked for. So test, don't assume:
+
+```bash
+git branch --merged main | grep -x '  <branch>'   # empty output = NOT merged, stop
+git push origin --delete <branch> && git branch -d <branch>
+```
+
+If it is not merged, leave both copies alone and **say so in the report** — name the branch and say
+the deletion is waiting on its PR. GitHub's `delete_branch_on_merge` will not do it for you later
+either, because this repo merges locally; see `traps.md`,
+`auto-delete-does-not-fire-on-a-locally-merged-pr`.
+
+**8. Report.** Say what was archived and where, the disposition of every item from the gate,
+which hotfixes and issues carried forward into the next task, whether the task's branch was deleted
+or is still waiting on its PR, and that the next step is `/start`.
 
 ## Constraints
 
@@ -146,7 +178,7 @@ which hotfixes and issues carried forward into the next task, and that the next 
   `traps.md` updates, and the archive directory itself. `work/archive/` is tracked precisely so a
   finished task's record reaches the other owner; left unpushed it reaches nobody.
 
-  **But ask first — every time.** After step 7's report, say what you are about to commit and push
+  **But ask first — every time.** At step 7, say what you are about to commit and push
   and wait for an explicit OK. `CLAUDE.md` is unambiguous that "every commit, push and PR needs its
   own explicit instruction, each time, no matter what the plan says", and a skill step reading
   "push" is exactly what makes that rule look satisfied when it is not. Reaching the end of `/done`
