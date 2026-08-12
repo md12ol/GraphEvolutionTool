@@ -29,8 +29,8 @@ use pyo3::prelude::*;
 ///
 /// **It holds no results.** A run's state lives in the
 /// [`PyRunResult`](crate::py_result::PyRunResult) `run` returns, never on the
-/// evolver — so one evolver is reusable across replicate runs with nothing stale
-/// from the previous one hanging off it (§8, GitHub #27).
+/// evolver — so one evolver is reusable across repeated runs with nothing stale
+/// from the previous one hanging off it.
 #[pyclass]
 pub struct GraphEvolver {
     config: Config,
@@ -198,7 +198,7 @@ impl GraphEvolver {
     /// ```
     ///
     /// Nothing is cached on the evolver, so a second `run` cannot be confused
-    /// with the first and the same evolver drives replicate runs safely (§8).
+    /// with the first and the same evolver drives repeated runs safely.
     ///
     /// # Memory: the three sizes multiply, they do not add
     ///
@@ -260,18 +260,18 @@ impl GraphEvolver {
 
     /// Write the per-iteration evolution log to `filename` as CSV.
     ///
-    /// **These two take `&self` and the evolver now holds nothing to write.**
-    /// GitHub #21 owns re-homing them onto the returned result, which is where
-    /// the log and the best individual live as of #27.
+    /// **These two take `&self` and the evolver holds nothing to write** — the
+    /// log and the best individual live on the value `run` returns, so both need
+    /// re-homing onto `PyRunResult` before they can be implemented.
     fn save_logs(&self, filename: &str) -> PyResult<()> {
         let _ = filename;
-        todo!("write the run history to `filename` — see #21, it moves to RunResult")
+        todo!("write the run history to `filename`; it belongs on PyRunResult")
     }
 
     /// Write the best individual and its graph to `filename`. See `save_logs`.
     fn save_results(&self, filename: &str) -> PyResult<()> {
         let _ = filename;
-        todo!("write the best genome and edge list to `filename` — see #21")
+        todo!("write the best genome and edge list to `filename`")
     }
 }
 
@@ -287,8 +287,8 @@ fn get(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyFitnessConfig>()?;
     m.add_class::<PySirParams>()?;
     m.add_class::<PyOperationWeights>()?;
-    // What `run` hands back (§6.4, §8). Registered so the types are importable
-    // and `isinstance`-able, not because a user constructs one.
+    // What `run` hands back. Registered so the types are importable and
+    // `isinstance`-able, not because a user constructs one.
     m.add_class::<PyRunResult>()?;
     m.add_class::<PyGenerationStats>()?;
     Ok(())

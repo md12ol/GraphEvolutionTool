@@ -2,17 +2,15 @@
 //!
 //! # Why these are a separate mirror rather than `#[pyclass]` on the engine's own types
 //!
-//! The same reason `py_config` gives for the config mirror, pointing the other
-//! way. [`crate::evolver::EvolutionOutcome`] carries the genome, and
-//! `#[pyclass]` cannot be generic (§8); [`crate::evolver::GenerationStats`] is
-//! engine-oriented and must stay that way, since the engine compares in oriented
-//! values throughout (§5.1). Attaching `#[pyclass]` to either would drag pyo3
-//! into the engine core and put a Python-visible type on numbers that are
-//! deliberately not in the user's units.
+//! Two reasons, and each on its own would be enough.
+//! [`crate::evolver::EvolutionOutcome`] is generic over the genome, and a
+//! `#[pyclass]` cannot carry a type parameter. And
+//! [`crate::evolver::GenerationStats`] holds engine-oriented numbers —
+//! lower-is-better, whatever the objective actually computes — which are not the
+//! numbers a user should ever see.
 //!
-//! So the dispatch layer erases the genome and converts the orientation, and
-//! this module is what that erased result becomes on the way out — spec §6.4,
-//! §8, GitHub #27.
+//! So the dispatch layer erases the genome and converts the orientation, and this
+//! module is what that erased result becomes on the way out.
 //!
 //! **Everything here is in the objective's own units.** Nothing in this module
 //! converts anything; [`crate::dispatch`]'s `erase` is the one place that
@@ -22,7 +20,7 @@ use pyo3::prelude::*;
 
 use crate::dispatch::ErasedOutcome;
 
-/// One row of the convergence log (§6.4).
+/// One row of the convergence log.
 ///
 /// `iteration` counts generations under the generational strategy and mating
 /// events under steady-state.
@@ -38,9 +36,9 @@ pub struct PyGenerationStats {
     pub best_fitness: f64,
     /// Population mean fitness at this iteration.
     pub mean_fitness: f64,
-    /// **Population** standard deviation — divides by `n`, because these are all
-    /// the individuals there are rather than a sample, so one individual has a
-    /// deviation of zero (§6.4).
+    /// **Population** standard deviation — divides by `n`, not `n - 1`, because
+    /// these are all the individuals there are rather than a sample of some
+    /// larger group. A population of one therefore has a deviation of zero.
     ///
     /// Unconverted, and correctly so: a spread is identical under negation, so
     /// this reads the same whichever direction the objective runs in.
@@ -57,12 +55,12 @@ impl PyGenerationStats {
     }
 }
 
-/// Everything one run produced (§6.4, §8).
+/// Everything one run produced.
 ///
-/// Returned by [`crate::GraphEvolver::run`]. There is deliberately no
-/// `best_fitness()` accessor on the evolver to read any of this from: the run's
-/// state lives in this object, so the evolver holds nothing stale from a
-/// previous run and is reusable across replicates.
+/// Returned by [`crate::GraphEvolver::run`]. There is deliberately no accessor on
+/// the evolver for reading any of this: the run's state lives here, so the
+/// evolver holds nothing stale from a previous run and is reusable across
+/// repeated runs.
 #[pyclass(name = "RunResult", frozen)]
 #[derive(Debug)]
 pub struct PyRunResult {
@@ -72,9 +70,11 @@ pub struct PyRunResult {
     /// The best individual's expressed network, as `(u, v, multiplicity)`.
     #[pyo3(get)]
     pub best_edges: Vec<(usize, usize, u32)>,
-    /// The best individual's genome, via `Genome::print` — the record of *which*
-    /// individual won, in a form the non-generic entry point can carry without
-    /// knowing the representation (§8).
+    /// The best individual's genome, via `Genome::print`.
+    ///
+    /// This is the record of *which* individual won, in a form the entry point
+    /// can carry without knowing the representation — which it cannot, since it
+    /// is not generic over the genome.
     #[pyo3(get)]
     pub best_genome_repr: String,
     /// The convergence log, one row per logged iteration.

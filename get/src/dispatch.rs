@@ -68,10 +68,10 @@ pub(crate) struct ErasedOutcome {
     pub best_edges: Vec<(usize, usize, u32)>,
     /// The winning genome's `Genome::print()` string.
     ///
-    /// This is what [`Genome::print`] exists for (§8): a non-generic entry point
-    /// can record *which* individual won without knowing its representation.
+    /// The entry point is not generic over the genome, so this is the only way
+    /// it can record *which* individual won.
     pub best_genome_repr: String,
-    /// The convergence log, one row per logged iteration (§6.4).
+    /// The convergence log, one row per logged iteration.
     ///
     /// Reuses the engine's [`GenerationStats`] row, but the two fitness columns
     /// have been oriented by [`erase`] — see this struct's own note above.
@@ -401,13 +401,13 @@ fn run_strategy<G: Genome, F: Fitness>(
 ///
 /// One generic function rather than the same lines in each arm. The conversion
 /// is the part that matters: everything inside the engine is lower-is-better,
-/// and this is the boundary where that stops being true (§5.1).
+/// and this is the boundary where that stops being true.
 /// `Direction::orient` is its own inverse, so it is also what undoes itself.
 ///
 /// **The history needs converting too, row by row** — and only its two fitness
 /// columns. `std_dev` is left exactly as the engine computed it, because a
-/// spread is identical under negation (§6.4). Orienting it as well would be a
-/// silent defect: the number stays positive, so nothing looks wrong.
+/// spread is identical under negation. Orienting it as well would be a silent
+/// defect: the number stays positive, so nothing looks wrong.
 fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
     let direction = outcome.direction;
 
@@ -1036,8 +1036,8 @@ mod tests {
 
     #[test]
     fn two_runs_on_one_evolver_do_not_leak_state() {
-        // The reason #27 returns a value instead of caching one: an evolver that
-        // held the previous run's result would hand a replicate the wrong
+        // The reason `run` returns a value instead of caching one: an evolver
+        // that held the previous run's result would hand the next run the wrong
         // numbers, and nothing about them would look wrong.
         let mut evolver = GraphEvolver {
             config: runnable(GENERATIONAL, EDGE_EDIT),
