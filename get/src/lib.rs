@@ -8,6 +8,7 @@ pub mod fitness;
 pub mod genomes;
 pub mod graph;
 pub mod py_config;
+pub mod py_result;
 pub mod sir;
 
 use crate::config::{Config, FitnessConfig};
@@ -16,6 +17,7 @@ use crate::py_config::{
     PyConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig, PyOperationWeights,
     PySelectionConfig, PySirParams, config_error_to_py,
 };
+use crate::py_result::{PyGenerationStats, PyRunResult};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -23,11 +25,15 @@ use pyo3::prelude::*;
 ///
 /// Constructed from a `config.toml` path; [`GraphEvolver::run`] dispatches on
 /// the configured evolution strategy, genome representation, and fitness
-/// objective, then returns the best graph found.
+/// objective, then returns everything that run produced.
+///
+/// **It holds no results.** A run's state lives in the
+/// [`PyRunResult`](crate::py_result::PyRunResult) `run` returns, never on the
+/// evolver — so one evolver is reusable across replicate runs with nothing stale
+/// from the previous one hanging off it (§8, GitHub #27).
 #[pyclass]
 pub struct GraphEvolver {
     config: Config,
-    best_fitness: Option<f64>,
     /// The objective registered by [`GraphEvolver::set_fitness_function`], set
     /// only when `[fitness] type = "python"`.
     ///
@@ -49,7 +55,6 @@ impl GraphEvolver {
             .map_err(|err| PyValueError::new_err(format!("failed to load config: {err}")))?;
         Ok(Self {
             config,
-            best_fitness: None,
             fitness_function: None,
         })
     }
@@ -110,7 +115,6 @@ impl GraphEvolver {
 
         Ok(Self {
             config: parsed,
-            best_fitness: None,
             fitness_function: None,
         })
     }
@@ -180,8 +184,21 @@ impl GraphEvolver {
         Ok(())
     }
 
-    /// Evolve a population and return the best graph as a weighted edge list
-    /// `(u, v, multiplicity)`.
+    /// Evolve a population and return everything the run produced.
+    ///
+    /// The returned [`PyRunResult`] carries the best fitness in the objective's
+    /// own units, the best individual's edge list as `(u, v, multiplicity)`, its
+    /// genome's printed form, and the convergence log:
+    ///
+    /// ```python
+    /// result = evolver.run(seed=1)
+    /// print(result.best_fitness, len(result.best_edges))
+    /// for row in result.history:
+    ///     print(row.iteration, row.best_fitness, row.std_dev)
+    /// ```
+    ///
+    /// Nothing is cached on the evolver, so a second `run` cannot be confused
+    /// with the first and the same evolver drives replicate runs safely (§8).
     ///
     /// # Memory: the three sizes multiply, they do not add
     ///
@@ -215,7 +232,7 @@ impl GraphEvolver {
     /// Required by spec §8.1 and agreed at the joint meeting of 2026-08-04; the
     /// `max_cores` and replicate-count parameters it refers to arrive with
     /// GitHub #20, which is what makes the last column reachable.
-    fn run(&mut self, seed: u64) -> PyResult<Vec<(usize, usize, u32)>> {
+    fn run(&mut self, seed: u64) -> PyResult<PyRunResult> {
         // Step 1 of two (§8): erase the objective before any strategy or genome
         // is chosen. Built here rather than inside the dispatch match so it
         // happens exactly once per run, per §8.1's per-run-instance rule.
@@ -235,28 +252,26 @@ impl GraphEvolver {
         let outcome =
             Python::attach(|py| py.detach(|| dispatch::evolve(&self.config, &fitness, seed)))?;
 
-        // Cached in the objective's own units, which is what `best_fitness()`
-        // reports. GitHub #27 removes both this field and that getter in favour
-        // of the returned result object.
-        self.best_fitness = Some(outcome.best_fitness);
-        Ok(outcome.best_edges)
-    }
-
-    /// Best fitness found so far, or infinity before any run completes.
-    fn best_fitness(&self) -> f64 {
-        self.best_fitness.unwrap_or(f64::INFINITY)
+        // Nothing is stored. `dispatch::erase` has already converted every
+        // number out of engine orientation, so this only re-homes the erased
+        // outcome onto the Python-visible type.
+        Ok(PyRunResult::from_erased(outcome))
     }
 
     /// Write the per-iteration evolution log to `filename` as CSV.
+    ///
+    /// **These two take `&self` and the evolver now holds nothing to write.**
+    /// GitHub #21 owns re-homing them onto the returned result, which is where
+    /// the log and the best individual live as of #27.
     fn save_logs(&self, filename: &str) -> PyResult<()> {
         let _ = filename;
-        todo!("write the run history to `filename`")
+        todo!("write the run history to `filename` — see #21, it moves to RunResult")
     }
 
-    /// Write the best individual and its graph to `filename`.
+    /// Write the best individual and its graph to `filename`. See `save_logs`.
     fn save_results(&self, filename: &str) -> PyResult<()> {
         let _ = filename;
-        todo!("write the best genome and edge list to `filename`")
+        todo!("write the best genome and edge list to `filename` — see #21")
     }
 }
 
@@ -272,6 +287,10 @@ fn get(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyFitnessConfig>()?;
     m.add_class::<PySirParams>()?;
     m.add_class::<PyOperationWeights>()?;
+    // What `run` hands back (§6.4, §8). Registered so the types are importable
+    // and `isinstance`-able, not because a user constructs one.
+    m.add_class::<PyRunResult>()?;
+    m.add_class::<PyGenerationStats>()?;
     Ok(())
 }
 
@@ -319,7 +338,6 @@ mod tests {
     fn evolver_with(fitness_block: &str) -> GraphEvolver {
         GraphEvolver {
             config: config_with(fitness_block),
-            best_fitness: None,
             fitness_function: None,
         }
     }
@@ -653,7 +671,6 @@ mod tests {
             .expect("a config equivalent to the shipped example should build");
 
         assert_eq!(evolver.config.population_size, 200);
-        assert!(evolver.best_fitness.is_none());
         assert!(evolver.fitness_function.is_none());
     }
 
