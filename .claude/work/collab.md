@@ -1909,3 +1909,80 @@ The `--merged` gate is unchanged, and `git branch -d` refuses an unmerged branch
 there are two guards in front of the open-PR case.
 
 *(Second append inside #48 · 2026-08-12 15:18 — Michael.)*
+
+### 50. There is a documentation site now, at `documentation/` — PR #64, and one call for you
+
+- **What:** a static, self-contained documentation website for GET, in a new top-level
+  `documentation/`. 38 cross-linked pages: the concepts in reading order, one reference page per
+  file in `get/src/`, ten runnable examples, a status page and a design-notes page. No build step,
+  no package manager, no network access — `cd documentation && ./serve.sh` and it is at
+  `localhost:8000`. It also opens fine straight off the filesystem.
+- **How it is put together, in one paragraph**, because it decides how you edit it:
+  `assets/site.js` holds the whole site map in one `NAV` table and builds the sidebar, the on-page
+  contents, the prev/next pager, the copy buttons and the light/dark toggle at load time. A page
+  file therefore contains only its `<main>`, and `data-page` on `<body>` is what ties it to its
+  `NAV` entry. Adding a page is: copy `_template.html`, set `data-page`, add one `NAV` line.
+  Diagrams are inline SVG using the stylesheet's own colour tokens, so they follow the theme and
+  need no diagram library.
+- **The call I want your opinion on.** Everything the spec sheet designs but the code does not yet
+  have is written **in the present tense, as though it works** — replicates and `max_cores`, the
+  result object, the convergence log reaching Python, `ci_95` and the per-row seed,
+  `save_logs`/`save_results`, the base-graph setter. That was deliberate and it follows this repo's
+  own rule that the sheet is the intent, but it is the site's biggest risk, so each one carries a
+  `planned` badge and a callout naming what actually happens today, and `status.html` indexes all
+  of them in one table. If you would rather the site described only what exists, say so on the PR —
+  it is a single-pass change now and a much larger one after the site has been edited a few times.
+- **Not urgent, and it blocks nothing.** It touches no code: nothing under `get/src/`,
+  `Cargo.toml`, `config.example.toml` or the sheet. Merge it whenever you have an hour, or tell me
+  to trim it first.
+- **If you extend it,** `documentation/README.md` is the handoff — the conventions, how to add a
+  page, the verification script that checks every link, anchor and `data-page` in one pass, and an
+  honest list of the thin spots.
+
+*#50 · raised 2026-08-12 18:39 — Michael.*
+
+### 51. Five things for the sheet at the next joint meeting — two of them say the code is ahead
+
+Found while surveying `get/src/` to write the documentation site (#50). Per this repo's rule I have
+changed nothing in `official_spec_sheet.md`; all five want a joint meeting. Listing them together
+because they share one ask — a single amendment pass — rather than because they are one problem.
+
+**The two that matter most, because a stale status row is the sheet's whole signal.**
+
+1. **Status table row 23 is wrong in the direction that makes us look less finished than we are.**
+   It still reads "Python interface built **except dispatch** … `GraphEvolver::run`'s body is still
+   `todo!()`, which is GitHub #26". `run` is fully implemented at `lib.rs:218-243`, and all four
+   strategy × genome dispatch arms are wired and tested end to end (`dispatch.rs:823`). The sheet's
+   own note under that table says a stale row "is the whole signal", which is exactly why this one
+   is first.
+2. **§9's closing paragraph is stale in the same direction.** It still lists the one-mutation
+   contract with `max_mutations` and the cap-derived SDA alphabet as "decided here but not yet true
+   of the code". Both are now true — `sda.rs:103-115`, `dispatch.rs:266`, `edge_edit.rs:243-250` —
+   and the paragraph contradicts the sheet's own status table at line 16.
+
+**A genuine gap in the design, not just the code.**
+
+3. **`crossover_rate`, `mutation_rate` and `infection_rate` are entirely unvalidated.** A negative
+   probability, or one above 1, parses and runs. §7's constraint list does not ask for them either,
+   so this is a hole in the sheet before it is a hole in `config.rs` — which is why it is here and
+   not in `issues.md`. My suggestion is `0.0 <= v <= 1.0` on all three, added to §7's list.
+
+**Two smaller wording-versus-code mismatches.**
+
+4. **§3.1 describes `Swap` as rejecting when "none of the three would-be edges already exists", but
+   the operation creates only two edges.** `operations.rs:191-193` checks three pairs, and the
+   third — `has_edge(first_neighbor, second_neighbor)` — is between the two *neighbours*, which is
+   an extra rejection rather than a would-be edge. Nothing documents why it is there, and it is the
+   one branch in that function with no test coverage. So either the sheet's wording is wrong or the
+   check is, and I could not tell which from the code.
+5. **§3.2's derived-alphabet invariant holds by convention, not by type.**
+   `random_with_edge_multiplicity_cap` always sets `num_chars = cap + 1`, but `SdaGenome::random`
+   still takes an arbitrary `num_chars`, and expression never checks a genome's alphabet against
+   its context's cap. A hand-assembled population via the Rust route — which §5.3 explicitly
+   supports — can therefore silently reintroduce the exact clamping bias §3.2 exists to prevent.
+
+All five are documented from the *code* on the site, unbadged, with `status.html` recording that
+items 1 and 2 run the opposite way to everything else there. If we amend the sheet, the site needs
+no change for 1 and 2 and a small one for 3.
+
+*#51 · raised 2026-08-12 18:39 — Michael.*
