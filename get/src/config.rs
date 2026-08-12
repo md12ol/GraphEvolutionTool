@@ -4,7 +4,7 @@
 //! types: [`crate::evolver::SharedEvolutionContext`] is generic over the genome
 //! and carries a non-deserializable `Genome::Context`, so configuration is
 //! parsed into this plain shape and then mapped onto concrete engine types by
-//! the dispatch layer in `lib.rs`.
+//! the dispatch layer in `dispatch.rs`.
 //!
 //! Plain data types that carry no such baggage are deserialized directly rather
 //! than mirrored — [`EdgeEditOperationWeights`] is nine `f64`s with a `Default`,
@@ -259,20 +259,32 @@ fn invalid(field: &'static str, constraint: impl Into<String>) -> ConfigError {
     }
 }
 
-/// Reject a leftover `seed` under `[fitness]`, reading the raw text.
+/// Reject the two `[fitness]` keys serde discards in silence, reading the raw
+/// text: a leftover `seed`, and a `target_profile` under the wrong objective.
 ///
-/// Serde cannot do this. [`SirParams`] is `#[serde(flatten)]`ed into
+/// Serde cannot do either. [`SirParams`] is `#[serde(flatten)]`ed into
 /// [`FitnessConfig`], and a flattened field deserializes through a buffered
-/// content map, so `deny_unknown_fields` never fires — the key is discarded in
-/// silence. That is the dangerous kind of silence: a config written before the
-/// seed moved out of `[fitness]` still parses, and runs under a different
-/// seeding model than its author believes, since the master seed now comes from
-/// the `run` call (spec §7).
+/// content map, so `deny_unknown_fields` never fires — an unrecognized key is
+/// discarded without a word. Both keys here are dangerous for the same reason:
 ///
-/// This is the TOML path only — the Python front end has no text to inspect —
-/// and it has to happen here rather than in [`Config::validate`], which sees an
-/// already-parsed config with the key gone.
-fn reject_fitness_seed(text: &str) -> Result<(), ConfigError> {
+/// - `seed` — a config written before the seed moved out of `[fitness]` still
+///   parses, and runs under a different seeding model than its author believes,
+///   since the master seed now comes from the `run` call (spec §7).
+/// - `target_profile` — spec §8 requires it be "rejected as a contradiction if
+///   supplied for any other objective". Left alone, someone who switches
+///   objective and forgets the profile behind believes they are matching a
+///   curve while the run maximizes spread.
+///
+/// **Deliberately two keys by name, not a general unknown-key sweep.** That
+/// would hand-roll what serde does everywhere else and start rejecting keys as
+/// the schema grows — the narrowness is a recorded choice (`collab.md` #25),
+/// pinned by `an_unknown_fitness_key_outside_the_two_named_ones_is_still_ignored`.
+///
+/// This is the TOML path only — the Python front end has no text to inspect,
+/// and `target_profile` exists there only on the `EpiProfMatch` variant, so the
+/// contradiction cannot be expressed. It has to happen here rather than in
+/// [`Config::validate`], which sees an already-parsed config with the key gone.
+fn reject_stray_fitness_keys(text: &str) -> Result<(), ConfigError> {
     // Parsed loosely, as plain TOML values, so this sees keys the `Config`
     // schema throws away. Text that isn't valid TOML at all is left for the
     // real parse below to report properly.
@@ -292,6 +304,27 @@ fn reject_fitness_seed(text: &str) -> Result<(), ConfigError> {
              everything derives from it (spec §7), so remove `seed` from `[fitness]`",
         ));
     }
+
+    // Three conditions, all of which must hold: a profile was supplied, the
+    // objective is present and reads as a string, and it is not the one
+    // objective that owns a profile. A missing, misspelled or non-string
+    // `type` falls through to the real parse, which names that problem far
+    // better than a message about the profile would.
+    let profile_supplied = fitness.get("target_profile").is_some();
+
+    if profile_supplied
+        && let Some(objective) = fitness.get("type").and_then(|value| value.as_str())
+        && objective != "epi_prof_match"
+    {
+        return Err(invalid(
+            "target_profile",
+            format!(
+                "belongs to `epi_prof_match` alone (spec §8), but the objective here is \
+                 `{objective}`, which never reads a profile. Either set \
+                 `type = \"epi_prof_match\"` or remove `target_profile`"
+            ),
+        ));
+    }
     Ok(())
 }
 
@@ -299,12 +332,14 @@ impl Config {
     /// Parse a [`Config`] from TOML text, **without** checking spec §7's
     /// constraints.
     ///
-    /// Rejects a stray `[fitness] seed`, which is a parse-time concern because
-    /// the key does not survive deserialization — see `reject_fitness_seed`.
-    /// Everything else is [`Config::validate`], kept separate so a test can
-    /// build a config that deliberately breaks one constraint.
+    /// Rejects a stray `[fitness] seed`, and a `target_profile` supplied under
+    /// an objective that is not `epi_prof_match`. Both are parse-time concerns
+    /// because neither key survives deserialization — see
+    /// `reject_stray_fitness_keys`. Everything else is [`Config::validate`],
+    /// kept separate so a test can build a config that deliberately breaks one
+    /// constraint.
     pub fn from_toml_str(text: &str) -> Result<Self, ConfigError> {
-        reject_fitness_seed(text)?;
+        reject_stray_fitness_keys(text)?;
         toml::from_str(text).map_err(ConfigError::Toml)
     }
 
@@ -827,11 +862,67 @@ num_epidemics  = 30
     }
 
     #[test]
-    fn an_unknown_fitness_key_other_than_seed_is_still_ignored() {
-        // The raw-text check is deliberately narrow — `seed` by name, not a
-        // general unknown-key sweep, which would hand-roll what serde does
-        // everywhere else and reject keys as the schema grows. Pinned so the
-        // narrowness is a recorded choice rather than an oversight.
+    fn a_target_profile_under_any_other_objective_is_rejected_as_a_contradiction() {
+        // Spec §8: the profile is required by `epi_prof_match` and "rejected as
+        // a contradiction if supplied for any other objective". Caught in the
+        // same raw-text pass as `seed`, and for the same reason — the flatten
+        // swallows it, so the realistic mistake of switching objective and
+        // leaving the profile behind would otherwise run as a spread
+        // maximization while its author believes a curve is being matched.
+        //
+        // One loop rather than three near-identical tests: the three objectives
+        // differ only in the string, and keeping them together is what stops a
+        // fourth non-matching objective being added to the enum and to two of
+        // these cases.
+        let others = ["epi_spread", "epi_length", "python"];
+
+        for objective in others {
+            // The epidemic parameters are valid, so a rejection cannot be a
+            // missing-field error wearing this test's name. `python` ignores
+            // them.
+            let text = fitness_config_text(&format!(
+                "[fitness]\ntype = \"{objective}\"\ninfection_rate = 0.05\n\
+                 num_epidemics = 30\ntarget_profile = [1.0, 3.0, 8.0]\n"
+            ));
+
+            match Config::from_toml_str(&text) {
+                Err(ConfigError::Validation { field, .. }) => {
+                    assert_eq!(field, "target_profile", "wrong field for {objective}");
+                }
+                other => panic!("expected `{objective}` to reject a profile, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn epi_prof_match_with_a_target_profile_is_untouched_by_the_contradiction_check() {
+        // The other side of the same clause: the objective that owns the
+        // profile still parses AND validates. Both halves matter — the check
+        // reads `type` out of loosely-parsed TOML, so getting that comparison
+        // backwards would break the one configuration it must leave alone.
+        let text = fitness_config_text(
+            "[fitness]\ntype = \"epi_prof_match\"\ninfection_rate = 0.05\n\
+             num_epidemics = 30\ntarget_profile = [1.0, 3.0, 8.0]\n",
+        );
+
+        let config = Config::from_toml_str(&text).expect("epi_prof_match should keep its profile");
+        config.validate().expect("the fixture should be valid");
+
+        match config.fitness {
+            FitnessConfig::EpiProfMatch { target_profile, .. } => {
+                assert_eq!(target_profile, vec![1.0, 3.0, 8.0]);
+            }
+            other => panic!("expected epi_prof_match, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_unknown_fitness_key_outside_the_two_named_ones_is_still_ignored() {
+        // The raw-text check is deliberately narrow — `seed` and
+        // `target_profile` by name, not a general unknown-key sweep, which
+        // would hand-roll what serde does everywhere else and reject keys as
+        // the schema grows. Pinned so the narrowness is a recorded choice
+        // rather than an oversight.
         match fitness_of(&fitness_config_text(
             "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.05\n\
              num_epidemics = 30\nnot_a_real_key = 42\n",
