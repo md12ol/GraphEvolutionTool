@@ -1871,3 +1871,45 @@ self-merge). `GraphEvolver::run`'s stale "for whoever implements the dispatch (#
 `main`: `cargo test -p get` 231/231, clippy and fmt clean. No hotfixes or issues touched by this
 task; nothing carried forward.
 *Recorded 2026-08-12 — Michael, at the `/done mdube_stale_run_doc` gate.*
+
+## 2026-08-12 15:30 — Michael — Branch cleanup is ours to do, in two places, for two different moments
+
+Enabled `delete_branch_on_merge` on `md12ol/GraphEvolutionTool` after merging PR #63, then found it
+covers almost none of the merges this repo performs. **The setting fires only when GitHub itself
+executes the merge.** Our rule sends every PR touching `.claude/work/*.md` through a local
+`git merge --no-ff` and a push, because `.gitattributes` merge drivers run in your git and not on
+their servers. GitHub sees those commits arrive on `main` and flips the PR's state to merged, but no
+merge action ran, so no cleanup runs either. The setting stays on — it is free and it covers the
+button-merge case — but it is not the mechanism we rely on.
+
+**So the deletion is written into two places, and that is deliberate rather than drift.**
+`CLAUDE.md`'s merge snippet covers merging *the other owner's* PR; `/done`'s new step 7 covers
+closing *your own* task. Neither path reaches the other, and both are needed because nobody merges
+their own PR here. The mechanism is written once, in `traps.md`
+(`auto-delete-does-not-fire-on-a-locally-merged-pr`); both places link to it rather than restating
+it, so there is one copy to keep true.
+
+**Which copy of the branch each place is actually deleting is the non-obvious part.** By the time
+you close your own task, the other owner has usually merged your PR and deleted the remote branch
+with it. What survives is your **local** branch, on your machine only — no one else can delete it
+and no setting will. That is the whole argument for step 7 existing separately from the merge
+snippet. Step 7 therefore runs `git fetch --prune`, deletes the local copy, and treats the remote
+delete as a tolerated no-op: `remote ref does not exist` is the expected outcome there.
+
+**Step 7 also fixed something that had only ever been implied.** `/done`'s Constraints said since
+2026-08-10 that the close-out belongs on `main`, but no step told the skill to *switch* there — and
+`/done` runs at the end of a task, when the task's code branch is the checked-out one. The archive
+and the `decisions.md` marker would have landed on the feature branch and waited on someone's
+review, which is precisely the stall the two-independent-tracks rule exists to prevent. It now
+checks out `main` and pulls first, and stages `.claude/` only so the task's source changes cannot
+be swept in.
+
+**The deletion is gated twice, because `/done` may legitimately run before the PR is merged**
+(`collab.md` #28, settled 2026-08-06 doing exactly that for issue #22 while PR #43 was open).
+Deleting an open PR's branch closes it unmerged, which is destructive and unrequested, so step 7
+checks `git branch --merged main` and `git branch -d` refuses an unmerged branch on its own. Not
+merged → both copies are left alone and the report names the branch as waiting.
+
+Commits: `0a95d44` (trap + `CLAUDE.md`), `8753156` (step 7), `083ed6a` (ordering correction).
+Raised to James as `collab.md` #48, which can compress once this entry is on `main`.
+*Recorded 2026-08-12 15:30 — Michael, after merging PR #63.*
