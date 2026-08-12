@@ -537,6 +537,24 @@ entry and names this as its open dependency, so the two do not drift apart while
 *#49 · raised 2026-08-11 18:33 — Michael, splitting packaging out of the new `deferred.md`
 because it failed the "not for v1" test.*
 
+**James's position, 2026-08-12 14:12 — James.** Agree with all three of your leanings and I'll add
+a fourth: **pip-installability is v1 scope** — your argument holds, the demo layer has to run on a
+machine that is not one of ours and every §8 usability claim already assumes no compilation, so
+punting it to `deferred.md` would leave the sheet promising something the packaging can't deliver.
+**Wheels for the three platforms**, accepting the CI cost, over source-only — a Rust toolchain
+requirement contradicts §8 outright rather than just being less polished. **The demo layer stays in
+`examples/`**, not inside the package, so matplotlib and networkx remain documented extras rather
+than wheel dependencies — `examples/config_builder.py` is already the precedent. **PyPI** over a
+GitHub-release URL, so `pip install` is the literal command §8 promises rather than a URL a user has
+to be told first.
+
+**This is my position, not a settled amendment.** `CLAUDE.md` reserves the sheet for a joint
+meeting with both of us present — recording my side now so that meeting is fast, not skipping it.
+§8 is untouched; `deferred.md` still carries the demo layer with this as its open dependency exactly
+as you left it.
+
+*(Reply inside #49 · 2026-08-12 14:12 — James.)*
+
 ## Settled
 
 Compressed 2026-07-31 after the spec-sheet call: the reasoning for each of these now lives in
@@ -1857,6 +1875,14 @@ that objective never reads one.
 
 *(Reply inside #45 · 2026-08-10 18:45 — James.)*
 
+**Closed the loop: #58 merged. 2026-08-12 14:10 — James.** PR #63 landed
+`reject_stray_fitness_keys`, the same raw-text sweep as `reject_fitness_seed` extended to cover
+`target_profile` under a non-`epi_prof_match` objective. 233 tests, clippy and fmt clean; full
+record in `work/archive/2026-08_reject-stray-target-profile/`. Spec §8's contradiction clause is
+now fully implemented; nothing outstanding from this item.
+
+*(Reply inside #45 · 2026-08-12 14:10 — James.)*
+
 ### 48. FYI: auto-delete-on-merge is on, and it will not clean up your local merges
 
 **FYI, no answer needed — 2026-08-12 14:20 — Michael.** I enabled `delete_branch_on_merge` on the
@@ -2032,3 +2058,38 @@ already happening in practice — rather than for (b). If it was meant the other
 the framing above flips.
 
 *#52 · raised 2026-08-13 00:34 — Michael.*
+**James's position, 2026-08-12 14:12 — James.** Going through all five.
+
+**1 and 2 — status table row 23 and the §9 closing paragraph.** Agreed, plainly: both describe
+work that is done as though it isn't, and the sheet's own note says a stale row is the whole
+signal. No disagreement to record.
+
+**3 — validation on `crossover_rate`, `mutation_rate`, `infection_rate`.** Agreed. `0.0 <= v <= 1.0`
+on all three, added to §7's constraint list. I don't see a design tradeoff here, just a hole.
+
+**4 — the `Swap` third check.** I checked `operations.rs:154-199` myself before answering. The two
+edges the operation actually creates are `(first_vertex, second_neighbor)` and
+`(second_vertex, first_neighbor)`, and those two are the ones the code already gets right. The
+third check, `has_edge(first_neighbor, second_neighbor)`, guards a pair the swap never touches —
+removing or creating an edge there is not what this operation does, so it is not a would-be edge by
+any reading. **My call: keep the code, fix the wording.** Reading it as a deliberate anti-clustering
+guard — swapping two edges whose freed neighbours are already adjacent would otherwise be free to
+produce a graph with more triangles concentrated around that pair — is more plausible than reading
+it as a stray defect that happens to have shipped with **zero test coverage on that exact branch**,
+which is the detail that would worry me if I thought it was accidental. That said, "more plausible"
+is not "confirmed" — I have not traced it to the legacy C++ or found a test that pins the intent
+either way, so treat this as my reasoning rather than a settled fact. §3.1's "three would-be edges"
+line should become two would-be edges plus a named third guard, however we describe it.
+
+**5 — the alphabet invariant.** Agreed, enforce it in code rather than leave it as a convention that
+only holds because every caller happens to go through
+`random_with_edge_multiplicity_cap`. §5.3's explicit support for hand-assembled populations is
+exactly the path that bypasses the convention, so "documented" isn't load-bearing here — the
+invariant needs to hold by construction. Whether that's a check inside `random` against the
+context's cap, or removing the free-form constructor outright, is implementation and can wait for
+whoever picks up the issue; either fixes the hole item 5 describes.
+
+**Same caveat as #49 — this is my side of the discussion, not a sheet amendment.** Nothing in
+`official_spec_sheet.md` has been touched; all five wait for the joint meeting this item asks for.
+
+*(Reply inside #51 · 2026-08-12 14:12 — James.)*
