@@ -457,7 +457,7 @@ v4 = (p / n³) % n</code></pre>
 <div class="plan-note">
   <b>What exists today.</b> <a href="dispatch.html">dispatch.rs</a> always constructs an empty base
   graph at the configured network size and cap
-  (<span class="src">dispatch.rs:224&ndash;226</span>), so every config-driven edge-edit run
+  (<span class="src">dispatch.rs:236&ndash;238</span>), so every config-driven edge-edit run
   currently starts from nothing. The setter is tracked as GitHub #28. You can already supply a base
   graph today from Rust by building an <code>EdgeEditContext</code> yourself and driving an evolver
   directly — see <a href="../guide/extending.html">Extension points</a> — which is what the worked

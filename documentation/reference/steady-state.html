@@ -415,11 +415,11 @@ iterations:       0, population_size, 2×population_size, …</code></pre>
 <div class="plan-note">
   <b>What exists today.</b> The rows are built correctly and travel out on
   <code>EvolutionOutcome::history</code>, readable by a Rust caller of <code>Evolver::run</code>. The
-  Python boundary (<code>dispatch::erase</code>, <code>get/src/dispatch.rs:398</code>) currently keeps
-  only the best fitness and the best graph's edge list and <b>drops the history</b>, so a
-  config-driven run cannot read its own convergence log today. The <code>ci_95</code> column and the
-  per-row seed and run index described in <a href="../guide/output.html">Logs &amp; results</a> are
-  not fields on <code>GenerationStats</code> yet either. See <a href="../status.html">Status</a>.
+  Python boundary (<code>dispatch::erase</code>, <code>get/src/dispatch.rs:411</code>) converts each
+  row's two fitness columns out of engine orientation and carries the whole log out on the result
+  object, so a config-driven run can read its own convergence log. The <code>ci_95</code> column and
+  the per-row seed and run index described in <a href="../guide/output.html">Logs &amp; results</a>
+  are still not fields on <code>GenerationStats</code>. See <a href="../status.html">Status</a>.
 </div>
 
 <h2>A small run, narrated</h2>

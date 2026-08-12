@@ -148,18 +148,22 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 <h2>Running</h2>
 
 <div class="api-item">
-  <div class="api-sig">GraphEvolver.run(seed) -&gt; list[tuple[int, int, int]]</div>
+  <div class="api-sig">GraphEvolver.run(seed) -&gt; RunResult</div>
   <div class="api-body">
-    <span class="src">lib.rs:218</span>
+    <span class="src">lib.rs:235</span>
     <p>
-      Runs the evolution and returns the best network found, as
-      <code>(u, v, multiplicity)</code> triples with <code>u &lt; v</code>. Pairs with no edge are
-      not listed.
+      Runs the evolution and returns everything that run produced — the best fitness, the best
+      network, the winning genome and the convergence log.
     </p>
     <p>
       <b>One seed drives everything</b> — the starting population, the evolution loop, and the
       epidemics. The same seed and the same config give the same result, on any machine, forever.
       See <a href="reproducibility.html">Seeds &amp; reproducibility</a>.
+    </p>
+    <p>
+      <b>Nothing is cached on the evolver.</b> The result is the returned value and nowhere else,
+      so one evolver drives as many runs as you like without a previous one's numbers surviving
+      into the next.
     </p>
     <p>
       The long Rust portion releases the GIL, so other Python threads keep running while a run is
@@ -168,18 +172,50 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
   </div>
 </div>
 
+<pre><code class="language-python">result = evolver.run(seed=20260812)
+
+print(result.best_fitness)       # in your units
+print(result.best_edges)         # (u, v, multiplicity) triples
+print(result.best_genome_repr)   # the winning genome, printed
+
+for row in result.history:       # the convergence log
+    print(row.iteration, row.best_fitness, row.mean_fitness, row.std_dev)</code></pre>
+
 <div class="api-item">
-  <div class="api-sig">GraphEvolver.best_fitness() -&gt; float</div>
+  <div class="api-sig">RunResult</div>
   <div class="api-body">
-    <span class="src">lib.rs:246</span>
+    <span class="src">py_result.rs:68</span>
     <p>
-      The winning fitness from the last <code>run</code>, <b>in your objective's own units</b> —
-      infected nodes for <code>epi_spread</code>, an RMSE for <code>epi_prof_match</code>. The
-      engine's internal lower-is-better orientation is converted away before you see it.
+      Read-only. <code>best_fitness</code> is <b>in your objective's own units</b> — infected nodes
+      for <code>epi_spread</code>, an RMSE for <code>epi_prof_match</code>. The engine's internal
+      lower-is-better orientation is converted away before you see it.
     </p>
-    <p class="warn" style="margin-top:.6rem">
-      <b>Before any run has happened it returns <code>+inf</code></b>, which under a maximizing
-      objective reads as a suspiciously excellent score. Do not call it first.
+    <p>
+      <code>best_edges</code> is the best network as <code>(u, v, multiplicity)</code> triples with
+      <code>u &lt; v</code>; pairs with no edge are not listed. <code>best_genome_repr</code> is the
+      winning genome's printed form, which is how a result records <i>which</i> individual won
+      without the API needing to know the representation.
+    </p>
+    <p>
+      <code>history</code> builds a fresh list on each access, so bind it once rather than
+      re-reading it inside a loop.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">GenerationStats</div>
+  <div class="api-body">
+    <span class="src">py_result.rs:34</span>
+    <p>
+      One row of <code>history</code>: <code>iteration</code>, <code>best_fitness</code>,
+      <code>mean_fitness</code>, <code>std_dev</code>. <code>iteration</code> counts generations
+      under the generational strategy and mating events under steady-state.
+    </p>
+    <p>
+      The two fitness columns are in your units; <code>std_dev</code> is left exactly as computed,
+      because a spread reads the same whichever direction the objective runs in. It is the
+      <b>population</b> deviation — see <a href="output.html">Logs &amp; results</a>.
     </p>
   </div>
 </div>
@@ -187,7 +223,7 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 <div class="api-item">
   <div class="api-sig">GraphEvolver.set_fitness_function(callable, direction)</div>
   <div class="api-body">
-    <span class="src">lib.rs:144</span>
+    <span class="src">lib.rs:148</span>
     <p>
       Registers your own objective. <code>direction</code> is <code>"minimize"</code> or
       <code>"maximize"</code>, case-insensitive, and is declared <b>here</b> because nothing can
@@ -201,20 +237,17 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
   </div>
 </div>
 
-<h3>Result object and replicates <span class="badge badge-planned">planned</span></h3>
+<h3>Replicates <span class="badge badge-planned">planned</span></h3>
 
 <p>
-  The design replaces the pair above with a single returned result object, and lets one call do
-  <code>n</code> replicate runs — which is what research use actually looks like:
+  The design lets one call do <code>n</code> replicate runs — which is what research use actually
+  looks like — returning a <b>list</b> of the result objects above, one per replicate:
 </p>
 
 <pre><code class="language-python">results = evolver.run(seed=20260812, runs=30, max_cores=8)   # a list, one per replicate
 
 best = min(results, key=lambda r: r.best_fitness)
-print(best.best_fitness)   # in your units
-print(best.best_edges)     # (u, v, multiplicity) triples
-print(best.best_genome)    # the winning genome, printed
-print(best.history)        # the convergence log, one row per logged iteration</code></pre>
+print(best.best_fitness)</code></pre>
 
 <div class="table-wrap">
 <table>
@@ -252,12 +285,11 @@ print(best.history)        # the convergence log, one row per logged iteration</
 </div>
 
 <div class="plan-note">
-  <b>Today:</b> <code>run(seed)</code> takes exactly one seed, performs one run, and returns the
-  edge list; fitness comes from <code>best_fitness()</code>, and the convergence history is not
-  returned at all. To do replicates now, call <code>run</code> in a Python loop with your own
-  seeds — but note that this does not give you the stream-derived seeding described above, so
-  extending the loop later will not reproduce your earlier runs unless you record each seed you
-  used.
+  <b>Today:</b> <code>run(seed)</code> takes exactly one seed and performs one run, returning a
+  single <code>RunResult</code> rather than a list. To do replicates now, call <code>run</code> in
+  a Python loop with your own seeds — but note that this does not give you the stream-derived
+  seeding described above, so extending the loop later will not reproduce your earlier runs unless
+  you record each seed you used.
 </div>
 
 <h3>Saving results <span class="badge badge-planned">planned</span></h3>
@@ -266,7 +298,7 @@ print(best.history)        # the convergence log, one row per logged iteration</
   <div class="api-sig">GraphEvolver.save_logs(path)
 GraphEvolver.save_results(path)</div>
   <div class="api-body">
-    <span class="src">lib.rs:251, lib.rs:257</span>
+    <span class="src">lib.rs:266, lib.rs:272</span>
     <p>
       Write the convergence log as CSV, and the best individual plus the generated TOML as the
       results record. Both convert fitness back into your units on the way out and leave
@@ -277,9 +309,9 @@ GraphEvolver.save_results(path)</div>
 </div>
 
 <div class="plan-note">
-  <b>Today:</b> both raise. The convergence history is currently discarded inside the engine before
-  it reaches Python, so a config-driven run cannot read its own log yet. If you need convergence
-  data now, the Rust route below can read <code>EvolutionOutcome</code> directly.
+  <b>Today:</b> both raise, and they still take the evolver rather than a result — which now holds
+  nothing to write, since a run's state lives in the returned <code>RunResult</code>. Write the CSV
+  yourself from <code>result.history</code> until they are re-homed onto the result object.
 </div>
 
 <h3 id="base-graph">Supplying a base graph <span class="badge badge-planned">planned</span></h3>

@@ -11,11 +11,11 @@ Run it after installing the extension module:
     maturin develop        # or: pip install .
     python examples/config_builder.py
 
-Every example below works today. What is NOT wired up yet is the run itself:
-`GraphEvolver.run()` is still unimplemented pending GitHub #26, so this script
-builds, validates and prints configurations rather than evolving anything.
-The `evolve_with_a_custom_objective` example marks the one line that will
-start working when #26 lands.
+Every example below works today. `GraphEvolver.run()` works too, and returns a
+`RunResult` carrying `best_fitness`, `best_edges`, `best_genome_repr` and the
+convergence `history` — but this script deliberately stops at building,
+validating and printing configurations, so that running it costs nothing. The
+`evolve_with_a_custom_objective` example marks the one line that would evolve.
 """
 
 import get
@@ -126,7 +126,7 @@ def evolve_with_a_custom_objective():
 
     evolver.set_fitness_function(total_edges, "maximize")
 
-    # edges = evolver.run(seed=1)   <- pending GitHub #26
+    # result = evolver.run(seed=1)   -> RunResult
     return evolver
 
 

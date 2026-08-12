@@ -142,7 +142,7 @@
 best = max(results, key=lambda r: r.best_fitness)   # epi_spread maximizes
 print(best.best_fitness)
 print(best.best_edges)
-print(best.best_genome)
+print(best.best_genome_repr)
 
 for row in best.history:
     print(row.iteration, row.best_fitness, row.mean_fitness, row.std_dev, row.ci_95)
@@ -157,12 +157,11 @@ evolver.save_results("results.txt")      # best individual + the generated TOML<
 </p>
 
 <div class="plan-note">
-  <b>Today:</b> <code>run</code> returns only the best edge list, and the winning fitness comes
-  from <code>best_fitness()</code>. The convergence history is discarded inside the engine before
-  it reaches Python, so <b>a config-driven run cannot read its own log</b>, and
-  <code>save_logs</code> / <code>save_results</code> both raise. If you need convergence data now,
-  the Rust route reads <code>EvolutionOutcome</code> directly — remembering that its numbers are in
-  engine orientation.
+  <b>Today:</b> <code>run</code> returns one result rather than a list, so the
+  <code>runs</code> and <code>max_cores</code> arguments above do not exist yet; a row carries four
+  columns and not <code>ci_95</code>, <code>seed</code> or <code>run</code>; and
+  <code>save_logs</code> / <code>save_results</code> both raise, so write the CSV yourself from
+  <code>result.history</code>.
 </div>
 
 <h2>Plotting a convergence curve</h2>
