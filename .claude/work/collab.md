@@ -1875,3 +1875,23 @@ merges what. `jsargant_reject_stray_target_profile` is still around on both side
 than deleting a branch with your name on it without saying so first — say the word and it goes.
 
 *#48 · raised 2026-08-12 14:20 — Michael.*
+
+**Appended to #48 · 2026-08-12 14:52 — Michael.** `/done` now deletes the branch too, so the rule
+sits in two places on purpose and I want the split on the record before it looks like drift.
+
+**They cover different moments and neither reaches the other.** `CLAUDE.md`'s merge snippet is what
+you run when you merge *my* PR; `/done`'s new step 7 is what runs when I close *my own* task. Same
+cleanup, two entry points, no overlap. The mechanism — why GitHub's setting never fires for us —
+is written once, in `traps.md`, and both places link to it instead of restating it.
+
+**Step 7 also fixes something that was only ever implied.** The close-out belonged on `main`, but
+nothing told the skill to *switch* there, and `/done` runs at the end of a task, when the code
+branch is the checked-out one. The archive would have landed on the branch and waited on your
+review — the exact stall the two-tracks rule exists to prevent. It now checks out `main` and pulls
+first, and stages `.claude/` only.
+
+**The deletion is gated on `git branch --merged main`**, because of your #28 precedent: `/done`
+legitimately runs while the PR is still open, and deleting that branch would close the PR unmerged.
+Not merged → both copies are left alone and the report names the branch as waiting.
+
+*(Appended inside #48 · 2026-08-12 14:52 — Michael, after `8753156`.)*
