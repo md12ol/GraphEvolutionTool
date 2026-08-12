@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>edge_edit/operations.rs · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="reference/edge-edit-operations.html">
+<main>
+
+<p class="page-kicker">Source reference</p>
+<h1><code>genomes/edge_edit/operations.rs</code></h1>
+<p class="lede">
+  The nine edits an <a href="edge-edit.html">edge-edit gene</a> can encode. Every one of them is a
+  silent no-op when its preconditions fail — nothing errors, nothing is retried, and evolution
+  routes around the impossible edits.
+</p>
+
+<p>
+  The gentle introduction is on <a href="../guide/genomes.html#operations">Genomes</a>. This page is
+  the precise behaviour: exactly what each operation does, exactly when it does nothing, and the two
+  places where the wording elsewhere and the code do not quite line up.
+</p>
+
+<h2>The enum and its opcodes</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub(super) enum GraphOperation {
+    Toggle, Hop, Add, Delete, Swap,
+    LocalToggle, LocalAdd, LocalDelete, Null,
+}</div>
+  <div class="api-body">
+    <span class="src">operations.rs:5</span>
+    <p>Crate-internal — it is reached through a gene's opcode, never named from outside.</p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub(super) fn from_opcode(opcode: u8) -&gt; Option&lt;Self&gt;</div>
+  <div class="api-body">
+    <span class="src">operations.rs:18</span>
+    <p>
+      Maps the low four bits of a gene onto an operation. <b>Opcodes 9–15 return
+      <code>None</code></b> and the gene is skipped entirely — which is how an unknown opcode
+      becomes a no-op rather than a panic.
+    </p>
+  </div>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Opcode</th><th>Operation</th><th>Parameters used</th></tr></thead>
+  <tbody>
+    <tr><td><code>0</code></td><td><code>Toggle</code></td>
+        <td><code>v1</code>, <code>v2</code>, <code>v3</code> as direction</td></tr>
+    <tr><td><code>1</code></td><td><code>Hop</code></td>
+        <td><code>v1</code> start, <code>v2</code>/<code>v3</code> neighbour indices</td></tr>
+    <tr><td><code>2</code></td><td><code>Add</code></td><td><code>v1</code>, <code>v2</code></td></tr>
+    <tr><td><code>3</code></td><td><code>Delete</code></td><td><code>v1</code>, <code>v2</code></td></tr>
+    <tr><td><code>4</code></td><td><code>Swap</code></td>
+        <td><code>v1</code>, <code>v2</code> vertices; <code>v3</code>, <code>v4</code> neighbour
+            indices</td></tr>
+    <tr><td><code>5</code></td><td><code>LocalToggle</code></td>
+        <td><code>v1</code> start, <code>v2</code>/<code>v3</code> neighbour indices,
+            <code>v4</code> as direction</td></tr>
+    <tr><td><code>6</code></td><td><code>LocalAdd</code></td>
+        <td><code>v1</code> start, <code>v2</code>/<code>v3</code> neighbour indices</td></tr>
+    <tr><td><code>7</code></td><td><code>LocalDelete</code></td>
+        <td><code>v1</code> start, <code>v2</code>/<code>v3</code> neighbour indices</td></tr>
+    <tr><td><code>8</code></td><td><code>Null</code></td><td>none</td></tr>
+    <tr><td><code>9</code>–<code>15</code></td><td><i>none</i></td><td>gene skipped</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn">
+  <b>This ordering is coupled to the weights table, implicitly and unenforced.</b> The
+  <code>[genome.operation_weights]</code> values are flattened into an array whose order must match
+  the opcode order above. Nothing checks that it does. Reordering either side — or inserting a
+  tenth operation anywhere but the end — silently remaps every weight onto the wrong operation, and
+  the only symptom is a run that explores differently than configured. If you touch either, change
+  both in the same commit and add a test that pins the pairing.
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub(super) fn apply(self, graph: &amp;mut Graph, v1: usize, v2: usize, v3: usize, v4: usize)</div>
+  <div class="api-body">
+    <span class="src">operations.rs:33</span>
+    <p>
+      Dispatches to the operation's implementation. The four parameters are already decoded from
+      the gene's payload — see <a href="edge-edit.html">edge_edit.rs</a> for the mixed-radix
+      decoding and its bias on large networks. Note that operations take different numbers of them,
+      so a gene's unused parameters simply do not matter.
+    </p>
+  </div>
+</div>
+
+<h2>The shared guard</h2>
+
+<div class="api-item">
+  <div class="api-sig">fn valid_pair(graph: &amp;Graph, u: usize, v: usize) -&gt; bool</div>
+  <div class="api-body">
+    <span class="src">operations.rs:47</span>
+    <p>
+      <code>u &lt; num_nodes &amp;&amp; v &lt; num_nodes &amp;&amp; u != v</code>. Every direct
+      operation checks this first, which is why an out-of-range vertex or a self-loop is a no-op
+      rather than an error.
+    </p>
+  </div>
+</div>
+
+<h2>The three direct operations</h2>
+
+<div class="api-item">
+  <div class="api-sig">fn add(graph: &amp;mut Graph, u: usize, v: usize)</div>
+  <div class="api-body">
+    <span class="src">operations.rs:64</span>
+    <p>Adds <b>one</b> edge copy between <code>u</code> and <code>v</code>.</p>
+    <p><b>No-op when:</b> the pair is invalid, or the edge is already at the cap — the underlying
+       add saturates rather than wrapping.</p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn delete(graph: &amp;mut Graph, u: usize, v: usize)</div>
+  <div class="api-body">
+    <span class="src">operations.rs:70</span>
+    <p>Removes <b>one</b> edge copy. On an unweighted graph that removes the edge.</p>
+    <p><b>No-op when:</b> the pair is invalid, or there is no edge to remove.</p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn toggle(graph: &amp;mut Graph, u: usize, v: usize, direction: usize)</div>
+  <div class="api-body">
+    <span class="src">operations.rs:51</span>
+    <p>The interesting one. Its behaviour depends on where the current weight sits:</p>
+  </div>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Current weight</th><th>Does</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><code>0</code></td><td><b>Add</b></td>
+        <td>Forced — there is nothing to remove.</td></tr>
+    <tr><td>at the cap</td><td><b>Remove</b></td>
+        <td>Forced — there is no room to add.</td></tr>
+    <tr><td>anything between</td>
+        <td><code>direction</code> <b>even → remove</b>, <b>odd → add</b></td>
+        <td>The only case with a genuine choice, and the payload parameter decides it.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <b>On an unweighted graph (<code>cap = 1</code>) the middle case cannot arise</b>, since every
+  weight is either <code>0</code> or at the cap. <code>Toggle</code> is then a true toggle and
+  <code>direction</code> is ignored — which is why it reads as absent/present in the common case.
+</div>
+
+<h2>The two-hop walk</h2>
+
+<div class="api-item">
+  <div class="api-sig">fn two_hop_endpoint(graph: &amp;Graph, start: usize,
+                    first_neighbor_index: usize,
+                    second_neighbor_index: usize) -&gt; Option&lt;(usize, usize)&gt;</div>
+  <div class="api-body">
+    <span class="src">operations.rs:76</span>
+    <p>
+      The shared machinery behind <code>Hop</code> and the three <code>Local*</code> operations.
+      Step from <code>start</code> to one of its neighbours, then to one of <i>that</i> node's
+      neighbours. Returns both the intermediate node and the far endpoint.
+    </p>
+    <p>Neighbour indices <b>wrap modulo the degree</b>, so an arbitrary payload always names a real
+       neighbour rather than failing.</p>
+    <p><b>Returns <code>None</code> — and the operation is a no-op — when:</b></p>
+    <ul>
+      <li><code>start</code> has no neighbours at all (or is out of range);</li>
+      <li>the intermediate neighbour has <b>degree &lt; 2</b>, so the walk has nowhere to go but
+          back;</li>
+      <li>the far endpoint <b>is <code>start</code></b> — a walk that returned to where it
+          began.</li>
+    </ul>
+  </div>
+</div>
+
+<figure>
+<svg viewBox="0 0 660 190" role="img" aria-label="A two-hop walk: from the start node to a neighbour, then to that neighbour's neighbour, which becomes the far endpoint.">
+  <g style="color:var(--border-firm)">
+    <line x1="90" y1="90" x2="250" y2="90" class="d-stroke" stroke-width="2"/>
+    <line x1="250" y1="90" x2="410" y2="90" class="d-stroke" stroke-width="2"/>
+    <path d="M90 90 Q250 20 410 90" class="d-stroke-acc" stroke-width="2" stroke-dasharray="6 4"
+          style="color:var(--accent)"/>
+
+    <circle cx="90"  cy="90" r="22" class="d-fill-acc"/><circle cx="90"  cy="90" r="22" class="d-stroke"/>
+    <circle cx="250" cy="90" r="22" class="d-fill-box"/><circle cx="250" cy="90" r="22" class="d-stroke"/>
+    <circle cx="410" cy="90" r="22" class="d-fill-good"/><circle cx="410" cy="90" r="22" class="d-stroke"/>
+
+    <text x="90"  y="96" class="d-text-mono" text-anchor="middle">v1</text>
+    <text x="250" y="96" class="d-text-mono" text-anchor="middle">n1</text>
+    <text x="410" y="96" class="d-text-mono" text-anchor="middle">n2</text>
+
+    <text x="90"  y="132" class="d-text-sm" text-anchor="middle">start</text>
+    <text x="250" y="132" class="d-text-sm" text-anchor="middle">intermediate</text>
+    <text x="250" y="148" class="d-text-sm" text-anchor="middle">needs degree ≥ 2</text>
+    <text x="410" y="132" class="d-text-sm" text-anchor="middle">far endpoint</text>
+    <text x="410" y="148" class="d-text-sm" text-anchor="middle">must not be the start</text>
+
+    <text x="250" y="30" class="d-text-acc" text-anchor="middle">the edit acts on this pair</text>
+    <text x="530" y="84" class="d-text-sm">Local* operate on (v1, n2).</text>
+    <text x="530" y="104" class="d-text-sm">Hop also removes (v1, n1).</text>
+  </g>
+</svg>
+<figcaption>Both neighbour steps wrap modulo the degree, so any payload names a real neighbour.
+The rejections are what make the walk meaningful rather than merely legal.</figcaption>
+</figure>
+
+<h2>The three local operations</h2>
+
+<p>
+  Each one takes the two-hop walk and then applies its direct counterpart to
+  <code>(start, endpoint)</code>. So every no-op condition of the direct operation applies on top of
+  every no-op condition of the walk.
+</p>
+
+<div class="api-item">
+  <div class="api-sig">fn local_add(graph, start, first_neighbor_index, second_neighbor_index)
+fn local_delete(graph, start, first_neighbor_index, second_neighbor_index)
+fn local_toggle(graph, start, first_neighbor_index, second_neighbor_index, direction)</div>
+  <div class="api-body">
+    <span class="src">operations.rs:108, :122, :93</span>
+    <p>
+      <code>LocalAdd</code> creates a shortcut across a two-hop path — the classic
+      triangle-closing move. <code>LocalDelete</code> removes one. <code>LocalToggle</code> does
+      whichever the current weight and <code>direction</code> call for.
+    </p>
+    <p>
+      Note <code>LocalToggle</code> is the only operation that uses all four decoded parameters:
+      <code>v4</code> is its toggle direction.
+    </p>
+  </div>
+</div>
+
+<h2><code>Hop</code> — move an edge</h2>
+
+<div class="api-item">
+  <div class="api-sig">fn hop(graph: &amp;mut Graph, start, first_neighbor_index, second_neighbor_index)</div>
+  <div class="api-body">
+    <span class="src">operations.rs:136</span>
+    <p>
+      Walk two hops, connect <code>start</code> to the far endpoint, then drop the edge to the
+      intermediate neighbour. The effect is to <b>move</b> one edge copy outward along the path,
+      leaving the total edge count unchanged.
+    </p>
+    <p>
+      <b>The order matters and is deliberate:</b> the removal only happens if the addition actually
+      took. If the new edge is already at the cap, adding fails, and <code>hop</code> returns
+      <i>before</i> removing anything — so a saturated target leaves the graph completely
+      untouched rather than destroying an edge for nothing.
+    </p>
+    <p><b>No-op when:</b> the walk fails, or the new edge is already at the cap.</p>
+  </div>
+</div>
+
+<h2><code>Swap</code> — a 2-opt rewire</h2>
+
+<div class="api-item">
+  <div class="api-sig">fn swap(graph: &amp;mut Graph, first_vertex, second_vertex,
+        first_neighbor_index, second_neighbor_index)</div>
+  <div class="api-body">
+    <span class="src">operations.rs:154</span>
+    <p>
+      Take two vertices and one neighbour of each. Cut both edges and cross-connect: the first
+      vertex takes the second's neighbour and vice versa. Total edge multiplicity is preserved
+      exactly — this is a pure rewiring, which is what makes it useful for exploring topology
+      without changing density.
+    </p>
+    <p>It is by far the fussiest operation, and rejects in two stages.</p>
+  </div>
+</div>
+
+<h3>Stage one — before looking up neighbours</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Rejected when</th><th>Because</th></tr></thead>
+  <tbody>
+    <tr><td><code>num_nodes &lt; 4</code></td>
+        <td>Four distinct vertices are needed and there are not four to have.</td></tr>
+    <tr><td>Either vertex is out of range, or they are the same vertex</td><td>—</td></tr>
+    <tr><td><b>Either vertex has degree ≤ 2</b></td>
+        <td>Removing one of its edges would leave it with no spare.</td></tr>
+    <tr><td>The two vertices are <b>already adjacent</b></td>
+        <td>The swap could not yield two disjoint edges.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Stage two — after looking up neighbours</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Rejected when</th><th>Because</th></tr></thead>
+  <tbody>
+    <tr><td>Any two of the four vertices coincide</td>
+        <td>Checked by sorting the quartet and looking for adjacent duplicates. A collision would
+            make the "swap" meaningless or produce a self-loop.</td></tr>
+    <tr><td><code>first_vertex</code> is already joined to <code>second_neighbor</code></td>
+        <td>One of the two edges the swap would create already exists.</td></tr>
+    <tr><td><code>second_vertex</code> is already joined to <code>first_neighbor</code></td>
+        <td>The other one already exists.</td></tr>
+    <tr><td><b><code>first_neighbor</code> is already joined to
+        <code>second_neighbor</code></b></td>
+        <td>See the warning below — this is <i>not</i> one of the created edges.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn">
+  <b>Two discrepancies worth knowing, both real.</b>
+  <ul>
+    <li><b>The third adjacency check is not a "would-be edge".</b> The design document describes
+        <code>Swap</code> as rejecting when "none of the three would-be edges already exists", but
+        the swap creates only <b>two</b> edges. The check between the two <i>neighbours</i> is an
+        additional rejection whose purpose is not documented anywhere, and it is the one branch here
+        with no test coverage. It makes <code>Swap</code> strictly rarer than the description
+        implies.</li>
+    <li><b>The degree floor is <code>&gt; 2</code>, and the original implementation used
+        <code>≥ 2</code>.</b> The design and the code agree with each other; the historical Java
+        version this descends from did not. It matters if you are comparing against archived
+        results, because it makes <code>Swap</code> fire less often on sparse graphs.</li>
+  </ul>
+</div>
+
+<h3>Worked example</h3>
+
+<pre><code class="language-text" data-no-tint>before:  0—1 (weight 2)   0—4   0—5   2—3   2—4   2—5
+swap(first_vertex = 0, second_vertex = 2, both neighbour indices = 0)
+
+  first_neighbor  = a neighbour of 0  ->  1
+  second_neighbor = a neighbour of 2  ->  3
+
+  cut   0—1  and  2—3
+  add   0—3  and  2—1
+
+after:   0—1 (weight 1)   0—3   2—1   0—4   0—5   2—4   2—5
+         total edge multiplicity unchanged</code></pre>
+
+<p>
+  Note the first edge had weight 2 and dropped to 1 rather than vanishing — the cut removes
+  <b>one copy</b>, like every other operation here.
+</p>
+
+<h2><code>Null</code></h2>
+
+<p>
+  Does nothing, deliberately. It exists so that the operation mix can include "no change" as an
+  outcome; set <code>null = 0.0</code> in
+  <a href="../guide/configuration.html">the weights</a> to make every gene do something.
+</p>
+
+<h2>Why silence rather than errors</h2>
+
+<p>
+  A gene's payload is an arbitrary integer decoded into vertex indices, so most conceivable edits
+  are invalid on most graphs. If invalid edits errored, expression would need a policy for what to
+  do when one fails — retry, skip, abort — and every one of those choices distorts the search. A
+  no-op is the neutral option: the gene contributes nothing this generation, and selection sorts
+  out whether that was a good use of a gene slot.
+</p>
+
+<div class="warn">
+  <b>The practical consequence for a from-scratch run.</b> Five of the nine operations —
+  <code>Swap</code>, <code>Hop</code> and the three <code>Local*</code> — need existing structure to
+  walk, so on an empty starting graph they all do nothing. Until <code>Add</code> and
+  <code>Toggle</code> have built something, well over half the operation mix is inert. This is
+  self-correcting and is not a bug, but it makes early generations look stalled. See
+  <a href="../guide/troubleshooting.html">Troubleshooting</a>.
+</div>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

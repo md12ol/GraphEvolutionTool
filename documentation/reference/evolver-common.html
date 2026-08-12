@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>evolver/common.rs · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="reference/evolver-common.html">
+<main>
+
+<p class="page-kicker">Reference</p>
+<h1>evolver/common.rs</h1>
+<p class="lede">
+  The shared half of the evolution engine: the <code>Evolver</code> trait and its context types, the
+  result and log-row types, tournament selection, the mutation helper, and
+  <code>express_and_score</code> — the one function every fitness value in GET passes through.
+  For the gentle introduction to what an evolver <i>is</i>, read
+  <a href="../guide/evolvers.html">Evolution strategies</a> first; this page is the precise
+  companion to it.
+</p>
+
+<p>
+  Two files are covered here, because they are two halves of one thing:
+  <code>get/src/evolver/mod.rs</code> declares the interface and the data types, and
+  <code>get/src/evolver/common.rs</code> holds the machinery both strategies call. The strategies
+  themselves have their own pages — <a href="generational.html">evolver/generational.rs</a> and
+  <a href="steady-state.html">evolver/steady_state.rs</a>.
+</p>
+
+<div class="warn">
+  <b>The engine never calls <code>Fitness::evaluate</code> or <code>Fitness::evaluate_batch</code>
+  directly. Ever.</b>
+  <code>common::express_and_score</code> is the <i>sole</i> path from a batch of genomes to a set of
+  fitness values — generational scoring, steady-state child scoring, the final outcome, all of it.
+  It is simultaneously the <b>orientation point</b> (the one place a score is flipped so that lower
+  always means better) and the <b>NaN gate</b> (the one place a broken objective is caught). A
+  direct call to either trait method compiles fine and returns plausible-looking numbers, and both
+  failures it lets through are <b>silent</b>: under a maximizing objective every comparison in the
+  run quietly runs backwards, and a single <code>NaN</code> becomes the best individual in every
+  tournament it enters, filling the population with whatever produced it and leaving a run that
+  looks converged. If you are writing a new strategy, this is the rule to get right first — see
+  <a href="../guide/new-evolver.html">Add a strategy</a>.
+</div>
+
+<h2>What lives where</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Item</th><th>File</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td><code>Evolver</code></td><td>mod.rs</td><td>the interface both strategies implement</td></tr>
+    <tr><td><code>SharedEvolutionContext</code></td><td>mod.rs</td><td>settings both strategies need</td></tr>
+    <tr><td><code>GenerationalContext</code>, <code>SteadyStateContext</code></td><td>mod.rs</td><td>settings only one strategy needs</td></tr>
+    <tr><td><code>EvolutionOutcome</code>, <code>GenerationStats</code></td><td>mod.rs</td><td>what a run hands back</td></tr>
+    <tr><td><code>Selection</code></td><td>common.rs</td><td>how parents are picked</td></tr>
+    <tr><td><code>express_and_score</code></td><td>common.rs</td><td>expression + scoring + orientation + NaN gate</td></tr>
+    <tr><td><code>mutate_child</code></td><td>common.rs</td><td>the engine's two mutation dice rolls</td></tr>
+    <tr><td><code>generation_stats</code></td><td>common.rs</td><td>one population → one log row</td></tr>
+    <tr><td><code>rank</code>, <code>best_index</code></td><td>common.rs</td><td>the engine's one and only comparator</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  The module re-exports both strategies, so callers write <code>evolver::GenerationalEvolver</code>
+  rather than reaching into the submodule.
+</p>
+
+<div class="api-item">
+  <div class="api-sig">pub use generational::GenerationalEvolver;
+pub use steady_state::SteadyStateEvolver;</div>
+  <div class="api-body">
+    <span class="src">evolver/mod.rs:13-14</span>
+    <p>The two concrete strategies, re-exported at the module root.</p>
+  </div>
+</div>
+
+<h2>The <code>Evolver</code> trait</h2>
+
+<p>
+  An evolver is a thing that takes a population, improves it, and reports what it found. The trait
+  is deliberately tiny: build one, run it.
+</p>
+
+<div class="api-item">
+  <div class="api-sig">pub trait Evolver&lt;G: Genome&gt;</div>
+  <div class="api-body">
+    <span class="src">evolver/mod.rs:131</span>
+    <p>
+      A genetic-algorithm evolution strategy over genome type <code>G</code>. Generic over the
+      genome rather than using a trait object, because a <code>Genome</code> cannot be erased — see
+      <a href="../guide/pipeline.html#two-front-ends">The pipeline</a> for why the two dispatch axes
+      are not symmetric.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">type TypeContext;</div>
+  <div class="api-body">
+    <span class="src">evolver/mod.rs:138</span>
+    <p>
+      The strategy-specific settings block: <code>GenerationalContext</code> or
+      <code>SteadyStateContext</code>. This is an <b>associated type</b> — each implementor fixes it
+      to one concrete type, which is neater than making the trait take a second type parameter.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn new(
+    shared: SharedEvolutionContext&lt;G&gt;,
+    type_context: Self::TypeContext,
+    population: Vec&lt;G&gt;,
+) -&gt; Self
+where
+    Self: Sized</div>
+  <div class="api-body">
+    <span class="src">evolver/mod.rs:148-157</span>
+    <p>
+      Build an evolver from the two settings blocks and a <b>ready-made starting population</b>.
+    </p>
+    <p>
+      The caller supplies the population because the evolver cannot build one: genome constructors
+      differ per representation and some can fail, so a generic evolver has no way to mint a
+      <code>G</code>. Building it in <a href="dispatch.html">dispatch.rs</a> keeps that knowledge
+      where it already lives, turns a bad dimension into a startup error rather than a mid-run
+      panic, and makes both evolvers testable from a hand-built population.
+    </p>
+    <p>
+      The <code>Self: Sized</code> bound opts only this one method out of dynamic dispatch — a
+      constructor cannot be called through a trait object anyway — so the rest of the trait stays
+      usable as <code>dyn Evolver&lt;G&gt;</code>.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn run&lt;F: Fitness&gt;(&amp;mut self, fitness: &amp;F, seed: u64) -&gt; EvolutionOutcome&lt;G&gt;</div>
+  <div class="api-body">
+    <span class="src">evolver/mod.rs:162</span>
+    <p>
+      Evolve the population against <code>fitness</code>, deriving <b>all</b> randomness from
+      <code>seed</code>, and return the best genome with its expressed graph and the run history.
+    </p>
+    <p>
+      Being generic over <code>F</code> is what makes the Rust extension route work without touching
+      dispatch: if you already hold a concrete objective type, you instantiate an evolver with it
+      directly. See <a href="../guide/new-evolver.html">Add a strategy</a> and
+      <a href="fitness.html">fitness.rs</a>.
+    </p>
+  </div>
+</div>
+
+<h2>Context types — the settings</h2>
+
+<p>
+  Settings are split in two: what both strategies need, and what only one of them needs. The split
+  is what lets <a href="dispatch.html">dispatch.rs</a> build the shared block once and hand it to
+  whichever strategy the config named.
+</p>
+
+<div class="api-item">
+  <div class="api-sig">pub struct SharedEvolutionContext&lt;G: Genome&gt; {
+    pub genome_context: G::Context,
+    pub crossover_rate: f64,
+    pub mutation_rate: f64,
+    pub max_mutations: usize,
+    pub selection: Selection,
+}</div>
+  <div class="api-body">
+    <span class="src">evolver/mod.rs:38-65</span>
+    <p>Run-level configuration shared by every evolution strategy. Five fields, and no more:</p>
+    <ul>
+      <li><b><code>genome_context</code></b> — the genome's own expression settings
+          (<code>EdgeEditContext</code>, <code>SdaContext</code>; see
+          <a href="genome-trait.html">genomes/genome.rs</a>). It is also the authority on network
+          size and the edge-weight cap.</li>
+      <li><b><code>crossover_rate</code></b> — the probability that a selected pair is recombined.
+          Rolled <b>once per pair</b>, never per child.</li>
+      <li><b><code>mutation_rate</code></b> — the probability that a child mutates at all.</li>
+      <li><b><code>max_mutations</code></b> — if it does mutate, the upper bound on how many
+          mutations it takes, drawn uniformly from <code>1..=max_mutations</code>.</li>
+      <li><b><code>selection</code></b> — the parent-selection strategy, used by both.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="note">
+  <b>Every value has exactly one source of truth, and that is why the list is short.</b>
+  Population size is not here — it is <code>population.len()</code>. Network size and the edge cap
+  are not here — they belong to the genome context. All three <i>are</i> in
+  <code>config.toml</code>, but <a href="dispatch.html">dispatch.rs</a> is the only place they are
+  read. A second copy of a value can drift out of step with the original, and nothing in the system
+  would report the disagreement.
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub struct GenerationalContext {
+    pub num_generations: usize,
+    pub elite_count: usize,
+}</div>
+  <div class="api-body">
+    <span class="src">evolver/mod.rs:68-74</span>
+    <p>
+      Generational-only settings: how many generations to run, and how many best individuals are
+      copied forward unchanged into each next generation. <code>elite_count</code> defaults to 1 in
+      <code>config.toml</code>. See <a href="generational.html">evolver/generational.rs</a>.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub struct SteadyStateContext {
+    pub num_mating_events: usize,
+}</div>
+  <div class="api-body">
+    <span class="src">evolver/mod.rs:77-80</span>
+    <p>
+      Steady-state-only settings: how many mate-and-replace events to perform. See
+      <a href="steady-state.html">evolver/steady_state.rs</a>.
+    </p>
+  </div>
+</div>
+
+<h2>What a run hands back</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub struct EvolutionOutcome&lt;G: Genome&gt; {
+    pub best_genome: G,
+    pub best_graph: Graph,
+    pub best_fitness_engine: f64,
+    pub direction: Direction,
+    pub history: Vec&lt;GenerationStats&gt;,
+}</div>
+  <div class="api-body">
+    <span class="src">evolver/mod.rs:115-124</span>
+    <p>
+      The result of one run. <b>Both strategies return this same type</b> — they differ only in how
+      they fill it in.
+    </p>
+    <p>
+      The expressed <code>Graph</code> travels with the genome so a caller can use the final network
+      without re-expressing it. <code>best_fitness_engine</code> is named the way it is on purpose:
+      it is in <b>engine orientation</b>, lower-is-better, whatever the objective actually computed.
+      <code>direction</code> is what undoes that — <code>direction.orient(best_fitness_engine)</code>
+      gives the number back in the objective's own units, and because negation is its own inverse it
+      is literally the same function that converted it on the way in.
+    </p>
+    <p>
+      The struct derives nothing — no <code>Debug</code>, no <code>Clone</code>. It is a plain value
+      you take apart.
+    </p>
+  </div>
+</div>
+
+<div class="warn">
+  <b>If you are embedding GET as a Rust crate, the numbers in here are negated under a maximizing
+  objective.</b> That is the stated cost of converting exactly twice per run instead of once per
+  stats row. The field name says <code>_engine</code> so it cannot be mistaken, and
+  <code>direction</code> is the fix. The Python boundary does this for you — see
+  <a href="../guide/fitness.html">Fitness &amp; orientation</a>.
+</div>
+
+<h3>The log row</h3>
+
+<div class="api-item">
+  <div class="api-sig">pub struct GenerationStats {
+    pub iteration: usize,
+    pub best_fitness: f64,
+    pub mean_fitness: f64,
+    pub std_dev: f64,
+}</div>
+  <div class="api-body">
+    <span class="src">evolver/mod.rs:91-96</span>
+    <p>
+      One row of the evolution log. <code>iteration</code> counts <b>generations</b> for the
+      generational strategy and <b>mating events</b> for steady-state.
+    </p>
+    <p>
+      <code>best_fitness</code> and <code>mean_fitness</code> are in engine orientation like
+      everything else inside the engine; the boundary converts them when it writes the log.
+      <code>std_dev</code> is left alone, because a spread is the same number whichever sign the
+      values carry.
+    </p>
+  </div>
+</div>
+
+<p>The log the reporting layer writes has five columns:</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>iteration</code></td>
+        <td>generation number, or mating-event number</td></tr>
+    <tr><td><code>best_fitness</code></td>
+        <td>best individual in the population at that iteration, in your units</td></tr>
+    <tr><td><code>mean_fitness</code></td>
+        <td>population mean, in your units</td></tr>
+    <tr><td><code>std_dev</code></td>
+        <td><b>population</b> deviation — divides by <code>n</code>, because these are all the
+            individuals there are, not a sample of a larger group. A single individual therefore has
+            a deviation of exactly zero. Crosses the boundary unchanged.</td></tr>
+    <tr><td><code>ci_95</code> <span class="badge badge-planned">planned</span></td>
+        <td>95% confidence half-width on the mean, <code>1.96 · s / √n</code>, where <code>s</code>
+            is the <b>sample</b> deviation — divides by <code>n−1</code>. It answers "how tightly is
+            this generation clustered around its mean". A single individual has an undefined
+            interval, reported as <code>0</code>.</td></tr>
+    <tr><td>the run's <code>seed</code> and run index <span class="badge badge-planned">planned</span></td>
+        <td>stamped on every row, so 30 replicate runs can be concatenated into one file and still
+            be separated afterwards</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <b>The two deviations in that table are deliberately different, and it is not a mistake.</b>
+  <code>std_dev</code> describes the population as the complete thing it is, so it divides by
+  <code>n</code>. <code>ci_95</code> is inherently a sampling statistic and needs the sampling
+  denominator <code>n−1</code> to mean anything. Reporting both is fine; computing the interval from
+  the population deviation would not be.
+</div>
+
+<div class="plan-note">
+  <b>What exists today.</b> <code>GenerationStats</code> has the four fields shown in the signature
+  above — <code>ci_95</code>, the seed and the run index are not fields yet, and nothing computes
+  them. Separately, and more importantly for anyone reading a log: both evolvers <i>do</i> build a
+  complete <code>history</code> and hand it back on the outcome, but the Python boundary
+  (<code>dispatch::erase</code>, <code>get/src/dispatch.rs:398</code>) currently keeps only the best
+  fitness and the best graph's edge list and <b>drops the history on the floor</b>. So a
+  config-driven run cannot read its own convergence log at all today — the rows are built, then
+  discarded before they reach you. A Rust embedder calling <code>Evolver::run</code> directly does
+  get the full <code>history</code> on the returned <code>EvolutionOutcome</code>. Progress is
+  tracked on <a href="../status.html">Status</a>.
+</div>
+
+<h2>Selection — picking parents</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub enum Selection {
+    Tournament { tournament_size: usize },
+}</div>
+  <div class="api-body">
+    <span class="src">evolver/common.rs:22-25</span>
+    <p>
+      The parent-selection strategy. It is an enum so that a second mechanism (roulette-wheel,
+      truncation, rank, …) is one extra variant plus one match arm, mapping straight onto a
+      <code>config.toml</code> field. One variant exists today.
+    </p>
+  </div>
+</div>
+
+<p>
+  <b>A tournament, in plain terms:</b> pick a few individuals at random, and the best of them wins.
+  A bigger <code>tournament_size</code> means more competitors per pick, so stronger individuals win
+  more often — that is what "selection pressure" means. At <code>tournament_size = 1</code> there is
+  no competition at all and selection is uniformly random.
+</p>
+
+<p>
+  There are two draw methods, and they <b>sample differently on purpose</b>:
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Method</th><th>Sampling</th><th>Used by</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><code>select(count)</code></td><td><b>with</b> replacement</td>
+        <td><a href="generational.html">generational</a></td>
+        <td>the textbook default; nothing downstream needs the entrants to be distinct</td></tr>
+    <tr><td><code>tournament_indices()</code></td><td><b>without</b> replacement</td>
+        <td><a href="steady-state.html">steady-state</a></td>
+        <td>it feeds tournament-local replacement, and "the worst two members" means nothing if an
+            individual can appear twice</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  The consequence is small but real and was accepted deliberately: one configured
+  <code>tournament_size</code> implies marginally different selection pressure in each strategy
+  (roughly 4.90 expected distinct entrants at <code>k = 5</code> in a population of 100 — about 2%,
+  which is noise against a stochastic run). A second consequence matters more when reading
+  generational traces: two picks can be <b>the same individual</b>, so a "pair" can be one genome and
+  its own clone, and crossover between them does nothing at all.
+</p>
+
+<div class="api-item">
+  <div class="api-sig">pub fn select&lt;G, R&gt;(
+    &amp;self,
+    population: &amp;[G],
+    fitnesses: &amp;[f64],
+    count: usize,
+    rng: &amp;mut R,
+) -&gt; Vec&lt;G&gt;
+where
+    G: Genome,
+    R: Rng + ?Sized</div>
+  <div class="api-body">
+    <span class="src">evolver/common.rs:67-73</span>
+    <p>
+      Run <code>count</code> independent tournaments and return a <b>clone</b> of each winner.
+      Sampling is with replacement at both levels: an individual can be drawn twice inside one
+      tournament, and can be returned more than once across the batch. Callers who need distinct
+      individuals must enforce that themselves — <code>select</code> cannot know whether its output
+      is a mating pair or an unrelated batch.
+    </p>
+    <p>
+      Guards: the population and fitness slices must be the same length, the population must be
+      non-empty, and <code>tournament_size</code> must be at least 1. There is deliberately
+      <b>no</b> upper check against the population size — with replacement, an oversized tournament
+      still draws perfectly well.
+    </p>
+    <p>
+      The <code>?Sized</code> on <code>R</code> is what lets a caller pass a trait-object RNG such as
+      <code>&amp;mut dyn RngCore</code>; the same bound appears on every RNG parameter in this file.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn tournament_indices&lt;R&gt;(&amp;self, fitnesses: &amp;[f64], rng: &amp;mut R) -&gt; Vec&lt;usize&gt;
+where
+    R: Rng + ?Sized</div>
+  <div class="api-body">
+    <span class="src">evolver/common.rs:109-112</span>
+    <p>
+      Draw <b>one</b> tournament of <b>distinct</b> individuals and return their indices sorted
+      <b>best first</b>. The front of the result are the parents, the back are the individuals they
+      will displace — which is exactly the shape steady-state's replacement rule needs.
+    </p>
+    <p>
+      Distinctness comes from rejection sampling: draw an index, keep it if it is not already in the
+      list, otherwise draw again (<code>common.rs:126-132</code>). <code>tournament_size</code> is
+      small in practice, so a linear membership scan beats a hash set and avoids the
+      population-sized buffer a shuffle would need on every event.
+    </p>
+    <p>
+      Guards: <code>tournament_size</code> at least 1, and <code>tournament_size</code> no larger
+      than the population — without the second, the rejection loop could never finish.
+    </p>
+  </div>
+</div>
+
+<h3>The comparator</h3>
+
+<div class="api-item">
+  <div class="api-sig">pub(super) fn rank(fitnesses: &amp;[f64], a: usize, b: usize) -&gt; Ordering</div>
+  <div class="api-body">
+    <span class="src">evolver/common.rs:33</span>
+    <p>
+      Order two individuals, better first, ties broken by <b>lower index</b>. The whole body is one
+      line: <code>fitnesses[a].total_cmp(&amp;fitnesses[b]).then(a.cmp(&amp;b))</code> — the
+      <code>.then(..)</code> only takes effect when the fitness comparison came out equal, so it is
+      a tie-break and not a second sort key.
+    </p>
+    <p>
+      The tie-break is load-bearing: it makes a tournament's outcome depend only on <i>which</i>
+      indices were drawn, never on the order the RNG produced them. Fitnesses arriving here are
+      already oriented so lower is better, and <code>NaN</code> cannot reach this point because
+      <code>Direction::orient</code> rejected it first.
+    </p>
+    <p>
+      <code>pub(super)</code> means "visible inside the <code>evolver</code> module" — both strategy
+      files use it, nothing outside the engine can.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub(super) fn best_index(fitnesses: &amp;[f64]) -&gt; usize</div>
+  <div class="api-body">
+    <span class="src">evolver/common.rs:47</span>
+    <p>
+      The index of the best individual, using the same <code>rank</code> ordering across the whole
+      slice — so "best" means one identical thing whether it is decided inside a tournament, by
+      elitism, or when packaging the final result. Both strategies call it to pick their winner.
+    </p>
+    <p>
+      Panics on an empty slice. Both callers construct a non-empty population and neither ever
+      removes an individual, so an empty slice is a bug rather than an input.
+    </p>
+  </div>
+</div>
+
+<h2>The scoring gate</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub fn express_and_score&lt;G, F&gt;(
+    batch: &amp;[G],
+    context: &amp;G::Context,
+    fitness: &amp;F,
+) -&gt; (Vec&lt;Graph&gt;, Vec&lt;f64&gt;)
+where
+    G: Genome,
+    F: Fitness</div>
+  <div class="api-body">
+    <span class="src">evolver/common.rs:253-261</span>
+    <p>
+      Express every genome in the batch, score the whole batch, and return the expressed graphs
+      alongside their fitnesses. Index <code>i</code> of both returned vectors belongs to
+      <code>batch[i]</code>. Three steps, in order:
+    </p>
+    <ol>
+      <li><b>Express, in parallel.</b> <code>batch.par_iter().map(|g| g.express(context))</code>
+          (<code>common.rs:263</code>). This is the only <code>par_iter</code> in the whole evolver
+          subsystem, and it is what <code>Genome: Send + Sync</code> and
+          <code>Genome::Context: Send + Sync</code> exist for.</li>
+      <li><b>Score, in one batched call.</b> It defers to <code>Fitness::evaluate_batch</code>, so a
+          native objective fans out over rayon and a Python-backed one crosses the FFI boundary
+          <i>once</i> for the whole batch instead of once per individual.</li>
+      <li><b>Orient, exactly once.</b> Each returned score goes through
+          <code>direction.orient(score)</code> (<code>common.rs:265-270</code>), which flips the sign
+          under <code>Maximize</code> and panics on <code>NaN</code>.</li>
+    </ol>
+    <p>
+      The returned fitnesses are therefore <b>always lower-is-better</b>, whatever the objective's
+      own direction, and everything downstream compares them without ever asking which way the
+      objective ran.
+    </p>
+    <p>
+      The graphs come back rather than being dropped because scoring had to build them anyway.
+      Handing them over costs nothing and saves generational from re-expressing its winner at the
+      end. A caller that only wants the scores can ignore the first element and let it drop —
+      steady-state does exactly that.
+    </p>
+    <p><b>Panics</b> if the objective returns <code>NaN</code> for any individual.</p>
+  </div>
+</div>
+
+<p>
+  Why one function and not a direction-aware comparator? Because a comparator needs the direction at
+  <i>every</i> comparison site — tournament ordering, the generational argmin, the steady-state best
+  — and a single missed site fails silently. This is the only place the whole batch is scored, so it
+  is the only place "exactly once" can be <b>guaranteed</b> rather than remembered. Orientation and
+  <code>NaN</code> rejection share one door by design. The full argument lives in
+  <a href="../guide/fitness.html">Fitness &amp; orientation</a>.
+</p>
+
+<h2>Variation helpers</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub fn mutate_child&lt;G, R&gt;(child: &amp;mut G, mutation_rate: f64, max_mutations: usize, rng: &amp;mut R)
+where
+    G: Genome,
+    R: Rng + ?Sized</div>
+  <div class="api-body">
+    <span class="src">evolver/common.rs:186-190</span>
+    <p>Apply the engine's two mutation dice rolls to one child, in a fixed order:</p>
+    <ol>
+      <li><code>mutation_rate</code> — does this child mutate at all? If not, return immediately.</li>
+      <li><code>max_mutations</code> — if it does, how many mutations, drawn uniformly from
+          <code>1..=max_mutations</code>; then call <code>Genome::mutate</code> that many times.</li>
+    </ol>
+    <p>
+      Both rolls live here, in one helper that <b>both</b> strategies call, so the two can never
+      drift apart on what mutation means — which is exactly what happened once on selection
+      sampling. Neither roll belongs to the genome: <code>Genome::mutate</code> applies exactly one
+      mutation per call, and a representation that rolled its own count internally would make
+      <code>max_mutations</code> meaningless for that representation with nothing to report it.
+    </p>
+    <p>
+      Note that "one mutation" is measured by <b>count, not strength</b>: one edge-edit gene out of
+      256 is a far smaller perturbation than one SDA transition out of 24. See
+      <a href="../guide/variation.html">Crossover &amp; mutation</a>.
+    </p>
+    <p><b>Panics</b> if <code>max_mutations</code> is zero — <code>1..=0</code> is an empty range
+      with no meaningful draw. This is a backstop; <code>Config::validate</code> rejects it first.</p>
+  </div>
+</div>
+
+<div class="note">
+  <b>The count roll consumes randomness even when the answer is forced.</b> At
+  <code>max_mutations = 1</code> the draw from <code>1..=1</code> has only one possible outcome, but
+  it still advances the RNG state (measured 2026-08-03). That means a seeded run does not reproduce
+  what the pre-<code>max_mutations</code> engine produced, even at the default. Skipping the draw at
+  1 would restore the old sequence and is deliberately <i>not</i> done: a special case that changes
+  the random stream based on a config value is a worse thing to own than a one-time change in seeded
+  output. See <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a>.
+</div>
+
+<p>
+  Crossover has no shared helper — it is a single roll each strategy makes for itself, immediately
+  before calling <code>mutate_child</code> on each of the two children. Both strategies make the
+  rolls in the identical order (crossover, then child one, then child two) so the two consume
+  randomness the same way.
+</p>
+
+<h2>Logging</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub fn generation_stats(iteration: usize, fitnesses: &amp;[f64]) -&gt; GenerationStats</div>
+  <div class="api-body">
+    <span class="src">evolver/common.rs:292</span>
+    <p>
+      Summarize a scored population into one log row: the minimum, the mean, and the
+      <b>population</b> standard deviation (<code>variance = Σ(f − mean)² / n</code>,
+      <code>common.rs:315</code>, then a square root). Written as plain loops rather than iterator
+      chains, per the project's readability convention.
+    </p>
+    <p>
+      <b>Every field comes out in engine orientation, because nothing here converts.</b> This
+      function used to take a <code>Direction</code> and convert <code>best</code> and
+      <code>mean</code> back into the objective's units — which meant <code>std_dev</code> had to be
+      deliberately <i>skipped</i>, since a deviation is unchanged by negation. That exception read
+      like a missed case and needed a test to defend it. With nothing converting here, there is
+      nothing to except.
+    </p>
+    <p><b>Panics</b> on an empty population.</p>
+  </div>
+</div>
+
+<h2>Validation: two layers, and they are not identical</h2>
+
+<p>
+  Both evolvers carry <code>assert!</code>s in their constructors. Those are <b>backstops for direct
+  Rust use</b> — tests, and embedding GET as a crate. A config-driven run should never reach one,
+  because <code>Config::validate</code> checks the same ground first and returns a proper error
+  naming the offending field, rather than a panic crossing the FFI boundary as an opaque
+  <code>PanicException</code>. See <a href="config.html">config.rs</a>.
+</p>
+
+<div class="warn">
+  <b>The config path is stricter than the engine on one rule.</b>
+  <code>Config::validate</code> enforces <code>population_size &gt;= tournament_size</code> for
+  <b>both</b> strategies (<code>get/src/config.rs:408</code>), but
+  <code>GenerationalEvolver::new</code> deliberately omits that assert — generational samples
+  <i>with</i> replacement, so an oversized tournament draws perfectly well and there is nothing to
+  reject. Steady-state does assert it (<code>get/src/evolver/steady_state.rs:170</code>), because
+  its without-replacement draw genuinely cannot be satisfied. So a hand-built generational evolver
+  with a tournament larger than its population is legal and works; the same thing expressed as a
+  config document is rejected. Worth knowing if you are writing tests, or if a config error surprises
+  you.
+</div>
+
+<h2>Related pages</h2>
+
+<ul>
+  <li><a href="../guide/evolvers.html">Evolution strategies</a> — the concepts, without the Rust</li>
+  <li><a href="generational.html">evolver/generational.rs</a> and
+      <a href="steady-state.html">evolver/steady_state.rs</a> — the two implementations</li>
+  <li><a href="../guide/fitness.html">Fitness &amp; orientation</a> and
+      <a href="fitness.html">fitness.rs</a> — <code>Direction</code>, <code>orient</code>, and the
+      <code>NaN</code> rule</li>
+  <li><a href="../guide/variation.html">Crossover &amp; mutation</a> — what the two rolls mean per
+      representation</li>
+  <li><a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a> — what a seed does and
+      does not fix</li>
+  <li><a href="../guide/output.html">Logs &amp; results</a> — the log format and the outcome</li>
+  <li><a href="../guide/new-evolver.html">Add a strategy</a> — the checklist a third evolver owes</li>
+  <li><a href="dispatch.html">dispatch.rs</a> — where contexts and populations are built</li>
+</ul>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

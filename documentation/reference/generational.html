@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>evolver/generational.rs · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="reference/generational.html">
+<main>
+
+<p class="page-kicker">Reference</p>
+<h1>evolver/generational.rs</h1>
+<p class="lede">
+  The generational strategy: replace the whole population every generation, carrying a configurable
+  number of elites forward unchanged, and rescore everyone each time. This is the precise companion
+  to <a href="../guide/evolvers.html">Evolution strategies</a> — read that first if you want the
+  concepts rather than the call sequence.
+</p>
+
+<p>
+  Generational works in <b>whole batches</b>. Each generation it builds an entirely new population of
+  the same size out of the old one, then scores every member of it. The alternative approach — change
+  two individuals at a time and leave the rest alone — is
+  <a href="steady-state.html">evolver/steady_state.rs</a>. The machinery both share (selection, the
+  scoring gate, the mutation helper, the log row) lives in
+  <a href="evolver-common.html">evolver/common.rs</a>.
+</p>
+
+<h2>Public surface</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub struct GenerationalEvolver&lt;G: Genome&gt;</div>
+  <div class="api-body">
+    <span class="src">evolver/generational.rs:17-22</span>
+    <p>
+      Evolves a population one full generation at a time, for a fixed number of generations. It has
+      four fields and all of them are <b>private</b>: the shared context, the generational context,
+      the population, and the accumulated history. There is no accessor for the population or the
+      log — everything a caller gets comes back on the <code>EvolutionOutcome</code>.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">impl&lt;G: Genome&gt; Evolver&lt;G&gt; for GenerationalEvolver&lt;G&gt; {
+    type TypeContext = GenerationalContext;
+}</div>
+  <div class="api-body">
+    <span class="src">evolver/generational.rs:137-138</span>
+    <p>
+      The trait implementation. Its strategy-specific settings block is
+      <a href="evolver-common.html"><code>GenerationalContext</code></a> —
+      <code>num_generations</code> and <code>elite_count</code>.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn new(
+    shared: SharedEvolutionContext&lt;G&gt;,
+    type_context: Self::TypeContext,
+    population: Vec&lt;G&gt;,
+) -&gt; Self</div>
+  <div class="api-body">
+    <span class="src">evolver/generational.rs:140-168</span>
+    <p>
+      Build the evolver. One assert: <code>elite_count &lt; population.len()</code>
+      (<code>generational.rs:154</code>). If they were equal, elites would fill every slot, nothing
+      would ever breed, and the run would be a fixed point — which on inspection looks exactly like a
+      broken fitness function rather than a bad setting. That is the silent failure the check exists
+      to catch.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn run&lt;F: Fitness&gt;(&amp;mut self, fitness: &amp;F, seed: u64) -&gt; EvolutionOutcome&lt;G&gt;</div>
+  <div class="api-body">
+    <span class="src">evolver/generational.rs:183-209</span>
+    <p>
+      Score, log, advance — <code>num_generations</code> times — then report the best. The full
+      sequence is spelled out below.
+    </p>
+  </div>
+</div>
+
+<p>
+  Two private methods do the work, and they are named in the walkthrough because they are what you
+  will see in a stack trace or a profiler:
+</p>
+
+<div class="api-item">
+  <div class="api-sig">fn advance_generation&lt;R&gt;(&amp;mut self, fitnesses: &amp;[f64], rng: &amp;mut R)
+where
+    R: Rng + ?Sized</div>
+  <div class="api-body">
+    <span class="src">evolver/generational.rs:41-44</span>
+    <p>
+      Produce the next generation from the current one. It takes the fitnesses of the population it
+      is <i>replacing</i> and does <b>no scoring of its own</b> — the whole next generation is scored
+      in one batch by <code>run</code>.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn outcome(
+    &amp;mut self,
+    graphs: Vec&lt;Graph&gt;,
+    fitnesses: &amp;[f64],
+    direction: Direction,
+) -&gt; EvolutionOutcome&lt;G&gt;</div>
+  <div class="api-body">
+    <span class="src">evolver/generational.rs:113-118</span>
+    <p>
+      Package the winner and the accumulated history into the shared
+      <a href="evolver-common.html"><code>EvolutionOutcome</code></a> type.
+    </p>
+  </div>
+</div>
+
+<h2>The loop, step by step</h2>
+
+<p>
+  Every step below names the real function that performs it. Nothing else happens in between.
+</p>
+
+<ol>
+  <li>
+    <b>Construct</b> — <code>Evolver::new</code> (<code>generational.rs:140</code>). Assert
+    <code>elite_count &lt; population.len()</code>. Store the two contexts and the population; start
+    with an empty history.
+  </li>
+  <li>
+    <b>Seed the random number generator</b> — <code>ChaCha8Rng::seed_from_u64(seed)</code>
+    (<code>generational.rs:187</code>), the first line of <code>run</code>. Every random choice for
+    the entire run comes from this one generator.
+  </li>
+  <li>
+    <b>Score the starting population</b> — <code>common::express_and_score</code>
+    (<code>generational.rs:192-193</code>). This returns two parallel vectors: the expressed graphs,
+    and their fitnesses already oriented so lower is better. Both are kept in local variables and
+    reused.
+  </li>
+  <li>
+    <b>Clear the history and log generation 0</b> —
+    <code>self.history.push(generation_stats(0, &amp;fitnesses))</code>
+    (<code>generational.rs:195-196</code>). The <code>clear()</code> means calling <code>run</code>
+    twice on one evolver does not stack two runs' logs together.
+  </li>
+  <li>
+    <b>For each generation from 1 to <code>num_generations</code></b>
+    (<code>generational.rs:198</code>):
+    <ol>
+      <li>
+        <b>Build the next population</b> — <code>advance_generation</code>
+        (<code>generational.rs:199</code>), which is steps 5a–5d below.
+      </li>
+      <li>
+        <b>Copy the elites forward</b> (<code>generational.rs:51-57</code>). Only if
+        <code>elite_count &gt; 0</code>: list every slot index, sort those indices with
+        <code>common::rank</code> — the same comparator selection uses, so "best" means one thing
+        engine-wide — and clone the first <code>elite_count</code> of them into the new population
+        unchanged.
+      </li>
+      <li>
+        <b>Breed until the new population is full</b> (<code>generational.rs:62-96</code>). Each pass
+        through the loop:
+        <ul>
+          <li><code>Selection::select(&amp;population, fitnesses, 2, rng)</code> picks two parents,
+              <b>with replacement</b> — so the "pair" can be one individual and its own clone.</li>
+          <li>One crossover roll for the pair: <code>rng.random_bool(crossover_rate)</code>, and if
+              it passes, <code>first.crossover(&amp;mut second, rng)</code>
+              (<code>generational.rs:73-75</code>). Crossover recombines <b>in place</b>, leaving one
+              child in each parent.</li>
+          <li><code>common::mutate_child</code> on the first child, then on the second
+              (<code>generational.rs:76-87</code>) — the two mutation rolls, in that fixed order.</li>
+          <li>Push the first child; push the second <b>only if there is still room</b>.</li>
+        </ul>
+      </li>
+      <li>
+        <b>Install the new population</b> — <code>self.population = next</code>
+        (<code>generational.rs:98</code>). The previous generation is dropped wholesale.
+      </li>
+      <li>
+        <b>Rescore the entire new population</b> — <code>common::express_and_score</code> again
+        (<code>generational.rs:201-203</code>), overwriting both the graphs and the fitnesses.
+        <b>Everyone is rescored, elites included.</b>
+      </li>
+      <li>
+        <b>Log the generation</b> —
+        <code>self.history.push(generation_stats(generation, &amp;fitnesses))</code>
+        (<code>generational.rs:205</code>).
+      </li>
+    </ol>
+  </li>
+  <li>
+    <b>Report</b> — <code>self.outcome(graphs, &amp;fitnesses, fitness.direction())</code>
+    (<code>generational.rs:208</code>). Find the winner with <code>common::best_index</code>, clone
+    its genome, move its graph out of the final scoring pass, record its fitness and the direction,
+    and take the history.
+  </li>
+</ol>
+
+<pre><code class="language-text" data-no-tint>score ─→ log(0) ─→ ┌─ advance ─→ score ─→ log(g) ─┐ ─→ outcome
+                   └────── × num_generations ─────┘</code></pre>
+
+<p>
+  So a run performs <code>num_generations + 1</code> scoring passes, and the history has
+  <code>num_generations + 1</code> rows.
+</p>
+
+<h2>The rules worth knowing</h2>
+
+<h3>Elites are copied forward — and rescored anyway</h3>
+
+<p>
+  An <b>elite</b> is one of the <code>elite_count</code> best individuals of the current generation,
+  copied into the next generation without crossover and without mutation. It is the simplest possible
+  insurance against losing a good solution to bad luck.
+</p>
+
+<p>
+  But being copied forward is <b>not</b> the same as being exempt from scoring. Every individual is
+  scored fresh each generation, elites included (<code>generational.rs:201</code>). Under a
+  stochastic objective — which the SIR objectives are, since each evaluation runs new epidemics —
+  this means an elite's recorded fitness moves between generations while its genome does not.
+</p>
+
+<div class="note">
+  <b>That is correct, not a bug.</b> The new number is a fresh sample of the same individual.
+  Freezing the old score instead would let one lucky draw persist for the rest of the run, and
+  selection would then be chasing that luck rather than the graph. See
+  <a href="../guide/fitness.html">Fitness &amp; orientation</a> for what "stochastic objective" means
+  here.
+</div>
+
+<p>
+  Two further points that surprise people. Elites are still <b>eligible as parents</b> — elitism
+  copies them forward, it does not remove them from the mating pool. And
+  <code>elite_count = 0</code> is a legal configuration: the sort is skipped entirely and the run is
+  genuinely non-elitist, which means the best individual really can be lost. That is a true property
+  of a non-elitist genetic algorithm rather than a reporting defect — see
+  <a href="#reported-best">what "the best" means</a> below.
+</p>
+
+<h3>The odd slot count</h3>
+
+<p>
+  Crossover produces <b>two</b> children, but the number of slots left to fill,
+  <code>population_size − elite_count</code>, may be <b>odd</b>. When it is, the last breeding pass
+  contributes one child and the other is discarded (<code>generational.rs:92-95</code>). Only ever
+  the final pass is affected.
+</p>
+
+<div class="note">
+  <b>Both children are always bred, even when one is about to be thrown away.</b> That keeps the cost
+  in random numbers identical for every pass regardless of parity, which is what stops the random
+  stream depending on whether the fill count happened to be even. It is a deliberate trade of a tiny
+  amount of wasted work for a reproducibility property.
+</div>
+
+<h3 id="reported-best">What "the best" means in the result</h3>
+
+<p>
+  The reported winner is the <b>best of the final population</b> — not a running best carried across
+  generations, and this is the same rule <a href="steady-state.html">steady-state</a> uses, so the
+  two strategies agree with each other.
+</p>
+
+<p>
+  There are two reasons this is the honest number. Fitness is stochastic between batches, so a
+  running best would substantially be a record of which generation drew the luckiest sample — which
+  is the same argument that says an elite's old score must not be frozen. And at
+  <code>elite_count = 0</code> a non-elitist run genuinely <i>can</i> end without its best-ever
+  individual: the run really did end without it, and a report claiming otherwise would be describing
+  a population that no longer exists. At <code>elite_count = 0</code> the divergence is a property of
+  your configuration, not of the report.
+</p>
+
+<h3>Logging cadence</h3>
+
+<p>
+  <b>One row per generation, plus a row for the starting population.</b> The initial population is
+  logged as <b>generation 0</b> before any breeding happens (<code>generational.rs:196</code>), which
+  matches steady-state's iteration-0 row so the two strategies' histories share an axis — and means a
+  run of zero generations still says where it began rather than producing nothing at all.
+</p>
+
+<pre><code class="language-text" data-no-tint>history.len() == num_generations + 1
+iterations:       0, 1, 2, 3, …, num_generations</code></pre>
+
+<div class="plan-note">
+  <b>What exists today.</b> The rows are built correctly and travel out on
+  <code>EvolutionOutcome::history</code>, and a Rust caller of <code>Evolver::run</code> can read
+  them. But the Python boundary (<code>dispatch::erase</code>,
+  <code>get/src/dispatch.rs:398</code>) currently keeps only the best fitness and the best graph's
+  edge list, so it <b>drops the history before it reaches you</b> — a config-driven run cannot read
+  its own convergence log at all today. The <code>ci_95</code> column and the per-row seed and run
+  index described in <a href="../guide/output.html">Logs &amp; results</a> are likewise not fields on
+  <code>GenerationStats</code> yet. See <a href="../status.html">Status</a>.
+</div>
+
+<h3>Randomness and reproducibility</h3>
+
+<p>
+  <code>run</code> builds a <code>ChaCha8Rng</code> from the <code>seed</code> argument
+  (<code>generational.rs:187</code>). It is explicitly <b>not</b> <code>StdRng</code>, whose
+  algorithm is permitted to change between <code>rand</code> releases — which would silently break
+  the reproducibility the <code>seed</code> parameter exists to provide.
+</p>
+
+<p>
+  Randomness is consumed only on the sequential path: the selection draws, the crossover roll, and
+  the two mutation rolls per child. Expression runs in parallel across rayon workers but reads no
+  randomness at all, so worker scheduling can never perturb a run. Per breeding pass the cost is
+  <code>2 × tournament_size</code> index draws, one crossover roll, and up to two rate rolls and two
+  count rolls.
+</p>
+
+<div class="warn">
+  <b>The evolver's seed is not the whole story under a stochastic objective.</b> An SIR objective
+  carries its own run seed and an atomic batch counter, and that counter advances once per call into
+  <code>express_and_score</code> — which for generational is <b>once per generation</b>. That is what
+  makes generational the fair comparison: every individual in a generation faces the same epidemic
+  dice. Steady-state advances the same counter once per <i>mating event</i>, which is a very
+  different rate. See <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a>.
+</div>
+
+<h2>A small run, narrated</h2>
+
+<p>
+  Population of 6, <code>elite_count = 2</code>, <code>num_generations = 2</code>,
+  <code>crossover_rate = 0.0</code>, <code>mutation_rate = 1.0</code>,
+  <code>max_mutations = 1</code>, <code>tournament_size = 3</code>. To keep the arithmetic visible,
+  imagine a toy genome that is just a number <code>v</code>, expressing to a graph with
+  <code>v + 1</code> nodes; one mutation adds 100; the objective minimizes the node count. So
+  <b>fitness is <code>v + 1</code>, and smaller is better</b>. Starting values, deliberately
+  unsorted: <code>[5, 3, 9, 1, 7, 2]</code>.
+</p>
+
+<ol>
+  <li>
+    <b>Score generation 0.</b> All six express in parallel; node counts are
+    <code>[6, 4, 10, 2, 8, 3]</code>. The objective minimizes, so orientation is the identity and the
+    engine's numbers are the same numbers. No <code>NaN</code>, so the gate passes.
+  </li>
+  <li>
+    <b>Log row 0.</b> best = 2.0; mean = 33 / 6 = 5.5; the squared deviations sum to 47.5, so the
+    population variance is 47.5 / 6 ≈ 7.92 and <code>std_dev</code> ≈ 2.81. Row:
+    <code>{ iteration: 0, best_fitness: 2.0, mean_fitness: 5.5, std_dev: 2.81 }</code>.
+  </li>
+  <li>
+    <b>Generation 1 — elites.</b> Sorting the slots by fitness gives slot 3 (f = 2), slot 5 (f = 3),
+    slot 1 (f = 4), slot 0 (f = 6), slot 4 (f = 8), slot 2 (f = 10). The best two are copied
+    unchanged, so the new population starts as <code>[1, 2]</code> — note these are the individuals
+    with values 1 and 2, taken from slots 3 and 5, not the first two slots.
+  </li>
+  <li>
+    <b>Generation 1 — breeding pass.</b> Two size-3 tournaments run. Say the first draws slots
+    {4, 3, 0} with fitnesses 8, 2, 6 — slot 3 wins. The second draws {5, 5, 2} with fitnesses 3, 3,
+    10 — slot 5 wins (and note it was drawn twice, which with-replacement sampling permits). The
+    crossover roll fails, because the rate is 0. Each child then mutates once, adding 100, giving
+    values 101 and 102. Both are pushed.
+  </li>
+  <li>
+    <b>Generation 1 — second pass</b> fills the last two slots the same way. The population is now
+    six individuals: two untouched elites and four mutated children.
+  </li>
+  <li>
+    <b>Rescore.</b> All six are expressed and scored again, elites included. Under this deterministic
+    objective the elites' numbers do not move (2.0 and 3.0); under an SIR objective they would.
+    The children score around 102 and up, because mutation made them much worse.
+  </li>
+  <li>
+    <b>Log row 1.</b> best is still 2.0 — the elite survived — while the mean has jumped to roughly
+    70 and the deviation is large. Because <code>elite_count ≥ 1</code> and this objective is
+    deterministic, <code>best_fitness</code> can never worsen from one row to the next.
+  </li>
+  <li>
+    <b>Generation 2</b> repeats the same three steps and logs row 2.
+  </li>
+  <li>
+    <b>Outcome.</b> <code>best_index</code> over the final fitnesses names the elite with value 1.
+    Its graph is moved out of the final scoring pass — never re-expressed — and the result is:
+    best genome value 1, a 2-node graph, <code>best_fitness_engine = 2.0</code>,
+    <code>direction = Minimize</code>, and three history rows.
+  </li>
+</ol>
+
+<p>
+  This example makes mutation strictly harmful so the mechanics are visible. In a real run mutation
+  is a small perturbation that sometimes helps, and the mean fitness falls over time rather than
+  exploding.
+</p>
+
+<h2>Costs and when to choose it</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Property</th><th>Generational</th></tr></thead>
+  <tbody>
+    <tr><td>Evaluations per iteration</td><td><code>population_size</code></td></tr>
+    <tr><td>Parallelism during scoring</td><td>the whole population at once — as wide as your cores</td></tr>
+    <tr><td>Python objective cost</td><td>one FFI crossing per generation</td></tr>
+    <tr><td>Are old scores ever stale?</td><td><b>No.</b> Everyone is rescored every generation</td></tr>
+    <tr><td>Elitism</td><td>explicit, via <code>elite_count</code>; can be switched off</td></tr>
+    <tr><td>Selection sampling</td><td><b>with</b> replacement, so self-mating is possible</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  <b>Prefer generational when the objective is stochastic and the comparison needs to be fair</b> —
+  every individual in a generation is scored under the same dice, which is exactly the guarantee
+  steady-state cannot offer. Prefer it too when scoring is expensive and parallel, since a whole
+  population of work is the widest unit the engine ever hands to rayon. The trade is that a
+  generation is a barrier: it costs as long as its slowest individual.
+</p>
+
+<h2>Related pages</h2>
+
+<ul>
+  <li><a href="../guide/evolvers.html">Evolution strategies</a> — the concepts behind this page</li>
+  <li><a href="evolver-common.html">evolver/common.rs</a> — <code>Selection</code>,
+      <code>express_and_score</code>, <code>mutate_child</code>, <code>generation_stats</code></li>
+  <li><a href="steady-state.html">evolver/steady_state.rs</a> — the other strategy, step by step</li>
+  <li><a href="../guide/variation.html">Crossover &amp; mutation</a> ·
+      <a href="../guide/fitness.html">Fitness &amp; orientation</a> ·
+      <a href="../guide/output.html">Logs &amp; results</a> ·
+      <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a></li>
+  <li><a href="config.html">config.rs</a> — the <code>[evolution]</code> block and its validation</li>
+  <li><a href="dispatch.html">dispatch.rs</a> — where this evolver is constructed and run</li>
+  <li><a href="../guide/new-evolver.html">Add a strategy</a></li>
+</ul>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

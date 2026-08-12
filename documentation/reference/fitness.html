@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fitness.rs · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="reference/fitness.html">
+<main>
+
+<p class="page-kicker">Reference</p>
+<h1>fitness.rs</h1>
+<p class="lede">
+  The objectives, the trait they implement, and the sign convention that makes them comparable.
+  This is the file with the most silent failure modes in the codebase — several mistakes here
+  compile, run, and produce numbers that look entirely reasonable. Every one of them is called out
+  below.
+</p>
+
+<p>
+  Source: <code>get/src/fitness.rs</code>, 1311 lines, of which about 700 are tests. The concept
+  page is <a href="../guide/fitness.html">Fitness &amp; orientation</a>; to write your own
+  objective, follow <a href="../guide/new-fitness.html">Add an objective</a>.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Item</th><th>What it is</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td><a href="#direction"><code>Direction</code></a></td><td>Minimise or maximise, plus the one conversion function</td>
+        <td><span class="badge badge-built">built</span></td></tr>
+    <tr><td><a href="#trait"><code>Fitness</code></a></td><td>The trait every objective implements</td>
+        <td><span class="badge badge-built">built</span></td></tr>
+    <tr><td><a href="#boxed"><code>impl Fitness for Box&lt;dyn Fitness&gt;</code></a></td><td>Lets an erased objective still be an objective</td>
+        <td><span class="badge badge-built">built</span></td></tr>
+    <tr><td><a href="#epidemicscorer"><code>EpidemicScorer</code></a></td><td>Owns per-run epidemic seeding</td>
+        <td><span class="badge badge-built">built</span></td></tr>
+    <tr><td><a href="#epispread"><code>EpiSpread</code></a></td><td>Total ever-infected · maximised</td>
+        <td><span class="badge badge-built">built</span></td></tr>
+    <tr><td><a href="#epilength"><code>EpiLength</code></a></td><td>Timesteps to burn out · maximised</td>
+        <td><span class="badge badge-built">built</span></td></tr>
+    <tr><td><a href="#epiprofmatch"><code>EpiProfMatch</code></a></td><td>RMSE against a target profile · minimised</td>
+        <td><span class="badge badge-built">built</span></td></tr>
+    <tr><td><a href="#pyfitness"><code>PyFitness</code></a></td><td>A user's Python callable as an objective</td>
+        <td><span class="badge badge-built">built</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="direction">Direction and orientation</h2>
+
+<p>
+  Every fitness number in the engine is in one of two forms, and mixing them up is the bug this type
+  exists to prevent:
+</p>
+
+<ul>
+  <li><b>original</b> — what the fitness function returned, in its own units. 28 nodes infected is
+      <code>28.0</code>, and bigger is better.</li>
+  <li><b>oriented</b> — the same number after conversion, so that <b>smaller is always better</b>.
+      That 28 becomes <code>-28.0</code>.</li>
+</ul>
+
+<p>
+  The engine only ever compares fitnesses, so it works in oriented values throughout and never asks
+  what the objective was. Logs and results are turned back into originals at the boundary.
+</p>
+
+<div class="api-item">
+  <div class="api-sig">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    Minimize,
+    Maximize,
+}</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:47, variants :49 and :52</span>
+    <p>
+      Whether an objective wants its value small or large. <code>Minimize</code> is the default and
+      suits an error or a distance; <code>Maximize</code> is for a count you want more of.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn orient(self, value: f64) -&gt; f64</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:70</span>
+    <p>
+      Converts an original into an oriented value. Under <code>Minimize</code> it returns the number
+      unchanged; under <code>Maximize</code> it returns the negation, so the largest original
+      becomes the smallest oriented value.
+    </p>
+    <p>
+      <b>Negation is its own inverse, so this one function converts both ways</b> — an original in
+      to compare, an oriented value in to report. That is why the whole design comes down to calling
+      it in exactly two places.
+    </p>
+    <p><b>Panics on <code>NaN</code></b> — see below.</p>
+  </div>
+</div>
+
+<h3>Where the two conversions happen</h3>
+
+<pre><code class="language-text">  your units          epi_spread returns 1470.0        Maximize
+       |
+       |   common::express_and_score          &lt;-- the one flip inward
+       v
+  engine orientation      -1470.0             lower is better; nothing here converts
+       |                                      tournaments · elitism · replace-worst · stats
+       |   the Python boundary                &lt;-- the one flip outward
+       v
+  your units again         1470.0             exactly what your function returned</code></pre>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Flip</th><th>Where</th><th>Site</th></tr></thead>
+  <tbody>
+    <tr><td>Inward</td><td><code>common::express_and_score</code> — the only place a batch of
+        genomes becomes a set of fitnesses</td><td><code>evolver/common.rs:269</code></td></tr>
+    <tr><td>Outward</td><td><code>dispatch::erase</code>, on the way out of a run</td>
+        <td><code>dispatch.rs:389-395</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <b>An objective never negates its own output.</b> If <code>evaluate</code> returned an
+  already-negated value <i>and</i> declared <code>Maximize</code>, the two could silently disagree —
+  and a run optimising backwards looks exactly like a run that is simply not converging. So the
+  objective states its units and its direction, and the engine does the arithmetic once.
+</div>
+
+<h3 id="nan"><code>NaN</code> is forbidden, and enforced</h3>
+
+<div class="warn">
+  <b>One <code>NaN</code> from a maximising objective can silently take over a whole run.</b> Under
+  minimisation <code>NaN</code> sorts beyond <code>+inf</code> and reads as worst, which is safe.
+  But under <code>Maximize</code> the value is negated, and <code>-NaN</code> sorts <b>below</b>
+  <code>-inf</code> — so it becomes the <b>best</b> individual in every tournament it enters, fills
+  the population with whatever genome produced it, and leaves a run that looks converged. Nothing
+  panics and no number looks wrong.
+</div>
+
+<p>
+  So <code>orient</code> checks for it with <code>assert!</code>, which <b>survives a release
+  build</b> (<code>fitness.rs:71-76</code>) — this is not a debug-only check. The test
+  <code>an_unchecked_negated_nan_would_have_sorted_best</code> (<code>fitness.rs:1110</code>) exists
+  purely to record why the assertion is there rather than trusting the ordering.
+</p>
+
+<p>
+  Common ways to produce one accidentally: dividing by a count that can be zero,
+  <code>0.0 / 0.0</code>, and <code>inf - inf</code>.
+</p>
+
+<div class="tip">
+  <b><code>±inf</code> is allowed and is useful.</b> <code>+inf</code> under <code>Minimize</code> is
+  the sanctioned way to say "this individual is invalid, never select it". Banning it would push
+  people toward a magic large number, which is worse because it stays silently comparable.
+</div>
+
+<h2 id="trait">The <code>Fitness</code> trait</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub trait Fitness: Send + Sync {
+    fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64;
+
+    fn direction(&amp;self) -&gt; Direction { Direction::Minimize }
+
+    fn evaluate_batch(&amp;self, graphs: &amp;[Graph]) -&gt; Vec&lt;f64&gt; { /* par_iter over evaluate */ }
+}</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:105</span>
+    <p>
+      An objective over expressed graphs. The <code>Send + Sync</code> bound is what lets the
+      default batch scorer fan out across threads.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:108</span>
+    <p>
+      The only required method. Score one graph and return the <b>original</b> — in the objective's
+      own units and sign, never an oriented value. Must not return <code>NaN</code>.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn direction(&amp;self) -&gt; Direction</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:112</span>
+    <p>
+      Which way is better. <b>Defaults to <code>Minimize</code></b>, so an error or distance
+      objective can say nothing at all. Override it if bigger is better — forgetting to is one of
+      the silent failures listed below.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn evaluate_batch(&amp;self, graphs: &amp;[Graph]) -&gt; Vec&lt;f64&gt;</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:131</span>
+    <p>
+      Score a whole batch, returning one original per graph in the same order. The default runs
+      <code>evaluate</code> on each graph across rayon (<code>fitness.rs:132-135</code>), which
+      suits a simple deterministic Rust objective and nothing else.
+    </p>
+    <p>
+      <b>The batch is not always a generation.</b> Generational hands over the whole population each
+      cycle; steady-state hands over just the two new children per mating event, and its starting
+      population once. A single graph is a batch of one. Nothing in this file needs to know which.
+    </p>
+  </div>
+</div>
+
+<div class="warn">
+  <b>Two kinds of objective <i>must</i> override <code>evaluate_batch</code>, and the default will
+  not tell you.</b>
+  <ul>
+    <li><b>Any stochastic objective.</b> The default draws a fresh seed per graph, so graphs inside
+        one batch stop being comparable — a graph could rank first for having been handed a milder
+        outbreak. Use <a href="#epidemicscorer"><code>EpidemicScorer::mean_batch</code></a>.</li>
+    <li><b>Any Python objective.</b> The default takes the Python lock once per graph from inside a
+        thread pool, which <b>deadlocks</b> — see <a href="#pyfitness"><code>PyFitness</code></a>.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <b>Implement these; never call them.</b> Only <code>common::express_and_score</code> calls
+  <code>evaluate</code> or <code>evaluate_batch</code>. A direct call from engine code compiles and
+  returns plausible numbers, but hands the engine an <i>original</i> where an <i>oriented</i> value
+  belongs — so under <code>Maximize</code> every comparison runs backwards. It skips the
+  <code>NaN</code> check too. (<code>fitness.rs:94-99</code>)
+</div>
+
+<h2 id="boxed">The boxed objective</h2>
+
+<div class="api-item">
+  <div class="api-sig">impl Fitness for Box&lt;dyn Fitness&gt; {
+    fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64;
+    fn direction(&amp;self) -&gt; Direction;
+    fn evaluate_batch(&amp;self, graphs: &amp;[Graph]) -&gt; Vec&lt;f64&gt;;
+}</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:167 — methods at :168, :172, :176</span>
+    <p>
+      "A boxed objective is an objective." The config layer erases its chosen objective to one
+      <code>Box&lt;dyn Fitness&gt;</code> before instantiating anything, so that adding an objective
+      is one match arm rather than one arm per strategy × genome combination. But
+      <code>Evolver::run&lt;F&gt;</code> requires <code>F: Fitness</code>, and a box holding a
+      <code>Fitness</code> is not itself one until this says so.
+    </p>
+    <p>
+      It has to live in this file — Rust's orphan rule rejects it anywhere else.
+    </p>
+  </div>
+</div>
+
+<div class="warn">
+  <b>Every method is forwarded, including the two that have defaults — and omitting either one
+  compiles.</b> This is the single most dangerous edit in the file:
+  <ul>
+    <li><b>Drop <code>direction</code></b> and the box reports <code>Minimize</code> whatever it
+        actually holds. Both maximising objectives then run the search <b>backwards</b>, while
+        looking merely unconverged.</li>
+    <li><b>Drop <code>evaluate_batch</code></b> and the box falls back to the trait default, which
+        fans out over rayon and calls <code>evaluate</code> per graph. For a Python objective that
+        <b>deadlocks</b>; for an epidemic objective it re-seeds per graph and destroys
+        comparability.</li>
+  </ul>
+  Neither omission produces a compiler error, a panic, or a wrong-looking number. The test
+  <code>a_boxed_objective_forwards_every_method_including_the_defaulted_ones</code>
+  (<code>fitness.rs:640</code>) is the only thing standing between this file and both failures.
+</div>
+
+<h2 id="epidemicscorer">EpidemicScorer</h2>
+
+<p>
+  Two requirements pull in opposite directions, and a stochastic objective has to satisfy both:
+</p>
+
+<ul>
+  <li><b>Within one batch</b>, every graph must face the <i>same</i> epidemic draws, so that
+      differences in fitness reflect the graph rather than the dice. This is
+      <b>common random numbers</b>.</li>
+  <li><b>Across batches</b>, the same graph must <i>not</i> keep getting the same epidemic, or the
+      run optimises against one frozen sample of the disease rather than against the disease.</li>
+</ul>
+
+<p>
+  <code>EpidemicScorer</code> is what delivers both. Every SIR objective holds one, and it is the
+  reason none of them calls the simulator directly.
+</p>
+
+<div class="api-item">
+  <div class="api-sig">pub struct EpidemicScorer {
+    params: SirSampleParams,
+    run_seed: u64,
+    batches_scored: AtomicU64,
+}</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:200</span>
+    <p>All three fields are private. The nesting it sits in, widest first:</p>
+    <pre><code class="language-text">experiment  = many runs at one set of parameters
+  run       = one evolution, one master seed        &lt;-- one scorer covers one run
+    batch   = whatever the evolver scores at once
+      graph = one candidate network
+        epidemic = one outbreak; a graph averages num_epidemics of them</code></pre>
+    <p>
+      <b>One scorer per run, never shared.</b> The counter is per-run state; two replicate runs
+      sharing a scorer would let thread scheduling decide which run saw which seed, and
+      reproducibility goes with it.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn new(params: SirSampleParams, run_seed: u64) -&gt; Self</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:212</span>
+    <p>
+      Builds a scorer for one run. <code>run_seed</code> is this run's share of the master seed
+      handed to <a href="lib.html#run"><code>GraphEvolver.run</code></a> — the <code>[fitness]</code>
+      config block has no seed of its own, deliberately.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn next_batch_seed(&amp;self) -&gt; u64</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:260</span>
+    <p>
+      The seed for the next batch of graphs. Every call returns a different one, because it advances
+      the counter. <b>Call it once per batch, then give that one seed to every graph in the
+      batch.</b>
+    </p>
+    <p>
+      The derivation is SplitMix64 over <code>(run_seed, counter)</code> — the private
+      <code>mix_seed</code> at <code>fitness.rs:310</code>. It is emphatically
+      <b>not <code>run_seed ^ counter</code></b>: under xor, run seed <code>n</code>'s batch 1 is run
+      seed <code>n+1</code>'s batch 0, so two replicates would replay each other's epidemics one
+      batch out of step. The test <code>neighbouring_run_seeds_share_no_batch_seed</code>
+      (<code>fitness.rs:1300</code>) pins that down.
+    </p>
+    <p>
+      The <code>AtomicU64</code> is not a concurrency flourish: <code>evaluate</code> only gets
+      <code>&amp;self</code>, so a plain <code>+= 1</code> will not compile, and the obvious
+      single-threaded alternative is not <code>Sync</code>, which the trait requires. Nothing is
+      actually contended.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn mean_batch(
+    &amp;self,
+    graphs: &amp;[Graph],
+    read: impl Fn(&amp;Epidemic) -&gt; f64 + Sync,
+) -&gt; Vec&lt;f64&gt;</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:280</span>
+    <p>
+      Scores a whole batch: <b>one seed for every graph, one tick of the counter</b>. This is the
+      only way to score an epidemic objective, and the method that actually delivers common random
+      numbers.
+    </p>
+    <p>
+      The seed is taken once, before the parallel loop (<code>fitness.rs:283</code>). Then each
+      graph, in parallel, runs <a href="sir.html#reroll"><code>simulate_epidemics</code></a> with
+      that shared seed, applies <code>read</code> to each returned epidemic, and averages
+      (<code>fitness.rs:285-296</code>).
+    </p>
+    <p>
+      The <code>read</code> closure is what keeps each objective down to a single line — it turns
+      one epidemic into one number. Averaging matters: a single epidemic is noisy enough that
+      selection would chase the dice instead of the graph. The division is safe because
+      <code>simulate_epidemics</code> rejects an empty set.
+    </p>
+  </div>
+</div>
+
+<p>
+  What that produces across a run, and note that the batch size is not fixed:
+</p>
+
+<pre><code class="language-text">generational   batch 1   seed A   all 200 of the population
+               batch 2   seed B   all 200 of the next generation
+
+steady-state   batch 1   seed A   the 200 starting graphs
+               batch 2   seed B   the 2 children of one mating event
+               batch 3   seed C   the 2 children of the next event</code></pre>
+
+<div class="note">
+  <b>Steady-state pays a known cost here, and it is accepted rather than fixed.</b> Its two children
+  are scored under a newer seed than the population they are compared against, and a graph that drew
+  an easy outbreak keeps that inflated score until something replaces it.
+  <b>Prefer generational when the objective is stochastic and the comparison needs to be fair</b> —
+  generational rescores everyone each generation under one seed, so it is immune.
+</div>
+
+<h2>The three SIR objectives</h2>
+
+<p>
+  The epidemic is the expensive part and all three objectives want the same one, so
+  <a href="sir.html"><code>sir_sim</code></a> returns everything and each objective is a thin
+  reading of it. All three follow an identical shape: hold an <code>EpidemicScorer</code>, and write
+  both entry points as one line over <code>mean_batch</code>.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Objective</th><th>Config <code>type</code></th><th>Reads</th><th>Direction</th></tr></thead>
+  <tbody>
+    <tr><td><code>EpiSpread</code></td><td><code>epi_spread</code></td><td>total ever-infected</td>
+        <td><b>Maximize</b></td></tr>
+    <tr><td><code>EpiLength</code></td><td><code>epi_length</code></td><td>timesteps to burn out</td>
+        <td><b>Maximize</b></td></tr>
+    <tr><td><code>EpiProfMatch</code></td><td><code>epi_prof_match</code></td>
+        <td>RMSE against a target profile</td><td><b>Minimize</b></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  Each direction is fixed by the objective and is <b>never configurable</b>. One fitness function is
+  always maximised or always minimised — it is a property of what the function computes, not of the
+  run, so a config that could say otherwise would only let it contradict the objective.
+</p>
+
+<h3 id="epispread">EpiSpread</h3>
+
+<div class="api-item">
+  <div class="api-sig">pub struct EpiSpread { /* private */ }
+
+pub fn new(params: SirSampleParams, run_seed: u64) -&gt; Self</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:318, constructor :324</span>
+    <p>
+      Total ever-infected, averaged over the batch's epidemics. <b>Maximised</b> — the search looks
+      for graphs an outbreak travels furthest through.
+    </p>
+    <p>
+      The reading is <code>epidemic.spread as f64</code>, written inline in both
+      <code>evaluate</code> (<code>fitness.rs:332</code>) and <code>evaluate_batch</code>
+      (<code>:337</code>); <code>direction</code> returns <code>Maximize</code> at <code>:342</code>.
+    </p>
+  </div>
+</div>
+
+<h3 id="epilength">EpiLength</h3>
+
+<div class="api-item">
+  <div class="api-sig">pub struct EpiLength { /* private */ }
+
+pub fn new(params: SirSampleParams, run_seed: u64) -&gt; Self</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:351, constructor :357</span>
+    <p>
+      Timesteps to burn out, averaged over the epidemics. <b>Maximised</b> — the search looks for
+      graphs an outbreak takes longest to cross.
+    </p>
+    <p>
+      Remember that <code>length</code> <a href="sir.html#trailing-zero">counts the burnout
+      step</a>, so a lone patient zero reads <code>1</code>, not <code>0</code>. Verified at
+      <code>fitness.rs:955-969</code>. Reading at <code>:365</code> and <code>:370</code>,
+      direction at <code>:375</code>.
+    </p>
+  </div>
+</div>
+
+<h3 id="epiprofmatch">EpiProfMatch</h3>
+
+<div class="api-item">
+  <div class="api-sig">pub struct EpiProfMatch { /* private */ }
+
+pub fn new(
+    params: SirSampleParams,
+    run_seed: u64,
+    target: Vec&lt;f64&gt;,
+) -&gt; Result&lt;Self, &amp;'static str&gt;</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:385, constructor :398</span>
+    <p>
+      Root-mean-square error between the epidemic's profile and a target profile you supply.
+      <b>Minimised</b> — zero is a perfect match.
+    </p>
+    <p>
+      The only fallible constructor of the three. It rejects an <b>empty</b> target (which would be
+      the divisor of every RMSE, giving <code>NaN</code>) and any <b>non-finite</b> value
+      (<code>fitness.rs:404-408</code>). <a href="config.html">Config validation</a> already rejects
+      both, so this is a backstop for a <code>Config</code> built in Rust without validation.
+    </p>
+  </div>
+</div>
+
+<div class="note">
+  <b>This objective's direction comes from the trait default, not an override.</b> There is no
+  <code>fn direction</code> in its <code>impl</code> block (<code>fitness.rs:440-450</code>) — it is
+  <code>Minimize</code> because that is what the trait says when nothing is stated. Correct today,
+  but it means no line in the file <i>asserts</i> the direction of this objective.
+</div>
+
+<h4>How the RMSE is computed</h4>
+
+<p>
+  The private <code>rmse</code> method (<code>fitness.rs:425</code>) is the reading. The rule is
+  fixed by the <b>target</b>, not by the epidemic:
+</p>
+
+<ul>
+  <li>Iterate <code>0 .. target.len()</code>, never the epidemic's length.</li>
+  <li>Where the epidemic is shorter, treat its value as <code>0</code> — the outbreak had ended, so
+      nobody was newly infected that day.</li>
+  <li>Where the epidemic is <b>longer, the surplus is ignored entirely</b>.</li>
+  <li>Divide by <code>target.len()</code> always, then take the square root.</li>
+</ul>
+
+<div class="warn">
+  <b>The scoring is deliberately asymmetric.</b> An epidemic that ends early is penalised for the
+  <i>whole</i> remaining target; one that outlasts the target is not penalised at all. So this
+  objective rewards <b>matching or exceeding</b> the target's tail, not matching it exactly. That is
+  inherited from the C++ (<code>legacy/main.cpp:545-553</code>) for comparability, and it is worth
+  knowing when reading a score. Tests: <code>fitness.rs:986</code>, <code>:1000</code>,
+  <code>:1022</code>.
+</div>
+
+<p>Worked, against the target <code>[1, 2, 3, 4]</code>:</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Epidemic profile</th><th>Compared as</th><th>Squared errors</th><th>RMSE</th></tr></thead>
+  <tbody>
+    <tr><td><code>[1, 2, 3, 4]</code></td><td><code>1, 2, 3, 4</code></td><td>0+0+0+0</td>
+        <td><code>0.0</code> — perfect</td></tr>
+    <tr><td><code>[1, 2]</code></td><td><code>1, 2, 0, 0</code></td><td>0+0+9+16 = 25</td>
+        <td><code>sqrt(25/4) = 2.5</code></td></tr>
+    <tr><td><code>[1, 2, 3, 4, 9, 9, 0]</code></td><td><code>1, 2, 3, 4</code> — surplus ignored</td>
+        <td>0+0+0+0</td><td><code>0.0</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  The middle row is the test at <code>fitness.rs:986-996</code>. Note the divisor is always the
+  target length — if it were the overlap, the second row would be <code>sqrt(25/2)</code>. Pinned by
+  <code>the_divisor_is_the_target_length_not_the_overlap</code> (<code>fitness.rs:1022</code>).
+</p>
+
+<h3>Worked example across all three</h3>
+
+<p>
+  Take the five-node graph from the <a href="sir.html#walkthrough">SIR walkthrough</a> — edges
+  <code>0–1</code>, <code>1–2</code>, <code>2–3</code>, <code>1–4</code>, rate <code>1.0</code>,
+  patient zero <code>0</code>. Its single epidemic is
+  <code>length 4, spread 5, profile [1, 1, 2, 1, 0]</code>. At rate 1.0 every epidemic is identical,
+  so the average over <code>num_epidemics</code> is just that value and the seed is irrelevant.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Objective</th><th>Original (your units)</th><th>Oriented (engine)</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><code>EpiSpread</code></td><td><b>5.0</b></td><td><code>-5.0</code></td>
+        <td>All five nodes reached. <code>Maximize</code>, so <code>orient</code> negates</td></tr>
+    <tr><td><code>EpiLength</code></td><td><b>4.0</b></td><td><code>-4.0</code></td>
+        <td>Three transmission steps plus the burnout step. <code>Maximize</code></td></tr>
+    <tr><td><code>EpiProfMatch</code>, target <code>[1,1,1,1,1]</code></td><td><b>≈0.6325</b></td>
+        <td><code>0.6325</code></td>
+        <td>Squared errors <code>0,0,1,0,1</code> = 2; <code>sqrt(2/5)</code>.
+            <code>Minimize</code>, so oriented equals original</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  The RMSE row shows the asymmetry in miniature: this graph infects <i>two</i> nodes at step 2 where
+  the target wanted one, and <i>none</i> at step 4 where the target wanted one — the early burnout
+  costs exactly as much as the overshoot did. Against the shorter target <code>[1, 1, 2]</code> the
+  score would be <code>0.0</code>, because the surplus tail is never examined.
+</p>
+
+<h2 id="pyfitness">PyFitness — a Python callable as an objective</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub struct PyFitness { /* private */ }
+
+pub fn new(callable: Py&lt;PyAny&gt;, direction: Direction) -&gt; Self</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:500, constructor :507</span>
+    <p>
+      Wraps a user's Python function and the direction declared alongside it. The config only
+      <i>selects</i> Python (<code>[fitness] type = "python"</code>); the callable itself arrives at
+      runtime through
+      <a href="lib.html#set-fitness-function"><code>GraphEvolver.set_fitness_function</code></a>,
+      and so does its direction, because nothing can infer whether a user's function wants its value
+      large or small.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn clone_ref(&amp;self) -&gt; Self</div>
+  <div class="api-body">
+    <span class="src">fitness.rs:521</span>
+    <p>
+      A second handle on the same callable. Replicate runs need one objective instance each, and
+      this is how <a href="dispatch.html">dispatch</a> produces them. The Python object is
+      <b>shared</b> rather than copied — the reference count is bumped — which is correct: the
+      user's function is stateless as far as the engine is concerned, and it is the <i>scorer</i>
+      state that must not be shared, of which this has none.
+    </p>
+  </div>
+</div>
+
+<h3>The callable takes a whole batch</h3>
+
+<p>
+  One call receives the entire batch and returns one float per graph, in the same order. The shape
+  is modelled on pymoo's <code>Problem._evaluate</code>, which this audience already knows:
+</p>
+
+<pre><code class="language-python">def fitness(batch):
+    # batch: list[(num_nodes, [(u, v, weight), ...])]
+    return [score(n, edges) for (n, edges) in batch]</code></pre>
+
+<p>
+  The edge list each graph arrives as is exactly
+  <a href="graph.html"><code>Graph::get_edge_list</code></a>'s output: each edge once, with
+  <code>u &lt; v</code>. Those tuples are built <b>before</b> the Python lock is taken
+  (<code>fitness.rs:545-548</code>), because that part is plain Rust work and holding the lock
+  across it would block every other Python thread for no reason.
+</p>
+
+<div class="warn">
+  <b>A per-graph callback does not merely run slowly — it deadlocks.</b> Measured 2026-08-07 by
+  deleting the <code>evaluate_batch</code> override and running the batching test. The trait default
+  then fans out over rayon, each worker tries to take the Python lock, and the calling thread is
+  holding that lock while blocking on rayon to finish. The suite <b>hung</b> until it was killed —
+  it did not fail, which is worse, because a hang carries no message saying why.
+  (<code>fitness.rs:477-484</code>)
+</div>
+
+<p>Two structural rules keep that from happening, and neither is advisory:</p>
+
+<ul>
+  <li><b>Python is never called from inside a rayon closure.</b> Expression fans out across threads
+      into a list of graphs first; only then does the single batched call happen.</li>
+  <li><b>The Rust-heavy part of a run releases the Python lock</b>, and this adapter re-acquires it
+      once per batch. That is the caller's job, at the entry point —
+      <a href="lib.html#run"><code>run</code></a> does it.</li>
+</ul>
+
+<h3>What happens when a callable misbehaves</h3>
+
+<p>
+  <code>Fitness</code>'s methods return <code>f64</code>, with no error path, so every violation is a
+  <b>panic</b> — each naming what was expected and which item was at fault
+  (<code>fitness.rs:550-585</code>):
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>What the callable did</th><th>Message contains</th><th>Test</th></tr></thead>
+  <tbody>
+    <tr><td>Raised an exception</td><td>"the registered Python objective raised: …"</td>
+        <td><code>fitness.rs:821</code></td></tr>
+    <tr><td>Returned the wrong type</td><td>"must return one float per graph, as a sequence"</td>
+        <td><code>fitness.rs:834</code></td></tr>
+    <tr><td>Returned too few or too many scores</td><td>"returned 1 scores for a batch of 2"</td>
+        <td><code>fitness.rs:847</code></td></tr>
+    <tr><td>Returned <code>NaN</code></td><td>"returned NaN for batch item 1"</td>
+        <td><code>fitness.rs:862</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  The <code>NaN</code> check is done here as well as in <code>orient</code> for one reason:
+  <code>orient</code> sees a lone number and cannot say which graph produced it, and a user debugging
+  their own function needs the index (<code>fitness.rs:572-581</code>).
+</p>
+
+<div class="tip">
+  <b>An empty batch never reaches Python.</b> <code>score_batch</code> returns immediately
+  (<code>fitness.rs:539-541</code>), so a user's function does not have to handle a batch of
+  nothing.
+</div>
+
+<h2>Writing your own objective</h2>
+
+<p>
+  The full route is on <a href="../guide/new-fitness.html">Add an objective</a>. The part that
+  belongs here is the shape, and the two traps:
+</p>
+
+<ol>
+  <li><b>Implement <code>Fitness</code>.</b> <code>evaluate</code> is the only required method; add
+      <code>direction</code> if bigger is better.</li>
+  <li><b>If it is epidemic-based, build on <code>EpidemicScorer</code></b> rather than calling the
+      simulator yourself. It owns the seeding, and wrong seeding still gives numbers that look
+      fine. Copy the shape <code>EpiSpread</code> uses: both <code>evaluate</code> and
+      <code>evaluate_batch</code> hand <code>mean_batch</code> a closure saying what to read off one
+      epidemic.</li>
+  <li><b>Write the same reading in both entry points.</b> Each objective deliberately writes its
+      reading twice rather than hiding it behind an indirection — the test
+      <code>both_entry_points_use_the_same_reading</code> (<code>fitness.rs:1176</code>) is what
+      catches the two drifting apart. Extend it when you add an objective.</li>
+</ol>
+
+<div class="warn">
+  <b>Do not write <code>evaluate</code> as a call to <code>self.evaluate_batch(...)</code>.</b> It
+  is the obvious implementation and it is a <b>latent stack overflow</b>: the trait's <i>default</i>
+  <code>evaluate_batch</code> calls <code>evaluate</code>, so any objective that forwards one way
+  without also overriding the other recurses until the stack dies. Route both through an inherent
+  method instead — that is exactly what <code>PyFitness::score_batch</code>
+  (<code>fitness.rs:528-535</code>) and <code>EpidemicScorer::mean_batch</code> are for. A single
+  graph is a batch of one: <code>mean_batch(slice::from_ref(graph))[0]</code>.
+</div>
+
+<h2>See also</h2>
+
+<ul>
+  <li><a href="../guide/fitness.html">Fitness &amp; orientation</a> — the concept page, with the
+      full end-to-end picture of the two number systems.</li>
+  <li><a href="../guide/new-fitness.html">Add an objective</a> — the step-by-step route, including
+      the config and dispatch changes this page does not cover.</li>
+  <li><a href="sir.html">sir.rs</a> — what an <code>Epidemic</code> is and how one is produced.</li>
+  <li><a href="evolver-common.html">evolver/common.rs</a> — <code>express_and_score</code>, the one
+      gate that orients and rejects <code>NaN</code>.</li>
+  <li><a href="dispatch.html">dispatch.rs</a> — where a config's <code>[fitness]</code> block
+      becomes one of these types, erased to a box.</li>
+  <li><a href="lib.html#set-fitness-function">lib.rs</a> — registering a Python callable and its
+      direction.</li>
+</ul>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>
