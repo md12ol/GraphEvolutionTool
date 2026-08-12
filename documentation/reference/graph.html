@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>graph.rs · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="reference/graph.html">
+<main>
+
+<p class="page-kicker">Reference</p>
+<h1>graph.rs</h1>
+<p class="lede">
+  Every public item on <code>Graph</code>, with exact signatures, line numbers and costs. For
+  <i>what a graph is</i> and why it behaves the way it does, read
+  <a href="../guide/graph.html">The graph</a> first — this page is its precise companion and does
+  not repeat the reasoning.
+</p>
+
+<p>
+  Source: <code>get/src/graph.rs</code>, 235 lines, of which 86 are tests.
+  <span class="badge badge-built">built</span> — the whole file is implemented and matches
+  <a href="../design-notes.html">the spec sheet</a> §2 in every particular.
+</p>
+
+<h2>The type</h2>
+
+<div class="api-item">
+  <div class="api-sig">#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Graph {
+    pub num_nodes: usize,
+    pub max_edge_multiplicity: u32,
+    adjacency: Vec&lt;Vec&lt;u32&gt;&gt;,
+}</div>
+  <div class="api-body">
+    <span class="src">graph.rs:1-10</span>
+    <p>
+      An undirected multigraph on a fixed node count. The <code>adjacency</code> field is
+      <b>private</b>: a symmetric <code>num_nodes × num_nodes</code> matrix where the entry at
+      <code>[u][v]</code> is the number of parallel edges between <code>u</code> and
+      <code>v</code>. Zero means no edge.
+    </p>
+    <p>
+      The two public fields are plain data with no accessors. <code>num_nodes</code> is the node
+      count; <code>max_edge_multiplicity</code> is this graph's own weight cap, which every write
+      clamps to. A cap of <code>1</code> makes the type behave as an ordinary simple, unweighted
+      graph.
+    </p>
+  </div>
+</div>
+
+<p>
+  Three consequences of the derived traits are worth knowing before you rely on them:
+</p>
+
+<ul>
+  <li><b><code>Clone</code> copies the whole matrix</b> — cost <code>O(n²)</code>. The evolver
+      clones graphs freely, and edge-edit expression begins by cloning its base graph.</li>
+  <li><b><code>PartialEq</code> compares all three fields</b>, including the cap. Two graphs with
+      identical edges but different <code>max_edge_multiplicity</code> are <b>not</b> equal.</li>
+  <li><b>There is no <code>Default</code> and no deserialization.</b> A graph is only ever built by
+      <code>Graph::new</code> and then edited.</li>
+</ul>
+
+<div class="warn">
+  <b><code>num_nodes</code> is public and mutable, and nothing keeps it in step with the matrix.</b>
+  Writing <code>graph.num_nodes = 10</code> on a graph whose <code>adjacency</code> is 5×5 leaves
+  the two disagreeing, and the next call to <code>weight</code> indexes out of bounds and
+  <b>panics</b>. Nothing in the type prevents this — it is convention only. Treat both public
+  fields as read-only after construction; if you need a different size, build a new graph. The same
+  applies to <code>max_edge_multiplicity</code>: raising it after the fact does not un-clamp weights
+  that were already clamped on the way in.
+</div>
+
+<h2>Constructing</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub fn new(num_nodes: usize, max_edge_multiplicity: u32) -&gt; Self</div>
+  <div class="api-body">
+    <span class="src">graph.rs:16</span>
+    <p>
+      An empty graph: <code>num_nodes</code> nodes, no edges, weights capped at
+      <code>max_edge_multiplicity</code>. Pass <code>1</code> for a simple unweighted graph.
+    </p>
+    <p>
+      Allocates the full <code>num_nodes × num_nodes</code> matrix of zeros immediately
+      (<code>graph.rs:21</code>) — <code>O(n²)</code> time and memory, and it is
+      <code>n</code> separate row allocations rather than one block. This is the allocation that
+      makes memory <a href="../guide/performance.html">quadratic in the node count</a>.
+    </p>
+  </div>
+</div>
+
+<div class="note">
+  <b>A zero node count is legal here and is not rejected.</b> <code>Graph::new(0, 1)</code> builds a
+  graph with an empty matrix. It is a real case in the simulator, where it is the one situation that
+  produces an epidemic of length zero — see <a href="sir.html#empty">sir.rs</a>. Config validation
+  is what stops a <i>run</i> ever reaching it.
+</div>
+
+<h2>Reading edges</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub fn weight(&amp;self, u: usize, v: usize) -&gt; u32</div>
+  <div class="api-body">
+    <span class="src">graph.rs:31</span>
+    <p>
+      The edge multiplicity between <code>u</code> and <code>v</code>: <code>0</code> for no edge,
+      <code>k</code> for <code>k</code> parallel edges.
+    </p>
+    <p>
+      <b>Returns <code>0</code> rather than panicking for out-of-range vertices</b>
+      (<code>graph.rs:32-34</code>). It also returns <code>0</code> for <code>weight(u, u)</code>,
+      because the diagonal is never written. Both are deliberate: genome expression decodes
+      arbitrary 32-bit payloads into vertex indices and never validates them first.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn has_edge(&amp;self, u: usize, v: usize) -&gt; bool</div>
+  <div class="api-body">
+    <span class="src">graph.rs:26</span>
+    <p>
+      True if at least one edge exists between <code>u</code> and <code>v</code>. Exactly
+      <code>self.weight(u, v) != 0</code>, so it inherits the same silence on invalid vertices.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn get_edge_list(&amp;self) -&gt; Vec&lt;(usize, usize, u32)&gt;</div>
+  <div class="api-body">
+    <span class="src">graph.rs:88</span>
+    <p>
+      Every edge exactly once, as <code>(u, v, multiplicity)</code> with <code>u &lt; v</code>,
+      in row-major order — so the list is sorted by <code>u</code> then <code>v</code>. Edges with
+      weight zero are omitted.
+    </p>
+    <p>
+      This is the shape that leaves the system: it is what
+      <a href="lib.html#run"><code>GraphEvolver.run</code></a> hands back to Python, and what a
+      <a href="fitness.html#pyfitness">Python objective</a> receives for each graph. Cost is
+      <code>O(n²)</code> — it scans the upper triangle of the matrix regardless of how many edges
+      there are.
+    </p>
+  </div>
+</div>
+
+<h2>Writing edges</h2>
+
+<p>
+  <b><code>set_edge</code> is the only writer.</b> Every other mutating method funnels through it,
+  which is what makes the matrix symmetric by construction rather than by discipline — the
+  asymmetric state is unreachable through the public API.
+</p>
+
+<div class="api-item">
+  <div class="api-sig">pub fn set_edge(&amp;mut self, u: usize, v: usize, weight: u32)</div>
+  <div class="api-body">
+    <span class="src">graph.rs:43</span>
+    <p>
+      Sets the multiplicity directly, writing both <code>[u][v]</code> and <code>[v][u]</code>
+      (<code>graph.rs:49-50</code>). A weight of <code>0</code> clears the edge.
+    </p>
+    <p>Three things it does silently, all load-bearing:</p>
+    <ul>
+      <li><b>Clamps</b> to <code>max_edge_multiplicity</code> (<code>graph.rs:48</code>) rather than
+          rejecting. <code>set_edge(0, 1, 12)</code> on a cap-5 graph stores <code>5</code>.</li>
+      <li><b>Ignores self-loops.</b> <code>u == v</code> returns immediately.</li>
+      <li><b>Ignores out-of-range vertices.</b> Either index at or beyond <code>num_nodes</code>
+          returns immediately.</li>
+    </ul>
+    <p>It returns nothing, so a caller cannot tell any of these apart from success.</p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn add_edge(&amp;mut self, u: usize, v: usize) -&gt; bool</div>
+  <div class="api-body">
+    <span class="src">graph.rs:56</span>
+    <p>
+      Adds <b>one</b> parallel edge, saturating at the cap. Returns <code>true</code> if the
+      multiplicity actually increased, and <code>false</code> if the pair was invalid, a self-loop,
+      or already at the cap.
+    </p>
+    <p>
+      That boolean is the one place the graph reports a refused write, and several
+      <a href="edge-edit-operations.html">edit operations</a> only proceed when it comes back
+      <code>true</code>.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn remove_edge(&amp;mut self, u: usize, v: usize)</div>
+  <div class="api-body">
+    <span class="src">graph.rs:64</span>
+    <p>
+      Removes <b>one</b> copy if any exists. On a weight-3 edge this leaves weight 2; on a
+      weight-0 pair it does nothing. Never underflows.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn clear_edge(&amp;mut self, u: usize, v: usize)</div>
+  <div class="api-body">
+    <span class="src">graph.rs:72</span>
+    <p>
+      Removes <b>all</b> parallel edges between the pair at once — <code>set_edge(u, v, 0)</code>.
+      Note the contrast with <code>remove_edge</code>: on a multigraph these are different
+      operations, and picking the wrong one is not a type error.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn set_edges(&amp;mut self, edges: &amp;[(usize, usize, u32)])</div>
+  <div class="api-body">
+    <span class="src">graph.rs:77</span>
+    <p>
+      Applies <code>set_edge</code> to every triple in the slice, in order. Cost is linear in the
+      slice length. Convenient for building a graph from a
+      <code>get_edge_list()</code> result — but see the clamping warning below before you do that
+      across two different caps.
+    </p>
+  </div>
+</div>
+
+<div class="warn">
+  <b>The clamp is the main trap when stacking runs.</b> <code>set_edges</code> on a list captured
+  from a cap-5 graph, applied to a cap-1 graph, silently collapses every weight to 1. Nothing
+  returns an error, nothing logs, and the resulting run looks like a poorly performing objective
+  rather than a data problem. The
+  <a href="../guide/python-api.html#base-graph">base-graph setter</a> owes an explicit check for
+  exactly this.
+</div>
+
+<h2>Neighbourhood queries</h2>
+
+<p>
+  Three queries, and the first two differ on any multigraph. Choosing the wrong one compiles fine
+  and gives plausible numbers.
+</p>
+
+<div class="api-item">
+  <div class="api-sig">pub fn degree(&amp;self, node: usize) -&gt; usize</div>
+  <div class="api-body">
+    <span class="src">graph.rs:127</span>
+    <p>
+      The number of <b>distinct</b> nodes connected to <code>node</code> — a row scan counting
+      non-zero entries, <code>O(n)</code>. A double edge counts once. Returns <code>0</code> for an
+      out-of-range node.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn total_edge_multiplicity(&amp;self, node: usize) -&gt; usize</div>
+  <div class="api-body">
+    <span class="src">graph.rs:139</span>
+    <p>
+      The total number of incident <b>edge copies</b>, counting parallel edges separately — a row
+      scan summing the weights, <code>O(n)</code>. A double edge counts twice. Returns
+      <code>0</code> for an out-of-range node.
+    </p>
+    <p>
+      Despite the name this is a <b>per-node</b> figure, not a whole-graph total. It takes a
+      <code>node</code> argument and sums only that node's row.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">pub fn get_neighbor_at_index(&amp;self, node: usize, index: usize) -&gt; Option&lt;usize&gt;</div>
+  <div class="api-body">
+    <span class="src">graph.rs:103</span>
+    <p>
+      The <code>index</code>-th <b>distinct</b> neighbour of <code>node</code>, in ascending node
+      order, <b>wrapping modulo the degree</b> (<code>graph.rs:113</code>). So any index at all
+      names a real neighbour: on a node of degree 2, indices 0, 2, 4… all give the first neighbour.
+    </p>
+    <p>
+      Returns <code>None</code> in exactly two cases: the node is out of range, or the node is
+      isolated (degree 0). Cost is <code>O(n)</code> — it calls <code>degree</code> and then
+      rescans the row.
+    </p>
+  </div>
+</div>
+
+<div class="note">
+  <b>Wrapping is why an arbitrary payload is always usable.</b> A genome gene carries a 32-bit
+  number with no idea what the graph looks like; the modulo turns it into a valid choice instead of
+  an error path. The cost is that a genuine off-by-one in a caller silently becomes a different,
+  perfectly valid neighbour rather than a failure — so this is not a function to reach for when you
+  want bounds checking.
+</div>
+
+<h2>Cost of every operation</h2>
+
+<p><code>n</code> is <code>num_nodes</code> throughout.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Operation</th><th>Cost</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td><code>new</code></td><td><code>O(n²)</code></td>
+        <td>Time <i>and</i> memory; <code>n</code> row allocations</td></tr>
+    <tr><td><code>weight</code>, <code>has_edge</code></td><td><code>O(1)</code></td>
+        <td>Two bounds checks and one lookup</td></tr>
+    <tr><td><code>set_edge</code></td><td><code>O(1)</code></td><td>Two writes</td></tr>
+    <tr><td><code>add_edge</code></td><td><code>O(1)</code></td>
+        <td>Read, write, read — three constant-time touches</td></tr>
+    <tr><td><code>remove_edge</code>, <code>clear_edge</code></td><td><code>O(1)</code></td><td></td></tr>
+    <tr><td><code>set_edges</code></td><td><code>O(edges)</code></td><td>Linear in the slice</td></tr>
+    <tr><td><code>degree</code></td><td><code>O(n)</code></td><td>One row scan</td></tr>
+    <tr><td><code>total_edge_multiplicity</code></td><td><code>O(n)</code></td><td>One row scan</td></tr>
+    <tr><td><code>get_neighbor_at_index</code></td><td><code>O(n)</code></td>
+        <td>Two row scans — <code>degree</code>, then the walk</td></tr>
+    <tr><td><code>get_edge_list</code></td><td><code>O(n²)</code></td>
+        <td>Scans the upper triangle however sparse the graph is</td></tr>
+    <tr><td><code>clone</code></td><td><code>O(n²)</code></td><td>Derived</td></tr>
+    <tr><td><code>==</code></td><td><code>O(n²)</code></td><td>Derived; includes the cap</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  Nothing here allocates except <code>new</code>, <code>clone</code> and
+  <code>get_edge_list</code>. That is what makes expression cheap enough to run a whole population
+  through every generation — and it is bought with the dense matrix, so the bill arrives as memory
+  rather than time. The <a href="lib.html#memory">memory table on lib.rs</a> has the numbers.
+</p>
+
+<h2>Worked example</h2>
+
+<p>Four nodes, cap 5, two edges — one of them doubled:</p>
+
+<pre><code class="language-rust">let mut graph = Graph::new(4, 5);
+graph.set_edge(0, 1, 2);   // a double edge between 0 and 1
+graph.set_edge(0, 3, 1);   // a single edge between 0 and 3</code></pre>
+
+<p>The matrix that produces, with rows and columns labelled by node:</p>
+
+<pre><code class="language-text">     0  1  2  3
+ 0 [ 0  2  0  1 ]
+ 1 [ 2  0  0  0 ]
+ 2 [ 0  0  0  0 ]     node 2 is isolated
+ 3 [ 1  0  0  0 ]
+       symmetric; the diagonal is always 0</code></pre>
+
+<p>Every query, and what it returns:</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Call</th><th>Result</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><code>weight(0, 1)</code></td><td><code>2</code></td><td>Two parallel edges</td></tr>
+    <tr><td><code>weight(1, 0)</code></td><td><code>2</code></td><td>Symmetric — the same edge</td></tr>
+    <tr><td><code>weight(0, 0)</code></td><td><code>0</code></td><td>No self-loops, ever</td></tr>
+    <tr><td><code>weight(0, 9)</code></td><td><code>0</code></td><td>Out of range, silently</td></tr>
+    <tr><td><code>degree(0)</code></td><td><code>2</code></td><td>Distinct neighbours 1 and 3</td></tr>
+    <tr><td><code>total_edge_multiplicity(0)</code></td><td><code>3</code></td><td>2 copies + 1 copy</td></tr>
+    <tr><td><code>get_edge_list()</code></td><td><code>[(0, 1, 2), (0, 3, 1)]</code></td>
+        <td>Each edge once, <code>u &lt; v</code>, sorted</td></tr>
+    <tr><td><code>get_neighbor_at_index(0, 0)</code></td><td><code>Some(1)</code></td><td>First neighbour</td></tr>
+    <tr><td><code>get_neighbor_at_index(0, 1)</code></td><td><code>Some(3)</code></td><td>Second neighbour</td></tr>
+    <tr><td><code>get_neighbor_at_index(0, 2)</code></td><td><code>Some(1)</code></td><td>Wrapped back round</td></tr>
+    <tr><td><code>get_neighbor_at_index(2, 0)</code></td><td><code>None</code></td><td>Node 2 is isolated</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  That is the test <code>degree_and_neighbor_selection_use_distinct_neighbors</code> at
+  <code>graph.rs:213-224</code>, so the table is verified rather than reasoned.
+</p>
+
+<h3>What the cap does</h3>
+
+<pre><code class="language-rust">let mut graph = Graph::new(2, 3);   // cap of 3
+graph.set_edge(0, 1, 5);
+assert_eq!(graph.weight(0, 1), 3);  // clamped on the way in, no error
+
+graph.add_edge(0, 1);               // returns false — already at the cap
+assert_eq!(graph.weight(0, 1), 3);
+
+graph.remove_edge(0, 1);
+assert_eq!(graph.weight(0, 1), 2);  // one copy removed, not all of them</code></pre>
+
+<p>
+  Verified by <code>explicit_multiplicity_cap_is_enforced</code> (<code>graph.rs:204-211</code>)
+  and <code>multiplicity_is_capped_at_five</code> (<code>graph.rs:171-187</code>).
+</p>
+
+<h2>Gotchas</h2>
+
+<div class="warn">
+  <b>The public fields can desynchronise the type.</b> <code>num_nodes</code> and
+  <code>max_edge_multiplicity</code> are <code>pub</code> while the matrix is not, so nothing stops
+  you setting a node count the matrix cannot honour. See the warning at the top of this page — the
+  failure is a panic on the next read, in a place unrelated to the assignment.
+</div>
+
+<div class="warn">
+  <b>Two failure modes look identical to a caller.</b> <code>set_edge</code> returns nothing, so
+  "the edge was set", "that was a self-loop", "that vertex does not exist" and "the weight was
+  clamped" are all indistinguishable. If you need to know, read the weight back, or use
+  <code>add_edge</code>, whose boolean is the only refusal signal the type offers.
+</div>
+
+<div class="note">
+  <b>Equality includes the cap.</b> If you are comparing an expressed graph against a fixture, build
+  the fixture with the same <code>max_edge_multiplicity</code> or the assertion fails on a field you
+  were not testing.
+</div>
+
+<div class="note">
+  <b><code>degree</code> vs <code>total_edge_multiplicity</code> is the recurring bug.</b> They are
+  equal on any simple graph, which is the default, so a mix-up survives every cap-1 test and only
+  shows up when someone runs with parallel edges enabled.
+</div>
+
+<h2>See also</h2>
+
+<ul>
+  <li><a href="../guide/graph.html">The graph</a> — the concept page: what a multigraph is here,
+      why the silence is deliberate, and the stated non-goals.</li>
+  <li><a href="sir.html">sir.rs</a> — the simulator reads this type through <code>weight</code>,
+      and treats a multiplicity of <code>k</code> as <code>k</code> independent chances to
+      transmit.</li>
+  <li><a href="fitness.html">fitness.rs</a> — objectives take <code>&amp;Graph</code>;
+      <code>get_edge_list</code> is what crosses into Python.</li>
+  <li><a href="edge-edit-operations.html">edge_edit/operations.rs</a> — the nine edit operations,
+      which are the heaviest users of the neighbourhood queries.</li>
+  <li><a href="../guide/performance.html">Performance &amp; memory</a> — why the dense matrix is
+      the dominant memory cost of a run.</li>
+</ul>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting started · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/getting-started.html">
+<main>
+
+<p class="page-kicker">Start here</p>
+<h1>Getting started</h1>
+<p class="lede">
+  Build the module, write a config, run an evolution, read the result. Fifteen minutes, assuming
+  you have a Rust toolchain.
+</p>
+
+<h2>1. Build the extension module</h2>
+
+<p>
+  GET is a Rust crate compiled into a Python extension module. You need a Rust toolchain and
+  <a href="https://www.maturin.rs">maturin</a>:
+</p>
+
+<pre><code class="language-bash"># from the repository root
+pip install maturin
+
+maturin develop        # build and install into the current virtualenv, for development
+# or
+pip install .          # a normal install</code></pre>
+
+<p>Check it worked:</p>
+
+<pre><code class="language-python">import get
+print(get.Config)      # &lt;class 'builtins.Config'&gt;</code></pre>
+
+<div class="note">
+  <b>Working on the Rust itself?</b> Note that <code>cargo test</code> and the Python build need
+  different feature flags — the extension-module feature is enabled by
+  <code>pyproject.toml</code> at build time and deliberately not by the crate's own manifest,
+  because enabling it there makes the whole test suite fail to <i>link</i>. Just use
+  <code>cargo test</code> and <code>maturin develop</code> as separate commands and it takes care
+  of itself.
+</div>
+
+<h2>2. Describe the experiment</h2>
+
+<p>
+  Two front ends, and they converge before anything is parsed — so neither can accept a
+  configuration the other would reject. Pick whichever suits you.
+</p>
+
+<h3>As a file</h3>
+
+<p>Copy <code>config.example.toml</code> from the repository root, or start from this:</p>
+
+<pre><code class="language-toml">population_size = 200        # individuals in the population
+network_size    = 100        # nodes in every graph GET builds
+crossover_rate  = 0.9        # 90% of selected pairs recombine
+mutation_rate   = 0.2        # 20% of children mutate at all
+
+[evolution]
+type            = "generational"   # replace the whole population each round
+num_generations = 500
+elite_count     = 1                # carry the single best forward untouched
+
+[selection]
+type            = "tournament"
+tournament_size = 5                # 5 entrants per tournament
+
+[genome]
+type        = "edge_edit"          # a script of edge edits
+gene_length = 256                  # 256 edits per individual
+
+[fitness]
+type           = "epi_spread"      # maximise how far the epidemic reaches
+infection_rate = 0.05              # per-edge, per-timestep
+num_epidemics  = 30                # average over 30 outbreaks per evaluation</code></pre>
+
+<div class="warn">
+  <b>The top-level keys must come before the first <code>[section]</code> header.</b> That is a
+  plain TOML rule: once a table opens, every following key belongs to it. A
+  <code>population_size</code> written below <code>[evolution]</code> silently becomes
+  <code>evolution.population_size</code>, and the error you get complains that
+  <code>population_size</code> is <i>missing</i>.
+</div>
+
+<h3>Or as Python objects</h3>
+
+<pre><code class="language-python">import get
+
+config = get.Config(
+    evolution       = get.EvolutionConfig.Generational(num_generations=500, elite_count=1),
+    population_size = 200,
+    network_size    = 100,
+    crossover_rate  = 0.9,
+    mutation_rate   = 0.2,
+    selection       = get.SelectionConfig.Tournament(tournament_size=5),
+    genome          = get.GenomeConfig.EdgeEdit(gene_length=256),
+    fitness         = get.FitnessConfig.EpiSpread(
+        sir = get.SirParams(infection_rate=0.05, num_epidemics=30)
+    ),
+)</code></pre>
+
+<p>
+  The repository ships <code>examples/config_builder.py</code>, which covers all four objectives,
+  both genomes and both strategies with this API.
+</p>
+
+<h2>3. Run it</h2>
+
+<pre><code class="language-python">import get
+
+evolver = get.GraphEvolver("experiment.toml")     # or .from_config(config)
+
+edges = evolver.run(20260812)                     # one master seed drives everything
+
+print("fitness:", evolver.best_fitness())         # in your objective's units
+print("edges:  ", len(edges))
+print(edges[:5])                                  # [(0, 3, 1), (0, 7, 1), ...]</code></pre>
+
+<p>
+  <code>run</code> returns the best network found, as <code>(u, v, multiplicity)</code> triples with
+  <code>u &lt; v</code>. Pairs with no edge are not listed. The seed reproduces the entire run —
+  same seed and same config, same answer, on any machine.
+</p>
+
+<h2>4. Read the result</h2>
+
+<p>
+  <code>best_fitness()</code> is in <b>your</b> units: infected nodes for
+  <code>epi_spread</code>, an RMSE for <code>epi_prof_match</code>. GET minimizes internally and
+  converts back on the way out, so you never see a negated number —
+  <a href="fitness.html">the whole scheme is here</a>.
+</p>
+
+<p>The edge list drops straight into the usual tools:</p>
+
+<pre><code class="language-python">import networkx as nx
+
+g = nx.Graph()
+g.add_nodes_from(range(100))                      # keep isolated nodes
+g.add_weighted_edges_from(edges)
+
+print(nx.number_of_edges(g), nx.average_clustering(g))</code></pre>
+
+<div class="tip">
+  <b>Write the config next to the results.</b> <code>config.to_toml()</code> returns the exact
+  document Rust parsed. Store it with the seed and the run reproduces verbatim — that pair is your
+  whole provenance record.
+</div>
+
+<h2>What to change first</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>If you want…</th><th>Change</th></tr></thead>
+  <tbody>
+    <tr><td>A run that finishes faster</td>
+        <td><code>num_epidemics</code> down. It dominates run time — and raises the noise in every
+            fitness number, so do not go far.</td></tr>
+    <tr><td>Less noisy fitness</td>
+        <td><code>num_epidemics</code> up. See <a href="performance.html">Performance</a>.</td></tr>
+    <tr><td>Stronger selection pressure</td><td><code>tournament_size</code> up.</td></tr>
+    <tr><td>More exploration</td>
+        <td><code>mutation_rate</code> or <code>max_mutations</code> up — they mean different
+            things, see <a href="variation.html">Crossover &amp; mutation</a>.</td></tr>
+    <tr><td>Networks built from scratch rather than edited</td>
+        <td><code>[genome] type = "sda"</code>. See <a href="genomes.html">Genomes</a>.</td></tr>
+    <tr><td>To match a real epidemic curve</td>
+        <td><code>[fitness] type = "epi_prof_match"</code> plus a
+            <code>target_profile</code>.</td></tr>
+    <tr><td>Your own scoring function</td>
+        <td><a href="new-fitness.html">Add an objective</a>.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Things that will confuse you once</h2>
+
+<ul>
+  <li><b>An edge-edit run looks like it does nothing at first.</b> Five of the nine operations need
+      existing structure to work on, and a run currently starts from an empty graph, so
+      <code>Add</code> and <code>Toggle</code> have to build something before the rest can do
+      anything. Self-correcting, not a bug — see <a href="genomes.html#operations">the
+      operations</a>.</li>
+  <li><b><code>best_fitness()</code> before any run returns <code>+inf</code></b>, which under a
+      maximizing objective reads as a fantastic score.</li>
+  <li><b>Probabilities are not range-checked.</b> A <code>mutation_rate</code> of <code>2.0</code>
+      runs happily.</li>
+  <li><b>Two error messages name the wrong field</b> —
+      <code>num_states = 0</code> reports as <code>init_state</code>, and
+      <code>population_size = 0</code> reports as <code>elite_count</code> or
+      <code>tournament_size</code>. See <a href="troubleshooting.html">Troubleshooting</a>.</li>
+</ul>
+
+<h2>Where next</h2>
+
+<div class="cards">
+  <a class="card" href="pipeline.html">
+    <h3>How it works →</h3>
+    <p>The whole loop in one diagram, then stage by stage.</p>
+  </a>
+  <a class="card" href="configuration.html">
+    <h3>Every config key →</h3>
+    <p>Types, defaults, constraints, and what makes each one invalid.</p>
+  </a>
+  <a class="card" href="../examples/index.html">
+    <h3>Worked examples →</h3>
+    <p>Both genomes, both strategies, a custom objective, stacking two runs.</p>
+  </a>
+  <a class="card" href="../status.html">
+    <h3>What is built →</h3>
+    <p>Which parts of this documentation describe code that exists today.</p>
+  </a>
+</div>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

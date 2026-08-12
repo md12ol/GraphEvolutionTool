@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>evolver/steady_state.rs · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="reference/steady-state.html">
+<main>
+
+<p class="page-kicker">Reference</p>
+<h1>evolver/steady_state.rs</h1>
+<p class="lede">
+  The steady-state strategy: one mate-and-replace event at a time. Each event draws a small
+  tournament, breeds its two best, and overwrites that same tournament's two worst — so almost the
+  whole population survives every event untouched. The concepts are in
+  <a href="../guide/evolvers.html">Evolution strategies</a>; this is the precise companion.
+</p>
+
+<p>
+  The contrast with <a href="generational.html">evolver/generational.rs</a> is the whole point of
+  having two strategies, so this page names the differences explicitly at each step. The shared
+  machinery — selection, the scoring gate, the mutation helper, the log row — lives in
+  <a href="evolver-common.html">evolver/common.rs</a>.
+</p>
+
+<h2>Public surface</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub struct SteadyStateEvolver&lt;G: Genome&gt;</div>
+  <div class="api-body">
+    <span class="src">evolver/steady_state.rs:17-22</span>
+    <p>
+      Evolves a population one mate-and-replace event at a time, for a fixed number of mating events.
+      Four private fields — the shared context, the steady-state context, the population, and the
+      history — with no accessors; everything a caller gets comes back on the
+      <code>EvolutionOutcome</code>.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">impl&lt;G: Genome&gt; Evolver&lt;G&gt; for SteadyStateEvolver&lt;G&gt; {
+    type TypeContext = SteadyStateContext;
+}</div>
+  <div class="api-body">
+    <span class="src">evolver/steady_state.rs:148-149</span>
+    <p>
+      The trait implementation. Its settings block is
+      <a href="evolver-common.html"><code>SteadyStateContext</code></a>, which carries a single
+      field: <code>num_mating_events</code>.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn new(
+    shared: SharedEvolutionContext&lt;G&gt;,
+    type_context: Self::TypeContext,
+    population: Vec&lt;G&gt;,
+) -&gt; Self</div>
+  <div class="api-body">
+    <span class="src">evolver/steady_state.rs:151-186</span>
+    <p>
+      Build the evolver. <b>Two</b> asserts, both deliberately at construction time rather than at
+      the first event: <code>tournament_size &gt;= 4</code> (<code>steady_state.rs:164</code>) and
+      <code>population.len() &gt;= tournament_size</code> (<code>steady_state.rs:170</code>).
+    </p>
+    <p>
+      <code>Selection::tournament_indices</code> would catch the second of those on its own — but not
+      until the first mating event, which is precisely the mid-run failure checking here avoids.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn run&lt;F: Fitness&gt;(&amp;mut self, fitness: &amp;F, seed: u64) -&gt; EvolutionOutcome&lt;G&gt;</div>
+  <div class="api-body">
+    <span class="src">evolver/steady_state.rs:188-198</span>
+    <p>
+      Seed the generator, score the starting population once, run every mating event, and report the
+      best. Only eleven lines, because the work is in the two private methods below.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">const MIN_TOURNAMENT_SIZE: usize = 4;</div>
+  <div class="api-body">
+    <span class="src">evolver/steady_state.rs:32</span>
+    <p>
+      The smallest tournament that keeps the two parents and the two individuals they replace
+      disjoint. Private to the type; see <a href="#why-four">why four</a> below.
+    </p>
+  </div>
+</div>
+
+<p>Three private methods do the work:</p>
+
+<div class="api-item">
+  <div class="api-sig">fn mating_event&lt;F, R&gt;(&amp;mut self, fitness: &amp;F, fitnesses: &amp;mut [f64], rng: &amp;mut R)
+where
+    F: Fitness,
+    R: Rng + ?Sized</div>
+  <div class="api-body">
+    <span class="src">evolver/steady_state.rs:43-47</span>
+    <p>
+      Perform one mating event. Note that it takes the fitness array as <code>&amp;mut</code> — it
+      updates the two replaced slots in place, so the array never drifts out of step with the
+      population it describes.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn evolve&lt;F, R&gt;(&amp;mut self, fitness: &amp;F, fitnesses: &amp;mut [f64], rng: &amp;mut R)
+where
+    F: Fitness,
+    R: Rng + ?Sized</div>
+  <div class="api-body">
+    <span class="src">evolver/steady_state.rs:101-105</span>
+    <p>
+      Run every mating event, and own the logging cadence: the starting population as iteration 0,
+      then one row per "generation equivalent".
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">fn outcome(&amp;mut self, fitnesses: &amp;[f64], direction: Direction) -&gt; EvolutionOutcome&lt;G&gt;</div>
+  <div class="api-body">
+    <span class="src">evolver/steady_state.rs:130</span>
+    <p>
+      Package the winner and the history. Unlike generational's version it takes no graphs, because
+      steady-state never keeps any — see <a href="#winner-graph">the winner's graph</a>.
+    </p>
+  </div>
+</div>
+
+<h2>The loop, step by step</h2>
+
+<ol>
+  <li>
+    <b>Construct</b> — <code>Evolver::new</code> (<code>steady_state.rs:151</code>). Assert
+    <code>tournament_size &gt;= 4</code> and <code>population.len() &gt;= tournament_size</code>.
+  </li>
+  <li>
+    <b>Seed the random number generator</b> — <code>ChaCha8Rng::seed_from_u64(seed)</code>
+    (<code>steady_state.rs:192</code>). Same generator choice as generational, for the same reason.
+  </li>
+  <li>
+    <b>Score the whole starting population, once</b> — <code>common::express_and_score</code>
+    (<code>steady_state.rs:194-195</code>). <b>The graphs are discarded immediately</b>; only the
+    fitness vector is kept, and it is threaded through the rest of the run as a mutable slice. This
+    is the only time the full population is ever scored.
+  </li>
+  <li>
+    <b>Enter <code>evolve</code></b> (<code>steady_state.rs:196</code>). Set
+    <code>log_interval = self.population.len()</code> (<code>steady_state.rs:108</code>) — the
+    "generation equivalent". Clear the history and log iteration 0
+    (<code>steady_state.rs:110-111</code>).
+  </li>
+  <li>
+    <b>For each event from 1 to <code>num_mating_events</code></b>
+    (<code>steady_state.rs:113</code>):
+    <ol>
+      <li>
+        <b>Draw one tournament of distinct individuals</b> —
+        <code>Selection::tournament_indices(fitnesses, rng)</code>
+        (<code>steady_state.rs:48</code>). The result is a list of slot indices sorted
+        <b>best first</b>, with no repeats.
+      </li>
+      <li>
+        <b>Clone the two best as parents</b> — <code>tournament[0]</code> and
+        <code>tournament[1]</code> (<code>steady_state.rs:50-51</code>). The originals stay in the
+        population; the children are built from copies.
+      </li>
+      <li>
+        <b>One crossover roll for the pair</b> — <code>rng.random_bool(crossover_rate)</code>, then
+        <code>first.crossover(&amp;mut second, rng)</code> if it passes
+        (<code>steady_state.rs:57-59</code>).
+      </li>
+      <li>
+        <b>Mutate each child</b> — <code>common::mutate_child</code> on the first, then the second
+        (<code>steady_state.rs:60-71</code>), in the same fixed order generational uses.
+      </li>
+      <li>
+        <b>Score the two children, in one batch</b> —
+        <code>express_and_score(&amp;children, ..)</code> on a two-element array
+        (<code>steady_state.rs:75-76</code>). One call rather than two, which halves the FFI
+        crossings a Python objective pays per event.
+      </li>
+      <li>
+        <b>Overwrite the tournament's two worst</b> — the last and second-to-last entries of the
+        sorted tournament (<code>steady_state.rs:78-81</code>). Both the genome and its fitness are
+        written in the same loop (<code>steady_state.rs:84-87</code>), so the fitness array stays
+        exactly in step with the population.
+      </li>
+      <li>
+        <b>Log, but only on the interval</b> — if <code>event % log_interval == 0</code>, push a row
+        stamped with the <b>event number</b> (<code>steady_state.rs:116-118</code>).
+      </li>
+    </ol>
+  </li>
+  <li>
+    <b>Report</b> — <code>self.outcome(&amp;fitnesses, fitness.direction())</code>
+    (<code>steady_state.rs:197</code>). Find the winner with <code>common::best_index</code>
+    (<code>steady_state.rs:133</code>), clone its genome, <b>re-express</b> its graph
+    (<code>steady_state.rs:137</code>), and take the history.
+  </li>
+</ol>
+
+<pre><code class="language-text" data-no-tint>score once ─→ log(0) ─→ ┌─ mating event ─→ log only every population_size events ─┐ ─→ outcome
+                        └────────────── × num_mating_events ─────────────────────┘</code></pre>
+
+<h2>How it differs from generational, step by step</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Step</th><th><a href="generational.html">Generational</a></th><th>Steady-state</th></tr></thead>
+  <tbody>
+    <tr><td>Unit of work</td>
+        <td>one generation — a whole new population</td>
+        <td>one mating event — two individuals replaced</td></tr>
+    <tr><td>Scoring the population</td>
+        <td>every generation, all of it</td>
+        <td><b>once</b>, at the start, and never again</td></tr>
+    <tr><td>Evaluations per unit</td>
+        <td><code>population_size</code></td>
+        <td><b>2</b>, always</td></tr>
+    <tr><td>Selection call</td>
+        <td><code>select(.., 2, ..)</code> — <b>with</b> replacement, one tournament per parent</td>
+        <td><code>tournament_indices(..)</code> — <b>without</b> replacement, one tournament per event</td></tr>
+    <tr><td>Can a pair be one individual?</td>
+        <td>yes — crossover then does nothing and only mutation moves the child</td>
+        <td><b>no</b>, by construction: the tournament's members are distinct</td></tr>
+    <tr><td>Elitism</td>
+        <td>explicit — sort by <code>rank</code>, copy <code>elite_count</code> forward</td>
+        <td><b>implicit</b> — the tournament's best is never in the replaced set</td></tr>
+    <tr><td>Who gets replaced</td>
+        <td>everyone, every generation</td>
+        <td>only the drawn tournament's two worst — <b>tournament-local</b></td></tr>
+    <tr><td>Are recorded scores fresh?</td>
+        <td>yes, all of them, always</td>
+        <td><b>no</b> — a slot keeps its original score until something replaces it</td></tr>
+    <tr><td>Fitness array</td>
+        <td>rebuilt from scratch each generation</td>
+        <td>mutated in place, threaded through as <code>&amp;mut [f64]</code></td></tr>
+    <tr><td>Graphs kept?</td>
+        <td>yes — the last scoring pass's vector</td>
+        <td>no — discarded immediately after the initial scoring</td></tr>
+    <tr><td>The winner's graph</td>
+        <td>moved out of the final scoring pass, never re-expressed</td>
+        <td><b>re-expressed</b> at the end</td></tr>
+    <tr><td>Log cadence</td>
+        <td>every generation</td>
+        <td>every <code>population_size</code> events</td></tr>
+    <tr><td>Construction asserts</td>
+        <td><code>elite_count &lt; population_size</code></td>
+        <td><code>tournament_size &gt;= 4</code> <b>and</b> <code>population_size &gt;= tournament_size</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>The rules worth knowing</h2>
+
+<h3>Tournament-local replacement</h3>
+
+<p>
+  This is the idea the whole strategy is built on, and it is worth stating slowly. When an event
+  happens, the engine draws a handful of individuals at random — say five out of two hundred — and
+  <b>everything about that event happens inside those five</b>. The best two of the five become
+  parents. The worst two of the same five get overwritten by the children. The other one hundred and
+  ninety-five individuals are not consulted, not compared, and not touched.
+</p>
+
+<p>Three consequences follow, and each is a design goal rather than a side effect:</p>
+
+<ul>
+  <li>
+    <b>Self-elitist.</b> The tournament's best is never among the replaced, so the population's best
+    individual can never be discarded — whenever it is drawn, it is by definition the best of that
+    tournament. No <code>elite_count</code> setting is needed, and there isn't one.
+  </li>
+  <li>
+    <b>Diversity-preserving.</b> A globally poor individual is not hunted down; it survives until it
+    happens to be drawn into a tournament. That keeps unusual genomes in the population much longer
+    than a global replace-the-worst rule would.
+  </li>
+  <li>
+    <b>Cheap.</b> Each event costs about <code>k log k</code> for a tournament of <code>k</code>,
+    rather than an <code>O(population)</code> scan to find the global worst. At a hundred thousand
+    events that difference is the run.
+  </li>
+</ul>
+
+<div class="note">
+  <b>Replacement is unconditional.</b> A child takes its slot <i>even if it scores worse</i> than the
+  individual it displaces (<code>steady_state.rs:84-87</code> — there is no comparison before the
+  write). The best-is-never-discarded guarantee comes from the tournament <i>structure</i>, not from
+  a comparison, so no extra check is needed and adding one would change the search behaviour.
+</div>
+
+<h3 id="why-four">Why <code>tournament_size &gt;= 4</code>, and only here</h3>
+
+<p>
+  An event needs four distinct roles: two parents, and two individuals to replace. A tournament
+  smaller than four cannot supply them:
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Size</th><th>What happens</th></tr></thead>
+  <tbody>
+    <tr><td>2</td><td>Both parents are replaced by their own children. The tournament's best is
+        <b>not</b> carried forward, so the strategy stops being self-elitist outright — the guarantee
+        the whole design rests on is gone.</td></tr>
+    <tr><td>3</td><td>The best is still preserved, but the second parent is also one of the replaced.
+        Workable, yet it quietly changes what an event means.</td></tr>
+    <tr><td><b>4</b></td><td>The smallest size at which parents and replaced are fully disjoint.
+        This is <code>MIN_TOURNAMENT_SIZE</code> (<code>steady_state.rs:32</code>).</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  <b>The constraint is strategy-specific.</b> Generational has no such floor and needs none — its
+  tournaments only ever choose parents, and nothing is defined in terms of a tournament's worst
+  members. Configuration validation reflects that: the <code>tournament_size &gt;= 4</code> rule is
+  applied for steady-state only (<code>get/src/config.rs:431</code>).
+</p>
+
+<div class="warn">
+  <b>The config path is stricter than the engine on the population rule.</b>
+  <code>Config::validate</code> enforces <code>population_size &gt;= tournament_size</code> for
+  <b>both</b> strategies (<code>get/src/config.rs:408</code>), and steady-state asserts it too
+  (<code>steady_state.rs:170</code>) because its without-replacement draw genuinely cannot be
+  satisfied otherwise — the rejection sampler would loop forever looking for a distinct index that
+  does not exist. <code>GenerationalEvolver::new</code> deliberately <i>omits</i> that assert, since
+  sampling with replacement copes with an oversized tournament perfectly well. So the same
+  configuration that a hand-built generational evolver accepts is rejected when it arrives as a
+  config document. Worth knowing if a validation error surprises you, or if you are writing tests.
+</div>
+
+<h3>Stale fitnesses — the accepted limitation</h3>
+
+<p>
+  Steady-state scores only the two new children per event. Every other slot keeps whatever number it
+  was given when it entered the population, and <b>nothing ever rescores it</b>.
+</p>
+
+<p>
+  Under a deterministic objective that is simply an optimization. Under a stochastic one — which the
+  SIR objectives are — it has a real consequence: the objective's batch counter advances once per
+  event, so the children being compared against the population were scored under <i>different dice</i>
+  than the population itself. An individual that drew lucky dice keeps its inflated score for the
+  rest of the run, because nothing will ever take a second look at it.
+</p>
+
+<div class="warn">
+  <b>Prefer <a href="generational.html">generational</a> when the objective is stochastic and the
+  comparison needs to be fair.</b> This limitation is inherent to combining incremental scoring with
+  a noisy objective rather than being a defect in the implementation: the alternatives — rescoring
+  the population periodically, or freezing the seed across a generation equivalent — each swap it for
+  a different distortion rather than removing it. It was accepted deliberately. See
+  <a href="../guide/fitness.html">Fitness &amp; orientation</a>.
+</div>
+
+<h3 id="winner-graph">The winner's graph is re-expressed</h3>
+
+<p>
+  <code>outcome</code> calls <code>best_genome.express(&amp;self.shared.genome_context)</code>
+  (<code>steady_state.rs:137</code>) to fill in <code>EvolutionOutcome::best_graph</code>.
+  Generational instead moves the winner's graph out of the vector its final scoring pass already
+  built. The reason for the difference is cost, not behaviour: steady-state has no such vector, and
+  keeping one <code>Graph</code> per individual alive for the whole run — a dense matrix each — to
+  save a single expression at the end would be a bad trade. <b>Both strategies return the identical
+  graph</b>, because expression is deterministic.
+</p>
+
+<p>
+  The winner itself is chosen by the same rule generational uses: the <b>best of the final
+  population</b>, via <code>common::best_index</code>. Here that is also the best individual the run
+  ever held, since the tournament structure means the best is never discarded.
+</p>
+
+<h3>Logging cadence</h3>
+
+<p>
+  Logging every event would give a 100,000-row history for a 100,000-event run, which is useless. So
+  steady-state logs the starting population as iteration 0, then <b>one row per
+  <code>population_size</code> events</b> — a "generation equivalent", chosen so a steady-state log
+  is comparable with a generational one. Rows are stamped with the <b>event number</b>, not a row
+  counter.
+</p>
+
+<pre><code class="language-text" data-no-tint>log_interval = population_size
+history.len() == num_mating_events / population_size + 1
+iterations:       0, population_size, 2×population_size, …</code></pre>
+
+<p>
+  The iteration-0 row is what makes a log self-contained: without it there would be no way to see
+  where a run started, and a run shorter than one interval would produce nothing at all.
+</p>
+
+<div class="note">
+  <b>Trailing events after the last full interval are not logged.</b> Twenty-five events over a
+  population of ten logs rows at 0, 10 and 20 — events 21 to 25 really happened and are reflected in
+  the final outcome, but no row describes them. This falls out of the interval rule; it is not a
+  separate rounding decision.
+</div>
+
+<div class="plan-note">
+  <b>What exists today.</b> The rows are built correctly and travel out on
+  <code>EvolutionOutcome::history</code>, readable by a Rust caller of <code>Evolver::run</code>. The
+  Python boundary (<code>dispatch::erase</code>, <code>get/src/dispatch.rs:398</code>) currently keeps
+  only the best fitness and the best graph's edge list and <b>drops the history</b>, so a
+  config-driven run cannot read its own convergence log today. The <code>ci_95</code> column and the
+  per-row seed and run index described in <a href="../guide/output.html">Logs &amp; results</a> are
+  not fields on <code>GenerationStats</code> yet either. See <a href="../status.html">Status</a>.
+</div>
+
+<h2>A small run, narrated</h2>
+
+<p>
+  Population of 6, <code>tournament_size = 4</code>, <code>num_mating_events = 12</code>. Same toy
+  genome as on the <a href="generational.html">generational page</a>: the individual is a number
+  <code>v</code>, fitness is <code>v + 1</code>, lower is better, one mutation adds 100. Starting
+  values <code>[5, 3, 9, 1, 7, 2]</code>, so the starting fitnesses are
+  <code>[6, 4, 10, 2, 8, 3]</code>.
+</p>
+
+<ol>
+  <li>
+    <b>Score once.</b> All six are expressed and scored — the only full-population scoring the run
+    will do. The graphs are dropped; the fitness vector is kept.
+  </li>
+  <li>
+    <b>Log row 0</b> — best 2.0, mean 5.5, <code>std_dev</code> ≈ 2.81. Identical to generation 0 on
+    the generational page, because it is the same starting population.
+  </li>
+  <li>
+    <b>Event 1 — draw.</b> Four distinct slots come out, say slots 3, 1, 4 and 2, with fitnesses 2,
+    4, 8 and 10. Sorted best-first the tournament is <code>[3, 1, 4, 2]</code>.
+  </li>
+  <li>
+    <b>Event 1 — breed.</b> Parents are slots 3 and 1 (values 1 and 3). One crossover roll, then a
+    mutation roll per child. Say both mutate: the children become 101 and 103, scoring 102 and 104.
+  </li>
+  <li>
+    <b>Event 1 — replace.</b> The tournament's worst two are slot 2 (fitness 10) and slot 4 (fitness
+    8). The children are written into those slots and the fitness array is updated in the same step:
+    slot 2 becomes 102, slot 4 becomes 104. Note both children are <i>worse</i> than what they
+    displaced and are installed anyway — replacement is unconditional.
+    <b>Slot 3, the tournament's best, is untouched.</b> Slots 0 and 5 were never drawn and are not
+    even looked at.
+  </li>
+  <li>
+    <b>Events 2 to 12</b> repeat that, each drawing a fresh tournament of four.
+  </li>
+  <li>
+    <b>Logging.</b> <code>log_interval</code> is 6, so rows land after event 6 and after event 12.
+    With row 0 that is three rows — matching <code>12 / 6 + 1</code>.
+  </li>
+  <li>
+    <b>Outcome.</b> <code>best_index</code> finds whichever slot holds the lowest fitness at the end
+    — here still the individual with value 1, which was never eligible for replacement in any
+    tournament it won. Its graph is expressed fresh, and the outcome carries it with
+    <code>best_fitness_engine = 2.0</code>, <code>direction = Minimize</code>, and three history rows.
+  </li>
+</ol>
+
+<h2>Costs and when to choose it</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Property</th><th>Steady-state</th></tr></thead>
+  <tbody>
+    <tr><td>Evaluations per event</td><td><b>2</b></td></tr>
+    <tr><td>Parallelism during scoring</td>
+        <td><b>two-way, regardless of how many cores you have</b></td></tr>
+    <tr><td>Python objective cost</td>
+        <td>one FFI crossing <b>per event</b> — a poor fit for Python fitness</td></tr>
+    <tr><td>Are old scores ever stale?</td><td>yes, and permanently so</td></tr>
+    <tr><td>Elitism</td><td>automatic; there is no setting and none is needed</td></tr>
+    <tr><td>Selection sampling</td><td><b>without</b> replacement; self-mating is impossible</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn">
+  <b>A single steady-state run cannot use a big machine.</b> It only ever expresses and scores two
+  genomes at a time, so its population-level parallelism is two-way no matter what you set
+  <code>max_cores</code> to. Replicate runs are the only way to fill the cores — the same conclusion
+  the FFI-cost argument reaches from the other direction. See
+  <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a> for how replicates are
+  seeded.
+</div>
+
+<p>
+  <b>Choose steady-state</b> when the objective is cheap and native, when you want the diversity that
+  tournament-local replacement preserves, or when you want elitism without having to reason about
+  <code>elite_count</code>. <b>Choose <a href="generational.html">generational</a></b> when the
+  objective is stochastic and comparisons must be fair, when scoring is expensive and you want it
+  parallel across the whole population, or when the objective is written in Python.
+</p>
+
+<h2>Related pages</h2>
+
+<ul>
+  <li><a href="../guide/evolvers.html">Evolution strategies</a> — the concepts behind this page</li>
+  <li><a href="generational.html">evolver/generational.rs</a> — the other strategy, step by step</li>
+  <li><a href="evolver-common.html">evolver/common.rs</a> — <code>Selection</code>,
+      <code>express_and_score</code>, <code>mutate_child</code>, <code>generation_stats</code></li>
+  <li><a href="../guide/fitness.html">Fitness &amp; orientation</a> ·
+      <a href="../guide/variation.html">Crossover &amp; mutation</a> ·
+      <a href="../guide/output.html">Logs &amp; results</a> ·
+      <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a></li>
+  <li><a href="config.html">config.rs</a> — the <code>[evolution]</code> and
+      <code>[selection]</code> blocks and their validation</li>
+  <li><a href="dispatch.html">dispatch.rs</a> — where this evolver is constructed and run</li>
+  <li><a href="../guide/new-evolver.html">Add a strategy</a></li>
+</ul>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add a strategy · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/new-evolver.html">
+<main>
+
+<p class="page-kicker">Extending GET</p>
+<h1>Add a strategy</h1>
+<p class="lede">
+  A third evolution strategy — a different answer to "who breeds and who gets replaced". Three
+  edits, and the genome match is untouched, because your evolver is generic over the representation.
+</p>
+
+<h2>What you have to implement</h2>
+
+<pre><code class="language-rust">pub trait Evolver&lt;G: Genome&gt; {
+    type TypeContext;
+    fn new(shared: SharedEvolutionContext&lt;G&gt;, type_context: Self::TypeContext, population: Vec&lt;G&gt;) -&gt; Self;
+    fn run&lt;F: Fitness&gt;(&amp;mut self, fitness: &amp;F, seed: u64) -&gt; EvolutionOutcome&lt;G&gt;;
+}</code></pre>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Piece</th><th>Is</th></tr></thead>
+  <tbody>
+    <tr><td><code>TypeContext</code></td>
+        <td>Whatever <i>your</i> strategy needs and the others do not — the generational one carries
+            its generation count and elite count, the steady-state one its mating-event count.</td></tr>
+    <tr><td><code>SharedEvolutionContext</code></td>
+        <td>What every strategy needs: the genome context, the rates, <code>max_mutations</code>,
+            and the selection strategy. Nothing else — see below.</td></tr>
+    <tr><td><code>population</code></td>
+        <td>Handed in, already built. You never mint genomes.</td></tr>
+    <tr><td><code>run</code></td>
+        <td>The loop. Returns the best genome, its expressed graph, its fitness, and the run
+            history.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>The three edits</h2>
+
+<ol>
+  <li><b>Implement the trait</b> in a new module under <code>evolver/</code>.</li>
+  <li><b>Add a config variant</b> for it under <code>[evolution]</code>, plus the mirrored Python
+      class, and any strategy-specific constraint in the evolution/selection validator.</li>
+  <li><b>Add one arm to the strategy match</b>, building your type context and calling
+      <code>Evolver::run</code>. That function is generic over the genome, so the genome match is
+      <b>not</b> touched.</li>
+</ol>
+
+<h2>The rules you must not break</h2>
+
+<div class="warn">
+  <b>1. Score through <code>express_and_score</code>, always.</b> The engine never calls
+  <code>Fitness::evaluate</code> or <code>evaluate_batch</code> directly, anywhere. That one
+  function is both the direction conversion and the <code>NaN</code> gate. Calling the trait
+  yourself produces values that compare backwards under a maximizing objective <i>and</i> lets a
+  <code>NaN</code> through that will win every tournament it enters — and neither failure announces
+  itself. Detail on <a href="fitness.html#gate">Fitness &amp; orientation</a>.
+</div>
+
+<div class="warn">
+  <b>2. Everything inside your evolver is in engine orientation — lower is better.</b> Do not
+  convert on the way in or on the way out. The fitness arrays, the stats rows and the outcome are
+  all engine-oriented; conversion happens once at each edge of the system, and a strategy that
+  helpfully converts something in the middle reintroduces the double-flip the design removed.
+</div>
+
+<div class="warn">
+  <b>3. Use the shared variation helper.</b> The crossover roll and the two mutation rolls live in
+  one place so that strategies cannot drift apart on what a mutation means. They already did drift
+  once, on selection sampling, which is why this is stated as a rule rather than left to taste.
+</div>
+
+<div class="warn">
+  <b>4. Seed a pinned generator.</b> Seed <code>ChaCha8Rng</code> from <code>run</code>'s seed —
+  not the library's default generator, whose algorithm may change between releases, which would
+  defeat the entire purpose of a seed argument. The same seed must mean the same thing across
+  strategies.
+</div>
+
+<h2>Decisions your strategy has to make</h2>
+
+<h3>How much of the population turns over?</h3>
+
+<p>
+  This is the whole design space. Generational replaces everything but its elites each round;
+  steady-state replaces two individuals per event. Both extremes work; the interesting part is what
+  the choice implies:
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>If you replace…</th><th>Then</th></tr></thead>
+  <tbody>
+    <tr><td>the whole population</td>
+        <td>You must rescore everyone, which is expensive but makes every comparison fair under a
+            stochastic objective — and gives you population-wide parallelism.</td></tr>
+    <tr><td>a few individuals</td>
+        <td>You score incrementally, which is cheap — but the population then carries
+            <b>stale fitnesses</b> computed under different dice, and an individual that drew lucky
+            keeps its inflated score until something rescores it.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  That trade-off is inherent rather than a defect of either implementation, and it is documented as
+  an accepted limitation of steady-state. If your strategy scores incrementally, say so plainly in
+  its documentation.
+</p>
+
+<h3>Where does elitism come from?</h3>
+
+<p>
+  Generational is explicitly elitist via <code>elite_count</code>. Steady-state is
+  <i>structurally</i> elitist — the tournament's best is never among the replaced — and needs no
+  setting at all. Either is fine; what is not fine is being accidentally elitist and not knowing
+  which.
+</p>
+
+<h3>How often do you log?</h3>
+
+<p>
+  Once per meaningful unit of progress, and <b>log the starting population as iteration 0</b>. Both
+  existing strategies do, which is what lets their histories share an axis. Steady-state logs one
+  row per <code>population_size</code> events rather than per event, because a 100,000-row history
+  is not a log — pick an interval that makes your history readable at your largest realistic run.
+</p>
+
+<h3>What do you report as the best?</h3>
+
+<p>
+  <b>The best of the final population</b>, matching both existing strategies — not a running best
+  carried across the run. A running best under a stochastic objective is substantially a record of
+  which iteration drew the luckiest sample, and if a configuration genuinely can lose its best
+  individual, a report claiming otherwise describes a population that no longer exists. Compare by
+  a total order rather than an unwrapped partial comparison.
+</p>
+
+<h2>Constraints and validation</h2>
+
+<p>
+  If your strategy needs something the others do not, put it in the validator, not in the evolver's
+  setup. Steady-state's <code>tournament_size ≥ 4</code> is the worked example: it is strategy
+  specific, so it is checked only when that strategy is selected, and switching strategies can
+  therefore make a previously valid selection block invalid.
+</p>
+
+<div class="note">
+  <b>The engine's own assertions are backstops, not validation.</b> They exist for direct library
+  use — tests, embedding — where no config was involved. A config-driven run must never reach one,
+  because a bad config has to surface as a proper exception naming the field, not as a panic
+  crossing the Python boundary. Note there is already one asymmetry of this kind: the validator
+  enforces <code>population_size ≥ tournament_size</code> for both strategies while the
+  generational evolver deliberately omits that assertion, so the config path is stricter than the
+  engine.
+</div>
+
+<h2>Testing it</h2>
+
+<ul>
+  <li><b>Run it twice from one seed</b> and compare the outcome and the whole history.</li>
+  <li><b>Run it with a deliberately maximizing objective</b> and confirm the reported fitness moves
+      the right way — this is the test that catches a missed orientation, and nothing else
+      will.</li>
+  <li><b>Feed it an objective that returns <code>NaN</code></b> and confirm the run fails rather
+      than converging on the offender.</li>
+  <li><b>Check the history length</b> against your logging cadence, including the iteration-0 row,
+      and at a run shorter than one logging interval.</li>
+  <li><b>Drive it from a hand-built population</b>, which is possible precisely because evolvers
+      take a population rather than minting one.</li>
+  <li><b>Try both genomes.</b> Your evolver is generic; the test that proves it is running it
+      against both.</li>
+</ul>
+
+<h2>What you get for free</h2>
+
+<p>
+  Every representation, every objective, both front ends, orientation, <code>NaN</code> rejection,
+  the variation scheme, and the statistics. Your strategy is a loop over machinery that already
+  exists — which is why three edits is a realistic estimate rather than an optimistic one.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evolution strategies · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/evolvers.html">
+<main>
+
+<p class="page-kicker">How it works</p>
+<h1>Evolution strategies</h1>
+<p class="lede">
+  An evolver is the loop: it decides who breeds, who survives, and when to stop. GET has two, and
+  the choice between them changes more than it looks like it should — including whether your
+  fitness comparisons are fair.
+</p>
+
+<h2>What an evolver does</h2>
+
+<p>
+  Both strategies keep a population of genomes and repeat the same three moves: <b>score</b> them,
+  <b>select</b> parents from the better ones, and <b>replace</b> some individuals with their
+  children. They differ in how much of the population turns over at once.
+</p>
+
+<pre><code class="language-rust">pub trait Evolver&lt;G: Genome&gt; {
+    type TypeContext;
+    fn new(shared: SharedEvolutionContext&lt;G&gt;, type_context: Self::TypeContext, population: Vec&lt;G&gt;) -&gt; Self;
+    fn run&lt;F: Fitness&gt;(&amp;mut self, fitness: &amp;F, seed: u64) -&gt; EvolutionOutcome&lt;G&gt;;
+}</code></pre>
+
+<div class="note">
+  <b>The evolver does not build genomes, deliberately.</b> Constructors differ per representation
+  and some are fallible, so a generic evolver cannot mint a <code>G</code>. The
+  <a href="pipeline.html">dispatch layer</a> builds the starting population — where
+  genome-specific knowledge already lives — and hands it in. That keeps <code>run</code>'s
+  signature clean, surfaces bad dimensions at startup rather than mid-run, and makes evolvers
+  directly testable from a hand-built population.
+</div>
+
+<p>
+  <b>Every value has one source of truth.</b> The shared context carries only the genome context,
+  the rates, <code>max_mutations</code> and the selection strategy. Population size is
+  <code>population.len()</code>. Network size and edge cap belong to the genome context. Config
+  still carries all three, but only dispatch reads them — a second copy on the context could drift,
+  and nothing would report the disagreement.
+</p>
+
+<h2>Selection</h2>
+
+<p>
+  Tournament selection: draw a handful of individuals at random, and the best one wins the right to
+  be a parent. <code>tournament_size</code> is how many entrants — larger means stronger selection
+  pressure, because a weak individual has to get luckier to win.
+</p>
+
+<p>
+  Ordering is by fitness with ties broken by <b>lower index</b>, so a tournament's outcome depends
+  only on which indices were drawn and not on the order the random number generator produced them.
+</p>
+
+<p>There are two draw methods, and they sample <b>differently</b>, on purpose:</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Method</th><th>Sampling</th><th>Used by</th></tr></thead>
+  <tbody>
+    <tr><td><code>select(count)</code></td><td><b>With</b> replacement</td><td>generational</td></tr>
+    <tr><td><code>tournament_indices()</code></td><td><b>Without</b> replacement</td><td>steady-state</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  The steady-state one has no choice: it feeds tournament-local replacement, and "the worst two
+  members" is undefined over a multiset. The generational one keeps the textbook default. The
+  divergence means one <code>tournament_size</code> implies marginally different pressure per
+  strategy — about 4.90 expected distinct entrants at <code>k = 5</code> on a population of 100,
+  roughly 2%, which is noise against a stochastic run.
+</p>
+
+<p>
+  One consequence for generational: two picks can be the same individual, so crossover between a
+  genome and its own clone does nothing but mutate. Steady-state cannot self-mate by construction.
+</p>
+
+<h2 id="generational">Generational</h2>
+
+<p>
+  <b>The whole population is replaced each generation.</b> Score everyone, log a row, then build an
+  entirely new population from the old one's winners.
+</p>
+
+<figure>
+<svg viewBox="0 0 700 330" role="img" aria-label="The generational loop: score the whole population, log, copy elites forward, then fill the remaining slots with children of selected pairs.">
+  <defs>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g style="color:var(--border-firm)">
+    <rect x="30" y="24" width="220" height="46" rx="8" class="d-fill-acc"/>
+    <rect x="30" y="24" width="220" height="46" rx="8" class="d-stroke"/>
+    <text x="140" y="52" class="d-text" text-anchor="middle" font-weight="600">score the whole population</text>
+
+    <rect x="30" y="94" width="220" height="46" rx="8" class="d-fill-box"/>
+    <rect x="30" y="94" width="220" height="46" rx="8" class="d-stroke"/>
+    <text x="140" y="122" class="d-text" text-anchor="middle">log one stats row</text>
+
+    <rect x="30" y="164" width="220" height="46" rx="8" class="d-fill-good"/>
+    <rect x="30" y="164" width="220" height="46" rx="8" class="d-stroke"/>
+    <text x="140" y="185" class="d-text" text-anchor="middle" font-weight="600">copy elite_count best</text>
+    <text x="140" y="202" class="d-text-sm" text-anchor="middle">forward unchanged</text>
+
+    <rect x="30" y="234" width="220" height="60" rx="8" class="d-fill-box"/>
+    <rect x="30" y="234" width="220" height="60" rx="8" class="d-stroke"/>
+    <text x="140" y="257" class="d-text" text-anchor="middle" font-weight="600">fill the rest with children</text>
+    <text x="140" y="275" class="d-text-sm" text-anchor="middle">select pair · crossover · mutate</text>
+
+    <path d="M140 72 L140 90"   class="d-stroke" stroke-width="1.5" marker-end="url(#ag)"/>
+    <path d="M140 142 L140 160" class="d-stroke" stroke-width="1.5" marker-end="url(#ag)"/>
+    <path d="M140 212 L140 230" class="d-stroke" stroke-width="1.5" marker-end="url(#ag)"/>
+    <path d="M252 264 L285 264 L285 47 L254 47" class="d-stroke-acc" stroke-width="1.6"
+          marker-end="url(#ag)" style="color:var(--accent)"/>
+    <text x="300" y="160" class="d-text-acc">next generation</text>
+
+    <!-- population turnover picture -->
+    <text x="420" y="40" class="d-text-acc">population turnover</text>
+    <g>
+      <text x="420" y="70" class="d-text-sm">generation n</text>
+      <rect x="420" y="80" width="24" height="24" rx="4" class="d-fill-good"/><rect x="420" y="80" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="450" y="80" width="24" height="24" rx="4" class="d-fill-box"/><rect x="450" y="80" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="480" y="80" width="24" height="24" rx="4" class="d-fill-box"/><rect x="480" y="80" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="510" y="80" width="24" height="24" rx="4" class="d-fill-box"/><rect x="510" y="80" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="540" y="80" width="24" height="24" rx="4" class="d-fill-box"/><rect x="540" y="80" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="570" y="80" width="24" height="24" rx="4" class="d-fill-box"/><rect x="570" y="80" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="600" y="80" width="24" height="24" rx="4" class="d-fill-box"/><rect x="600" y="80" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="630" y="80" width="24" height="24" rx="4" class="d-fill-box"/><rect x="630" y="80" width="24" height="24" rx="4" class="d-stroke"/>
+
+      <path d="M535 112 L535 132" class="d-stroke" stroke-width="1.4" marker-end="url(#ag)"/>
+
+      <text x="420" y="152" class="d-text-sm">generation n+1</text>
+      <rect x="420" y="162" width="24" height="24" rx="4" class="d-fill-good"/><rect x="420" y="162" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="450" y="162" width="24" height="24" rx="4" class="d-fill-acc"/><rect x="450" y="162" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="480" y="162" width="24" height="24" rx="4" class="d-fill-acc"/><rect x="480" y="162" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="510" y="162" width="24" height="24" rx="4" class="d-fill-acc"/><rect x="510" y="162" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="540" y="162" width="24" height="24" rx="4" class="d-fill-acc"/><rect x="540" y="162" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="570" y="162" width="24" height="24" rx="4" class="d-fill-acc"/><rect x="570" y="162" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="600" y="162" width="24" height="24" rx="4" class="d-fill-acc"/><rect x="600" y="162" width="24" height="24" rx="4" class="d-stroke"/>
+      <rect x="630" y="162" width="24" height="24" rx="4" class="d-fill-acc"/><rect x="630" y="162" width="24" height="24" rx="4" class="d-stroke"/>
+
+      <text x="420" y="212" class="d-text-sm">green = elite carried forward</text>
+      <text x="420" y="232" class="d-text-sm">blue = a brand new child</text>
+      <text x="420" y="252" class="d-text-sm">Everything not elite is replaced,</text>
+      <text x="420" y="270" class="d-text-sm">every single generation.</text>
+    </g>
+  </g>
+</svg>
+<figcaption>One generation of a population of eight with <code>elite_count = 1</code>.</figcaption>
+</figure>
+
+<h3>The rules that are easy to get wrong</h3>
+
+<ul>
+  <li><b>Elites are rescored every generation</b>, like everyone else. They are copied forward
+      unchanged, not exempted from scoring. Under a stochastic objective an elite's recorded fitness
+      therefore moves between generations while its genome does not — and that is correct. The new
+      number is a fresh sample of the same individual, and freezing the old one would let a lucky
+      draw persist forever.</li>
+  <li><b>Odd slot counts lose one child.</b> Crossover yields two children, but
+      <code>population_size - elite_count</code> may be odd. The last pair contributes one child and
+      the other is discarded. Only the final pair is ever affected.</li>
+  <li><b>Generation 0 is the initial population.</b> It is logged before any breeding happens, so
+      both strategies' histories share an axis.</li>
+</ul>
+
+<h2 id="steady-state">Steady-state</h2>
+
+<p>
+  <b>One mate-and-replace event at a time.</b> Most of the population simply persists. Each event
+  draws a single tournament of distinct individuals; its <b>two best breed</b>, and the two children
+  <b>overwrite that same tournament's two worst</b>.
+</p>
+
+<figure>
+<svg viewBox="0 0 700 250" role="img" aria-label="A steady-state mating event: draw a tournament of six distinct individuals, the two best breed, and their children overwrite the two worst of that same tournament.">
+  <defs>
+    <marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g style="color:var(--border-firm)">
+    <text x="20" y="28" class="d-text-acc">the population — most of it is untouched</text>
+    <g>
+      <rect x="20" y="42" width="660" height="34" rx="6" class="d-fill-bg"/>
+      <rect x="20" y="42" width="660" height="34" rx="6" class="d-stroke" stroke-dasharray="4 3"/>
+      <g>
+        <rect x="34"  y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="34"  y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="64"  y="49" width="20" height="20" rx="3" class="d-fill-good"/><rect x="64" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="94"  y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="94"  y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="124" y="49" width="20" height="20" rx="3" class="d-fill-warn"/><rect x="124" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="154" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="154" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="184" y="49" width="20" height="20" rx="3" class="d-fill-good"/><rect x="184" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="214" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="214" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="244" y="49" width="20" height="20" rx="3" class="d-fill-warn"/><rect x="244" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="274" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="274" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="304" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="304" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="334" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="334" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="364" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="364" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="394" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="394" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="424" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="424" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="454" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="454" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="484" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="484" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="514" y="49" width="20" height="20" rx="3" class="d-fill-good"/><rect x="514" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="544" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="544" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="574" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="574" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="604" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="604" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="634" y="49" width="20" height="20" rx="3" class="d-fill-warn"/><rect x="634" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+      </g>
+    </g>
+    <text x="20" y="98" class="d-text-sm">green = drawn and best · amber = drawn and worst · grey = not drawn this event</text>
+
+    <rect x="90" y="126" width="200" height="46" rx="8" class="d-fill-good"/>
+    <rect x="90" y="126" width="200" height="46" rx="8" class="d-stroke"/>
+    <text x="190" y="147" class="d-text" text-anchor="middle" font-weight="600">the two best breed</text>
+    <text x="190" y="164" class="d-text-sm" text-anchor="middle">crossover, then mutate</text>
+
+    <rect x="400" y="126" width="230" height="46" rx="8" class="d-fill-warn"/>
+    <rect x="400" y="126" width="230" height="46" rx="8" class="d-stroke"/>
+    <text x="515" y="147" class="d-text" text-anchor="middle" font-weight="600">children overwrite the two worst</text>
+    <text x="515" y="164" class="d-text-sm" text-anchor="middle">of that same tournament</text>
+
+    <path d="M294 149 L396 149" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#as)" style="color:var(--accent)"/>
+
+    <text x="20" y="212" class="d-text-sm">Replacement is tournament-local, not global — which is what makes the strategy self-elitist</text>
+    <text x="20" y="232" class="d-text-sm">and diversity-preserving, and why the tournament needs at least four distinct members.</text>
+  </g>
+</svg>
+<figcaption>One mating event. Everything outside the tournament is untouched.</figcaption>
+</figure>
+
+<h3>What tournament-local replacement buys</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Property</th><th>Because</th></tr></thead>
+  <tbody>
+    <tr><td><b>Self-elitist</b></td>
+        <td>The tournament's best is never among the replaced, so the population's best is never
+            discarded — and no explicit elitism is needed.</td></tr>
+    <tr><td><b>Diversity-preserving</b></td>
+        <td>A globally poor individual survives until it happens to be drawn.</td></tr>
+    <tr><td><b>Cheap</b></td>
+        <td><code>O(k log k)</code> per event rather than an <code>O(population)</code> scan for
+            the global worst — which matters at 100,000 events.</td></tr>
+    <tr><td><b>Unconditional</b></td>
+        <td>A child takes its slot even if it scores worse than what it displaces. The
+            best-never-discarded guarantee comes from the tournament structure, not from a
+            comparison.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn">
+  <b><code>tournament_size ≥ 4</code> is required here, and only here.</b> Two parents and the two
+  individuals they replace must be distinct. Three still preserves the tournament's best but makes
+  the second parent one of the replaced; two breaks self-elitism outright, since both parents are
+  replaced by their own children. Generational has no such floor.
+</div>
+
+<h3>Logging cadence</h3>
+
+<p>
+  Logging every event would give a 100,000-row history, so steady-state logs the starting
+  population as iteration 0 and then one row per <code>population_size</code> events — a
+  "generation equivalent". So <code>history.len() == num_mating_events / population_size + 1</code>.
+  The iteration-0 row is what makes a log self-contained; without it, a run shorter than one
+  interval produced nothing at all.
+</p>
+
+<h2>Choosing between them</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th></th><th>Generational</th><th>Steady-state</th></tr></thead>
+  <tbody>
+    <tr><td>Turnover</td><td>Everyone but the elites, every generation</td>
+        <td>Two individuals per event</td></tr>
+    <tr><td>Scoring per step</td><td>The whole population</td><td>The two new children only</td></tr>
+    <tr><td>Elitism</td><td>Explicit, via <code>elite_count</code></td>
+        <td>Implicit, from the tournament structure</td></tr>
+    <tr><td>Population-level parallelism</td><td>As wide as the population</td>
+        <td><b>Two-way, regardless of cores</b></td></tr>
+    <tr><td>With a Python objective</td><td>One crossing per generation</td>
+        <td>One crossing per <i>event</i> — a poor fit</td></tr>
+    <tr><td>Fitness comparisons</td><td>Fair — everyone rescored under one seed</td>
+        <td><b>Carries stale fitnesses</b> — see below</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn">
+  <b>Known limitation, accepted: steady-state carries stale fitnesses.</b> It scores only the two
+  new children per event, so the epidemic dice advance per <i>event</i>. The fitness values sitting
+  in the population were computed under different dice than the children being compared against
+  them — and an individual that drew lucky dice keeps its inflated score for the rest of the run,
+  because nothing rescores it. Generational is immune: it rescores everyone each generation under
+  one seed.
+  <br><br>
+  This is inherent to combining incremental scoring with a stochastic objective; the alternatives
+  each trade it for a different distortion rather than removing it.
+  <b>Prefer generational when the objective is stochastic and the comparison needs to be fair</b> —
+  which, with any of the three SIR objectives, it is.
+</div>
+
+<h2>What a run reports</h2>
+
+<p>
+  <b>The reported best is the best of the final population, for both strategies</b> — not a running
+  best carried across generations. Two reasons this is the honest number rather than a limitation:
+</p>
+
+<ul>
+  <li>Fitness is stochastic between batches, so a running best would be substantially a record of
+      which generation drew the luckiest sample — the same argument that rejects freezing an
+      elite's old score.</li>
+  <li>At <code>elite_count = 0</code>, which is permitted, a non-elitist generational GA genuinely
+      can lose its best individual. The run really did end without it, and a report claiming
+      otherwise would describe a population that no longer exists. <b>At
+      <code>elite_count = 0</code> the divergence is a property of your configuration, not of the
+      report.</b></li>
+</ul>
+
+<p>
+  Both strategies return the identical graph for a given winner, since expression is deterministic.
+  Generational takes it out of the graphs its last scoring pass already built; steady-state
+  re-expresses it, having no such vector to hand. The difference is cost, not behaviour.
+</p>
+
+<p>
+  Reproducibility is the same for both: each seeds <code>ChaCha8Rng</code> from
+  <code>run</code>'s seed — not the standard generator, whose algorithm may change between releases
+  of its library, which would defeat the entire purpose of a seed argument. See
+  <a href="reproducibility.html">Seeds &amp; reproducibility</a>, and
+  <a href="output.html">Logs &amp; results</a> for the columns.
+</p>
+
+<h2>Adding a third strategy</h2>
+
+<p>
+  One config variant, one arm in the strategy match, and an implementation of <code>Evolver</code>.
+  The one rule that is not optional: <b>score through
+  <a href="fitness.html#gate"><code>express_and_score</code></a></b>, or your strategy silently
+  bypasses orientation and the <code>NaN</code> gate. Recipe on
+  <a href="new-evolver.html">Add a strategy</a>.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

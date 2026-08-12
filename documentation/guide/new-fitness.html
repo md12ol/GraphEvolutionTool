@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add an objective · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/new-fitness.html">
+<main>
+
+<p class="page-kicker">Extending GET</p>
+<h1>Add an objective</h1>
+<p class="lede">
+  Scoring graphs by something other than an epidemic. Three routes, in increasing order of effort:
+  a Python callable, a native objective in the crate, or your own Rust type outside it.
+</p>
+
+<h2>Route 1 — a Python callable</h2>
+
+<p>
+  Set <code>[fitness] type = "python"</code> in the config and register your function. No Rust, no
+  compilation.
+</p>
+
+<pre><code class="language-python">import get
+import numpy as np
+
+config = get.Config(
+    evolution       = get.EvolutionConfig.Generational(num_generations=200),
+    population_size = 100,
+    network_size    = 60,
+    crossover_rate  = 0.9,
+    mutation_rate   = 0.2,
+    selection       = get.SelectionConfig.Tournament(tournament_size=5),
+    genome          = get.GenomeConfig.EdgeEdit(gene_length=128),
+    fitness         = get.FitnessConfig.Python(),      # note the empty parentheses
+)
+
+def total_weight(batch):
+    """Score a whole population at once. One call, one list back."""
+    return [float(sum(w for (_u, _v, w) in edges)) for (_n, edges) in batch]
+
+evolver = get.GraphEvolver.from_config(config)
+evolver.set_fitness_function(total_weight, "maximize")
+edges = evolver.run(20260812)</code></pre>
+
+<h3>The contract</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th></th><th></th></tr></thead>
+  <tbody>
+    <tr><td><b>Input</b></td>
+        <td>The whole population, as a sequence of <code>(num_nodes, edge_list)</code> pairs. Each
+            edge list is <code>(u, v, multiplicity)</code> triples with <code>u &lt; v</code>;
+            pairs with no edge are absent.</td></tr>
+    <tr><td><b>Output</b></td>
+        <td>One number per input, <b>in the same order</b>. Position <code>i</code> of your result
+            is the score of individual <code>i</code>.</td></tr>
+    <tr><td><b>Direction</b></td>
+        <td>Declared at registration — <code>"minimize"</code> or <code>"maximize"</code>,
+            case-insensitive. Nothing can infer it from your function, and this is the only place
+            it can be said.</td></tr>
+    <tr><td><b>Values</b></td>
+        <td>Finite or <code>±inf</code>. <b><code>NaN</code> is rejected</b> and will fail the
+            run.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn">
+  <b>It must be batched, and this is not a style preference.</b> A per-individual callback
+  serializes every call behind the interpreter lock — losing all the parallelism GET's expression
+  stage just bought you, <i>and</i> paying lock contention on top, <i>and</i> running Python's
+  arithmetic instead of Rust's. The measured gap is orders of magnitude. Batched, only the speed of
+  your function body remains.
+</div>
+
+<div class="tip">
+  The interface is modelled on <b>pymoo's <code>Problem._evaluate</code></b> — a batch of
+  solutions in, an array of objective values out, vectorized in numpy. That idiom is already
+  familiar to the audience, and it is the shape the performance argument demands, so the ergonomic
+  choice and the fast choice agree.
+</div>
+
+<h3>Vectorising it properly</h3>
+
+<pre><code class="language-python">import numpy as np
+
+def clustering_penalty(batch):
+    """Prefer graphs whose degree distribution is even. Vectorized per graph."""
+    out = np.empty(len(batch))
+    for i, (n, edges) in enumerate(batch):
+        deg = np.zeros(n)
+        for (u, v, w) in edges:
+            deg[u] += w
+            deg[v] += w
+        out[i] = float(deg.std())        # lower is more even
+    return out                           # a numpy array is fine
+
+evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
+
+<h3>Things that will bite you</h3>
+
+<ul>
+  <li><b>Registration is refused if the config did not select <code>python</code>.</b> Silently
+      accepting a callable that will never be consulted is indistinguishable from success, so it
+      errors instead.</li>
+  <li><b>Use generational, not steady-state.</b> Steady-state scores two children per mating event,
+      so a Python objective pays one crossing <i>per event</i> instead of per generation. See
+      <a href="evolvers.html">Evolution strategies</a>.</li>
+  <li><b>Replicates run sequentially under a Python objective</b>, chosen by the engine rather than
+      by you — <code>n</code> concurrent runs would be <code>n</code> threads contending for one
+      lock.</li>
+  <li><b>Your own randomness is not seeded by GET.</b> If your objective is stochastic, seed it
+      yourself from something deterministic or you lose reproducibility.</li>
+  <li><b>Return the right length.</b> A mismatched list is an error, not a silent truncation — but
+      returning scores in the wrong <i>order</i> is neither, and will quietly evolve nonsense.</li>
+</ul>
+
+<h2>Route 2 — a native objective inside the crate</h2>
+
+<p>Six small edits, none of which touch a strategy or a genome:</p>
+
+<ol>
+  <li>Add a variant to the fitness config enum, with whatever parameters it needs.</li>
+  <li>Add its name to the type-name function, which is what error messages print.</li>
+  <li>Add an arm to fitness validation if it has parameters worth constraining. Every constraint
+      lives there, not scattered through dispatch.</li>
+  <li>Implement the <code>Fitness</code> trait for your type: <code>evaluate</code> in your own
+      units, and <code>direction</code> if it is not minimize.</li>
+  <li>Add one arm to the objective-erasing match, which turns the config variant into a boxed
+      objective.</li>
+  <li>Mirror the variant on the Python config side, and add its attribute path to the error-mapping
+      table.</li>
+</ol>
+
+<p>
+  Then document it in <code>config.example.toml</code> — the shipped example is parsed and validated
+  by the test suite, so a broken example fails the build rather than a user's afternoon.
+</p>
+
+<div class="warn">
+  <b>Two traps in the trait itself.</b> Do not call <code>self.evaluate_batch</code> from inside
+  <code>evaluate</code> — the default <code>evaluate_batch</code> calls <code>evaluate</code>, so
+  that is infinite recursion and a stack overflow at runtime rather than a compile error. And if
+  you override <code>evaluate_batch</code>, remember it must produce results in input order.
+</div>
+
+<h3>Sharing one simulation between objectives</h3>
+
+<p>
+  If your objective needs an epidemic, read the existing pattern first: the expensive part is the
+  simulation, so one run returns <code>{ length, spread, profile }</code> and each of the three SIR
+  objectives is a thin reading of it. Adding a fourth reading of the same simulation is much
+  cheaper than adding a fourth simulator.
+</p>
+
+<h2 id="rust-route">Route 3 — your own crate, outside GET</h2>
+
+<p>
+  If your objective is hot enough to matter and you do not want to fork GET, depend on it as a
+  library. This route <b>never touches dispatch or the config schema</b>:
+</p>
+
+<pre><code class="language-rust">use get::fitness::{Direction, Fitness};
+use get::graph::Graph;
+
+struct EdgeBudget { target: f64 }
+
+impl Fitness for EdgeBudget {
+    fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64 {
+        let mut total = 0.0;
+        for (_u, _v, w) in graph.get_edge_list() {
+            total += w as f64;
+        }
+        (total - self.target).abs()
+    }
+
+    fn direction(&amp;self) -&gt; Direction { Direction::Minimize }
+}</code></pre>
+
+<p>
+  Then build a population, a genome context and an evolver yourself and call <code>run</code> with
+  your objective. The evolver's <code>run</code> is generic over the objective, so a caller holding
+  a concrete type instantiates the evolver with it directly — no arm, no config variant, no
+  boxing.
+</p>
+
+<div class="note">
+  <b>Numbers you read from the outcome are in engine orientation</b> — lower is better, whatever
+  your direction said. That is the stated cost of converting only at the two edges of the system,
+  and the direction carried on the outcome is what you convert with. See
+  <a href="fitness.html">Fitness &amp; orientation</a>.
+</div>
+
+<p>
+  Assembling contexts and populations by hand is genuinely awkward today; that is a known rough
+  edge of this route rather than a hint that you are doing it wrong.
+</p>
+
+<h2>Checklist, whichever route</h2>
+
+<ul>
+  <li>Return values in <b>your own units and sign</b>. Nothing is normalized for you, and nothing
+      should be pre-negated.</li>
+  <li>Declare <code>direction</code> honestly. A negated value <i>and</i> a
+      <code>Maximize</code> declaration cancel into a run that optimizes backwards, and looks
+      exactly like one that simply is not converging.</li>
+  <li>Never return <code>NaN</code>. Use <code>+inf</code> under minimize to mean "invalid, never
+      select this".</li>
+  <li>Keep it deterministic given its inputs, or seed your own randomness.</li>
+  <li>Remember it will be called from many threads at once — it must be safe to share.</li>
+</ul>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

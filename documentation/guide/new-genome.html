@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add a genome · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/new-genome.html">
+<main>
+
+<p class="page-kicker">Extending GET</p>
+<h1>Add a genome</h1>
+<p class="lede">
+  A third representation — a different way of describing a graph compactly. Four edits, and the
+  evolvers are untouched, because the strategy match is generic over the genome type.
+</p>
+
+<h2>What you have to implement</h2>
+
+<pre><code class="language-rust">pub trait Genome: Clone + Send + Sync {
+    type Context: Send + Sync;
+    fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph;
+    fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R);
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, rng: &amp;mut R);
+    fn print(&amp;self) -&gt; String;
+}</code></pre>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Method</th><th>Must</th></tr></thead>
+  <tbody>
+    <tr><td><code>express</code></td>
+        <td>Build a <a href="graph.html">graph</a> from the genome and the run context.
+            <b>Deterministic</b> — the same genome and context must always give the same graph, or
+            reproducibility breaks and the two evolvers stop agreeing about the winner.</td></tr>
+    <tr><td><code>crossover</code></td>
+        <td>Recombine <b>in place</b>, leaving one child in each parent. Both are kept. Tolerate
+            unequal sizes defensively even though nothing produces them.</td></tr>
+    <tr><td><code>mutate</code></td>
+        <td>Apply <b>exactly one</b> mutation. Not a random number of them — the engine decides how
+            many times to call you.</td></tr>
+    <tr><td><code>print</code></td>
+        <td>Render the genome as a string. This is the type-erasure hook: it is how a non-generic
+            entry point records which individual won without knowing the representation.</td></tr>
+    <tr><td><code>Context</code></td>
+        <td>Carry run-level expression configuration, and be the authority on graph size and edge
+            cap. It is shared by reference across every worker, so it must be safe to share and
+            must not be mutated during expression.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn">
+  <b>The one-mutation rule is a contract, not a convention.</b> A genome that rolls its own count
+  internally makes <code>max_mutations</code> mean nothing for that representation — and nothing
+  reports the disagreement, so a user comparing two representations at the same setting silently
+  compares two different things. See <a href="variation.html">Crossover &amp; mutation</a>.
+</div>
+
+<h2>The four edits</h2>
+
+<ol>
+  <li><b>Implement the trait</b> in a new module under <code>genomes/</code>, alongside a
+      constructor that mints a random individual and any dimension validation it needs.</li>
+  <li><b>Add a config variant</b> for it, with its dimensions as fields, plus the mirrored Python
+      class and its serialization.</li>
+  <li><b>Add a startup function</b> beside the two that exist — the thing that validates the
+      dimensions, mints <code>population_size</code> individuals, and builds the context. Dispatch
+      builds the population precisely because this knowledge lives here.</li>
+  <li><b>Add one arm to the genome match</b> in dispatch, calling your startup function and handing
+      the population to the generic strategy function. The strategy match is <b>not</b>
+      touched.</li>
+</ol>
+
+<p>Then add the keys to <code>config.example.toml</code>, which the test suite parses and validates
+   — so a broken example fails the build.</p>
+
+<h2>Design questions worth answering first</h2>
+
+<h3>Where does the size of the graph come from?</h3>
+
+<p>
+  From your context, and from nowhere else. Config carries <code>network_size</code> and
+  <code>max_edge_multiplicity</code>, but only the dispatch layer reads them — a second copy on the
+  context could drift, and nothing would report the disagreement. Whatever your context exposes is
+  the authority during expression.
+</p>
+
+<h3>Does anything derive from the edge cap?</h3>
+
+<p>
+  It might. The <a href="genomes.html#alphabet">SDA alphabet</a> is derived as
+  <code>max_edge_multiplicity + 1</code> so that every character it can emit is a legal edge weight
+  and nothing is ever clamped. If your representation produces weights in any indirect way, work
+  out what the equivalent invariant is before writing the constructor, because the failure is
+  silent in both directions — too wide and the graph biases toward the cap, too narrow and the
+  upper weights are unreachable.
+</p>
+
+<div class="warn">
+  <b>Learn from the existing wart here.</b> SDA's derived-alphabet invariant is upheld by
+  <i>convention</i> rather than by the type system: the dispatch layer always derives it correctly,
+  but the underlying constructor still accepts an arbitrary alphabet size, and expression does not
+  check the genome's alphabet against the context's cap. A hand-assembled population via the
+  <a href="new-fitness.html#rust-route">library route</a> can therefore silently reintroduce the
+  exact bias the design exists to prevent. If your representation has a similar coupling, encode it
+  in the constructor rather than in a comment.
+</div>
+
+<h3>What is run configuration, and what is genome data?</h3>
+
+<p>
+  If mutation and crossover never touch it, it belongs on the context, not in the genome. SDA's
+  <code>init_state</code> is the worked example: it is expression configuration, so putting it in
+  the genome would waste mutation budget on something that should not vary within a run.
+</p>
+
+<h3>Can expression fail?</h3>
+
+<p>
+  It cannot — <code>express</code> returns a graph, not a result. That is deliberate, and the
+  graph's silent handling of impossible edits is what makes it workable: an out-of-range vertex, a
+  self-loop, or an edit whose preconditions fail is simply a no-op. Push everything that <i>can</i>
+  fail into the constructor and the dimension checks, where it surfaces at startup rather than
+  mid-run.
+</p>
+
+<h3>Degenerate sizes</h3>
+
+<p>
+  Decide what your representation does at zero and one node before you find out by accident. Both
+  existing genomes return an empty graph without doing any work, and SDA's out-of-range
+  <code>init_state</code> bug specifically hides at two nodes, because the expression loop never
+  runs there.
+</p>
+
+<h2>Testing it</h2>
+
+<ul>
+  <li><b>Express twice, compare.</b> Determinism is the property everything else rests on.</li>
+  <li><b>Mutate <code>n</code> times from a fixed seed and count what changed</b> — the
+      one-mutation contract is exactly the kind of thing that is right on day one and wrong after
+      the first refactor.</li>
+  <li><b>Crossover two known parents and check both children.</b> Losing the second child is a
+      classic silent halving of your crossover's effect.</li>
+  <li><b>Run it through both strategies end to end</b> at a tiny population and a handful of
+      generations. Dispatch is where a mismatched context shows up.</li>
+  <li><b>Hand-build a population and drive an evolver directly</b>, which is possible precisely
+      because the evolver takes a population rather than minting one.</li>
+</ul>
+
+<h2>What you get for free</h2>
+
+<p>
+  Everything except expression. Selection, both evolution strategies, the whole
+  <a href="variation.html">variation scheme</a>, orientation and <code>NaN</code> rejection,
+  logging, all three SIR objectives and any Python objective work with your representation the
+  moment dispatch can build it — because none of them know what a genome <i>is</i>. That is what the
+  static-generic design buys, and it is the reason a new genome costs four edits rather than
+  four files.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Troubleshooting · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/troubleshooting.html">
+<main>
+
+<p class="page-kicker">Using GET</p>
+<h1>Troubleshooting</h1>
+<p class="lede">
+  Symptom first, cause second. Most of these are documented behaviour rather than bugs — but they
+  all look like bugs the first time.
+</p>
+
+<h2>Config errors</h2>
+
+<h3>"missing field <code>population_size</code>" but I definitely wrote it</h3>
+
+<p>
+  You wrote it <b>after</b> a <code>[section]</code> header. In TOML, once a table opens every
+  following key belongs to that table — so your <code>population_size</code> became
+  <code>evolution.population_size</code>, which GET does not know, and the real top-level key is
+  genuinely missing. <b>All top-level keys must appear before the first section header.</b>
+</p>
+
+<h3>The error names a field I did not write</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>You set</th><th>The error says</th><th>Because</th></tr></thead>
+  <tbody>
+    <tr><td><code>num_states = 0</code></td><td><code>init_state</code></td>
+        <td>The <code>init_state &lt; num_states</code> check fires first, and
+            <code>0 &lt; 0</code> is false.</td></tr>
+    <tr><td><code>population_size = 0</code></td>
+        <td><code>elite_count</code> or <code>tournament_size</code></td>
+        <td>Nothing checks <code>population_size</code> by name; it is caught indirectly by
+            whichever constraint it breaks first.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>My change to a config value did nothing</h3>
+
+<p>
+  <b>Most unknown keys are silently ignored.</b> A misspelled key does not error — it simply is not
+  read, and the default applies. Two exceptions: <code>[genome.operation_weights]</code> rejects
+  unknown keys, and two migration hazards are checked by name (<code>[fitness] seed</code>, and
+  <code>target_profile</code> under the wrong objective).
+</p>
+
+<p>
+  Check by printing <code>config.to_toml()</code> and reading what GET actually received. That is
+  the document it parsed.
+</p>
+
+<h3>"tournament_size must be at least 4" — but it worked yesterday</h3>
+
+<p>
+  You switched to <code>steady_state</code>. That floor is <b>strategy-specific</b>: steady-state
+  needs four distinct individuals per event (two parents and the two they replace), and
+  generational has no such requirement. Switching strategies can invalidate a previously fine
+  selection block.
+</p>
+
+<h3>My config validated and then <code>run()</code> raised</h3>
+
+<p>
+  Two SDA dimensions — <code>num_states</code> outside <code>1..=65536</code>, and
+  <code>max_resp_len = 0</code> — are checked when the population is minted rather than during
+  validation. A config that loads cleanly can still fail on the first run.
+</p>
+
+<h2>The run behaves oddly</h2>
+
+<h3>Nothing happens for the first many generations (edge-edit)</h3>
+
+<p>
+  Expected. A run currently starts from an <b>empty</b> base graph, and five of the nine edit
+  operations — <code>Swap</code>, <code>Hop</code> and the three <code>Local*</code> — need
+  existing structure to walk. Until <code>Add</code> or <code>Toggle</code> have built something,
+  more than half the operation mix does nothing. It is self-correcting.
+</p>
+
+<p>
+  To speed it up, weight <code>add</code> and <code>toggle</code> higher for the early phase, or
+  set <code>null = 0.0</code> so no gene is a deliberate no-op.
+</p>
+
+<h3>The fitness barely moves, or moves erratically</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Suspect</th><th>Check</th></tr></thead>
+  <tbody>
+    <tr><td><code>num_epidemics</code> too low</td>
+        <td>A single SIR draw is very noisy, and selection will chase that noise rather than
+            structure. This is the most common cause by a distance.</td></tr>
+    <tr><td>Selection pressure too low</td><td>Raise <code>tournament_size</code>.</td></tr>
+    <tr><td>Too little variation</td>
+        <td>Raise <code>mutation_rate</code>, or <code>max_mutations</code> — they mean
+            <a href="variation.html">different things</a>.</td></tr>
+    <tr><td>Too <i>much</i> variation</td>
+        <td>An SDA mutation can change every character after the one it touched, so a high
+            <code>max_mutations</code> is far more disruptive there than for edge-edit.</td></tr>
+    <tr><td><code>infection_rate</code> at an extreme</td>
+        <td>At a rate so low that nothing spreads, or so high that everything does, every graph
+            scores the same and there is nothing for selection to work with.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>The population converged, but the answer is poor</h3>
+
+<p>
+  Under <a href="evolvers.html#steady-state">steady-state</a> with a stochastic objective, suspect
+  <b>stale fitnesses</b>. Only the two new children are scored per event, so an individual that
+  drew lucky dice keeps its inflated score for the rest of the run — nothing rescores it — and it
+  wins tournaments it should not. <b>Prefer generational when the objective is stochastic</b>,
+  which all three SIR objectives are.
+</p>
+
+<h3>The run looks converged almost immediately</h3>
+
+<p>
+  If your own objective can return <code>NaN</code>, that is the first thing to check. Under a
+  maximizing objective a <code>NaN</code> sorts as the <i>best</i> individual in every tournament,
+  and fills the population with whatever produced it. GET rejects <code>NaN</code> at the gate, so
+  you will get a failure rather than this — but only for values that pass through the gate. See
+  <a href="fitness.html">Fitness &amp; orientation</a>.
+</p>
+
+<h3>Every edge weight is 1 when I set the cap to 5</h3>
+
+<p>
+  Something narrowed the cap. <code>set_edge</code> <b>clamps</b> rather than rejecting, so feeding
+  a cap-5 result into a cap-1 run silently collapses every weight — this is the main trap when
+  <a href="python-api.html#base-graph">stacking two runs</a>. Check that both configs carry the
+  same <code>max_edge_multiplicity</code>.
+</p>
+
+<h3>My <code>epi_prof_match</code> scores look wrong</h3>
+
+<ul>
+  <li><b>A profile copied from a legacy C++ run is wrong twice over.</b> The old loader prepended
+      patient zero, so the stored file omitted its own first element, and it rescaled every value
+      by <code>verts / 128</code>. GET does neither and compares your profile verbatim.</li>
+  <li><b>Include the trailing zero.</b> A GET profile always ends in one.</li>
+  <li><b>Overshooting is free.</b> The RMSE iterates over the target's length only, so a run that
+      outlasts the target is not penalised for the surplus at all, while one that burns out early
+      is penalised by the whole remaining target. The objective rewards matching <i>or
+      exceeding</i> the tail.</li>
+</ul>
+
+<h2>Values that surprise you</h2>
+
+<h3><code>best_fitness()</code> returns <code>inf</code></h3>
+
+<p>
+  You called it before any run. Under a maximizing objective that reads as a fantastic score. Run
+  first.
+</p>
+
+<h3>A probability outside [0, 1] runs happily</h3>
+
+<p>
+  <code>crossover_rate</code>, <code>mutation_rate</code> and <code>infection_rate</code> are not
+  range-checked. This is a gap in the design as well as the code. Check your own numbers.
+</p>
+
+<h3>The log's <code>ci_95</code> is not the band on my plot</h3>
+
+<p>
+  Correct — they are different statistics. <code>ci_95</code> is <b>within-population, per
+  iteration</b>: how tightly this generation is clustered around its own mean. The band on a
+  published convergence plot is usually <b>across replicates</b>, computed when replicate logs are
+  aggregated. See <a href="output.html">Logs &amp; results</a>.
+</p>
+
+<h3><code>std_dev</code> and <code>ci_95</code> use different denominators</h3>
+
+<p>
+  Deliberately. The population deviation divides by <code>n</code> because the population is the
+  complete thing, not a sample; the confidence interval divides by <code>n-1</code> because it is
+  inherently a sampling statistic.
+</p>
+
+<h2>Performance</h2>
+
+<h3>The run is far slower than expected</h3>
+
+<ul>
+  <li><code>num_epidemics</code> dominates run time. Everything else in an evaluation is cheap.</li>
+  <li>A <b>per-individual</b> Python objective is the classic disaster — it serializes every call
+      behind the interpreter lock and throws away all the parallelism. It must be
+      <a href="new-fitness.html">batched</a>.</li>
+  <li>A Python objective with steady-state pays one crossing <i>per mating event</i>. Use
+      generational.</li>
+  <li>A high <code>min_epidemic_length</code> on a graph that fizzles often means most evaluations
+      pay for several simulations instead of one.</li>
+</ul>
+
+<h3>It ran out of memory after I gave it more cores</h3>
+
+<p>
+  Expected, and it is the least intuitive thing in GET. Each concurrently-executing replicate holds
+  its own expressed population, and a graph is a dense <code>network_size²</code> matrix regardless
+  of how sparse it is. Doubling the cores doubles peak memory. The arithmetic and a worked table
+  are on <a href="performance.html">Performance &amp; memory</a>.
+</p>
+
+<h3>A single steady-state run leaves my machine idle</h3>
+
+<p>
+  Also expected. Steady-state scores two children per event, so its population-level parallelism is
+  <b>two-way regardless of the core count</b>. Replicates are the only way to fill a big machine
+  with it.
+</p>
+
+<h2>Build problems</h2>
+
+<h3><code>import get</code> fails after building</h3>
+
+<p>
+  Check you built into the environment you are importing from — <code>maturin develop</code>
+  installs into the <i>active</i> virtualenv. <code>pip install .</code> from the repository root is
+  the alternative.
+</p>
+
+<h3><code>cargo test</code> fails to link with undefined <code>Py*</code> symbols</h3>
+
+<p>
+  The Python extension-module feature has been enabled in the crate's own manifest. It belongs in
+  the build configuration instead, and enabling it in the crate makes the <i>whole</i> test suite
+  fail to link regardless of how few tests touch Python. Use <code>cargo test</code> and
+  <code>maturin develop</code> as separate commands.
+</p>
+
+<h2>Still stuck</h2>
+
+<p>
+  Print <code>config.to_toml()</code> and read what GET actually parsed — a surprising number of
+  problems are visible there in one line. Then check <a href="../status.html">Implementation
+  status</a>, in case the thing you are reaching for is one of the pieces documented as designed
+  but not yet built.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

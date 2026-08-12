@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The pipeline · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/pipeline.html">
+<main>
+
+<p class="page-kicker">How it works</p>
+<h1>The pipeline</h1>
+<p class="lede">
+  One loop, four stages, and a small number of rules about who is allowed to do what. This page is
+  the map; every stage has its own page with the detail.
+</p>
+
+<h2>The loop</h2>
+
+<p>
+  GET is an evolutionary algorithm. It keeps a <b>population</b> of candidate solutions, scores
+  them, lets the better ones produce children, and repeats. The only thing that makes it a
+  <i>graph</i> evolution tool is what a candidate solution is and how it gets scored.
+</p>
+
+<figure>
+<svg viewBox="0 0 760 430" role="img" aria-label="Detailed pipeline: build population, express genomes to graphs, score with fitness, orient, select, breed, mutate, repeat.">
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g style="color:var(--border-firm)">
+
+  <!-- setup column -->
+  <rect x="20" y="20" width="200" height="56" rx="9" class="d-fill-box"/>
+  <rect x="20" y="20" width="200" height="56" rx="9" class="d-stroke"/>
+  <text x="120" y="42" class="d-text" text-anchor="middle" font-weight="600">Config</text>
+  <text x="120" y="61" class="d-text-sm" text-anchor="middle">TOML, or built in Python</text>
+
+  <rect x="20" y="106" width="200" height="56" rx="9" class="d-fill-box"/>
+  <rect x="20" y="106" width="200" height="56" rx="9" class="d-stroke"/>
+  <text x="120" y="128" class="d-text" text-anchor="middle" font-weight="600">validate</text>
+  <text x="120" y="147" class="d-text-sm" text-anchor="middle">once, before anything runs</text>
+
+  <rect x="20" y="192" width="200" height="56" rx="9" class="d-fill-box"/>
+  <rect x="20" y="192" width="200" height="56" rx="9" class="d-stroke"/>
+  <text x="120" y="214" class="d-text" text-anchor="middle" font-weight="600">dispatch</text>
+  <text x="120" y="233" class="d-text-sm" text-anchor="middle">pick concrete types, mint population</text>
+
+  <path d="M120 78 L120 102" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+  <path d="M120 164 L120 188" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+
+  <!-- the loop box -->
+  <rect x="270" y="20" width="470" height="330" rx="12" class="d-fill-bg"/>
+  <rect x="270" y="20" width="470" height="330" rx="12" class="d-stroke" stroke-dasharray="5 4"/>
+  <text x="505" y="43" class="d-text-acc" text-anchor="middle">the evolution loop — one iteration</text>
+
+  <rect x="300" y="60" width="180" height="52" rx="8" class="d-fill-acc"/>
+  <rect x="300" y="60" width="180" height="52" rx="8" class="d-stroke"/>
+  <text x="390" y="82" class="d-text" text-anchor="middle" font-weight="600">express</text>
+  <text x="390" y="99" class="d-text-sm" text-anchor="middle">genomes → graphs, in parallel</text>
+
+  <rect x="300" y="132" width="180" height="52" rx="8" class="d-fill-good"/>
+  <rect x="300" y="132" width="180" height="52" rx="8" class="d-stroke"/>
+  <text x="390" y="154" class="d-text" text-anchor="middle" font-weight="600">score</text>
+  <text x="390" y="171" class="d-text-sm" text-anchor="middle">epidemics → one f64 each</text>
+
+  <rect x="300" y="204" width="180" height="52" rx="8" class="d-fill-warn"/>
+  <rect x="300" y="204" width="180" height="52" rx="8" class="d-stroke"/>
+  <text x="390" y="226" class="d-text" text-anchor="middle" font-weight="600">orient · reject NaN</text>
+  <text x="390" y="243" class="d-text-sm" text-anchor="middle">the single conversion point</text>
+
+  <rect x="540" y="60" width="170" height="52" rx="8" class="d-fill-box"/>
+  <rect x="540" y="60" width="170" height="52" rx="8" class="d-stroke"/>
+  <text x="625" y="82" class="d-text" text-anchor="middle" font-weight="600">log a stats row</text>
+  <text x="625" y="99" class="d-text-sm" text-anchor="middle">best · mean · sd · ci</text>
+
+  <rect x="540" y="132" width="170" height="52" rx="8" class="d-fill-box"/>
+  <rect x="540" y="132" width="170" height="52" rx="8" class="d-stroke"/>
+  <text x="625" y="154" class="d-text" text-anchor="middle" font-weight="600">select</text>
+  <text x="625" y="171" class="d-text-sm" text-anchor="middle">tournament</text>
+
+  <rect x="540" y="204" width="170" height="52" rx="8" class="d-fill-box"/>
+  <rect x="540" y="204" width="170" height="52" rx="8" class="d-stroke"/>
+  <text x="625" y="226" class="d-text" text-anchor="middle" font-weight="600">crossover + mutate</text>
+  <text x="625" y="243" class="d-text-sm" text-anchor="middle">two rolls, engine-owned</text>
+
+  <path d="M390 114 L390 128" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+  <path d="M390 186 L390 200" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+  <path d="M482 230 L510 230 L510 86 L536 86" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+  <path d="M625 114 L625 128" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+  <path d="M625 186 L625 200" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+  <path d="M625 258 L625 300 L390 300 L390 320" class="d-stroke-acc" stroke-width="1.6" style="color:var(--accent)"/>
+  <path d="M390 320 L290 320 L290 86 L296 86" class="d-stroke-acc" stroke-width="1.6"
+        marker-end="url(#a2)" style="color:var(--accent)"/>
+  <text x="470" y="315" class="d-text-acc" text-anchor="middle">next generation</text>
+
+  <path d="M224 220 L266 220" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+
+  <!-- outcome -->
+  <rect x="270" y="372" width="470" height="46" rx="9" class="d-fill-good"/>
+  <rect x="270" y="372" width="470" height="46" rx="9" class="d-stroke"/>
+  <text x="505" y="393" class="d-text" text-anchor="middle" font-weight="600">EvolutionOutcome</text>
+  <text x="505" y="409" class="d-text-sm" text-anchor="middle">best genome · its graph · its fitness · the full history</text>
+  <path d="M505 352 L505 368" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+
+  </g>
+</svg>
+<figcaption>The left column happens once per run. The dashed box happens once per generation
+(generational) or once per mating event (steady-state).</figcaption>
+</figure>
+
+<h2>Stage by stage</h2>
+
+<h3>1. Config in, validated once</h3>
+<p>
+  A run starts from a <a href="configuration.html">config document</a>. Whether you wrote it as
+  TOML by hand or built it out of Python objects, it ends up as the same Rust <code>Config</code>
+  struct, and <code>Config::validate</code> checks it <b>before a single graph is allocated</b>.
+  A bad config is a user mistake, so it comes back as a Python exception naming the offending field
+  — never a panic crossing the FFI boundary. Everything downstream is allowed to assume the config
+  is sane.
+</p>
+
+<h3 id="two-front-ends">2. Two front ends, one parser</h3>
+<p>
+  The Python configuration objects do not parse anything. They <b>serialize to TOML</b>, and that
+  TOML is what Rust parses:
+</p>
+
+<pre><code class="language-text" data-no-tint>Python config objects ──serialize──&gt; TOML ──serde──&gt; Config ──validate──&gt; run
+                                              hand-written TOML ─┘</code></pre>
+
+<p>
+  Two things fall out of that, and both matter in practice. There is exactly one parser and one
+  validator, so the Python path cannot accept a configuration the file path would reject. And the
+  generated TOML <i>is</i> a provenance record: write it next to your results and the run can be
+  reproduced verbatim.
+</p>
+
+<h3>3. Dispatch picks the concrete types</h3>
+<p>
+  The engine is <b>statically generic</b> over the genome — <code>Evolver::run</code> is a generic
+  method, so there is no <code>Box&lt;dyn Evolver&gt;</code> and no <code>dyn Genome</code>.
+  Runtime choice is resolved by a <code>match</code> in
+  <a href="../reference/dispatch.html">dispatch.rs</a> that instantiates real types.
+</p>
+<p>
+  The two axes are not symmetric, and only one of them is a match:
+</p>
+<ul>
+  <li><b>Genome cannot be erased.</b> <code>mutate</code> and <code>crossover</code> are generic
+      over the RNG, <code>crossover</code> takes <code>&amp;mut Self</code>, <code>Clone</code>
+      requires <code>Sized</code>, and <code>Context</code> is an associated type that differs per
+      representation. So <b>strategy × genome</b> stays a match.</li>
+  <li><b>Fitness can be.</b> No generic methods, no <code>Self</code> in argument position, and
+      <code>dyn Fitness</code> is <code>Send + Sync</code>. The objective is erased to
+      <code>Box&lt;dyn Fitness&gt;</code> <i>before</i> the evolver is built, which collapses
+      dispatch from strategy × genome × objective down to strategy × genome.</li>
+</ul>
+<p>
+  The practical consequence: <b>adding an objective is one match arm and never touches
+  dispatch</b>, while adding a genome or a strategy multiplies the dispatch table. See
+  <a href="new-fitness.html">Add an objective</a>.
+</p>
+
+<div class="warn">
+  <b>Dispatch also builds the starting population.</b> The evolver deliberately cannot mint
+  genomes: constructors differ per representation and some are fallible. Dispatch is where
+  genome-specific knowledge already lives, so it builds the population and hands it in. That is
+  what keeps bad dimensions a startup error rather than a mid-run panic, and it is why evolvers
+  are testable from a hand-built population.
+</div>
+
+<h3>4. Express — genome to graph</h3>
+<p>
+  Every genome in the population is expressed into a <a href="graph.html">Graph</a>, in parallel
+  across rayon workers. Expression is pure Rust and holds no Python lock. See
+  <a href="genomes.html">Genomes</a> for what each representation does here.
+</p>
+
+<h3>5. Score — graph to a number</h3>
+<p>
+  Each graph gets one <code>f64</code>. For the three built-in objectives that means running
+  <code>num_epidemics</code> <a href="sir.html">SIR simulations</a> on the graph and reading one
+  number off them. Scoring is <b>batched</b>: the whole population goes over in one call, which is
+  what makes a Python objective viable at all.
+</p>
+
+<h3>6. Orient — the one conversion</h3>
+<p>
+  Objectives return values in their own units and sign; the engine only ever minimizes. The
+  conversion happens in exactly one function, <code>common::express_and_score</code>, which is
+  also the gate that rejects <code>NaN</code>. This is important enough to have
+  <a href="fitness.html">its own page</a> — including why a single <code>NaN</code> from a
+  maximizing objective can silently take over a whole run.
+</p>
+
+<h3>7. Select, breed, mutate</h3>
+<p>
+  Tournament selection picks parents; <code>crossover_rate</code> decides whether a pair
+  recombines; two further rolls decide whether and how much each child mutates. All of it is
+  owned by the engine rather than the genome — see <a href="variation.html">Crossover &amp;
+  mutation</a>.
+</p>
+
+<h3>8. Out</h3>
+<p>
+  A run produces an <code>EvolutionOutcome</code>: the best genome, its already-expressed graph,
+  its fitness, and the full run history. The Python boundary converts fitness back into your units
+  on the way out. See <a href="output.html">Logs &amp; results</a>.
+</p>
+
+<h2>The three bounds that make it parallel</h2>
+
+<p>
+  These appear on the traits and look like boilerplate. They are not — each is load-bearing, and
+  removing any one of them stops the pipeline compiling in parallel form:
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Bound</th><th>Why it is there</th></tr></thead>
+  <tbody>
+    <tr><td><code>Genome: Clone + Send + Sync</code></td>
+        <td>The population is expressed across rayon workers. <code>Clone</code> is how an
+            individual is copied — there is no <code>copy</code> method.</td></tr>
+    <tr><td><code>Genome::Context: Send + Sync</code></td>
+        <td>One <code>&amp;Context</code> is shared by every worker during expression. Parallel
+            expression does not compile without it.</td></tr>
+    <tr><td><code>Fitness: Send + Sync</code></td>
+        <td>The default batch scorer fans out with <code>par_iter</code>.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  Net effect: expression and native scoring are both parallel and free of the Python GIL. That
+  property is exactly what makes the batched Python objective design work — see
+  <a href="performance.html">Performance &amp; memory</a>.
+</p>
+
+<h2>Two rules worth memorising</h2>
+
+<div class="note">
+  <b>The engine never calls <code>Fitness::evaluate</code> directly.</b>
+  <code>common::express_and_score</code> is the only path from genomes to fitness values,
+  everywhere, in both strategies. A direct call would bypass orientation and the
+  <code>NaN</code> gate, and neither failure announces itself.
+</div>
+
+<div class="note">
+  <b>Lower is better, inside the engine, always.</b> Selection, elitism and replacement all assume
+  it, which is what lets them work without ever asking what the objective was. Your units come
+  back at the Python boundary.
+</div>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

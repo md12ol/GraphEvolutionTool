@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>py_config.rs · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="reference/py-config.html">
+<main>
+
+<p class="page-kicker">Source reference · get/src/py_config.rs</p>
+<h1>py_config.rs</h1>
+<p class="lede">
+  The configuration objects you fill in from Python. They mirror
+  <a href="config.html">config.rs</a> field for field, and their only job is to
+  <b>serialize back to TOML</b> — so the Python route and the file route meet before anything is
+  parsed, and there is exactly one parser and one validator behind both.
+</p>
+
+<h2>What this module is for</h2>
+
+<p>
+  You can describe a run two ways: write a <code>config.toml</code> by hand, or build the same
+  description out of typed Python objects. The second route is what most users take, and it is
+  built on a deliberate constraint:
+</p>
+
+<pre><code class="language-text" data-no-tint>Python config objects ──serialize──&gt; TOML ──serde──&gt; Config ──validate──&gt; run
+                                              hand-written TOML ─┘</code></pre>
+
+<p>
+  <b>Python is a builder for the config format, not a second parser of it.</b> The objects on this
+  page never interpret anything. They render a TOML document, and that document goes through
+  exactly the same <code>Config::from_toml_str</code> and <code>Config::validate</code> a
+  hand-written file goes through. Two things fall out, and both are the point:
+</p>
+
+<ul>
+  <li>The Python path <b>cannot</b> accept a configuration the file path would reject. There is no
+      second set of rules to drift.</li>
+  <li>You get provenance for free. <code>config.to_toml()</code> returns the exact document that was
+      parsed — write it beside your results and the run reproduces verbatim.</li>
+</ul>
+
+<h2>Why these are a separate mirror</h2>
+
+<p>
+  The obvious design would be to put the Python annotations directly on <code>config.rs</code>'s own
+  types and skip the duplication. That does not compile, and the reason is worth recording because
+  it looks like a stylistic choice and is not. Measured on pyo3 0.27.2 and serde 1.0.228:
+</p>
+
+<ul>
+  <li>pyo3 rejects a <b>unit variant</b> in a complex enum — it wants an empty tuple variant
+      instead. So <code>FitnessConfig::Python</code> would have to become
+      <code>Python()</code>.</li>
+  <li>serde then rejects <i>that</i>: a tagged enum cannot use tuple variants. And the tag is
+      exactly what deserializes <code>type = "python"</code> for the file front end.</li>
+</ul>
+
+<p>
+  So annotating the config types directly would break the TOML front end in order to serve the
+  Python one. The mirror also confines every pyo3 annotation to this one file, which matters with
+  two people editing the crate at once.
+</p>
+
+<div class="warn">
+  <b>The cost of a mirror is drift.</b> A field added to <code>config.rs</code> and not here is
+  invisible from Python, silently. Two tests hold the line: one destructures <code>Config</code>
+  exhaustively so a new field <b>fails to compile</b> until the mirror has it
+  (<span class="src">py_config.rs:735</span>), and one scrapes <code>config.rs</code>'s own
+  validation calls out of its source text and checks each has a Python attribute path
+  (<span class="src">py_config.rs:990</span>). Neither is a hand-maintained list, because a
+  hand-maintained list is exactly the thing that goes stale.
+</div>
+
+<h2>The Python API</h2>
+
+<p>
+  All seven classes are registered on the module under their <b>unprefixed</b> names — the
+  <code>Py</code> prefix is a Rust-side disambiguator and is not part of the API you type. The
+  registration itself lives in <a href="lib.html">lib.rs</a>.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>You write</th><th>Rust type</th><th>Mirrors</th></tr></thead>
+  <tbody>
+    <tr><td><code>get.Config</code></td><td><code>PyConfig</code></td><td><code>config::Config</code></td></tr>
+    <tr><td><code>get.EvolutionConfig</code></td><td><code>PyEvolutionConfig</code></td><td><code>config::EvolutionConfig</code></td></tr>
+    <tr><td><code>get.SelectionConfig</code></td><td><code>PySelectionConfig</code></td><td><code>config::SelectionConfig</code></td></tr>
+    <tr><td><code>get.GenomeConfig</code></td><td><code>PyGenomeConfig</code></td><td><code>config::GenomeConfig</code></td></tr>
+    <tr><td><code>get.FitnessConfig</code></td><td><code>PyFitnessConfig</code></td><td><code>config::FitnessConfig</code></td></tr>
+    <tr><td><code>get.SirParams</code></td><td><code>PySirParams</code></td><td><code>config::SirParams</code></td></tr>
+    <tr><td><code>get.OperationWeights</code></td><td><code>PyOperationWeights</code></td><td><code>genomes::EdgeEditOperationWeights</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Constructor signatures</h3>
+
+<p>
+  Every default below is the same value <code>config.rs</code>'s serde defaults supply, so omitting
+  an argument in Python and omitting the line in TOML give identical runs.
+</p>
+
+<div class="api-item">
+  <div class="api-sig">Config(evolution, population_size, network_size, crossover_rate, mutation_rate, selection, genome, fitness, max_edge_multiplicity=1, max_mutations=1)</div>
+  <div class="api-body">
+    <span class="src">py_config.rs:323</span>
+    <p>
+      The whole configuration. Note the argument order: the two defaulted arguments come
+      <i>last</i>, after <code>fitness</code>, which is not the order the fields are documented in.
+      Pass them by keyword and the order stops mattering.
+    </p>
+    <p>
+      There is no <code>seed</code> argument, and that is deliberate — one master seed is supplied
+      to the <code>run</code> call and everything derives from it. See
+      <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a>.
+    </p>
+    <p>All ten fields are readable and writable as attributes (<span class="src">py_config.rs:282</span>).</p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">EvolutionConfig.Generational(num_generations, elite_count=1)
+EvolutionConfig.SteadyState(num_mating_events)</div>
+  <div class="api-body">
+    <span class="src">py_config.rs:196</span>
+    <p>
+      Which strategy runs. The two are alternatives, not layers — see
+      <a href="../guide/evolvers.html">Evolution strategies</a> for how they differ and when to
+      prefer each.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">SelectionConfig.Tournament(tournament_size)</div>
+  <div class="api-body">
+    <span class="src">py_config.rs:214</span>
+    <p>
+      One scheme today. It is an enum rather than a bare integer so that adding a second scheme does
+      not change the shape of the Python API.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">GenomeConfig.EdgeEdit(gene_length, operation_weights=None)
+GenomeConfig.Sda(num_states, max_resp_len, init_state=0)</div>
+  <div class="api-body">
+    <span class="src">py_config.rs:224</span>
+    <p>
+      The representation and its dimensions. Leaving <code>operation_weights</code> as
+      <code>None</code> omits the table from the generated document entirely, so all nine weights
+      fall back to <code>1.0</code>.
+    </p>
+    <p>
+      There is no <code>num_chars</code> argument on <code>Sda</code>: the alphabet is derived as
+      <code>max_edge_multiplicity + 1</code>, so every character the automaton can emit is a legal
+      edge weight and none is ever clamped away. <code>init_state</code> must be less than
+      <code>num_states</code> — an out-of-range value would panic during expression, so
+      <code>Config::validate</code> rejects it first.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">FitnessConfig.EpiSpread(sir)
+FitnessConfig.EpiLength(sir)
+FitnessConfig.EpiProfMatch(sir, target_profile)
+FitnessConfig.Python()</div>
+  <div class="api-body">
+    <span class="src">py_config.rs:250</span>
+    <p>
+      The objective. <code>target_profile</code> is an ordinary Python list of numbers, written into
+      the document like any other value. <code>Python()</code> takes no arguments — you register the
+      callable and its direction separately, with
+      <code>evolver.set_fitness_function(callable, direction)</code>.
+    </p>
+    <p>
+      <code>Python()</code> needs those empty parentheses because pyo3 rejects unit variants in a
+      complex enum. This is the single variant that forced this whole module to exist.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">SirParams(infection_rate, num_epidemics, patient_zero=None, min_epidemic_length=3, max_epidemic_retries=5)</div>
+  <div class="api-body">
+    <span class="src">py_config.rs:92</span>
+    <p>
+      The epidemic settings shared by the three SIR objectives. The two retry defaults are the
+      legacy C++ constants, so omitting both reproduces historical behaviour.
+      <code>patient_zero=None</code> means a fresh node is drawn for every epidemic.
+    </p>
+    <p>
+      Unrelated to <code>fitness::PyFitness</code>, despite both starting with <code>Py</code>: that
+      one adapts a registered Python <i>callable</i> to the fitness trait, this one is
+      configuration.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">OperationWeights(toggle=1.0, hop=1.0, add=1.0, delete=1.0, swap=1.0, local_toggle=1.0, local_add=1.0, local_delete=1.0, null=1.0)</div>
+  <div class="api-body">
+    <span class="src">py_config.rs:147</span>
+    <p>
+      Relative probability of each edit operation. Every field defaults to <code>1.0</code>, giving
+      all nine equal probability; a weight of <code>0.0</code> disables its operation outright. See
+      <a href="edge-edit-operations.html">the nine operations</a> for what each one does.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">Config.to_toml() -&gt; str</div>
+  <div class="api-body">
+    <span class="src">py_config.rs:376</span>
+    <p>
+      Render this configuration as the TOML document the Rust side parses. This is the provenance
+      record: the generated text <i>is</i> what was run, so writing it beside your results lets you
+      re-run verbatim, and it is also the exact seam
+      <code>GraphEvolver.from_config</code> goes through — the document you inspect is
+      byte-for-byte the one that was parsed.
+    </p>
+    <p>
+      Raises <code>ValueError</code> if a field is too large for a TOML integer. That gap is real
+      and reachable: <code>population_size=2**63</code> converts into Rust happily and only fails
+      here, where it is reported by field name rather than wrapping silently to a negative number.
+    </p>
+  </div>
+</div>
+
+<h2>A worked example</h2>
+
+<p>The same experiment as the one on the <a href="config.html#key-reference">config.rs</a> page:</p>
+
+<pre><code class="language-python">import get
+
+config = get.Config(
+    evolution=get.EvolutionConfig.SteadyState(num_mating_events=100_000),
+    population_size=200,
+    network_size=100,
+    crossover_rate=0.9,
+    mutation_rate=0.2,
+    selection=get.SelectionConfig.Tournament(tournament_size=6),
+    genome=get.GenomeConfig.Sda(num_states=12, max_resp_len=4, init_state=3),
+    fitness=get.FitnessConfig.EpiProfMatch(
+        sir=get.SirParams(
+            infection_rate=0.05,
+            num_epidemics=30,
+            patient_zero=0,
+            min_epidemic_length=3,
+            max_epidemic_retries=5,
+        ),
+        target_profile=[1, 3, 8, 17, 24, 19, 11, 5, 2, 1],
+    ),
+    max_edge_multiplicity=3,
+    max_mutations=2,
+)
+
+# The provenance record: this is the document Rust parses, verbatim.
+with open("provenance.toml", "w") as f:
+    f.write(config.to_toml())
+
+evolver = get.GraphEvolver.from_config(config)   # renders, parses, validates
+edges = evolver.run(20260812)</code></pre>
+
+<p>With a Python objective instead:</p>
+
+<pre><code class="language-python">config = get.Config(
+    # ... everything else the same ...
+    fitness=get.FitnessConfig.Python(),
+)
+evolver = get.GraphEvolver.from_config(config)
+
+# The config only SELECTS python. The callable and its direction arrive here,
+# because nothing can infer whether your function wants a big number or a small one.
+evolver.set_fitness_function(
+    lambda batch: [score(n, edges) for (n, edges) in batch],
+    "maximize",
+)
+edges = evolver.run(1)</code></pre>
+
+<p>
+  Runnable versions of every objective, both genomes and both strategies live in
+  <code>examples/config_builder.py</code> at the repository root, and in
+  <a href="../examples/index.html">Examples</a>.
+</p>
+
+<h2>How a Python object becomes TOML</h2>
+
+<p>
+  Each mirror type knows how to write itself into a TOML table. The rules are small but a couple of
+  them are load-bearing:
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Rule</th><th>Why</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr><td>Tagged types write their <code>type</code> key first, then their own fields.</td>
+        <td>That is the discriminator the file front end deserializes on.</td>
+        <td><span class="src">py_config.rs:514, 550, 566, 612</span></td></tr>
+    <tr><td>The epidemic block is written <b>into</b> <code>[fitness]</code>, not as a sub-table.</td>
+        <td>It is flattened on the Rust side, so a sub-table would not parse.</td>
+        <td><span class="src">py_config.rs:470</span></td></tr>
+    <tr><td>An unset <code>patient_zero</code> is <b>omitted entirely</b>, never written as a null
+            or a sentinel.</td>
+        <td>A null would not parse, and a sentinel would pin patient zero to a node the user never
+            chose.</td>
+        <td><span class="src">py_config.rs:490</span></td></tr>
+    <tr><td>Unset <code>operation_weights</code> are left out, so serde's defaults supply all
+            nine.</td>
+        <td>Writing them out would work but would put nine lines of noise in every provenance
+            document.</td>
+        <td><span class="src">py_config.rs:580</span></td></tr>
+    <tr><td>Every whole number goes through a checked conversion to a TOML integer.</td>
+        <td>TOML integers are 64-bit signed; wrapping to a negative number would be a silently
+            wrong config.</td>
+        <td><span class="src">py_config.rs:454</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Error messages point at your Python, not at a document</h2>
+
+<p>
+  <code>Config::validate</code> names the offending field <i>as it appears in the TOML</i>. That is
+  the right answer for someone who wrote a file and a poor one here: a user who wrote
+  <code>SirParams(num_epidemics=0)</code> and is told <code>num_epidemics</code> has to work out
+  which of the objects they assembled owns it. So validation failures are rewritten on the way out.
+</p>
+
+<div class="api-item">
+  <div class="api-sig">pub fn config_error_to_py(error: &amp;ConfigError) -&gt; PyErr</div>
+  <div class="api-body">
+    <span class="src">py_config.rs:437</span>
+    <p>
+      Turns a config error into a Python <code>ValueError</code>, replacing the TOML field name with
+      the attribute path that produced it wherever one can be identified. The constraint text itself
+      is carried through unchanged.
+    </p>
+    <p>
+      Anything with no Python equivalent — a parse failure, an I/O error — passes through with its
+      original wording, which is already the useful one.
+    </p>
+  </div>
+</div>
+
+<p>The mapping, in full (<span class="src">py_config.rs:410</span>):</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>TOML field</th><th>Reported to Python as</th></tr></thead>
+  <tbody>
+    <tr><td><code>population_size</code></td><td><code>config.population_size</code></td></tr>
+    <tr><td><code>max_edge_multiplicity</code></td><td><code>config.max_edge_multiplicity</code></td></tr>
+    <tr><td><code>max_mutations</code></td><td><code>config.max_mutations</code></td></tr>
+    <tr><td><code>elite_count</code></td><td><code>config.evolution.elite_count</code></td></tr>
+    <tr><td><code>tournament_size</code></td><td><code>config.selection.tournament_size</code></td></tr>
+    <tr><td><code>operation_weights</code></td><td><code>config.genome.operation_weights</code></td></tr>
+    <tr><td><code>init_state</code></td><td><code>config.genome.init_state</code></td></tr>
+    <tr><td><code>num_epidemics</code></td><td><code>config.fitness.sir.num_epidemics</code></td></tr>
+    <tr><td><code>min_epidemic_length</code></td><td><code>config.fitness.sir.min_epidemic_length</code></td></tr>
+    <tr><td><code>max_epidemic_retries</code></td><td><code>config.fitness.sir.max_epidemic_retries</code></td></tr>
+    <tr><td><code>patient_zero</code></td><td><code>config.fitness.sir.patient_zero</code></td></tr>
+    <tr><td><code>target_profile</code></td><td><code>config.fitness.target_profile</code></td></tr>
+    <tr><td><code>seed</code></td><td><i>no mapping</i> — unreachable from Python, which has no seed
+            to write</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>So a zero epidemic count raises, in full:</p>
+
+<pre><code class="language-text" data-no-tint>ValueError: invalid config: `config.fitness.sir.num_epidemics` must be at least 1,
+since fitness is their average</code></pre>
+
+<h2>Gotchas</h2>
+
+<ul>
+  <li><b>One check exists on the file route and not here.</b> Supplying a <code>target_profile</code>
+      under an objective that is not <code>epi_prof_match</code> is a hard error in a TOML file. From
+      Python the mistake cannot be made in the first place — the field only exists on
+      <code>FitnessConfig.EpiProfMatch</code> — so there is nothing to reject. The two front ends
+      are equivalent in what they <i>accept</i>; this is the one place their error surfaces
+      differ.</li>
+  <li><b>The document is re-parsed, every time.</b> Building an evolver from Python serializes to
+      text and parses it back. That is the design — one parser, one validator — not an oversight,
+      and it costs nothing measurable against a run.</li>
+  <li><b>Very large integers fail at <code>to_toml()</code>, not at construction.</b>
+      <code>population_size=2**63</code> is accepted by the constructor and rejected when the
+      document is rendered.</li>
+  <li><b>Attribute writability on the four enum classes is not something this source settles.</b>
+      <code>Config</code> and <code>SirParams</code> are explicitly readable and writable field by
+      field. <code>EvolutionConfig</code>, <code>SelectionConfig</code>, <code>GenomeConfig</code>
+      and <code>FitnessConfig</code> are pyo3 complex enums whose variant fields carry no explicit
+      accessor annotation, and the error-path table above assumes they are at least readable. Treat
+      them as read-only and rebuild the variant rather than mutating it in place, unless and until
+      someone verifies otherwise against pyo3 0.27.</li>
+  <li><b>A failure to parse the generated document is reported as a GET bug, not yours.</b> If the
+      mirror ever emits something the parser rejects, the exception says so and prints the whole
+      document for a bug report — see <a href="lib.html">lib.rs</a>.</li>
+</ul>
+
+<h2>See also</h2>
+
+<ul>
+  <li><a href="config.html">config.rs</a> — the schema these objects mirror, with the full key
+      reference table.</li>
+  <li><a href="../guide/python-api.html">Python API</a> — the user-facing tour of the whole
+      module.</li>
+  <li><a href="lib.html">lib.rs</a> — <code>GraphEvolver</code>, <code>from_config</code>,
+      <code>set_fitness_function</code>, and the module registration.</li>
+  <li><a href="dispatch.html">dispatch.rs</a> — what happens after validation.</li>
+</ul>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

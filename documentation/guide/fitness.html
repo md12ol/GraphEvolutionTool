@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fitness &amp; orientation · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/fitness.html">
+<main>
+
+<p class="page-kicker">How it works</p>
+<h1>Fitness &amp; orientation</h1>
+<p class="lede">
+  A fitness function turns a graph into one number. Everything else on this page is about a single
+  question that turns out to matter enormously: which direction is <i>better</i>, and who is
+  allowed to know.
+</p>
+
+<h2>The contract</h2>
+
+<pre><code class="language-rust">pub trait Fitness: Send + Sync {
+    fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64;
+    fn direction(&amp;self) -&gt; Direction { Direction::Minimize }
+    fn evaluate_batch(&amp;self, graphs: &amp;[Graph]) -&gt; Vec&lt;f64&gt; { /* par_iter over evaluate */ }
+}</code></pre>
+
+<p>
+  <code>evaluate</code> returns a score <b>in the objective's own units and sign</b> — nothing is
+  normalized, scaled or flipped for you. <code>direction</code> declares whether bigger or smaller
+  is better. <code>evaluate_batch</code> scores a whole population at once, and exists so that a
+  <a href="new-fitness.html">Python objective</a> pays one crossing per batch rather than one per
+  individual.
+</p>
+
+<h3>Why declare a direction instead of just negating?</h3>
+
+<p>
+  Because the two could then silently disagree. If <code>evaluate</code> returned an
+  already-negated value <i>and</i> the trait declared <code>Maximize</code>, the run would optimize
+  backwards — and a run optimizing backwards is indistinguishable from one that simply is not
+  converging. Declaring it puts the fact in exactly one place.
+</p>
+
+<div class="note">
+  <b>Direction belongs to the objective, never to config.</b> One fitness function is always
+  maximized or always minimized; it is a property of what the function computes, not of the run.
+  A config field that could say otherwise would only let it contradict the objective. A Python
+  objective declares its direction when the callable is registered, because nothing can infer it
+  from your function.
+</div>
+
+<h2>Your units and the engine's</h2>
+
+<p>
+  There are two number systems, and every value in GET belongs to exactly one of them.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th></th><th>What it is</th></tr></thead>
+  <tbody>
+    <tr><td><b>Your units</b></td>
+        <td>Whatever your objective naturally returns. <code>epi_spread</code> counts infected
+            nodes, so bigger is better. <code>epi_prof_match</code> is an RMSE, so smaller is
+            better.</td></tr>
+    <tr><td><b>Engine orientation</b></td>
+        <td>One rule, no exceptions: <b>lower is better</b>. Selection, elitism and replacement all
+            assume it, which is what lets them work without ever asking what the objective
+            was.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  The conversion between them is a negation — and negation is its own inverse, so one function maps
+  both ways. The entire design is about calling it in exactly <b>two</b> places.
+</p>
+
+<figure>
+<svg viewBox="0 0 700 470" role="img" aria-label="Fitness values flow from your units through one inward conversion into engine orientation, and back out through one outward conversion at the Python boundary.">
+  <defs>
+    <marker id="af" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g style="color:var(--accent)">
+
+  <rect x="60" y="14" width="580" height="56" rx="9" class="d-fill-good"/>
+  <rect x="60" y="14" width="580" height="56" rx="9" class="d-stroke"/>
+  <text x="350" y="38" class="d-text" text-anchor="middle" font-weight="600">YOUR UNITS</text>
+  <text x="350" y="57" class="d-text-sm" text-anchor="middle">epi_spread → 1470 nodes infected · direction = Maximize</text>
+
+  <path d="M350 74 L350 100" class="d-stroke-acc" stroke-width="1.8" marker-end="url(#af)"/>
+  <text x="360" y="93" class="d-text-sm">Fitness::evaluate → 1470.0</text>
+
+  <rect x="60" y="106" width="580" height="74" rx="9" class="d-fill-warn"/>
+  <rect x="60" y="106" width="580" height="74" rx="9" class="d-stroke"/>
+  <text x="350" y="130" class="d-text-mono" text-anchor="middle" font-weight="600">common::express_and_score</text>
+  <text x="350" y="150" class="d-text-sm" text-anchor="middle">express the batch in parallel · score the batch · reject NaN</text>
+  <text x="350" y="169" class="d-text-acc" text-anchor="middle">ORIENT — the one and only flip inward</text>
+
+  <path d="M350 184 L350 210" class="d-stroke-acc" stroke-width="1.8" marker-end="url(#af)"/>
+  <text x="360" y="203" class="d-text-sm">1470.0 → −1470.0</text>
+
+  <rect x="60" y="216" width="580" height="118" rx="9" class="d-fill-box"/>
+  <rect x="60" y="216" width="580" height="118" rx="9" class="d-stroke"/>
+  <text x="350" y="240" class="d-text" text-anchor="middle" font-weight="600">ENGINE ORIENTATION — lower is better</text>
+  <text x="350" y="266" class="d-text-sm" text-anchor="middle">tournament ranking · elitism · replace-worst · argmin</text>
+  <text x="350" y="285" class="d-text-sm" text-anchor="middle">GenerationStats · EvolutionOutcome</text>
+  <text x="350" y="313" class="d-text-acc" text-anchor="middle">None of these know, ask, or store which way the objective ran.</text>
+
+  <path d="M350 338 L350 364" class="d-stroke-acc" stroke-width="1.8" marker-end="url(#af)"/>
+  <text x="360" y="357" class="d-text-sm">−1470.0 → 1470.0</text>
+
+  <rect x="60" y="370" width="580" height="58" rx="9" class="d-fill-warn"/>
+  <rect x="60" y="370" width="580" height="58" rx="9" class="d-stroke"/>
+  <text x="350" y="393" class="d-text" text-anchor="middle" font-weight="600">Python boundary</text>
+  <text x="350" y="412" class="d-text-acc" text-anchor="middle">ORIENT BACK — the one and only flip outward</text>
+
+  <rect x="60" y="440" width="580" height="26" rx="7" class="d-fill-good"/>
+  <rect x="60" y="440" width="580" height="26" rx="7" class="d-stroke"/>
+  <text x="350" y="458" class="d-text-sm" text-anchor="middle">YOUR UNITS AGAIN — 1470, exactly what your function returned</text>
+
+  </g>
+</svg>
+<figcaption>Two flips per run, at the two edges. Everything between them is a plain
+<code>f64</code> comparison with no direction in sight — which is why a missed conversion is
+impossible rather than merely unlikely.</figcaption>
+</figure>
+
+<h2 id="gate">One gate: <code>express_and_score</code></h2>
+
+<pre><code class="language-rust">common::express_and_score(batch, context, fitness) -&gt; (Vec&lt;Graph&gt;, Vec&lt;f64&gt;)</code></pre>
+
+<p>
+  This one function expresses every genome in parallel, scores the batch, applies the direction
+  conversion, and rejects <code>NaN</code>. The fitnesses it returns are <b>always
+  lower-is-better</b>, whatever the objective. Index <code>i</code> of both vectors is
+  <code>population[i]</code>.
+</p>
+
+<p>
+  It is the engine's single point of conversion, and the reason is that it is the only place the
+  whole population is scored — so it is the only place "exactly once" can be <i>guaranteed</i>
+  rather than remembered. The alternative, a direction-aware comparator, would need the direction
+  at every comparison site: tournament ordering, the generational argmin, the steady-state best. A
+  missed one fails silently.
+</p>
+
+<div class="warn">
+  <b>The engine never calls <code>Fitness::evaluate</code> or <code>evaluate_batch</code>
+  directly.</b> <code>express_and_score</code> is the sole path from a batch of genomes to a set of
+  fitnesses — generational scoring, steady-state child scoring, everything. The two trait methods
+  exist to be <i>implemented</i> by an objective and <i>called by</i> <code>express_and_score</code>,
+  never by the engine. A direct call would bypass orientation <i>and</i> the <code>NaN</code>
+  rejection, and neither failure announces itself. Any new evolution strategy scores its population
+  through this function or it is wrong.
+</div>
+
+<h2>NaN is forbidden; infinity is not</h2>
+
+<p>
+  <code>NaN</code> is rejected at the gate, and the reason is sharper than it looks. Under
+  minimization <code>NaN</code> sorts beyond <code>+inf</code> and reads as <i>worst</i>, which
+  would be safe. But under <code>Maximize</code> the value is negated — and <code>-NaN</code> sorts
+  <i>below</i> <code>-inf</code>, making it the <b>best</b> individual in every tournament it
+  enters. One <code>NaN</code> from a maximizing objective fills the population with whatever
+  genome produced it and leaves a run that looks converged.
+</p>
+
+<p>
+  <code>±inf</code> is allowed, deliberately. <code>+inf</code> under <code>Minimize</code> is the
+  sanctioned way to say <i>this individual is invalid, never select it</i>. Removing it would push
+  people toward a magic large number, which is worse because it stays silently comparable.
+</p>
+
+<h2>The three built-in objectives</h2>
+
+<p>
+  All three read the same simulation. The expensive part of an evaluation is the epidemic, so one
+  run returns everything and each objective is a thin reading of it:
+</p>
+
+<pre><code class="language-rust">sir_sim(graph, params, rng) -&gt; Epidemic { length, spread, profile }</code></pre>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Objective</th><th>Reads</th><th>Direction</th><th>Use it when</th></tr></thead>
+  <tbody>
+    <tr><td><code>epi_spread</code></td><td>Total ever-infected</td><td><b>Maximize</b></td>
+        <td>You want a network the disease saturates.</td></tr>
+    <tr><td><code>epi_length</code></td><td>Timesteps to burn out</td><td><b>Maximize</b></td>
+        <td>You want a network that keeps an outbreak alive a long time.</td></tr>
+    <tr><td><code>epi_prof_match</code></td><td>RMSE against a target curve</td>
+        <td><b>Minimize</b></td>
+        <td>You have a real epidemic curve and want a network that reproduces its shape.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Each direction is fixed by the objective and is never configurable. What the simulator actually
+   does — including the one-timestep infectious period and the trailing zero in the profile — is on
+   <a href="sir.html">The SIR model</a>.</p>
+
+<h3 id="rmse">How <code>epi_prof_match</code> handles a length mismatch</h3>
+
+<p>
+  Your target and the simulated run will usually be different lengths. The rule is fixed by the
+  <b>target</b>:
+</p>
+
+<ul>
+  <li>iterate <code>0 .. target.len()</code>, never the run's length;</li>
+  <li>where the run is <b>shorter</b>, treat its value as <code>0</code> — the epidemic had ended,
+      so nobody was newly infected that day;</li>
+  <li>where the run is <b>longer</b>, the surplus is <b>ignored</b>;</li>
+  <li>divide by <code>target.len()</code> always, then take the square root.</li>
+</ul>
+
+<div class="warn">
+  <b>That asymmetry is deliberate and it changes what you are selecting for.</b> A run that burns
+  out early is penalised by the whole remaining target; a run that outlasts the target is not
+  penalised at all. So this objective rewards <b>matching or exceeding</b> the target's tail, not
+  matching it exactly. It is inherited from the original C++ for comparability with archived
+  results.
+</div>
+
+<h2>Averaging, and why noise matters here</h2>
+
+<p>
+  <code>num_epidemics</code> is how many independent outbreaks one evaluation averages over. It is
+  not a tuning nicety. A single SIR draw is very noisy, and selection will happily chase that noise
+  instead of graph structure — you would evolve lucky dice rather than good networks. It also
+  dominates run time, since everything else in an evaluation is cheap by comparison.
+</p>
+
+<p>
+  The dice themselves are handled carefully enough to need
+  <a href="reproducibility.html">their own page</a>. The short version: within one evaluation every
+  member of the population faces the <i>same</i> epidemic draws, so fitness differences reflect the
+  graph rather than the dice; across evaluations the draws change, so a network cannot keep
+  winning on one frozen sample of the disease.
+</p>
+
+<h2>Writing your own</h2>
+
+<p>
+  Two routes, and neither is a fallback for the other — see <a href="new-fitness.html">Add an
+  objective</a> for both in full.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Route</th><th>What it looks like</th><th>For</th></tr></thead>
+  <tbody>
+    <tr><td><b>Python</b></td>
+        <td><code>set_fitness_function(callable, direction)</code>, taking the whole batch at
+            once</td>
+        <td>Most users, and any prototype. No Rust, no compilation, config-driven.</td></tr>
+    <tr><td><b>Rust</b></td>
+        <td>Depend on <code>get</code> as a crate, <code>impl Fitness</code>, drive an evolver
+            directly</td>
+        <td>A hot native objective, without forking GET.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="tip">
+  <b>Keep hot objectives native.</b> The Python adapter is for prototyping, where developer speed
+  matters more than run time. A per-individual Python objective can be hundreds of times slower
+  wall-clock than parallel Rust; batched, only the speed of the Python body remains.
+</div>
+
+<p>
+  A user-supplied objective deliberately never gets a <code>[fitness]</code> variant of its own.
+  The alternative — a string-keyed registry that config could name — would move validation out of
+  the parser, which is exactly the failure the one-validator design exists to prevent. Keeping user
+  objectives out of the schema means nothing user-supplied is ever deserialized, so there is
+  nothing new to validate.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

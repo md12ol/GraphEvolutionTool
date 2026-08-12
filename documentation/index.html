@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GET — Graph Evolution Tool documentation</title>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="index.html">
+<main>
+
+<p class="page-kicker">Graph Evolution Tool</p>
+<h1>Evolve networks against an epidemic</h1>
+<p class="lede">
+  GET searches for graphs that make a simulated disease behave in a particular way — spread as far
+  as possible, last as long as possible, or trace a particular infection curve. You describe the
+  experiment in a config file or in Python; GET runs an evolutionary algorithm in Rust and hands
+  back the best network it found, plus the convergence log that produced it.
+</p>
+
+<div class="cards">
+  <a class="card" href="guide/getting-started.html">
+    <h3>Getting started →</h3>
+    <p>Build the extension module, write a config, run your first evolution, read the result.</p>
+  </a>
+  <a class="card" href="guide/pipeline.html">
+    <h3>How it works →</h3>
+    <p>The genome → graph → fitness loop, drawn out, with every stage explained in plain language.</p>
+  </a>
+  <a class="card" href="guide/configuration.html">
+    <h3>Configuration →</h3>
+    <p>Every key GET accepts, what it does, what it defaults to, and what makes it invalid.</p>
+  </a>
+  <a class="card" href="reference/index.html">
+    <h3>Source reference →</h3>
+    <p>One page per module in <code>get/src/</code>, with the public types and where they live.</p>
+  </a>
+</div>
+
+<h2>The idea in one picture</h2>
+
+<p>
+  Everything in GET is a loop around four things. A <b>genome</b> is a compact recipe. Expressing it
+  produces a <b>graph</b>. Running epidemics on that graph produces a <b>fitness</b> number. An
+  <b>evolver</b> uses those numbers to decide which genomes get to have children, and the loop goes
+  round again.
+</p>
+
+<figure>
+<svg viewBox="0 0 720 260" role="img" aria-label="The GET pipeline: genome expresses to a graph, the graph is scored by fitness, and the evolver selects and breeds genomes.">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g style="color:var(--border-firm)">
+
+  <rect x="20"  y="60" width="150" height="72" rx="9" class="d-fill-acc"/>
+  <rect x="20"  y="60" width="150" height="72" rx="9" class="d-stroke"/>
+  <text x="95"  y="90"  class="d-text" text-anchor="middle" font-weight="600">Genome</text>
+  <text x="95"  y="110" class="d-text-sm" text-anchor="middle">a recipe: edits, or an automaton</text>
+
+  <rect x="285" y="60" width="150" height="72" rx="9" class="d-fill-box"/>
+  <rect x="285" y="60" width="150" height="72" rx="9" class="d-stroke"/>
+  <text x="360" y="90"  class="d-text" text-anchor="middle" font-weight="600">Graph</text>
+  <text x="360" y="110" class="d-text-sm" text-anchor="middle">n nodes, weighted edges</text>
+
+  <rect x="550" y="60" width="150" height="72" rx="9" class="d-fill-good"/>
+  <rect x="550" y="60" width="150" height="72" rx="9" class="d-stroke"/>
+  <text x="625" y="90"  class="d-text" text-anchor="middle" font-weight="600">Fitness</text>
+  <text x="625" y="110" class="d-text-sm" text-anchor="middle">one f64 per individual</text>
+
+  <path d="M175 96 L280 96" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#ar)" style="color:var(--accent)"/>
+  <text x="227" y="86" class="d-text-acc" text-anchor="middle">express</text>
+
+  <path d="M440 96 L545 96" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#ar)" style="color:var(--accent)"/>
+  <text x="492" y="86" class="d-text-acc" text-anchor="middle">simulate</text>
+
+  <path d="M625 137 L625 190 L95 190 L95 137" class="d-stroke-acc" stroke-width="1.6"
+        marker-end="url(#ar)" style="color:var(--accent)"/>
+  <rect x="255" y="172" width="210" height="36" rx="7" class="d-fill-bg"/>
+  <rect x="255" y="172" width="210" height="36" rx="7" class="d-stroke"/>
+  <text x="360" y="195" class="d-text" text-anchor="middle">Evolver: select · breed · mutate</text>
+
+  </g>
+</svg>
+<figcaption>Each stage is an independent trait, so representations and objectives swap without
+touching the engine.</figcaption>
+</figure>
+
+<h2>What you get to choose</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Axis</th><th>Options</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Representation</b></td>
+      <td><a href="guide/genomes.html#edge-edit">edge-edit</a> — a script of edits over a starting
+          graph · <a href="guide/genomes.html#sda">SDA</a> — an automaton that writes a graph from
+          scratch</td>
+      <td><code>[genome] type</code></td>
+    </tr>
+    <tr>
+      <td><b>Strategy</b></td>
+      <td><a href="guide/evolvers.html#generational">generational</a> — replace everyone each
+          round · <a href="guide/evolvers.html#steady-state">steady-state</a> — one mating at a
+          time</td>
+      <td><code>[evolution] type</code></td>
+    </tr>
+    <tr>
+      <td><b>Objective</b></td>
+      <td><code>epi_spread</code> · <code>epi_length</code> · <code>epi_prof_match</code> · or
+          <a href="guide/new-fitness.html">your own</a>, in Python or Rust</td>
+      <td><code>[fitness] type</code></td>
+    </tr>
+    <tr>
+      <td><b>Selection</b></td>
+      <td>tournament</td>
+      <td><code>[selection] type</code></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>A complete run</h2>
+
+<pre><code class="language-python">import get
+
+config = get.Config(
+    evolution       = get.EvolutionConfig.Generational(num_generations=500, elite_count=1),
+    population_size = 200,
+    network_size    = 100,
+    crossover_rate  = 0.9,
+    mutation_rate   = 0.2,
+    selection       = get.SelectionConfig.Tournament(tournament_size=5),
+    genome          = get.GenomeConfig.EdgeEdit(gene_length=256),
+    fitness         = get.FitnessConfig.EpiSpread(
+        sir = get.SirParams(infection_rate=0.05, num_epidemics=30)
+    ),
+)
+
+evolver = get.GraphEvolver.from_config(config)
+edges   = evolver.run(20260812)      # one master seed drives everything
+
+print(evolver.best_fitness())        # nodes infected, in your units
+print(len(edges))                    # the winning network, as (u, v, weight) triples
+</code></pre>
+
+<p>
+  Line by line, with every option spelled out, on the
+  <a href="guide/python-api.html">Python API</a> page. The same experiment as a TOML file is on
+  <a href="guide/configuration.html">Configuration</a> — the two front ends
+  <a href="guide/pipeline.html#two-front-ends">converge before anything is parsed</a>, so neither
+  can accept something the other rejects.
+</p>
+
+<h2>Where to go next</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>If you want to…</th><th>Read</th></tr></thead>
+  <tbody>
+    <tr><td>run an experiment and get numbers out</td>
+        <td><a href="guide/getting-started.html">Getting started</a> →
+            <a href="guide/configuration.html">Configuration</a> →
+            <a href="guide/output.html">Logs &amp; results</a></td></tr>
+    <tr><td>understand why a run behaves the way it does</td>
+        <td><a href="guide/fitness.html">Fitness &amp; orientation</a> →
+            <a href="guide/sir.html">The SIR model</a> →
+            <a href="guide/reproducibility.html">Seeds &amp; reproducibility</a></td></tr>
+    <tr><td>score graphs by something other than an epidemic</td>
+        <td><a href="guide/new-fitness.html">Add an objective</a></td></tr>
+    <tr><td>add a new representation or strategy</td>
+        <td><a href="guide/new-genome.html">Add a genome</a> ·
+            <a href="guide/new-evolver.html">Add a strategy</a></td></tr>
+    <tr><td>find the code behind a concept</td>
+        <td><a href="reference/index.html">Module map</a></td></tr>
+    <tr><td>know what is actually built today</td>
+        <td><a href="status.html">Implementation status</a></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <b>About this documentation.</b> GET's design is fixed by
+  <code>official_spec_sheet.md</code> at the repository root, and these pages document the system
+  as that sheet designs it. A few pieces are designed and agreed but not yet in the code; they are
+  written here as though they work, and marked
+  <span class="badge badge-planned">planned</span> wherever they appear. The
+  <a href="status.html">status page</a> lists every one of them in a single table.
+</div>
+
+</main>
+<script src="assets/site.js"></script>
+</body>
+</html>

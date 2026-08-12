@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sir.rs · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="reference/sir.html">
+<main>
+
+<p class="page-kicker">Reference</p>
+<h1>sir.rs</h1>
+<p class="lede">
+  The epidemic simulator: one outbreak over one graph, and the machinery that samples several of
+  them reproducibly. If you have never met an epidemic model, start at
+  <a href="#what-is-sir">What SIR is</a> — this page is written to be read from cold, and the
+  worked walkthrough is the part to read twice.
+</p>
+
+<p>
+  Source: <code>get/src/sir.rs</code>, 701 lines, of which 392 are tests.
+  <span class="badge badge-built">built</span> — implemented, and matching the spec sheet §5.2
+  including the 2026-08-04 amendment about the burnout step. See
+  <a href="../guide/sir.html">The SIR model</a> for the modelling background and
+  <a href="fitness.html">fitness.rs</a> for the three objectives that read its output.
+</p>
+
+<h2 id="what-is-sir">What SIR is</h2>
+
+<p>
+  SIR is the standard way to describe an outbreak spreading through a group. Every individual is in
+  exactly one of three states at any moment:
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>State</th><th>Means</th><th>Can catch it?</th><th>Can pass it on?</th></tr></thead>
+  <tbody>
+    <tr><td><b>S</b> — Susceptible</td><td>Healthy, not yet infected</td><td>Yes</td><td>No</td></tr>
+    <tr><td><b>I</b> — Infectious</td><td>Currently carrying it</td><td>Already has it</td><td>Yes</td></tr>
+    <tr><td><b>R</b> — Removed</td><td>Recovered or dead — either way, out of the story</td><td>No</td><td>No</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  The only moves allowed are <b>S → I → R</b>, never backwards. One individual starts infected
+  ("patient zero"), and the outbreak ends when nobody is infectious any more — which can happen
+  with plenty of susceptible people left over, because they were simply never reached.
+</p>
+
+<p>
+  On a <b>network</b>, transmission only travels along edges. That is the whole reason this project
+  exists: the shape of the graph, not just the infection rate, decides how far and how long an
+  outbreak runs, so "evolve a graph whose outbreaks look like <i>this</i>" is a meaningful thing to
+  ask for.
+</p>
+
+<h3>The specific variant GET simulates</h3>
+
+<p>
+  GET uses SIR with a <b>one-timestep infectious period</b>. There is no recovery probability to
+  configure, because recovery is not random:
+</p>
+
+<ul>
+  <li>A node infected during step <code>t</code> is infectious for step <code>t+1</code> —
+      <b>exactly one step</b>.</li>
+  <li>During that one step it tries to infect each still-susceptible neighbour.</li>
+  <li>Then it becomes Removed, permanently, and never infects anyone again.</li>
+</ul>
+
+<p>
+  So the outbreak moves outward from patient zero in a wave, one hop per timestep, and burns out
+  behind itself. The only randomness is <i>whether</i> each transmission attempt succeeds.
+</p>
+
+<div class="note">
+  <b>Why the one-step infectious period?</b> It is the model the project has always simulated —
+  <code>sir.rs</code> is a deliberate port of <code>Graph::SIR</code> in
+  <code>legacy/Graph.cpp</code>, so that scores stay comparable with the archived C++ results
+  (<code>sir.rs:1-20</code>). It also makes an epidemic cheap, which matters when every fitness
+  evaluation runs dozens of them.
+</div>
+
+<h2>Parameters</h2>
+
+<div class="api-item">
+  <div class="api-sig">#[derive(Clone, Debug, PartialEq)]
+pub struct SirParams {
+    pub infection_rate: f64,
+    pub patient_zero: Option&lt;usize&gt;,
+}</div>
+  <div class="api-body">
+    <span class="src">sir.rs:36-41</span>
+    <p>One epidemic's parameters.</p>
+    <p>
+      <code>infection_rate</code> is the probability that transmission succeeds along
+      <b>one edge copy in one timestep</b>. Per edge copy, not per neighbour — a doubled edge gets
+      two independent chances. See <a href="#exposure">exposure</a>.
+    </p>
+    <p>
+      <code>patient_zero</code> pins the node the outbreak starts from. <code>None</code> draws a
+      fresh node uniformly at random <b>for every epidemic</b> (<code>sir.rs:225</code>), which is
+      usually what you want: pinning a node measures how good the graph is at spreading
+      <i>from that node</i>, not in general.
+    </p>
+    <p>
+      This is deliberately a plain struct rather than the config type — the simulator has no
+      business depending on the config schema (<code>sir.rs:31-34</code>). The mapping from
+      <a href="config.html">config.rs</a> happens in
+      <a href="dispatch.html">dispatch.rs</a>.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">#[derive(Clone, Debug, PartialEq)]
+pub struct SirSampleParams {
+    pub epidemic: SirParams,
+    pub num_epidemics: usize,
+    pub min_epidemic_length: usize,
+    pub max_epidemic_retries: usize,
+}</div>
+  <div class="api-body">
+    <span class="src">sir.rs:54-64</span>
+    <p>How one graph's epidemics are sampled — the epidemic itself, plus three sampling controls.</p>
+    <ul>
+      <li><b><code>num_epidemics</code></b> — how many outbreaks a graph's score averages over. At
+          least 1. This is not a tuning nicety: a single SIR draw is very noisy, and selection will
+          happily chase that noise instead of graph structure. It also dominates run time.</li>
+      <li><b><code>min_epidemic_length</code></b> — outbreaks shorter than this are re-rolled. C++
+          default 3. <b>Set it to 1 to disable the re-roll</b>, since every real epidemic has
+          <code>length &gt;= 1</code>.</li>
+      <li><b><code>max_epidemic_retries</code></b> — attempts before keeping whatever came out. C++
+          default 5. At least 1.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>What one epidemic returns</h2>
+
+<div class="api-item">
+  <div class="api-sig">#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Epidemic {
+    pub length: usize,
+    pub spread: usize,
+    pub profile: Vec&lt;usize&gt;,
+}</div>
+  <div class="api-body">
+    <span class="src">sir.rs:170-181</span>
+    <p>
+      Everything the three SIR objectives read, from one simulation. The epidemic is the expensive
+      part and all three objectives want the same one, so a single run reports all three readings.
+    </p>
+    <ul>
+      <li><b><code>length</code></b> — how many timesteps the epidemic occupied,
+          <b>including</b> the final one in which the last infectious node recovers without
+          infecting anybody.</li>
+      <li><b><code>spread</code></b> — total ever-infected, including patient zero. The one reading
+          that has never been ambiguous.</li>
+      <li><b><code>profile</code></b> — the count of <b>newly infected</b> nodes at each timestep.
+          <code>profile[0]</code> is always <code>1</code> (patient zero), and the last element is
+          always a terminating <code>0</code>.</li>
+    </ul>
+  </div>
+</div>
+
+<h3 id="trailing-zero">The trailing zero, and why <code>length</code> is what it is</h3>
+
+<p>
+  This trips up everyone once, so it is worth being explicit. Consider an outbreak that infects
+  nobody at all — patient zero has no neighbours:
+</p>
+
+<pre><code class="language-text">profile = [1, 0]      length = 1      spread = 1</code></pre>
+
+<p>Read that as two facts:</p>
+
+<ul>
+  <li><b>The profile ends in a zero</b> because the simulator records the step in which nothing
+      happened, rather than suppressing it. The final entry is not padding; it is the burnout step
+      being reported.</li>
+  <li><b><code>length</code> is 1, not 0</b>, because that burnout step is a real timestep — patient
+      zero spent it being infectious and recovering. Even the emptiest outbreak occupies one step.</li>
+</ul>
+
+<p>The three readings are consistent by construction (<code>sir.rs:160-166</code>):</p>
+
+<pre><code class="language-text">spread  == sum(profile)        the trailing zero contributes nothing
+length  == profile.len() - 1   the trailing zero is the "- 1"</code></pre>
+
+<div class="warn">
+  <b>A target profile captured from older GET output is off by one element.</b> Until the
+  2026-08-04 amendment, the spec specified no trailing zero and <code>length = 0</code> for a lone
+  patient zero. The code now matches <code>legacy/Graph.cpp</code> instead. So a
+  <a href="fitness.html#epiprofmatch"><code>epi_prof_match</code></a> target written against the old
+  convention will not line up element for element, and the mismatch produces a plausible wrong
+  number rather than an error.
+</div>
+
+<div class="note" id="empty">
+  <b><code>length == 0</code> means "no epidemic existed", not "nobody was infected".</b> Only a
+  graph with <b>zero nodes</b> produces it, returning <code>length: 0, spread: 0, profile: []</code>
+  (<code>sir.rs:215-221</code>). That is deliberate and documented as not-to-be-fixed
+  (<code>sir.rs:203-208</code>): a lone patient zero is <code>length 1</code>, so zero is
+  unambiguously the "nothing to measure" signal.
+</div>
+
+<h2>Running one epidemic</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub fn sir_sim&lt;R: Rng + ?Sized&gt;(
+    graph: &amp;Graph,
+    params: &amp;SirParams,
+    rng: &amp;mut R,
+) -&gt; Epidemic</div>
+  <div class="api-body">
+    <span class="src">sir.rs:213</span>
+    <p>Runs one epidemic to completion and returns its three readings.</p>
+    <p>
+      The random number generator is <b>passed in</b> rather than taken from a global. That is one
+      of only two deliberate departures from the C++ port, and it is what lets a single seed drive
+      a whole batch of graphs (<code>sir.rs:11-14</code>).
+    </p>
+    <p>
+      It never panics and never returns an error. An out-of-range <code>patient_zero</code> yields
+      an outbreak that infects nobody rather than a failure (<code>sir.rs:227-233</code>) —
+      <a href="config.html">config validation</a> is what is supposed to make that unreachable.
+    </p>
+  </div>
+</div>
+
+<h3>The per-step update rule</h3>
+
+<p>
+  The loop runs while at least one node is infectious (<code>sir.rs:242</code>). Each pass does four
+  things in strict order:
+</p>
+
+<h4 id="exposure">1. Count exposure</h4>
+<p>
+  For every node that is currently infectious, add the edge weight to every other node's exposure
+  tally (<code>sir.rs:249-258</code>). So <code>exposure[v]</code> ends up as
+  <b>the total number of edge copies connecting <code>v</code> to infectious nodes</b>.
+</p>
+<p>
+  A multiplicity of <code>k</code> contributes <code>k</code>, because parallel edges are
+  <code>k</code> independent chances to transmit, not one. Two different infectious neighbours also
+  contribute separately — exposure 2 means two chances, whether they came from one doubled edge or
+  two single ones.
+</p>
+
+<h4>2. Draw for infection</h4>
+<p>
+  Each node that is <b>Susceptible</b> and has <b>exposure greater than zero</b> gets
+  <b>one</b> combined random draw (<code>sir.rs:260-267</code>). The private helper
+  <code>transmits</code> (<code>sir.rs:304</code>) resolves it:
+</p>
+
+<pre><code class="language-text">escape      = (1 - infection_rate) ^ exposure
+infected if   random() &lt; 1 - escape</code></pre>
+
+<p>
+  In words: the chance of <i>escaping</i> all <code>exposure</code> independent contacts is
+  <code>(1 − rate)</code> multiplied by itself <code>exposure</code> times, and the node is infected
+  if it does not escape. One draw, not <code>exposure</code> draws — mathematically identical, and
+  cheaper.
+</p>
+
+<div class="note">
+  <b>Written as a power rather than the C++ <code>1 − exp(n · ln(1 − α))</code>.</b> The two are the
+  same quantity, but the logarithm form computes <code>ln(0)</code> when
+  <code>infection_rate</code> is exactly <code>1.0</code>. The direct form has no such edge case,
+  which is why every worked example on this page can safely use rate 1.0
+  (<code>sir.rs:298-306</code>).
+</div>
+
+<h4>3. Advance everybody at once</h4>
+<p>
+  A newly infected node is parked in a staging state, <code>JustInfected</code>, so it cannot
+  transmit during the same step it caught the infection (<code>sir.rs:189-195</code>). Only after
+  every susceptible node has been resolved does the whole population step forward
+  (<code>sir.rs:271-281</code>): every <code>Infectious</code> node becomes <code>Removed</code>,
+  and every <code>JustInfected</code> node becomes <code>Infectious</code>.
+</p>
+<p>
+  This is what makes a timestep <b>simultaneous</b> rather than a cascade. Without the staging
+  state, an infection early in the node ordering could spread all the way across the graph within a
+  single step, and results would depend on node numbering.
+</p>
+
+<h4>4. Record the step</h4>
+<p>
+  The number of nodes that just became infectious is pushed onto the profile
+  (<code>sir.rs:288</code>). When that number is zero the loop condition fails and the epidemic
+  ends — which is exactly how the terminating zero gets written.
+</p>
+
+<h2 id="walkthrough">A worked micro-simulation</h2>
+
+<p>
+  Five nodes. Edges <code>0–1</code>, <code>1–2</code>, <code>2–3</code>, <code>1–4</code>, every
+  one of them a single edge. <code>infection_rate = 1.0</code> so every transmission succeeds and
+  the trace is fully deterministic; <code>patient_zero = Some(0)</code>.
+</p>
+
+<pre><code class="language-text">        4
+        |
+  0 --- 1 --- 2 --- 3</code></pre>
+
+<div class="table-wrap">
+<table>
+  <thead><tr>
+    <th>Step</th><th>Infectious at start</th><th>Exposure of susceptibles</th>
+    <th>Newly infected</th><th>Becomes Removed</th><th><code>profile</code> after</th>
+  </tr></thead>
+  <tbody>
+    <tr><td>start</td><td>—</td><td>—</td><td>node 0 (patient zero)</td><td>—</td>
+        <td><code>[1]</code></td></tr>
+    <tr><td>1</td><td>{0}</td><td>1 → 1</td><td>{1}</td><td>0</td><td><code>[1, 1]</code></td></tr>
+    <tr><td>2</td><td>{1}</td><td>2 → 1, 4 → 1</td><td>{2, 4}</td><td>1</td>
+        <td><code>[1, 1, 2]</code></td></tr>
+    <tr><td>3</td><td>{2, 4}</td><td>3 → 1</td><td>{3}</td><td>2, 4</td>
+        <td><code>[1, 1, 2, 1]</code></td></tr>
+    <tr><td>4</td><td>{3}</td><td>nobody susceptible left</td><td>none</td><td>3</td>
+        <td><code>[1, 1, 2, 1, 0]</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Reading the trace line by line:</p>
+
+<ul>
+  <li><b>Step 1.</b> Node 0 is infectious. Its only neighbour is node 1, so node 1 has exposure 1
+      and — at rate 1.0 — is certainly infected. Node 0 now recovers and is out for good.</li>
+  <li><b>Step 2.</b> Node 1 is infectious and has three neighbours: 0, 2 and 4. Node 0 is already
+      Removed and is skipped, so nodes 2 and 4 are infected <b>in the same step</b>. This is where
+      the profile records a 2.</li>
+  <li><b>Step 3.</b> Nodes 2 and 4 are infectious. Node 4 is a dead end. Node 2 reaches node 3.
+      Note that node 1, their shared neighbour, is Removed — the wave never travels backwards.</li>
+  <li><b>Step 4.</b> Node 3 is infectious but every remaining neighbour is Removed. Nobody is newly
+      infected, so a <code>0</code> is recorded and the loop ends. <b>This is the burnout step,
+      and it counts.</b></li>
+</ul>
+
+<p>The final result:</p>
+
+<pre><code class="language-text">profile = [1, 1, 2, 1, 0]
+length  = 5 - 1 = 4        four timesteps, the last one being burnout
+spread  = 1+1+2+1+0 = 5    all five nodes were reached</code></pre>
+
+<h3>The same graph, at a rate below 1</h3>
+
+<p>
+  Only step 2 changes in character. Nodes 2 and 4 each have exposure 1, so each is infected
+  independently with probability <code>1 − (1 − rate)¹ = rate</code>. At <code>rate = 0.5</code>
+  the step infects both, one, or neither, and the outbreak may stop early — which is precisely the
+  noise <code>num_epidemics</code> and the <a href="#reroll">re-roll</a> exist to manage.
+</p>
+
+<p>
+  Had <code>1–2</code> been a <b>doubled</b> edge, node 2's exposure at step 2 would be 2 and its
+  infection probability <code>1 − (1 − rate)²</code>. At rate 0.3 that is 0.51 rather than 0.30.
+  The test <code>parallel_edges_are_independent_chances_to_transmit</code>
+  (<code>sir.rs:402-443</code>) pins this down empirically against the analytic values.
+</p>
+
+<h3>Two more shapes, for intuition</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Graph (5 nodes, rate 1.0, patient zero 0)</th><th><code>profile</code></th>
+      <th><code>length</code></th><th><code>spread</code></th></tr></thead>
+  <tbody>
+    <tr><td>Path <code>0–1–2–3–4</code></td><td><code>[1,1,1,1,1,0]</code></td><td>5</td><td>5</td></tr>
+    <tr><td>Star — 0 joined to 1, 2, 3, 4</td><td><code>[1,4,0]</code></td><td>2</td><td>5</td></tr>
+    <tr><td>The example above</td><td><code>[1,1,2,1,0]</code></td><td>4</td><td>5</td></tr>
+    <tr><td>Five isolated nodes</td><td><code>[1,0]</code></td><td>1</td><td>1</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  All three connected shapes have <b>identical spread</b> and <b>very different length</b>. That is
+  the clearest possible statement of why
+  <a href="fitness.html#epispread"><code>epi_spread</code></a> and
+  <a href="fitness.html#epilength"><code>epi_length</code></a> select for different structures:
+  spread rewards reaching everybody, length rewards reaching them <i>slowly</i>, along a long thin
+  path. The 6-node path case is verified at <code>sir.rs:328-344</code>, the isolated case at
+  <code>sir.rs:347-362</code>.
+</p>
+
+<h2 id="reroll">Sampling many epidemics, and the re-roll</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub fn simulate_epidemics(
+    graph: &amp;Graph,
+    params: &amp;SirSampleParams,
+    batch_seed: u64,
+) -&gt; Vec&lt;Epidemic&gt;</div>
+  <div class="api-body">
+    <span class="src">sir.rs:110</span>
+    <p>
+      Runs one graph's whole set of epidemics — <code>num_epidemics</code> of them — re-rolling ones
+      that fizzle, and returns them all. This is what an objective calls; each of the three SIR
+      objectives is just a reading over the epidemics it returns.
+    </p>
+    <p>
+      The epidemics run <b>sequentially</b> (<code>sir.rs:131-151</code>). Parallelism comes from
+      the levels above: many graphs at once, and many replicate runs at once.
+    </p>
+    <p>
+      <b>Panics</b> if <code>num_epidemics</code> or <code>max_epidemic_retries</code> is zero
+      (<code>sir.rs:115-122</code>). Config validation rejects both, so a config-driven run cannot
+      reach it; the assertion is a backstop for direct Rust use. Zero epidemics would leave the
+      objective averaging nothing, producing the <code>NaN</code> the
+      <a href="fitness.html#nan">fitness contract forbids</a>.
+    </p>
+  </div>
+</div>
+
+<h3>Why short outbreaks are re-rolled</h3>
+
+<p>
+  An outbreak that fizzles immediately tells you almost nothing about the graph. It reports that the
+  dice went badly, not that the network is poor. Without a re-roll, a large share of evaluations
+  come back near-empty and selection chases the dice instead of structure.
+</p>
+
+<p>So the loop is (<code>sir.rs:137-148</code>):</p>
+
+<pre><code class="language-text">for each epidemic i:
+    for attempt a in 0 .. max_epidemic_retries:
+        run the epidemic with seed[i, a]
+        keep it                          &lt;- every attempt overwrites `kept`
+        if length &gt;= min_epidemic_length: stop</code></pre>
+
+<p>
+  Two details that are easy to get wrong when reading it. <b>The kept epidemic is the first
+  long-enough one</b> — or, if none of the attempts qualified, <b>the last one tried</b>, not the
+  best one (<code>sir.rs:144</code>). And the epidemic is never discarded for being too
+  <i>long</i>; the threshold is one-sided.
+</p>
+
+<div class="warn">
+  <b>The re-roll is a biased resample, not variance reduction.</b> It pushes expected fitness upward
+  by an amount that depends on how often a given graph fizzles — so a graph that fizzles often gains
+  more from it than one that rarely does. It is <b>not</b> interchangeable with raising
+  <code>num_epidemics</code>, and the two do different jobs. It is kept deliberately, for
+  comparability with the archived C++ results, which is why both values are exposed rather than
+  hardcoded (<code>sir.rs:49-52</code>).
+</div>
+
+<div class="tip">
+  <b>To turn it off, set <code>min_epidemic_length = 1</code>.</b> Every real epidemic has
+  <code>length &gt;= 1</code>, so nothing is ever rejected. <code>max_epidemic_retries = 1</code> is
+  equivalent — one attempt, kept regardless. Both must be at least 1; <code>0</code> panics rather
+  than being caught gracefully.
+</div>
+
+<h2 id="seeding">Seeding</h2>
+
+<div class="api-item">
+  <div class="api-sig">pub fn epidemic_seeds(
+    batch_seed: u64,
+    num_epidemics: usize,
+    max_epidemic_retries: usize,
+) -&gt; Vec&lt;u64&gt;</div>
+  <div class="api-body">
+    <span class="src">sir.rs:83</span>
+    <p>
+      Builds the pool of seeds one batch draws its epidemics from. A <code>ChaCha8Rng</code> is
+      seeded with <code>batch_seed</code> and its output stream <i>is</i> the seed list —
+      <code>num_epidemics × max_epidemic_retries</code> of them.
+    </p>
+    <p>
+      Epidemic <code>i</code>, attempt <code>a</code> uses the seed at the <b>fixed position</b>
+      <code>i * max_epidemic_retries + a</code> (<code>sir.rs:138</code>).
+    </p>
+  </div>
+</div>
+
+<p>
+  The fixed position is the load-bearing part. Two properties depend on it, and both break quietly
+  if seeds are drawn sequentially instead (<code>sir.rs:66-82</code>):
+</p>
+
+<ul>
+  <li><b>Every graph in a batch draws from the same pool</b>, so differences in fitness reflect the
+      graph rather than the dice. This is what "common random numbers" means. A retry only changes
+      <i>which</i> of the shared draws a particular graph stops on.</li>
+  <li><b>Extending appends.</b> Raising <code>num_epidemics</code> from 30 to 50 leaves the first 30
+      epidemics replaying unchanged, so extending an experiment never invalidates what you already
+      have. Verified at <code>sir.rs:527-537</code>.</li>
+</ul>
+
+<p>
+  Sequential drawing would break both, because a graph that retries consumes extra draws and every
+  later epidemic in that evaluation would be offset from the graphs that did not retry. Positional
+  indexing resynchronises at the next epidemic. It is also what makes scoring order-independent, so
+  a population evaluated across threads reproduces exactly regardless of which worker got there
+  first.
+</p>
+
+<pre><code class="language-text">batch_seed
+    |
+    +-- ChaCha8Rng stream --> [ s0  s1  s2  s3  s4 | s5  s6  s7  s8  s9 | ... ]
+                                \_______________/   \_______________/
+                                  epidemic 0          epidemic 1
+                                  attempts 0..4       attempts 0..4</code></pre>
+
+<div class="note">
+  <b>Where <code>batch_seed</code> comes from.</b> Not from here. It is handed down by
+  <a href="fitness.html#epidemicscorer"><code>EpidemicScorer</code></a>, which derives one seed per
+  batch of graphs from the run's master seed and an atomic counter. This file only consumes it. The
+  full chain is on <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a>.
+</div>
+
+<h2>Gotchas</h2>
+
+<div class="warn">
+  <b>An out-of-range <code>patient_zero</code> fails quietly.</b> It returns
+  <code>length 0, spread 0</code> (<code>sir.rs:227-233</code>) rather than erroring, and that zero
+  is then averaged into the graph's score, dragging it down. Config validation checks
+  <code>patient_zero &lt; network_size</code>, so this only bites code that builds a
+  <code>Config</code> in Rust without validating it.
+</div>
+
+<div class="note">
+  <b>RNG consumption is data-dependent.</b> An unpinned <code>patient_zero</code> consumes one draw
+  per epidemic (<code>sir.rs:225</code>), and only susceptible nodes with non-zero exposure consume
+  a draw at all (<code>sir.rs:260-267</code>). That is harmless — each epidemic gets its own freshly
+  seeded generator — but it means you cannot reason about stream position <i>across</i> epidemics,
+  only within one.
+</div>
+
+<div class="note">
+  <b>The exposure scan touches every node, not just susceptible ones.</b> Removed and infectious
+  nodes accumulate exposure too (<code>sir.rs:253-257</code>); those entries are simply never read.
+  It costs a little work and keeps the loop simple — not a bug, but it will look like one if you are
+  reading the loop closely.
+</div>
+
+<div class="note">
+  <b>Cost.</b> One epidemic step is <code>O(infectious × n)</code> for the exposure scan plus
+  <code>O(n)</code> for the draws, so an epidemic is <code>O(n²)</code> in the worst case and one
+  evaluation multiplies that by <code>num_epidemics</code>. This is why <code>num_epidemics</code>
+  dominates run time — everything else in an evaluation is cheap by comparison.
+</div>
+
+<h2>See also</h2>
+
+<ul>
+  <li><a href="../guide/sir.html">The SIR model</a> — the concept page, with the modelling
+      background and how to choose <code>infection_rate</code> and <code>num_epidemics</code>.</li>
+  <li><a href="fitness.html">fitness.rs</a> — the three objectives that read an
+      <code>Epidemic</code>, and <code>EpidemicScorer</code>, which owns the batch seed.</li>
+  <li><a href="graph.html">graph.rs</a> — the simulator reads the graph only through
+      <code>weight</code>, and treats multiplicity as independent chances.</li>
+  <li><a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a> — the full seed chain
+      from the master seed down to one epidemic.</li>
+  <li><a href="config.html">config.rs</a> — where the SIR parameters are validated.</li>
+</ul>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

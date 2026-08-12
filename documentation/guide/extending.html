@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Extension points · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/extending.html">
+<main>
+
+<p class="page-kicker">Extending GET</p>
+<h1>Extension points</h1>
+<p class="lede">
+  Four things you can add, and they cost wildly different amounts. Knowing which axis you are on
+  before you start saves the most time of anything on this page.
+</p>
+
+<h2>The cost of each axis</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Add a…</th><th>Costs</th><th>Because</th></tr></thead>
+  <tbody>
+    <tr><td><b><a href="new-fitness.html">Objective</a></b></td>
+        <td><b>One arm.</b> Cheapest by a wide margin — and in Python, no Rust at all.</td>
+        <td>The objective is erased to a trait object <i>before</i> dispatch, so it never enters
+            the strategy × genome match.</td></tr>
+    <tr><td><b><a href="new-genome.html">Genome</a></b></td>
+        <td>One config variant, one startup function, one dispatch arm.</td>
+        <td>The strategy match is generic over the genome, so evolvers are untouched.</td></tr>
+    <tr><td><b><a href="new-evolver.html">Strategy</a></b></td>
+        <td>One config variant, one arm in the strategy match, one trait implementation.</td>
+        <td>The genome match is untouched, for the same reason in reverse.</td></tr>
+    <tr><td><b>Selection scheme</b></td>
+        <td>One enum variant and one match arm.</td>
+        <td>Selection is already an enum for exactly this reason. Note that the validation function
+            destructures it irrefutably on purpose, so adding a variant <i>stops compiling</i>
+            there and forces you to answer the "does this need a constraint?" question.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<figure>
+<svg viewBox="0 0 700 260" role="img" aria-label="Dispatch happens in two steps: the objective is erased first, then a match over strategy times genome instantiates concrete types.">
+  <defs>
+    <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g style="color:var(--border-firm)">
+    <rect x="30" y="24" width="180" height="46" rx="8" class="d-fill-box"/>
+    <rect x="30" y="24" width="180" height="46" rx="8" class="d-stroke"/>
+    <text x="120" y="52" class="d-text" text-anchor="middle" font-weight="600">validated config</text>
+
+    <rect x="270" y="24" width="220" height="60" rx="8" class="d-fill-good"/>
+    <rect x="270" y="24" width="220" height="60" rx="8" class="d-stroke"/>
+    <text x="380" y="47" class="d-text" text-anchor="middle" font-weight="600">step 1 — erase the objective</text>
+    <text x="380" y="67" class="d-text-mono" text-anchor="middle" font-size="11">Box&lt;dyn Fitness&gt;</text>
+    <text x="380" y="100" class="d-text-sm" text-anchor="middle">one arm per objective · touches nothing else</text>
+
+    <path d="M214 47 L266 47" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#ax)" style="color:var(--accent)"/>
+
+    <rect x="270" y="130" width="220" height="60" rx="8" class="d-fill-acc"/>
+    <rect x="270" y="130" width="220" height="60" rx="8" class="d-stroke"/>
+    <text x="380" y="153" class="d-text" text-anchor="middle" font-weight="600">step 2 — strategy × genome</text>
+    <text x="380" y="173" class="d-text-sm" text-anchor="middle">2 genome arms + 2 strategy arms</text>
+    <text x="380" y="206" class="d-text-sm" text-anchor="middle">a new genome or strategy adds one arm to one of the two</text>
+    <text x="380" y="226" class="d-text-sm" text-anchor="middle">— not one per combination, because the second match is generic</text>
+
+    <path d="M380 88 L380 126" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#ax)" style="color:var(--accent)"/>
+
+    <rect x="540" y="130" width="130" height="60" rx="8" class="d-fill-box"/>
+    <rect x="540" y="130" width="130" height="60" rx="8" class="d-stroke"/>
+    <text x="605" y="158" class="d-text" text-anchor="middle" font-weight="600">a running</text>
+    <text x="605" y="176" class="d-text" text-anchor="middle" font-weight="600">evolver</text>
+    <path d="M494 160 L536 160" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#ax)" style="color:var(--accent)"/>
+  </g>
+</svg>
+<figcaption>Erasing the objective first is what collapses dispatch from strategy × genome ×
+objective down to strategy × genome — and it is why an objective is so much cheaper to add than
+anything else.</figcaption>
+</figure>
+
+<h2>Why the two axes are not symmetric</h2>
+
+<p>
+  <b>Genome cannot be a trait object.</b> Its mutation and crossover methods are generic over the
+  random number generator, crossover takes a mutable <code>Self</code>, cloning requires a known
+  size, and its context is an associated type that differs per representation. Any one of those
+  rules out <code>dyn Genome</code>. So strategy × genome stays a <code>match</code>.
+</p>
+
+<p>
+  <b>Fitness has none of those problems</b> — no generic methods, no <code>Self</code> in argument
+  position, and it is thread-safe through its supertrait. So the objective is boxed before the
+  evolver is built, and a new objective never touches dispatch at all.
+</p>
+
+<div class="warn">
+  <b>Three things the boxing requires, each of which fails silently if missed.</b> Relevant if you
+  are working in this area rather than just adding an arm:
+  <ul>
+    <li>A forwarding implementation of <code>Fitness</code> for the boxed trait object, which must
+        live beside the trait — the orphan rule rejects it anywhere else.</li>
+    <li><b>Every method forwarded, including the defaulted ones.</b> Omitting either compiles and
+        is wrong: dropping <code>direction</code> makes a maximizing objective run backwards, and
+        dropping <code>evaluate_batch</code> makes a Python objective fall back to a per-individual
+        fan-out — which is the exact thing the batched design exists to prevent.</li>
+    <li><b>A factory, not a value.</b> Replicates need per-run objective instances, so the erasing
+        match is re-run once per replicate. One shared box handed to <code>n</code> concurrent runs
+        is the shared-counter bug that destroys reproducibility under load.</li>
+  </ul>
+</div>
+
+<h2>Two front doors, and neither is a fallback</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th></th><th>Route</th><th>For</th></tr></thead>
+  <tbody>
+    <tr><td><b>Config-driven</b></td>
+        <td>Write a config, register a Python callable, call <code>run</code>.</td>
+        <td>Most users, and any prototype. No Rust, no compilation.</td></tr>
+    <tr><td><b>Library</b></td>
+        <td>Depend on <code>get</code> as a crate, implement <code>Fitness</code> for your own type,
+            and drive an evolver directly.</td>
+        <td>A hot native objective, without forking GET.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  The library route <b>needs no dispatch arm, because it does not go through dispatch</b>. The
+  evolver's <code>run</code> is generic over the objective, so a caller who already holds a concrete
+  type instantiates the evolver with it directly. Dispatch exists to turn <i>a config document</i>
+  into concrete types; a library consumer is not a config consumer, and the two doors are
+  independent.
+</p>
+
+<div class="note">
+  <b>A user-supplied objective deliberately never gets a config variant.</b> The alternative — a
+  string-keyed registry that config could name — would move validation out of the parser, which is
+  exactly the failure the single-validator design exists to prevent. Keeping user objectives out of
+  the schema means nothing user-supplied is ever deserialized, so there is nothing new to validate.
+</div>
+
+<h3>What dispatch must keep public</h3>
+
+<p>
+  Dispatch must not become the <i>only</i> way to construct a run. Narrowing any of these would
+  kill the library route silently, with no compile error inside the crate:
+</p>
+
+<ul>
+  <li>the <code>Fitness</code> trait, and <code>Direction</code></li>
+  <li>the genome implementations and their context types</li>
+  <li><code>SharedEvolutionContext</code>, each strategy's type context, and <code>Evolver::new</code></li>
+  <li><code>Evolver::run</code> and <code>EvolutionOutcome</code></li>
+</ul>
+
+<p>
+  Assembling a population and contexts by hand is genuinely awkward today, and that is a real cost
+  of the library route — it may deserve a builder later. It is not a reason to route user
+  objectives through the config enum instead.
+</p>
+
+<h2>The one rule that is not optional</h2>
+
+<div class="warn">
+  <b>Score through <code>express_and_score</code>.</b> The engine never calls
+  <code>Fitness::evaluate</code> or <code>evaluate_batch</code> directly, anywhere. That single
+  function is both the orientation point and the <code>NaN</code> gate, and a direct call bypasses
+  both — producing values that compare backwards under a maximizing objective, and letting a
+  <code>NaN</code> through that will take over the population. Neither failure announces itself.
+  Any new evolution strategy scores its population through this function or it is wrong. Detail on
+  <a href="fitness.html#gate">Fitness &amp; orientation</a>.
+</div>
+
+<h2>Practical notes for any of them</h2>
+
+<ul>
+  <li><b>Add the key to <code>config.example.toml</code>.</b> The shipped example is parsed
+      <i>and</i> validated by the test suite, so it can never silently rot — and a broken example
+      fails the suite rather than a user's afternoon.</li>
+  <li><b>Mirror any new config field on the Python side</b>, and add its attribute path to the
+      error-mapping table, or the test that scrapes the validator for field names will fail.</li>
+  <li><b>Never use a bare default on a count where zero is meaningless.</b> Named default functions
+      exist for precisely that reason.</li>
+  <li><b>A top-level config field added on one side only fails to compile</b>, because the
+      round-trip test destructures the config exhaustively with no catch-all. That is deliberate,
+      and it is the best guard in the codebase.</li>
+</ul>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>
