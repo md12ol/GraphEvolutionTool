@@ -396,9 +396,17 @@ reach for `--json` on reads and the REST API on writes:
 - **Prefer explicit loops to iterator chains.** Both owners have to read every line here and one of
   us does not write Rust, so a plain `for` with an accumulator beats a chain that needs a turbofish,
   a closure returning through an `Option`, or more than about two adapters. Keep comments terse and
-  written for someone new to the code; link `official_spec_sheet.md` rather than restating it —
-  a copy of the sheet drifts, and the sheet is the authority. Agreed 2026-08-04; reasoning in
+  written for someone new to the code; ~~link `official_spec_sheet.md` rather than restating it —
+  a copy of the sheet drifts, and the sheet is the authority.~~ Agreed 2026-08-04; reasoning in
   `decisions.md` 2026-08-04 22:12.
+  **Amended 2026-08-13 — Michael: do not reference the sheet from `get/src` at all.** Not by
+  section number, not by name, not as a link. The original clause was aimed at *restating* the
+  sheet, and "link it instead" was the cheap alternative — but the reader of a shipped crate has no
+  access to `official_spec_sheet.md`, so every pointer to it is a dead end rather than a shortcut.
+  Measured 2026-08-13: **135** such references had accumulated in `get/src`, against 10,251 lines.
+  The rest of the clause stands unchanged — terse, for someone new, and never a copy of the sheet.
+  Where a comment needs the *reason* a thing is correct, state the reason itself rather than citing
+  where it was agreed. Backlog is GitHub #68; `documentation/`'s equivalent is #67.
 - **No agent co-attribution on commits or PRs — ever, and never ask.** No `Co-Authored-By: Claude`
   trailer, no "Generated with Claude Code" footer, no `🤖` line. The author and committer are the
   owner whose machine it is, and nothing else appears. Added to *this* file 2026-08-09 — Michael,

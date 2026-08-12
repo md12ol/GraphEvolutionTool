@@ -2146,3 +2146,39 @@ it existing. Checked while writing it: James had no open PR and no remote branch
 with nothing in flight.
 
 *#53 addendum · 2026-08-13 01:31 — Michael.*
+
+### 54. FYI — `get/src` no longer links the spec sheet, and both docs reworks are levelled (8)
+
+Michael, 2026-08-13. Direct to `main` rather than a PR, under the practice #52(a) proposes: it
+binds your practice, so it gets a note here rather than silence. Reverse it if you disagree.
+
+**The `CLAUDE.md` amendment.** The comment convention agreed 2026-08-04 said "link
+`official_spec_sheet.md` rather than restating it". The restating half stands; the linking half is
+struck. Shipped source does not reference the sheet **at all** — not by section number, not by
+name, not as a link — because a reader of the published crate cannot open it, so every pointer is a
+dead end. Where a comment needs the reason something is correct, it now states the reason instead of
+citing where it was agreed.
+
+**Why it needed saying.** The original clause was aimed at stopping copies of the sheet drifting out
+of step, and linking was the cheap alternative. Applied for nine days it produced **135** sheet
+references in 10,251 lines of `get/src`, alongside 19 issue numbers, 13 dated "agreed on" notes and
+8 pointers at `.claude/` working docs. None of that is followable by anyone outside this repo.
+
+**Two issues filed for the cleanup, both deliberately last.**
+
+- **#68** — cut the comment volume in `get/src`. 2,332 of 10,251 lines are comments (22.7%), with
+  `genomes/genome.rs` at 64% and `evolver/mod.rs` at 63%, while
+  `genomes/edge_edit/operations.rs` — the nine opcodes, the most intricate logic in the crate — sits
+  at 1%. The density is inverted.
+- **#67** — the same rework for `documentation/`. 39 pages, 13,599 lines, with six reference pages
+  over 500 lines each. Written to argue the design rather than describe the behaviour.
+
+**Both are tier (8), after everything currently open.** #67 was filed at (1) and re-levelled the same
+day: nothing technically blocks either, but #20, #21, #28 and #56 all rewrite the code and pages they
+would touch, so doing them first means doing them twice.
+
+**Overlap you should know about:** #68 and #56 both edit the doc comments in `generational.rs` and
+`steady_state.rs`. Whichever runs second should inherit the other's result rather than re-deciding
+it.
+
+*#54 · raised 2026-08-13 02:14 — Michael.*
