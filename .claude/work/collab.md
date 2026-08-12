@@ -2093,3 +2093,56 @@ whoever picks up the issue; either fixes the hole item 5 describes.
 `official_spec_sheet.md` has been touched; all five wait for the joint meeting this item asks for.
 
 *(Reply inside #51 · 2026-08-12 14:12 — James.)*
+
+### 53. Documentation edits move to a per-owner queue — `jsargant_edits.md` is your half, if you agree
+
+Michael, raising this because it changes your practice as well as mine, and because it contradicts a
+`CLAUDE.md` bullet that is only a day old.
+
+**The ask.** Stop editing `documentation/` inside every task's PR. Instead, a task that invalidates
+something the site says appends an entry to a queue file naming what is now false and what it should
+say, and the site is corrected in **one sweep** as its own task. Mine is
+`documentation/mdube_edits.md`, live as of 2026-08-13. Yours would be
+`documentation/jsargant_edits.md`, and it does not exist — I have not created a file that dictates
+your workflow.
+
+**Why the cost is real rather than theoretical.** Shipping GitHub #27 — a three-hour issue about a
+return type — touched ten HTML files. None of them were the point of the work, and the second pass
+found that the first pass had missed two pages still claiming the convergence log never reaches
+Python, plus roughly forty-five `src` line references that my own edits had shifted. That is a whole
+extra task's worth of care hiding inside every code task, and it is the kind of care that gets
+skipped under time pressure, which is worse than batching it.
+
+**Why per-owner files rather than one shared queue.** A queue is a **churn list** — an entry is
+deleted once applied — and that is precisely the category `decisions.md` 2026-08-04 18:25 excluded
+from `merge=union`, because union cannot express a deletion and an applied entry silently comes back.
+Two files mean neither of us ever touches the other's, so the question never arises. The cost, which
+should be written into whatever we agree: **a sweep reads every queue file, not only its own**, or a
+page owed edits by both of us gets half-corrected and looks deliberate.
+
+**How a session knows which file is which.** `git config user.email`, checked rather than guessed —
+`mdube04@uoguelph.ca`, `michael.dube@ovgu.de` and `35709889+md12ol@users.noreply.github.com` are
+mine; `shorinbonsai@gmail.com` is yours. Anything unrecognised **stops and asks**. Filing into the
+wrong owner's queue is silent, which is the failure worth designing against.
+
+**What this contradicts, and what I have not done about it.** `CLAUDE.md`'s bullet "When a `planned`
+feature ships, de-badge its documentation in the same PR" (added 2026-08-13) says the opposite about
+*timing*. The de-badging itself still has to happen — badge, `.plan-note` callout, `status.html`
+row — just in the sweep. I have **not** amended that bullet, because it binds you and the routing
+table prefers a PR for exactly that case. If you agree here, the amendment goes in with your name on
+it. Note it is also contingent on #50, which you have not ruled on.
+
+**The one thing I did apply directly.** #27's own documentation was corrected in its PR, under the
+old rule, before this file existed. The site is current as of 2026-08-13; nothing is pending in my
+queue. So this changes the next task, not the last one.
+
+*#53 · raised 2026-08-13 01:19 — Michael.*
+
+**Addendum to #53, same session:** Michael asked for `documentation/jsargant_edits.md` to be created
+rather than left as a proposal, so it now exists — which makes the "it does not exist" line above
+out of date. It is empty of pending work and carries a header saying it was created on James's
+behalf and is not yet agreed. **Deleting the file is the whole of the rejection**; nothing depends on
+it existing. Checked while writing it: James had no open PR and no remote branch, so this collides
+with nothing in flight.
+
+*#53 addendum · 2026-08-13 01:31 — Michael.*
