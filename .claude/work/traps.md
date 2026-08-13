@@ -509,3 +509,21 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
 - **Measured:** 2026-08-13. `session_brief.sh` had carried the heading-anchored form since it was
   written and had therefore never once printed a `Start here` block on any handoff in this repo.
 - **Added:** 2026-08-13 — handoff-start-here-is-a-bold-label-not-a-heading
+
+### A folder-local `files.exclude` in the docs worktree can render its whole Explorer root as empty
+- **Bites when:** you (or a future setup step) add a `.vscode/settings.json` inside the
+  `<repo>-docs` worktree with a `files.exclude` pattern meant to hide everything except
+  `.claude/work/` — e.g. `{"**": true, "!.claude": false, ...}`. VS Code sometimes renders that
+  entire workspace root as having no children at all, including after **Developer: Reload
+  Window**, even though the files genuinely exist on disk (`ls`/`find` show them fine).
+- **Do this instead:** don't add that settings file. The docs worktree is already
+  sparse-checked-out to `.claude/work/*` (`CLAUDE.md`, "dedicated `main` worktree"), so there is
+  nothing else on disk left to hide — the exclude rule was always redundant on top of being the
+  bug. If a docs-worktree Explorer root ever looks empty, check for a stray
+  `.vscode/settings.json` there before suspecting the worktree or sparse-checkout is broken.
+- **Why:** not fully root-caused — plausibly VS Code collapsing a root it determines has nothing
+  visible under it, rather than an ordinary exclude-pattern bug. Not worth chasing further since
+  the fix (delete the file) is strictly simpler than the setting it was trying to express.
+- **Measured:** 2026-08-13. Removing the settings file and reloading fixed it immediately;
+  `setup_docs_worktree.sh` never writes one.
+- **Added:** 2026-08-13 — docs-worktree-files-exclude-can-render-the-whole-root-empty

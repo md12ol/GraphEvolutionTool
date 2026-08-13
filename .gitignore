@@ -1,6 +1,7 @@
 .idea/
 target/
 .vscode/
+.venv/
 # Running examples/config_builder.py leaves examples/__pycache__/ behind, which
 # showed up as untracked for whoever ran it. Byte-code, never shared.
 __pycache__/

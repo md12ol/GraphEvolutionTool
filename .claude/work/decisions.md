@@ -2291,3 +2291,97 @@ remains **Open**, unaffected.
 *Recorded 2026-08-13 11:35 — Michael.*
 
 ## Task complete: per-owner-work-dirs — 2026-08-13
+
+## 2026-08-13 — Michael — `.claude/work/<owner>/` moved into a dedicated `main` worktree (`collab.md` #58, PR #70)
+
+**Chose:** a linked git worktree, permanently checked out to `main` at the fixed sibling path
+`../<repo-name>-docs`, as the sole place every skill (`save`, `park`, `load`, `done`, `start`)
+reads and writes `.claude/work/<owner>/` and the persistent docs. `session_brief.sh` reads
+`git show main:.claude/work/...` instead, needing no worktree setup since it was read-only anyway.
+
+**Why:** `.claude/work/<owner>/current/` and `parked/` are ordinary tracked files, so a feature
+branch's copy is frozen at the moment it was cut. `main` moving afterwards — including a task
+closing and archiving out of `parked/` — was invisible from that branch until merge. Hit directly
+this session: `mdube_run_output` was cut mid-task, then `result-object` and `per-owner-work-dirs`
+both closed and archived on `main`, and switching back to `mdube_run_output` showed both still
+listed as parked. The routing table already said these directories go "direct push to `main`" —
+the actual bug was `/save`'s own push step saying "`main`, or the current branch, if this session
+is on one," which is what let the drift happen.
+
+**Rejected:** always `git checkout main` in the same working tree before touching `.claude/work/`,
+then checking back out to the code branch afterward (the "checkout dance") — this session did
+exactly that by hand for the `result-object` and `per-owner-work-dirs` closes, and it produced a
+real bug: a `git stash pop` after the dance restored stale pre-edit content over freshly-written
+files, silently, because the stash captured the git index's stale staged content rather than the
+edited working-tree content. A worktree has no equivalent failure mode — there's no stash, no
+checkout, no shared index to race with itself. Also rejected: a fully separate `.claude/`-only repo
+(the user's original suggestion) — decoupling the docs from the code's commit history the sheet
+and `CLAUDE.md` rely on ("where the sheet and the code disagree, fix the code, or write a dated
+entry") loses more than the branch-drift bug costs.
+
+**Consequence for union merge:** `decisions.md` and `collab.md` stop being touched by feature
+branches under this model, since every write goes straight to the worktree's `main`. A
+feature-branch PR should now carry no diff to either file, so `merge=union` stops mattering for PR
+merges specifically — it still matters for two people running `/save` on `main` around the same
+real time, which this change doesn't touch.
+
+**Migration performed this session:** `mdube_run_output`'s stale `.claude/work/mdube/` (frozen at
+branch creation, still carrying `result-object` and `per-owner-work-dirs` as parked even though
+both had since archived on `main`) was removed from that branch entirely (`git rm -r`), and its one
+live task (`run-output`) was copied into the new `main` worktree by hand, since the branch's copy
+was staged-but-uncommitted and had no history worth carrying across. Merging `main` into
+`mdube_run_output` afterward produced four `rename/delete` conflicts, all auto-resolving to
+`main`'s content (`git add` on files git had already written correctly) — confirms the branch
+cleanup was sufficient for a clean merge.
+
+**Affects:** `.claude/hooks/session_brief.sh`, `.claude/skills/{save,park,load,done,start}/SKILL.md`,
+`.claude/CLAUDE.md`, `.claude/README.md` — PR #70, open. `collab.md` #58 is the notification to
+James, including his one-time setup step.
+*Recorded 2026-08-13 — Michael.*
+
+## 2026-08-13 14:52 — Michael — Joint meetings get their own directory, and deciding is split from executing
+
+**Decided:** `.claude/work/meetings/<YYYY-MM-DD>.md` — one file per joint meeting, no owner in the
+path, direct push to `main`, **not** union-merged. Three skills operate on it: `/makeAgenda` derives
+it from `collab.md`, `/startMeeting` walks it and records decisions into it, `/endMeeting` executes
+the resulting checklist. Each file is an agenda before the meeting and the minutes of it afterwards,
+carrying a `Status:` of `prepared` → `in progress` → `closed` → `executed`.
+
+**Why a directory rather than more `collab.md`.** `collab.md` reached 2476 lines and its own
+`Open`/`Settled` headings stopped being accurate around item #48 (`collab.md` #59). Turning it into
+an agenda was manual every time, and the answers were landing in a session transcript rather than
+back inside the items — the failure `collab.md` #52(b) names and #50 is the live instance of, since
+PR #64 merged without ruling on the question its item asks. A derived agenda fixes the reading
+problem without touching the source: `/makeAgenda` never edits `collab.md`, so reorganising that
+file stays a joint decision rather than something a skill does on the way past.
+
+**Why the meetings directory is not union-merged.** Union merge exists for the case where two people
+append to the same file concurrently. One file per date makes that case impossible, and union's
+silent failures — byte-identical lines deduplicating, an entry spliced mid-line — are pure cost with
+no matching benefit. Same reasoning as the 2026-08-04 narrowing that took `traps.md`, `issues.md`
+and `hotfixes.md` off the driver.
+
+**Why deciding and executing are separate sittings.** `/startMeeting` edits exactly one file and
+`/endMeeting` runs later, usually in a fresh session. A meeting that edits documents as it goes
+leaves half-applied decisions when it overruns, and a half-applied meeting is indistinguishable from
+a finished one to the next session — the same class of silent failure as the `/done` that archived
+without pushing (`collab.md` #40). Decisions taken in the first half also routinely change what the
+second half decides, so a document edited at item 3 and contradicted at item 14 costs more than one
+edited once at the end.
+
+**Rejected: letting `/endMeeting` push everything to `main`.** It was the original ask. The routing
+table sends `official_spec_sheet.md`, `get/src/`, `documentation/` and skill frontmatter through a
+branch and a PR, and both owners agreeing something in a room is not a code review — a defect in
+code is invisible until something downstream reads a wrong number. So `/endMeeting` splits: working
+docs direct to `main`, everything else on a branch, PR opened and never merged by the agent.
+
+**Rejected: a separate PR for the three skills.** They all read through the `main` worktree PR #70
+establishes, so landing them first would ship skills depending on a convention `CLAUDE.md` does not
+yet document. Michael also asked not to have several workflow PRs open at once. Folded into #70 as
+`f343402`; the PR was retitled to say so.
+
+**Affects:** `.claude/skills/{makeAgenda,startMeeting,endMeeting}/SKILL.md` and `.claude/CLAUDE.md`
+— PR #70, open. `.claude/work/meetings/2026-08-13.md` is on `main` already, covering `collab.md`
+items 40–60. `collab.md` #60 is the notification to James, with an ACKNOWLEDGE ask.
+
+*meetings-directory-and-skills · recorded 2026-08-13 14:52 — Michael.*
