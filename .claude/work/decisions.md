@@ -2453,3 +2453,46 @@ edges with weights lowered to the new cap.
 
 **Affects:** `get/src/lib.rs`, `set_base_graph` (GitHub #28, branch `jsargant_set_base_graph`).
 *Recorded 2026-08-12 — James, at task 3 of #28.*
+
+## 2026-08-13 14:03 — James and Michael — `.claude/` moves into its own repository, and the `main`-pinned worktree goes
+
+**Chose:** `.claude/` leaves GET's tree entirely and is gitignored there. A second repository,
+`GET-claude`, holds the directory wholesale and is cloned *as* that path on each machine
+(`git clone <url> GraphEvolutionTool/.claude`), giving a real nested repo with its own `.git` and no
+symlink. The `main`-pinned worktree agreed in `collab.md` #58 one day earlier, and
+`.claude/scripts/setup_docs_worktree.sh` that creates it, are removed in the same pass. Agreed
+jointly in the room; raised as `collab.md` #62.
+
+**Why — the release requirement, not the friction.** Two failures on the worktree's first day (a
+bootstrap workaround where the setup script was unreachable from a branch cut before it existed, and
+a near-miss on a `collab.md` 109 lines behind) are symptoms of pinning a worktree to `main`, which is
+also the branch you want checked out — git forbids one branch in two worktrees. Those alone would
+argue for un-pinning, not migrating. What actually decides it is that we want testing and release
+branches, and neither a wheel nor a public clone of GET should carry `.claude/`. No branch-based
+scheme delivers that: `skills/`, `hooks/` and `CLAUDE.md` must sit in the *checked-out* tree for
+Claude Code to read them, so they live on `main` and land in every clone, and deleting them on a
+release branch makes every later `main → release` merge a modify/delete conflict on every skill
+touched since. Absent files need no exclude rule.
+
+**Costs accepted rather than waved past.** Archaeology gets harder — "what did the plan say when
+this commit landed" becomes a timestamp lookup across two repos instead of one SHA — which a project
+this young rarely asks. Non-atomic commits across two repos we already pay, by design: `/done`
+pushes `decisions.md` to `main` while the code it describes sits in an open PR. Cross-repo reference
+ambiguity is closed by disabling issues on `GET-claude`, leaving one tracker so `#43` stays
+unambiguous. The one cost that does not shrink with team size is that per-machine setup fails
+*silently* — a clone that skipped it has no conventions loaded and says nothing — so a `SessionStart`
+guard checking for `.claude/skills/` and stopping with the clone command is part of the migration,
+not a follow-up.
+
+**Rejected:** a dedicated `claude-work` branch, which was the minimal fix and the first
+recommendation, because it cannot keep `.claude/` out of a clone for the reason above. Also rejected
+leaving #58's worktree in place with the pin corrected: it fixes the friction and none of the
+packaging requirement, and running both schemes at once is the half-migrated state that is worse
+than either end.
+
+**Affects:** one tracker issue covering the whole migration as a single pass — the directory move,
+`setup_docs_worktree.sh` and its worktree deleted, every skill resolving `$DOCS_WT` rewritten to
+plain paths, `CLAUDE.md`'s worktree rules and PR-route table, `.gitignore`, the `SessionStart` hook
+and its guard, `traps.md`'s worktree entries, and the packaging include list verified clean.
+Supersedes the worktree decision recorded for `collab.md` #58.
+*Recorded 2026-08-13 14:03 — James and Michael, agreed together in the room.*
