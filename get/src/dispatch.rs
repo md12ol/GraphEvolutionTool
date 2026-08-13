@@ -405,9 +405,9 @@ fn run_strategy<G: Genome, F: Fitness>(
 /// `Direction::orient` is its own inverse, so it is also what undoes itself.
 ///
 /// **The history needs converting too, row by row** — and only its two fitness
-/// columns. `std_dev` is left exactly as the engine computed it, because a
-/// spread is identical under negation. Orienting it as well would be a silent
-/// defect: the number stays positive, so nothing looks wrong.
+/// columns. `std_dev` and `ci_95` are left exactly as the engine computed them,
+/// because a spread is identical under negation. Orienting either would be a
+/// silent defect: the number stays positive, so nothing looks wrong.
 fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
     let direction = outcome.direction;
 
@@ -418,6 +418,7 @@ fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
             best_fitness: direction.orient(row.best_fitness),
             mean_fitness: direction.orient(row.mean_fitness),
             std_dev: row.std_dev,
+            ci_95: row.ci_95,
         });
     }
 
@@ -928,6 +929,14 @@ mod tests {
                 "iteration {}: a deviation is never negative, got {}",
                 row.iteration,
                 row.std_dev,
+            );
+            // Same reasoning as std_dev: ci_95 is a spread, so erase must leave
+            // it alone rather than orient it.
+            assert!(
+                row.ci_95 >= 0.0,
+                "iteration {}: ci_95 is never negative, got {}",
+                row.iteration,
+                row.ci_95,
             );
         }
 

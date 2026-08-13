@@ -43,14 +43,21 @@ pub struct PyGenerationStats {
     /// Unconverted, and correctly so: a spread is identical under negation, so
     /// this reads the same whichever direction the objective runs in.
     pub std_dev: f64,
+    /// Half-width of the 95% confidence interval on `mean_fitness`, using the
+    /// **sample** deviation (divides by `n - 1`) rather than `std_dev`'s
+    /// population deviation — estimating the mean's uncertainty is a
+    /// sample-deviation question even though `std_dev` beside it is not. Zero
+    /// when the population has one individual, never `NaN`. Unconverted, like
+    /// `std_dev`, for the same reason.
+    pub ci_95: f64,
 }
 
 #[pymethods]
 impl PyGenerationStats {
     fn __repr__(&self) -> String {
         format!(
-            "GenerationStats(iteration={}, best_fitness={}, mean_fitness={}, std_dev={})",
-            self.iteration, self.best_fitness, self.mean_fitness, self.std_dev,
+            "GenerationStats(iteration={}, best_fitness={}, mean_fitness={}, std_dev={}, ci_95={})",
+            self.iteration, self.best_fitness, self.mean_fitness, self.std_dev, self.ci_95,
         )
     }
 }
@@ -111,6 +118,7 @@ impl PyRunResult {
                 best_fitness: row.best_fitness,
                 mean_fitness: row.mean_fitness,
                 std_dev: row.std_dev,
+                ci_95: row.ci_95,
             });
         }
 

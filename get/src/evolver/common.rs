@@ -289,6 +289,11 @@ where
 /// `std_dev` is the population deviation (divides by `n`), not the sample
 /// deviation: these are all the individuals there are, not a sample of a larger
 /// group. A single individual therefore has a deviation of zero.
+///
+/// `ci_95` divides by `n - 1` instead, on purpose: it estimates the
+/// uncertainty in `mean_fitness` as a statistic, which is a sample-deviation
+/// question even though `std_dev` right beside it is a population-deviation
+/// one. `n == 1` gives `0.0`, not a division by zero.
 pub fn generation_stats(iteration: usize, fitnesses: &[f64]) -> GenerationStats {
     assert!(
         !fitnesses.is_empty(),
@@ -314,11 +319,19 @@ pub fn generation_stats(iteration: usize, fitnesses: &[f64]) -> GenerationStats 
     }
     let variance = sum_sq_dev / n;
 
+    let ci_95 = if n > 1.0 {
+        let sample_variance = sum_sq_dev / (n - 1.0);
+        1.96 * sample_variance.sqrt() / n.sqrt()
+    } else {
+        0.0
+    };
+
     GenerationStats {
         iteration,
         best_fitness: best,
         mean_fitness: mean,
         std_dev: variance.sqrt(),
+        ci_95,
     }
 }
 
@@ -418,6 +431,14 @@ mod tests {
         assert_eq!(stats.best_fitness, 2.0);
         assert_eq!(stats.mean_fitness, 5.0);
         assert!((stats.std_dev - 5.0_f64.sqrt()).abs() < 1e-12);
+
+        // Same sum of squared deviations (20), but ci_95 divides by n - 1 = 3,
+        // not n = 4: sample variance 20/3, half-width 1.96 * sqrt(20/3) / sqrt(4).
+        let expected_ci_95 = 1.96 * (20.0_f64 / 3.0).sqrt() / 4.0_f64.sqrt();
+        assert!((stats.ci_95 - expected_ci_95).abs() < 1e-12);
+        // The two denominators must actually differ, or this test can't tell
+        // ci_95 apart from std_dev by coincidence.
+        assert!((stats.ci_95 - stats.std_dev).abs() > 1e-6);
     }
 
     #[test]
@@ -426,6 +447,9 @@ mod tests {
         assert_eq!(stats.best_fitness, 3.5);
         assert_eq!(stats.mean_fitness, 3.5);
         assert_eq!(stats.std_dev, 0.0);
+        // n - 1 = 0 would divide by zero if computed the same way as std_dev;
+        // this is the guard that it doesn't produce NaN instead of 0.0.
+        assert_eq!(stats.ci_95, 0.0);
     }
 
     /// Guards the rule that nothing inside the engine converts. These are the
@@ -445,9 +469,11 @@ mod tests {
         assert_eq!(stats.mean_fitness, -5.0);
 
         // Deviation is unchanged by negation, so it matches the minimizing case
-        // — and now that is just true rather than a carve-out to defend.
+        // — and now that is just true rather than a carve-out to defend. Same
+        // for ci_95: it's a spread, not a location.
         let minimized = generation_stats(1, &[2.0, 4.0, 6.0, 8.0]);
         assert_eq!(stats.std_dev, minimized.std_dev);
+        assert_eq!(stats.ci_95, minimized.ci_95);
         assert!(stats.std_dev > 0.0, "a negated deviation would be negative");
     }
 
