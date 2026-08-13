@@ -75,5 +75,49 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
 
 ## Pending
 
-*Nothing pending. James had no work in flight when this file was created on 2026-08-13 — no open PR
-and no remote branch — and the site was current as of that date.*
+## 2026-08-13 12:45 — James — `set_base_graph` exists now, so every "not yet" claim about it is false
+
+- **Trigger:** GitHub #28, branch `jsargant_set_base_graph`, commits `3af041c` (the setter and its
+  three checks) and `c99fa11` (threading it through `dispatch::evolve` into `edge_edit_start`).
+  Shipped as `GraphEvolver.set_base_graph(num_nodes, edges)`, matching the signature the site
+  already documents.
+- **Files:** `guide/python-api.html` (the `#base-graph` section, ~L317-340); `examples/index.html`
+  (the stacking example's `.plan-note`, ~L314-317); `status.html` (the "Supplying a base graph"
+  row, ~L115); `HANDOFF.md` (the mirror row at ~L82).
+- **Now false:** `examples/index.html` says "**Today:** there is no `set_base_graph`, so an
+  edge-edit run always starts from an empty graph and stacking is not yet possible." Stacking is
+  possible now, and the example above that note runs as written. `status.html` and `HANDOFF.md`
+  both still list the feature as planned.
+- **Should say:** the setter exists and takes `(num_nodes, edges)` with `edges` as
+  `(u, v, multiplicity)` triples — the same shape `run` returns as `best_edges`, so an SDA run's
+  output feeds an edge-edit run with no reshaping. Unset means an empty base graph, which is the
+  default, and five of the nine opcodes (`Swap`, `Hop`, the three `Local*`) are inert on one until
+  `Add`/`Toggle` build structure — self-correcting, not a defect.
+- **Badges:** `guide/python-api.html` — drop `badge-planned` from the `#base-graph` heading (L317).
+  `examples/index.html` — delete the `.plan-note` at ~L314-317 entirely. `status.html` — delete the
+  "Supplying a base graph" row (~L115). `HANDOFF.md`'s row is the duplicate `collab.md` #57 raised;
+  leave it to whatever #50 settles rather than patching the same table twice.
+
+*#set-base-graph-ships · filed 2026-08-13 12:45 — James.*
+
+## 2026-08-13 12:45 — James — cap narrowing raises now; the site still says it silently collapses
+
+- **Trigger:** GitHub #28, commit `3af041c`. The decision is `decisions.md` 2026-08-12 — the
+  cap-narrowing check **rejects** with `ValueError` rather than warning or clamping.
+- **Files:** `guide/python-api.html` (the three-checks list under `#base-graph`);
+  `examples/index.html` (the `.warn` block above the stacking plan-note, ~L307-313).
+- **Now false:** `python-api.html` says cap narrowing "must be rejected **or warned**", which was
+  the open question and is now settled. `examples/index.html`'s warning says setting edges
+  "**clamps** rather than rejecting, so piping a cap-3 result into a cap-1 run silently collapses
+  every weight to 1 and you get a plausible-looking network" — that is still true of
+  `Graph::set_edge` itself, but no longer of the path a user can reach: `set_base_graph` checks
+  every multiplicity before building anything and raises.
+- **Should say:** `set_base_graph` raises `ValueError` naming the offending edge, its multiplicity
+  and the configured cap, so the silent collapse is not reachable through the Python API. The
+  advice to keep `max_edge_multiplicity` identical or raise it stands — it just fails loudly now
+  instead of quietly. Worth keeping a sentence that `Graph::set_edge` still clamps, since that is
+  why the setter has to check at all, and it is what a Rust-side embedder still faces.
+- **Badges:** none — neither location carries a `badge-planned` span or a `.plan-note`. This is a
+  correctness fix to prose, not a de-badging, and it is separable from `#set-base-graph-ships`.
+
+*#set-base-graph-cap-rejects · filed 2026-08-13 12:45 — James.*
