@@ -16,6 +16,10 @@
 //! converts anything; [`crate::dispatch`]'s `erase` is the one place that
 //! happens.
 
+use std::fs::File;
+use std::io::Write;
+
+use pyo3::exceptions::PyIOError;
 use pyo3::prelude::*;
 
 use crate::dispatch::ErasedOutcome;
@@ -120,6 +124,40 @@ impl PyRunResult {
             self.best_edges.len(),
             self.history.len(),
         )
+    }
+
+    /// Write the convergence log to `filename` as CSV.
+    ///
+    /// Header, then one row per logged iteration: §6.4's five columns, then
+    /// `seed` and `run_index` last — both are run-level and so identical on
+    /// every row, which is what lets several runs' logs be concatenated and
+    /// still be separable.
+    pub fn save_logs(&self, filename: &str) -> PyResult<()> {
+        let mut file = File::create(filename)
+            .map_err(|err| PyIOError::new_err(format!("could not create {filename}: {err}")))?;
+
+        writeln!(
+            file,
+            "iteration,best_fitness,mean_fitness,std_dev,ci_95,seed,run_index"
+        )
+        .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
+
+        for row in &self.history {
+            writeln!(
+                file,
+                "{},{},{},{},{},{},{}",
+                row.iteration,
+                row.best_fitness,
+                row.mean_fitness,
+                row.std_dev,
+                row.ci_95,
+                self.seed,
+                self.run_index,
+            )
+            .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
+        }
+
+        Ok(())
     }
 }
 

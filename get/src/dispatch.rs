@@ -1106,6 +1106,52 @@ mod tests {
     }
 
     #[test]
+    fn save_logs_writes_one_row_per_logged_iteration_plus_a_header() {
+        // Task 5's verify-by: row count is `num_generations + 1` under
+        // generational and `num_mating_events / population_size + 1` under
+        // steady-state. `GENERATIONAL` and `STEADY_STATE` are `runnable`'s
+        // fixtures: population_size 6, num_generations 3, num_mating_events 12
+        // — 4 and 3 rows respectively.
+        for (evolution, expected_rows) in [(GENERATIONAL, 4), (STEADY_STATE, 3)] {
+            let mut evolver = GraphEvolver {
+                config: runnable(evolution, EDGE_EDIT),
+                fitness_function: None,
+                config_toml: String::new(),
+            };
+            let result = evolver.run(3).expect("a full config run completes");
+            assert_eq!(result.history.len(), expected_rows);
+
+            let path = std::env::temp_dir().join(format!(
+                "get_save_logs_test_{}_{expected_rows}.csv",
+                std::process::id(),
+            ));
+            result
+                .save_logs(path.to_str().expect("temp path is valid UTF-8"))
+                .expect("save_logs writes successfully");
+
+            let contents = std::fs::read_to_string(&path).expect("the file was written");
+            std::fs::remove_file(&path).expect("temp file cleans up");
+
+            let lines: Vec<&str> = contents.lines().collect();
+            assert_eq!(
+                lines[0],
+                "iteration,best_fitness,mean_fitness,std_dev,ci_95,seed,run_index",
+            );
+            assert_eq!(
+                lines.len(),
+                expected_rows + 1,
+                "header plus one row per logged iteration",
+            );
+            for line in &lines[1..] {
+                let fields: Vec<&str> = line.split(',').collect();
+                assert_eq!(fields.len(), 7);
+                assert_eq!(fields[5], "3", "seed column carries the run's seed");
+                assert_eq!(fields[6], "0", "run_index column is the hard 0");
+            }
+        }
+    }
+
+    #[test]
     fn a_maximizing_objective_actually_climbs_through_the_dispatch() {
         // The failure this catches is the loudest-consequence, quietest-symptom
         // one in the whole layer: if the direction is lost anywhere between the

@@ -280,17 +280,12 @@ impl GraphEvolver {
         ))
     }
 
-    /// Write the per-iteration evolution log to `filename` as CSV.
+    /// Write the best individual and its graph to `filename`.
     ///
-    /// **These two take `&self` and the evolver holds nothing to write** — the
-    /// log and the best individual live on the value `run` returns, so both need
-    /// re-homing onto `PyRunResult` before they can be implemented.
-    fn save_logs(&self, filename: &str) -> PyResult<()> {
-        let _ = filename;
-        todo!("write the run history to `filename`; it belongs on PyRunResult")
-    }
-
-    /// Write the best individual and its graph to `filename`. See `save_logs`.
+    /// **Takes `&self` and the evolver holds nothing to write** — the best
+    /// individual lives on the value `run` returns, so this needs re-homing
+    /// onto `PyRunResult` before it can be implemented. `save_logs` already
+    /// made that move; see [`crate::py_result::PyRunResult::save_logs`].
     fn save_results(&self, filename: &str) -> PyResult<()> {
         let _ = filename;
         todo!("write the best genome and edge list to `filename`")
