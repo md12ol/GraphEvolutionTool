@@ -91,7 +91,7 @@ impl GraphEvolver {
     ///     selection=get.SelectionConfig.Tournament(tournament_size=5),
     ///     genome=get.GenomeConfig.EdgeEdit(gene_length=256),
     ///     fitness=get.FitnessConfig.EpiSpread(
-    ///         sir=get.SirParams(infection_rate=0.05, num_epidemics=30)
+    ///         sir=get.SirParams(infection_rate=0.5, num_epidemics=30)
     ///     ),
     /// )
     /// evolver = get.GraphEvolver.from_config(config)
@@ -570,7 +570,7 @@ mod tests {
                 operation_weights: None,
             },
             PyFitnessConfig::EpiSpread {
-                sir: PySirParams::new(0.05, 30, None, 3, 5),
+                sir: PySirParams::new(0.5, 30, None, 3, 5),
             },
             1,
             1,
