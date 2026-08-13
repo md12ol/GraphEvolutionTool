@@ -1,12 +1,12 @@
 ---
-name: makeAgenda
+name: make-agenda
 description: Turn .claude/work/collab.md into a meeting agenda at .claude/work/meetings/<YYYY-MM-DD>.md — one section per unsettled item, each with a title, a status, a proportionate brief, and click-to-answer questions. Rerunnable — a second call folds in items raised since the first without touching anything a human edited. Use when preparing for a joint meeting, or when new collab items land before one starts.
 ---
 
 # Make agenda
 
 Read `collab.md`, decide what actually needs the two owners in a room, and write it out as a file
-that `/startMeeting` can walk. The agenda is a **derived document** — `collab.md` stays the source
+that `/start-meeting` can walk. The agenda is a **derived document** — `collab.md` stays the source
 of truth, and this skill never edits it.
 
 **This is the judgement-heavy skill in the set.** The value is not in listing the items; it is in
@@ -35,7 +35,7 @@ header and it is what a rerun diffs against.
 
 ## 1. Resolve the meeting date and the target file
 
-`/makeAgenda [YYYY-MM-DD]`. With no argument, use today's date.
+`/make-agenda [YYYY-MM-DD]`. With no argument, use today's date.
 
 Target: `.claude/work/meetings/<YYYY-MM-DD>.md`. **No owner in the path** — a meeting belongs to
 both owners, the same reasoning that keeps `work/archive/` shared.
@@ -47,7 +47,7 @@ Then branch on what is already there:
 | Does not exist | **First pass** — build the whole agenda. Go to §2. |
 | Exists, header says `Status: prepared` | **Rerun** — fold in what is new. Go to §6. |
 | Exists, header says `Status: in progress` | **Stop.** A meeting is being walked right now. Say so, name the item the cursor is on, and offer to append new items to the end of the agenda without touching anything before the cursor. |
-| Exists, header says `Status: closed` | **Stop.** That meeting is over and `/endMeeting` may already have acted on it. Offer a new date instead. |
+| Exists, header says `Status: closed` | **Stop.** That meeting is over and `/end-meeting` may already have acted on it. Offer a new date instead. |
 
 Never silently overwrite an agenda file. Everything about this skill's rerun behaviour exists
 because the first pass is cheap and a lost decision is not.
@@ -97,7 +97,7 @@ Two rules that are easy to get wrong:
   re-argue something both parties already conceded, which is the most expensive thing an agenda can
   cause.
 - **`Close` still needs a line in the agenda.** It is the confirmation that it may be moved to
-  Settled, and that confirmation is a decision `/endMeeting` acts on. Never drop a Close item for
+  Settled, and that confirmation is a decision `/end-meeting` acts on. Never drop a Close item for
   brevity.
 
 **Also detect blocked-on relationships.** An item that says "waits for #N", or whose answer is
@@ -118,7 +118,7 @@ it. Build the map even where the item does not state it — if item A's options 
 ## 5. Write the file
 
 Header, then one section per item, then the consolidated checklist. Use this shape exactly —
-`/startMeeting` and `/endMeeting` both parse it.
+`/start-meeting` and `/end-meeting` both parse it.
 
 ```markdown
 # Joint meeting — <YYYY-MM-DD>
@@ -177,7 +177,7 @@ Finish with the consolidated checklist, grouped by target file, every group pres
 ```markdown
 # Consolidated action checklist
 
-_Filled in at the end of the meeting, then executed by `/endMeeting` in one pass._
+_Filled in at the end of the meeting, then executed by `/end-meeting` in one pass._
 
 ### `official_spec_sheet.md`
 - [ ] _(pending)_
@@ -210,7 +210,7 @@ Then:
 2. **Never touch a section whose `Decisions & doc changes` block is filled in.** That is a human
    decision and this skill does not own it. If such an item's source text changed, leave the section
    alone and add a note under the block: *"⚠ `collab.md` #N gained a reply after this was decided —
-   re-read before `/endMeeting` acts on it."*
+   re-read before `/end-meeting` acts on it."*
 3. **Never delete a section.** If an item was settled in `collab.md` between passes, re-status it to
    `Close` and say why; do not remove it. Someone may have been counting on discussing it.
 4. **Preserve hand edits.** If a brief or an option was reworded by a person — it will not match what
@@ -245,5 +245,5 @@ Five lines, no more:
   report and let a person raise it properly. An agenda entry with no source is unciteable afterwards.
 - **Do not commit or push.** The agenda is a working document; committing it is a separate,
   explicitly-requested step. Say in the report that it is uncommitted.
-- **Do not run `/startMeeting`.** Preparing the agenda and walking it are different sittings, and
+- **Do not run `/start-meeting`.** Preparing the agenda and walking it are different sittings, and
   usually different days.

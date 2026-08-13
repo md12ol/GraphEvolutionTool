@@ -412,18 +412,18 @@ report the discrepancy rather than following the stale version.
 The spec sheet changes only at a joint meeting, and `collab.md` is where the questions for one
 accumulate. Three skills turn that pile into an agenda, a decision, and the edits it implies:
 
-- **`/makeAgenda [date]`** — reads `collab.md`, classifies every unsettled item as
+- **`/make-agenda [date]`** — reads `collab.md`, classifies every unsettled item as
   **Decide · Ratify · Acknowledge · FYI · Park · Close**, orders them blockers-first, and writes
   `work/meetings/<date>.md` with a proportionate brief and click-to-answer questions per item.
   **Rerunnable** — a second call diffs `collab.md` against the SHA in the agenda header and folds in
   what is new *without touching any section a human already edited or decided*. It never edits
   `collab.md`.
-- **`/startMeeting [date]`** — walks the agenda one item at a time, asks the prepared questions as
+- **`/start-meeting [date]`** — walks the agenda one item at a time, asks the prepared questions as
   buttons, and writes each decision and the file changes it implies into that item's block. It
   carries a `**Cursor:**`, so a meeting that breaks resumes at the right item. **It edits exactly one
   file** — every other document waits, because a decision taken at item 3 is routinely changed by
   item 14.
-- **`/endMeeting [date]`** — executes the consolidated checklist. Working docs go **direct to
+- **`/end-meeting [date]`** — executes the consolidated checklist. Working docs go **direct to
   `main`**; `official_spec_sheet.md`, `get/src/`, `documentation/` and skill frontmatter go on a
   **branch with a PR**, per the routing table. Both owners decided it, so its commits carry
   `Co-Authored-By:` the other owner — and it never merges the PR.

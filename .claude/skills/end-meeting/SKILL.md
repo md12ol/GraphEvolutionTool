@@ -1,6 +1,6 @@
 ---
-name: endMeeting
-description: Execute a closed meeting's consolidated action checklist — amend the spec sheet, CLAUDE.md, decisions.md and collab.md, apply code and documentation changes, file tracker issues — routing working docs direct to main and code and the spec sheet through a branch and a PR. Use after /startMeeting has closed a meeting and both owners want the agreed changes landed.
+name: end-meeting
+description: Execute a closed meeting's consolidated action checklist — amend the spec sheet, CLAUDE.md, decisions.md and collab.md, apply code and documentation changes, file tracker issues — routing working docs direct to main and code and the spec sheet through a branch and a PR. Use after /start-meeting has closed a meeting and both owners want the agreed changes landed.
 ---
 
 # End meeting
@@ -19,7 +19,7 @@ DOCS_WT="$(dirname "$MAIN_TREE")/$(basename "$MAIN_TREE")-docs"
 cd "$DOCS_WT" && git pull
 ```
 
-`/endMeeting [YYYY-MM-DD]`, defaulting to the most recent closed meeting file. Stop, with a plain
+`/end-meeting [YYYY-MM-DD]`, defaulting to the most recent closed meeting file. Stop, with a plain
 report, if any of these holds:
 
 - **The header does not say `Status: closed`.** A meeting still `in progress` has a checklist that
@@ -28,7 +28,7 @@ report, if any of these holds:
 - **The header says `Status: executed`.** It has already run. Report what it did and stop; a second
   run would duplicate `decisions.md` entries and re-file issues.
 - **The checklist is empty or every group reads `_(pending)_`.** There is nothing to execute. Say so
-  rather than inferring actions from the item blocks — if `/startMeeting` did not roll a consequence
+  rather than inferring actions from the item blocks — if `/start-meeting` did not roll a consequence
   up into the checklist, a person needs to decide whether it was dropped on purpose.
 - **The main tree has uncommitted changes under `get/src/`, `documentation/` or the spec sheet.**
   This skill is about to create a branch and edit those files. Report what is dirty and stop.
