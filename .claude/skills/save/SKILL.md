@@ -76,6 +76,16 @@ work. Never archive them:
 | `hotfixes.md` | **Churn list** | Temporary / band-aid code in the tree. Entries leave only once reverted. |
 | `traps.md` | **Churn list** | Permanent workspace gotchas. Entries leave only when no longer true. |
 | `collab.md` | **Append-only** | Cross-owner decisions, when the repo is shared. Agreed items are marked, never deleted. Skip if the file doesn't exist. |
+| `collab_settled.md` | **Append-only** | The archive half, split out 2026-08-13. Closed items move here and are not edited afterwards. |
+
+**Before appending to `collab.md`, and before finishing the save** — both added 2026-08-13 at the
+joint meeting:
+
+- **Take the next item number from the highest across *both* collab files**, never from the live one
+  alone. `### 48` was used twice because two sessions each read the end of one file.
+- **Report every open item with no appended reply, oldest first, at any age.** No threshold — an
+  item counts from the moment it is raised, because the failure being closed is an item going quiet
+  rather than an item going stale.
 
 ## 1. Gather state
 

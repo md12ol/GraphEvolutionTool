@@ -50,6 +50,10 @@ Then resolve *which task*, in this order:
   it rather than doing it silently.
 - **No slug, `current/` empty, several parked** → **ask.** List each slug with its `Blocked on:`
   line, so the choice is answerable without opening anything.
+- **No slug, and the owner's directory does not exist at all** → say which of the two this is, and
+  do not let them look alike: either you have no live task, or your setup is incomplete. Added
+  2026-08-13 at the joint meeting — a fresh checkout with no owner directory reads as breakage when
+  it usually means nobody has started a task on this machine yet.
 - **No slug, `current/` empty, nothing parked** → there is no active task. Say so and point at
   `/start`. Do not invent one.
 
@@ -124,7 +128,16 @@ file that is nobody's plan. Stopping on real divergence is always correct here.
 6. `.claude/work/issues.md` — only to notice what's already logged, so you don't re-report it.
 7. `.claude/work/collab.md`, if it exists — the repo is shared. Read the **Open** items: each one
    is a decision on one side that overrides work on the other, and acting against an open item is
-   how someone's work gets silently overwritten.
+   how someone's work gets silently overwritten. Closed items live in `collab_settled.md`; read that
+   only when chasing a reference.
+
+**Then report two things about `collab.md`, every time** — added 2026-08-13 at the joint meeting:
+
+- **Every open item with no appended reply, oldest first, at any age.** No threshold: an item counts
+  the moment it is raised. The failure this closes is silent — #50 sat unanswered and the PR it
+  concerned merged without a ruling, which no waiting period would have caught sooner.
+- **The highest item number across `collab.md` *and* `collab_settled.md`**, so the next person to
+  append does not guess. Guessing is how `### 48` came to be used twice.
 
 `work/<owner>/current/plan_superseded.md` is reference only. Don't read it on load, and never action
 anything in it — it holds the original wording of tasks that are already done.

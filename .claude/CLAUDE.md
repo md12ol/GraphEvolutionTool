@@ -64,7 +64,7 @@ at session start but **refuses on a dirty tree** — a divergence usually means 
 
 ### `.claude/work/` lives in a dedicated `main` worktree, not in the branch you're coding on
 
-**Added 2026-08-13 — Michael, `collab.md` #58.** This is a bug fix, not a new convention layered
+**Added 2026-08-13 — Michael, `collab_settled.md` #58.** This is a bug fix, not a new convention layered
 on the old one: `work/<owner>/current/` and `parked/` are ordinary tracked files, so a feature
 branch's copy of them is frozen at the moment the branch was cut, and every `/save` on `main`
 afterwards — including a task closing and archiving out of `parked/` — is invisible from that
@@ -132,6 +132,7 @@ actually finished the work.
 | `hotfixes.md` | temporary code in the tree, each with a `Remove when:` and an **`Owner:`** — a hotfix lives in one person's working tree, so it needs a name on it |
 | `traps.md` | permanent gotchas about this workspace — the things that bite every session |
 | `collab.md` | **questions and overrides between the owners.** Post a question for the other to answer, or flag a decision on your side that conflicts with theirs. Answers are appended *inside* the item, stamped. Settled items move to **Settled** and compress to a one-line disposition once their reasoning lives in `decisions.md` or the spec — never edit someone else's words, and never drop the only copy of a reason |
+| `collab_settled.md` | the **archive** half of `collab.md`, split out 2026-08-13. Same union-merge rules, same formatting; closed items move here and are not edited afterwards. Take the next free item number from **both** files |
 
 Finished tasks land in `.claude/work/archive/<YYYY-MM>_<slug>/` — **tracked and shared**, with no
 owner in the path. A finished task is the project's history; only *live* tasks are per-owner.
@@ -244,7 +245,7 @@ Anything it prints is a line two entries could collapse onto. All five files wer
 2026-07-31.
 
 **`uniq -d` is not sufficient on its own — run a structure check beside it** (added 2026-08-09,
-`collab.md` #23). Union merge has a third failure it cannot see: it can splice one entry into the
+`collab_settled.md` #23). Union merge has a third failure it cannot see: it can splice one entry into the
 *middle of a line* of another, which repeats no line, so the audit above comes back clean on a
 genuinely corrupted file. Measured on `main` 2026-08-04, when one item was spliced into another and
 stopped being a top-level heading at all:
@@ -293,14 +294,14 @@ where review actually buys something:
 | Anything under `get/src/`, `Cargo.toml`, `config.example.toml` — code that solves an issue | **Feature branch + PR.** Never a direct push to `main`, no matter how small |
 | `settings.json`, `hooks/` | **Feature branch + PR** — these execute on the other person's machine at session start (see rule 2 above) |
 | `/official_spec_sheet.md` | **PR, and only after a joint meeting** — see the top of this file |
-| `.claude/work/*.md` — `decisions.md`, `traps.md`, `issues.md`, `hotfixes.md`, `collab.md` | Direct push to `main` is fine. They carry no behaviour, and a trap that is not on `main` protects nobody. Note only `decisions.md` and `collab.md` are union-merged (rule 1 above) |
+| `.claude/work/*.md` — `decisions.md`, `traps.md`, `issues.md`, `hotfixes.md`, `collab.md`, `collab_settled.md` | Direct push to `main` is fine. They carry no behaviour, and a trap that is not on `main` protects nobody. Note only `decisions.md`, `collab.md` and `collab_settled.md` are union-merged (rule 1 above) |
 | `.claude/work/<owner>/` — live and parked task directories | Direct push to `main`, **by `/save` and `/park` automatically, from the dedicated `main` worktree** (added 2026-08-13, corrected 2026-08-13 — see "`.claude/work/` lives in a dedicated `main` worktree" above). Nobody reviews your own plan, and an unpushed handoff is the failure these directories were tracked to prevent. Union merge does not reach them — verified with `git check-attr merge` |
-| `.claude/CLAUDE.md` | Direct push is permitted, but **prefer a PR when the change binds the other owner's practice** rather than recording a fact |
+| `.claude/CLAUDE.md`, and `.claude/skills/*/SKILL.md` **bodies** | Direct push to `main`, and if the change **binds the other owner's practice** it carries a mandatory `collab.md` item with an explicit ACKNOWLEDGE ask, raised in the same session. ~~Prefer a PR when the change binds the other owner's practice.~~ Superseded 2026-08-13 at the joint meeting: the preference had been correctly departed from repeatedly (#54, #55 were both pushed under the new practice before it was written), and a mandatory note is the part a reviewer was there for — a review can be skipped silently, the note cannot. Folds in the identical rule agreed for skill bodies on 2026-08-11 and never written down |
 | `.claude/skills/*/SKILL.md` — **frontmatter** (`model:`, `allowed-tools:`, any hook-adjacent key) | **Feature branch + PR.** Changing it changes what executes on the other person's machine on their next pull, without them reading it |
-| `.claude/skills/*/SKILL.md` — **body** | Direct push to `main` is fine. It is prose we both read anyway, and a PR round-trip in front of a typo fix is how a rule starts being skipped |
+| `.claude/skills/*/SKILL.md` — **body** | Direct push to `main` is fine. It is prose we both read anyway, and a PR round-trip in front of a typo fix is how a rule starts being skipped. **If the body change binds the other owner's practice, the row above applies** — direct push plus a mandatory ACKNOWLEDGE item |
 
 **The test is "does this change what runs", not "which directory is it in"** — added 2026-08-09,
-agreed in `collab.md` #34. That is the whole reason rule 2 exists for `settings.json` and `hooks/`,
+agreed in `collab_settled.md` #34. That is the whole reason rule 2 exists for `settings.json` and `hooks/`,
 and it is why the skills row splits rather than naming the directory: the next person to add a
 fourth directory should be able to route it from the principle instead of waiting for the table to
 catch up. Frontmatter is configuration the harness executes; a skill's body is prose a reader
@@ -313,7 +314,7 @@ itself — commits and pushes straight to `main` right then, not bundled into th
 held until the other owner merges it. They are two independent tracks: the PR carries the code, the
 docs carry the record that the task is closed. Waiting would hold the task-closing record hostage to
 someone else's review schedule, which is exactly the kind of stall `/done` exists to avoid. Settled
-2026-08-06 doing exactly this for issue #22 while PR #43 was still open — `collab.md` #28.
+2026-08-06 doing exactly this for issue #22 while PR #43 was still open — `collab_settled.md` #28.
 
 The reason code is absolute: a defect in `get/src/` is invisible until something downstream reads a
 wrong number, and the current issue set has several files claimed by two workstreams at once. The
@@ -329,14 +330,14 @@ only thing that catches them:
 - **`merge=union` never conflicts.** Byte-identical lines in `decisions.md` and `collab.md` — the
   two union-merged files, narrowed from all five on 2026-08-04 — dedupe and interleave two entries
   into one block that reads as coherent and is not. Git will not tell you; the reviewer might.
-- **Source files genuinely overlap.** `collab.md` #14 has three files claimed by #10 *and* #14/#15
+- **Source files genuinely overlap.** `collab_settled.md` #14 has three files claimed by #10 *and* #14/#15
   at once. Review is where a conflicting edit gets noticed while it is still cheap.
 - **Rule 2 above is the strict case, not the exception.** `settings.json` and `hooks/` execute on
   the other person's machine at session start, without them reading the diff. Those were already
   PR-only; this generalizes the habit to everything so the rule has no edge to fall off.
 
 ~~Self-merging is allowed in exactly one case: the other owner is unavailable and the change is
-blocking.~~ **Widened 2026-08-09 at the joint meeting to two cases** — `collab.md` #29:
+blocking.~~ **Widened 2026-08-09 at the joint meeting to two cases** — `collab_settled.md` #29:
 
 1. **The other owner is unavailable and the change is blocking.** Unchanged.
 2. **A strict deletion, or a one-line correction, to a doc — where the change removes something
@@ -350,7 +351,7 @@ trace, not a gap.
 
 **Why case 2 exists.** PR #37 was self-merged under case 1 when case 1 did not apply — James was
 demonstrably available, having merged two PRs six minutes earlier — and Michael logged it honestly
-as a self-merge of convenience rather than dressing it as the documented one (`collab.md` #29). A
+as a self-merge of convenience rather than dressing it as the documented one (`collab_settled.md` #29). A
 rule that gets correctly broken is stated wrong, which is the same reasoning that reworded the
 agent-merge rule above. The cost of the old wording was visible on 2026-08-09: the spec sheet's
 status table had been stale on **four of nine rows** for days, each row naming a component as
@@ -534,16 +535,30 @@ reach for `--json` on reads and the REST API on writes:
   person's home directory protects one person — the same argument that puts traps on `main`. The
   precedent was also in plain sight and went unchecked: every one of the 40 commits before that day
   carries no trailer. **Check `git log` before inventing a commit convention.**
-- **When a `planned` feature ships, de-badge its documentation in the same PR.** Added
-  2026-08-13 — Michael. `documentation/` describes GET as `official_spec_sheet.md` designs it, so
-  anything designed but not yet built is written in the present tense carrying a
-  `badge-planned` span and a `.plan-note` callout, with `documentation/status.html` indexing every
-  one. That convention is only honest while someone maintains it: shipping the feature and leaving
-  the badge turns "not built yet" into a lie, and shipping it while leaving `status.html`'s row
-  makes the one page people check for the answer wrong. So the PR that lands the code also greps
-  `documentation/` for `badge-planned`, drops the badge and its callout, and removes the
-  `status.html` row. Reasoning in `decisions.md` 2026-08-12 18:52. **Contingent on `collab.md` #50**
-  — if the present-tense convention is dropped, this rule goes with it.
+- ~~**When a `planned` feature ships, de-badge its documentation in the same PR.** Added
+  2026-08-13 — Michael. The PR that lands the code greps `documentation/` for `badge-planned`, drops
+  the badge and its callout, and removes the `status.html` row.~~ **Superseded 2026-08-13 at the
+  joint meeting, on both halves** (`collab_settled.md` #50 and #53), which is why the whole bullet
+  is struck rather than edited: the present-tense convention it depended on was dropped, and the
+  timing it specified moved.
+- **Documentation pages describe present behaviour; `status.html` is the only page that names
+  unbuilt work.** Added 2026-08-13 — Michael & James. The `badge-planned` spans and `.plan-note`
+  callouts go, and the roadmap lives in exactly one place. A list maintained in two files breaks on
+  whichever PR forgets it, which is what `documentation/HANDOFF.md` demonstrated.
+- **A task does not edit `documentation/`. It appends to its owner's queue.** Added 2026-08-13 —
+  Michael & James. A task that invalidates something the site says writes an entry naming the page,
+  what is now false and what it should say, into `documentation/<owner>_edits.md`. The site is
+  corrected in **one sweep**, a standing task on an alternating owner, one per meeting cycle. The
+  cost is measured, not theoretical: GitHub #27, a three-hour issue about a return type, touched ten
+  HTML files, and a second pass still found two wrong pages and ~45 shifted `src` line references.
+  Three things are load-bearing:
+    - **A sweep reads *every* queue file, not only its own.** A page owed edits by both owners that
+      gets half-corrected looks deliberate, which is worse than one that is obviously stale.
+    - **An applied entry is tagged `edited — please verify`, and only the queue's owner deletes it.**
+      The sweeper is not the verifier: the person who knows what the page should say is the one who
+      raised the entry — the same reason `[x]` means *you* saw it verified.
+    - **Queues are per-owner because entries are deleted, not struck through.** A churn list cannot
+      take `merge=union`, which is unable to express a deletion.
 - **Never mark work `[x]` that you have not seen verified.** If it only compiled, or only ran
   somewhere that doesn't count, it is `[~]`. Work that looks done and isn't is the most expensive
   failure mode this system has.
