@@ -2380,3 +2380,21 @@ ran the plain `git worktree add ... main` from the original wording above, re-ru
 a no-op once sparse, and safe either way.
 
 *#58 addendum · 2026-08-13 — Michael.*
+
+**Second addendum to #58, same session:** the setup script now also writes and opens a two-folder
+VS Code workspace, so the whole thing is `git pull` → run the script → done — no separate step to
+wire up seeing both. It writes `<repo-name>.code-workspace` at your repo root (gitignored) with the
+code folder and the docs worktree as the two roots, and launches it with `code` if that's on your
+`PATH`; otherwise it prints the command to run yourself. Safe to re-run — rewrites and reopens the
+workspace every time, which is also how you'd get the window back if you close it.
+
+**One caution, found the hard way this session:** an earlier version tried to hide everything
+except `.claude/work` inside the docs root via a folder-local `.vscode/settings.json`
+(`files.exclude`). VS Code intermittently rendered that whole root as empty — no children shown,
+sometimes not even after a reload — and it took a while to pin down. Removed rather than fixed:
+the sparse checkout already keeps that folder down to just `.claude/work/` on disk, so the exclude
+rule was redundant on top of being the likely cause. If your workspace ever shows an empty root
+after this, that's the shape of bug to suspect — check for a stray `.vscode/settings.json` in the
+docs worktree before assuming the worktree itself is broken.
+
+*#58 second addendum · 2026-08-13 — Michael.*
