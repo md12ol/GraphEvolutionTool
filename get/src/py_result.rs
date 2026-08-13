@@ -16,6 +16,10 @@
 //! converts anything; [`crate::dispatch`]'s `erase` is the one place that
 //! happens.
 
+use std::fs::File;
+use std::io::Write;
+
+use pyo3::exceptions::PyIOError;
 use pyo3::prelude::*;
 
 use crate::dispatch::ErasedOutcome;
@@ -43,14 +47,21 @@ pub struct PyGenerationStats {
     /// Unconverted, and correctly so: a spread is identical under negation, so
     /// this reads the same whichever direction the objective runs in.
     pub std_dev: f64,
+    /// Half-width of the 95% confidence interval on `mean_fitness`, using the
+    /// **sample** deviation (divides by `n - 1`) rather than `std_dev`'s
+    /// population deviation — estimating the mean's uncertainty is a
+    /// sample-deviation question even though `std_dev` beside it is not. Zero
+    /// when the population has one individual, never `NaN`. Unconverted, like
+    /// `std_dev`, for the same reason.
+    pub ci_95: f64,
 }
 
 #[pymethods]
 impl PyGenerationStats {
     fn __repr__(&self) -> String {
         format!(
-            "GenerationStats(iteration={}, best_fitness={}, mean_fitness={}, std_dev={})",
-            self.iteration, self.best_fitness, self.mean_fitness, self.std_dev,
+            "GenerationStats(iteration={}, best_fitness={}, mean_fitness={}, std_dev={}, ci_95={})",
+            self.iteration, self.best_fitness, self.mean_fitness, self.std_dev, self.ci_95,
         )
     }
 }
@@ -65,6 +76,13 @@ impl PyGenerationStats {
 #[derive(Debug)]
 pub struct PyRunResult {
     /// Best fitness found, in the **objective's own units and sign**.
+    ///
+    /// This is the best of the **final** population, not the best ever seen —
+    /// it matches `history`'s last row rather than the highest `best_fitness`
+    /// across every row. Under a stochastic objective an earlier generation
+    /// can score higher by a lucky draw that a later, better-adapted
+    /// individual does not repeat; reporting that draw instead would credit
+    /// noise rather than the search.
     #[pyo3(get)]
     pub best_fitness: f64,
     /// The best individual's expressed network, as `(u, v, multiplicity)`.
@@ -83,6 +101,25 @@ pub struct PyRunResult {
     /// it once (`rows = result.history`) rather than re-reading it in a loop.
     #[pyo3(get)]
     pub history: Vec<PyGenerationStats>,
+    /// The seed `run` was called with.
+    ///
+    /// Run-level rather than per-row: it lives here once and `save_logs`
+    /// stamps it onto every CSV row it writes, rather than every in-memory
+    /// row carrying its own copy of a value that never varies within a run.
+    #[pyo3(get)]
+    pub seed: u64,
+    /// Which replicate this is, `0`-based.
+    ///
+    /// A hard `0` until GitHub #20 gives `run` more than one replicate to
+    /// number — reserved now so the CSV schema does not change under users
+    /// once it does.
+    #[pyo3(get)]
+    pub run_index: usize,
+    /// The TOML document this run's config was parsed from — the provenance
+    /// record `save_results` writes alongside the best individual, so the run
+    /// can be reproduced verbatim.
+    #[pyo3(get)]
+    pub config_toml: String,
 }
 
 #[pymethods]
@@ -95,6 +132,71 @@ impl PyRunResult {
             self.history.len(),
         )
     }
+
+    /// Write the convergence log to `filename` as CSV.
+    ///
+    /// Header, then one row per logged iteration: §6.4's five columns, then
+    /// `seed` and `run_index` last — both are run-level and so identical on
+    /// every row, which is what lets several runs' logs be concatenated and
+    /// still be separable.
+    pub fn save_logs(&self, filename: &str) -> PyResult<()> {
+        let mut file = File::create(filename)
+            .map_err(|err| PyIOError::new_err(format!("could not create {filename}: {err}")))?;
+
+        writeln!(
+            file,
+            "iteration,best_fitness,mean_fitness,std_dev,ci_95,seed,run_index"
+        )
+        .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
+
+        for row in &self.history {
+            writeln!(
+                file,
+                "{},{},{},{},{},{},{}",
+                row.iteration,
+                row.best_fitness,
+                row.mean_fitness,
+                row.std_dev,
+                row.ci_95,
+                self.seed,
+                self.run_index,
+            )
+            .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
+        }
+
+        Ok(())
+    }
+
+    /// Write the best individual to `filename`, and the run's config TOML
+    /// alongside it at `{filename}.toml` — the provenance record §8 promises,
+    /// derived rather than a second argument so callers cannot forget it.
+    ///
+    /// Three sections: the best fitness, the winning genome's
+    /// `Genome::print()` string, and its expressed network as a weighted edge
+    /// list — §6.4's "best individual".
+    pub fn save_results(&self, filename: &str) -> PyResult<()> {
+        let mut file = File::create(filename)
+            .map_err(|err| PyIOError::new_err(format!("could not create {filename}: {err}")))?;
+
+        writeln!(file, "best_fitness = {}", self.best_fitness)
+            .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
+        writeln!(file, "genome = {}", self.best_genome_repr)
+            .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
+        writeln!(file, "\nedges (u,v,multiplicity):")
+            .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
+        for &(u, v, weight) in &self.best_edges {
+            writeln!(file, "{u},{v},{weight}").map_err(|err| {
+                PyIOError::new_err(format!("could not write to {filename}: {err}"))
+            })?;
+        }
+
+        let config_path = format!("{filename}.toml");
+        std::fs::write(&config_path, &self.config_toml).map_err(|err| {
+            PyIOError::new_err(format!("could not write to {config_path}: {err}"))
+        })?;
+
+        Ok(())
+    }
 }
 
 impl PyRunResult {
@@ -103,7 +205,16 @@ impl PyRunResult {
     /// No conversion happens here — `dispatch::erase` has already done it, and
     /// doing it twice would put a maximizing objective's numbers back into
     /// engine orientation while every one of them still looked plausible.
-    pub(crate) fn from_erased(outcome: ErasedOutcome) -> Self {
+    ///
+    /// `seed`, `run_index` and `config_toml` are run-level rather than part of
+    /// `ErasedOutcome`: dispatch knows nothing of the config document or which
+    /// replicate it's building, so those three arrive from the caller instead.
+    pub(crate) fn from_erased(
+        outcome: ErasedOutcome,
+        seed: u64,
+        run_index: usize,
+        config_toml: String,
+    ) -> Self {
         let mut history = Vec::with_capacity(outcome.history.len());
         for row in outcome.history {
             history.push(PyGenerationStats {
@@ -111,6 +222,7 @@ impl PyRunResult {
                 best_fitness: row.best_fitness,
                 mean_fitness: row.mean_fitness,
                 std_dev: row.std_dev,
+                ci_95: row.ci_95,
             });
         }
 
@@ -119,6 +231,9 @@ impl PyRunResult {
             best_edges: outcome.best_edges,
             best_genome_repr: outcome.best_genome_repr,
             history,
+            seed,
+            run_index,
+            config_toml,
         }
     }
 }
