@@ -27,6 +27,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use rayon::ThreadPoolBuilder;
+use rayon::prelude::*;
 
 use crate::GraphEvolver;
 use crate::config::{self, Config, EvolutionConfig, FitnessConfig, GenomeConfig, SelectionConfig};
@@ -376,6 +378,88 @@ pub(crate) fn evolve<F: Fitness>(
             ))
         }
     }
+}
+
+/// How many replicates may execute at once.
+///
+/// Never more than the caller allowed, never more than there are runs — extra
+/// threads past the replicate count have nothing to do — and never zero, which
+/// `ThreadPoolBuilder` reads as "pick a default" rather than "run nothing".
+fn effective_concurrency(max_cores: Option<usize>, n_runs: usize) -> usize {
+    let available = match max_cores {
+        Some(cap) => cap,
+        // `available_parallelism` fails on some constrained targets; one thread
+        // is the honest fallback, since the alternative is guessing high.
+        None => std::thread::available_parallelism().map_or(1, |n| n.get()),
+    };
+    available.min(n_runs).max(1)
+}
+
+/// Run one replicate per entry in `seeds`, and hand back their outcomes **in
+/// run order**.
+///
+/// `objectives` is parallel to `seeds` — one objective per run, built by the
+/// caller before this is entered. They are not built here because each needs a
+/// fresh per-run instance (an SIR objective owns an epidemic counter, and
+/// sharing one across concurrent runs lets thread scheduling decide which run
+/// sees which epidemic seed), and because building a Python objective touches
+/// the interpreter, which must not happen inside a rayon worker.
+///
+/// **The engine picks parallel or sequential; the caller does not.** A native
+/// Rust objective scores without the interpreter, so replicates are independent
+/// and concurrency is nearly free. Under `fitness = "python"` every scoring call
+/// re-acquires the GIL, so `n` concurrent runs are `n` threads contending for
+/// one lock — slower than sequential *and* contended. Exposing that as a setting
+/// would only create a way to choose wrong.
+///
+/// **The pool is built here, per call, never configured globally.** Rayon's
+/// global pool can be configured once per process, and this crate is a Python
+/// extension module imported once per session — a global configuration would
+/// make `max_cores` a property of whichever `run` happened first, and the second
+/// call with a different cap would fail outright.
+///
+/// # Errors
+///
+/// `ValueError` if the thread pool cannot be built, or from any replicate that
+/// fails — the first such error is returned and the rest are abandoned.
+pub(crate) fn run_replicates(
+    config: &Config,
+    objectives: &[Box<dyn Fitness>],
+    seeds: &[u64],
+    max_cores: Option<usize>,
+) -> PyResult<Vec<ErasedOutcome>> {
+    debug_assert_eq!(objectives.len(), seeds.len(), "one objective per run");
+
+    // Nothing to run, and in particular no pool to size: `effective_concurrency`
+    // would clamp to 1 and build a pool for zero work.
+    if seeds.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    if matches!(config.fitness, FitnessConfig::Python) {
+        let mut outcomes = Vec::with_capacity(seeds.len());
+        for (objective, &seed) in objectives.iter().zip(seeds) {
+            outcomes.push(evolve(config, objective, seed)?);
+        }
+        return Ok(outcomes);
+    }
+
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(effective_concurrency(max_cores, seeds.len()))
+        .build()
+        .map_err(|err| PyValueError::new_err(format!("could not build the thread pool: {err}")))?;
+
+    // `zip` over two slices is an *indexed* parallel iterator, so `collect`
+    // rebuilds the vector by position rather than by completion. That is what
+    // makes the result order the run order: the same master seed has to give the
+    // same output ordering on every machine, whatever order the runs finish in.
+    pool.install(|| {
+        seeds
+            .par_iter()
+            .zip(objectives.par_iter())
+            .map(|(&seed, objective)| evolve(config, objective, seed))
+            .collect::<PyResult<Vec<ErasedOutcome>>>()
+    })
 }
 
 /// Pick the evolution strategy and run it, for a genome type already settled.
@@ -897,6 +981,20 @@ mod tests {
     /// no such floor, but one fixture serving both keeps the four combinations
     /// comparable.
     fn runnable(evolution_block: &str, genome_block: &str) -> Config {
+        runnable_with_fitness(
+            evolution_block,
+            genome_block,
+            "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.3\nnum_epidemics = 2\n",
+        )
+    }
+
+    /// The same, with the `[fitness]` block chosen — the replicate tests need a
+    /// `python` one to reach the sequential arm, which no SIR block can.
+    fn runnable_with_fitness(
+        evolution_block: &str,
+        genome_block: &str,
+        fitness_block: &str,
+    ) -> Config {
         let text = format!(
             "population_size = 6\n\
              network_size = 8\n\
@@ -910,10 +1008,7 @@ mod tests {
              tournament_size = 4\n\
              \n\
              {genome_block}\n\
-             [fitness]\n\
-             type = \"epi_spread\"\n\
-             infection_rate = 0.3\n\
-             num_epidemics = 2\n"
+             {fitness_block}"
         );
         let config = Config::from_toml_str(&text).expect("the runnable config parses");
         config.validate().expect("the runnable config validates");
@@ -972,6 +1067,146 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// One objective per seed, which is what `run_replicates` requires — a
+    /// fresh instance each, never one shared, because an SIR objective owns a
+    /// per-run epidemic counter.
+    fn objectives_for(config: &Config, seeds: &[u64]) -> Vec<Box<dyn Fitness>> {
+        let mut objectives: Vec<Box<dyn Fitness>> = Vec::with_capacity(seeds.len());
+        for &seed in seeds {
+            objectives.push(Box::new(EpiSpread::new(
+                sir_sample_params(sir_of(config)),
+                seed,
+            )));
+        }
+        objectives
+    }
+
+    #[test]
+    fn replicates_come_back_in_run_order_not_completion_order() {
+        // The ordering guarantee the whole feature rests on: the same master
+        // seed must give the same output ordering on every machine, however the
+        // runs interleave. Checked by running the same seeds concurrently and
+        // sequentially and requiring the two sequences to match element for
+        // element — a completion-ordered collect would diverge under load.
+        let config = runnable(GENERATIONAL, EDGE_EDIT);
+        let seeds = replicate_seeds(20260813, 6);
+
+        let concurrent = run_replicates(&config, &objectives_for(&config, &seeds), &seeds, Some(4))
+            .expect("concurrent replicates complete");
+        let serial = run_replicates(&config, &objectives_for(&config, &seeds), &seeds, Some(1))
+            .expect("sequential replicates complete");
+
+        assert_eq!(concurrent.len(), 6, "one outcome per seed");
+        for (index, (parallel, sequential)) in concurrent.iter().zip(&serial).enumerate() {
+            assert_eq!(
+                parallel.best_fitness, sequential.best_fitness,
+                "run {index} differs between max_cores=4 and max_cores=1",
+            );
+            assert_eq!(
+                parallel.best_edges, sequential.best_edges,
+                "run {index}'s graph differs between max_cores=4 and max_cores=1",
+            );
+        }
+    }
+
+    #[test]
+    fn a_python_objective_runs_its_replicates_through_the_sequential_arm() {
+        // The python arm end to end, with a real registered callable — not a
+        // native config standing in for one. A timing assertion would prove
+        // nothing here, so what this checks is that the branch completes and
+        // scores through the callable at all: under the parallel arm these
+        // would be n threads contending for one GIL.
+        Python::attach(|py| {
+            let mut evolver = GraphEvolver {
+                config: runnable_with_fitness(GENERATIONAL, EDGE_EDIT, PYTHON_FITNESS),
+                fitness_function: None,
+                config_toml: String::new(),
+            };
+            let callable = py
+                .eval(
+                    c"lambda batch: [float(len(edges)) for (n, edges) in batch]",
+                    None,
+                    None,
+                )
+                .expect("the lambda compiles");
+            evolver
+                .set_fitness_function(&callable, "maximize")
+                .expect("a python config accepts a callable");
+
+            assert!(
+                matches!(evolver.config.fitness, FitnessConfig::Python),
+                "fixture sanity: this must be the python arm, not a native one",
+            );
+
+            let seeds = replicate_seeds(11, 3);
+            let mut objectives = Vec::with_capacity(seeds.len());
+            for &seed in &seeds {
+                objectives.push(evolver.objective(seed).expect("objective per run"));
+            }
+
+            // `max_cores` is deliberately generous: under the python arm it is
+            // moot, and passing it proves the cap does not drag the config onto
+            // the parallel path.
+            let outcomes = run_replicates(&evolver.config, &objectives, &seeds, Some(8))
+                .expect("python replicates complete sequentially");
+
+            assert_eq!(outcomes.len(), 3, "one outcome per seed");
+            for (index, outcome) in outcomes.iter().enumerate() {
+                assert!(
+                    outcome.best_fitness.is_finite(),
+                    "run {index} scored through the callable",
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn a_native_objective_runs_with_the_core_cap_unset() {
+        // The other half of the gate: unset `max_cores` means all available,
+        // which must still complete rather than building a zero-width pool.
+        let config = runnable(GENERATIONAL, EDGE_EDIT);
+        let seeds = replicate_seeds(11, 3);
+
+        let outcomes = run_replicates(&config, &objectives_for(&config, &seeds), &seeds, None)
+            .expect("replicates complete with max_cores unset");
+
+        assert_eq!(outcomes.len(), 3, "one outcome per seed, cap unset");
+    }
+
+    #[test]
+    fn a_zero_replicate_request_yields_no_outcomes() {
+        // Named for what is actually asserted. The early return in
+        // `run_replicates` also avoids constructing a pool for zero work —
+        // rayon reads `num_threads(0)` as "pick a default", so an unguarded
+        // empty request would build a full-width pool to do nothing — but that
+        // is not observable from here and this test does not claim it.
+        let config = runnable(GENERATIONAL, EDGE_EDIT);
+
+        let outcomes =
+            run_replicates(&config, &[], &[], Some(8)).expect("an empty request is not an error");
+
+        assert!(outcomes.is_empty(), "no seeds means no outcomes");
+    }
+
+    #[test]
+    fn concurrency_is_capped_by_the_run_count_and_the_caller() {
+        // `min(max_cores, n_runs)`, and never zero. Threads beyond the replicate
+        // count have nothing to do, and zero means "default" to rayon.
+        assert_eq!(effective_concurrency(Some(8), 3), 3, "capped by run count");
+        assert_eq!(
+            effective_concurrency(Some(2), 30),
+            2,
+            "capped by the caller"
+        );
+        assert_eq!(effective_concurrency(Some(1), 30), 1, "fully sequential");
+        assert_eq!(effective_concurrency(Some(0), 4), 1, "never zero threads");
+        assert_eq!(effective_concurrency(None, 1), 1, "unset, but one run");
+        assert!(
+            effective_concurrency(None, 64) >= 1,
+            "unset means all available, whatever this machine has",
+        );
     }
 
     #[test]
