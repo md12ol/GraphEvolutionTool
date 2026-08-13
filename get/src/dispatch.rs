@@ -824,7 +824,7 @@ mod tests {
         );
 
         let err = evolver
-            .run(1)
+            .run(1, 1, None)
             .expect_err("init_state 9 with num_states 4 must be rejected");
 
         let message = err.to_string();
@@ -1365,7 +1365,12 @@ mod tests {
             config_toml: config_toml.clone(),
         };
 
-        let result = evolver.run(8).expect("a full config run completes");
+        let [result] = <[_; 1]>::try_from(
+            evolver
+                .run(8, 1, None)
+                .expect("a full config run completes"),
+        )
+        .expect("one run returns exactly one result");
 
         assert!(
             result.best_fitness >= 1.0,
@@ -1400,9 +1405,13 @@ mod tests {
             config_toml: String::new(),
         };
 
-        let first = evolver.run(4).expect("first run");
-        let second = evolver.run(5).expect("second run");
-        let first_again = evolver.run(4).expect("first run, repeated");
+        let [first] = <[_; 1]>::try_from(evolver.run(4, 1, None).expect("first run"))
+            .expect("one run returns exactly one result");
+        let [second] = <[_; 1]>::try_from(evolver.run(5, 1, None).expect("second run"))
+            .expect("one run returns exactly one result");
+        let [first_again] =
+            <[_; 1]>::try_from(evolver.run(4, 1, None).expect("first run, repeated"))
+                .expect("one run returns exactly one result");
 
         // Seed 4 reproduces exactly, after seed 5 has run through the same
         // evolver — so nothing the second run did survived into the third.
@@ -1431,7 +1440,12 @@ mod tests {
                 fitness_function: None,
                 config_toml: String::new(),
             };
-            let result = evolver.run(3).expect("a full config run completes");
+            let [result] = <[_; 1]>::try_from(
+                evolver
+                    .run(3, 1, None)
+                    .expect("a full config run completes"),
+            )
+            .expect("one run returns exactly one result");
             assert_eq!(result.history.len(), expected_rows);
 
             let path = std::env::temp_dir().join(format!(
@@ -1497,7 +1511,12 @@ mod tests {
             fitness_function: None,
             config_toml: config_toml.clone(),
         };
-        let result = evolver.run(7).expect("a full config run completes");
+        let [result] = <[_; 1]>::try_from(
+            evolver
+                .run(7, 1, None)
+                .expect("a full config run completes"),
+        )
+        .expect("one run returns exactly one result");
 
         let path =
             std::env::temp_dir().join(format!("get_save_results_test_{}", std::process::id()));
