@@ -43,15 +43,11 @@ script showing the edge-edit run's starting population expresses the seeded edge
       `cargo doc -p get --no-deps` clean for this item (8 warnings, all pre-existing, none in
       range). Python docstring reach to be confirmed in task 7, when maturin builds anyway.
 
-- [ ] `documentation/` consequences of shipping `set_base_graph` — six claims the site makes that
-      this branch falsifies: `status.html`'s "Supplying a base graph" row; `python-api.html`'s
-      `badge-planned` on `#base-graph` and its "rejected **or warned**" (settled as rejects,
-      `decisions.md` 2026-08-12); `examples/index.html`'s plan-note "there is no `set_base_graph`"
-      and its warn block saying a narrowed cap "silently collapses" (it now raises); and
-      `HANDOFF.md`'s mirror row, which `collab.md` #57 says should wait on #50.
-      Route undecided — this PR, per `CLAUDE.md`'s de-badge rule, or `jsargant_edits.md`, per the
-      queue Michael used for #71.
-      **Verify by:** `grep -rn 'set_base_graph' documentation/` shows nothing claiming it unbuilt.
+- [x] `documentation/` consequences filed as two entries in `documentation/jsargant_edits.md` —
+      `#set-base-graph-ships` (the badge, the plan-note, the `status.html` row) and
+      `#set-base-graph-cap-rejects` (the site says a narrowed cap silently collapses; it raises
+      now). Queued not applied, per that file's rule superseding `CLAUDE.md`'s de-badge *timing*.
+      `HANDOFF.md`'s mirror row left to `collab.md` #50/#57. Rides the PR, as `mdube_edits.md` did.
 
 - [ ] Manual stacked-run check: a small script (SDA config → `run()` → `best_edges`; edge-edit
       config with matching `network_size`/`max_edge_multiplicity` → `set_base_graph(n, edges)` →
