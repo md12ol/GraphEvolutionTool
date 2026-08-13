@@ -124,7 +124,7 @@ which objective it is holding.</figcaption>
 <div class="api-item">
   <div class="api-sig">pub(crate) fn objective(&amp;self, run_seed: u64) -&gt; PyResult&lt;Box&lt;dyn Fitness&gt;&gt;</div>
   <div class="api-body">
-    <span class="src">dispatch.rs:106</span>
+    <span class="src">dispatch.rs:117</span>
     <p>
       Builds the objective for one run and hides its concrete type behind a pointer. Four arms:
       the three epidemic objectives each map their <code>[fitness]</code> block onto the simulator's
@@ -149,7 +149,7 @@ which objective it is holding.</figcaption>
 <div class="api-item">
   <div class="api-sig">pub(crate) fn python_fitness(&amp;self) -&gt; PyResult&lt;Box&lt;dyn Fitness&gt;&gt;</div>
   <div class="api-body">
-    <span class="src">dispatch.rs:160</span>
+    <span class="src">dispatch.rs:171</span>
     <p>
       The <code>python</code> arm, split out so the match above stays one call per objective. Returns
       a fresh adapter around the registered callable — a fresh instance per call, because replicate
@@ -179,7 +179,7 @@ which objective it is holding.</figcaption>
 <div class="api-item">
   <div class="api-sig">pub(crate) fn edge_edit_start(config, gene_length, weights, rng) -&gt; PyResult&lt;(EdgeEditContext, Vec&lt;EdgeEditGenome&gt;)&gt;</div>
   <div class="api-body">
-    <span class="src">dispatch.rs:207</span>
+    <span class="src">dispatch.rs:218</span>
     <p>
       Builds <code>population_size</code> random edit scripts and the context they express against.
       The operation mix is compiled into a sampler <b>once</b> and shared across the whole population
@@ -202,7 +202,7 @@ which objective it is holding.</figcaption>
 <div class="api-item">
   <div class="api-sig">pub(crate) fn sda_start(config, num_states, max_resp_len, init_state, rng) -&gt; PyResult&lt;(SdaContext, Vec&lt;SdaGenome&gt;)&gt;</div>
   <div class="api-body">
-    <span class="src">dispatch.rs:252</span>
+    <span class="src">dispatch.rs:263</span>
     <p>
       Builds <code>population_size</code> random automata and their context. The alphabet is
       <b>derived, never configured</b>: <code>num_chars = max_edge_multiplicity + 1</code>, so every
@@ -230,7 +230,7 @@ which objective it is holding.</figcaption>
 <div class="api-item">
   <div class="api-sig">pub(crate) fn evolve&lt;F: Fitness&gt;(config: &amp;Config, fitness: &amp;F, seed: u64) -&gt; PyResult&lt;ErasedOutcome&gt;</div>
   <div class="api-body">
-    <span class="src">dispatch.rs:301</span>
+    <span class="src">dispatch.rs:312</span>
     <p>
       Runs one complete evolution. Seeds a reproducible random generator from <code>seed</code>, maps
       the selection block onto the engine's own strategy, then matches the genome — two arms, one per
@@ -247,14 +247,14 @@ which objective it is holding.</figcaption>
       master seed instead would make it re-seed its own generator and replay the exact draws that
       just built the population — correlating the initial genomes with the first mutations, which
       looks like nothing at all in the output. There is a test named after this
-      (<span class="src">dispatch.rs:737</span>).
+      (<span class="src">dispatch.rs:762</span>).
     </div>
   </div>
 </div>
 
 <p>
   The strategy match itself is a private helper, <code>run_strategy</code>
-  (<span class="src">dispatch.rs:351</span>). It is generic over the genome, so both representations
+  (<span class="src">dispatch.rs:362</span>). It is generic over the genome, so both representations
   share one body. It assembles the shared evolution context — genome context, crossover rate,
   mutation rate, <code>max_mutations</code>, selection — and then picks
   <code>GenerationalEvolver</code> or <code>SteadyStateEvolver</code>.
@@ -265,7 +265,7 @@ which objective it is holding.</figcaption>
 <div class="api-item">
   <div class="api-sig">pub(crate) struct ErasedOutcome { pub best_fitness: f64, pub best_edges: Vec&lt;(usize, usize, u32)&gt; }</div>
   <div class="api-body">
-    <span class="src">dispatch.rs:56</span>
+    <span class="src">dispatch.rs:57</span>
     <p>
       One run's result with the genome type removed. The Python entry point cannot be generic — a
       Python class cannot carry a type parameter, but the engine's own outcome does — so every
@@ -301,15 +301,15 @@ which objective it is holding.</figcaption>
         <td>The <code>[selection]</code> block onto the engine's selection strategy. One variant
             each today; kept as a function so a second scheme is one arm here and touches neither
             evolver.</td>
-        <td><span class="src">dispatch.rs:409</span></td></tr>
+        <td><span class="src">dispatch.rs:436</span></td></tr>
     <tr><td><code>sir_sample_params</code></td>
         <td>The <code>[fitness]</code> block onto the simulator's own sampling parameters. The shape
             changes: the config block is flat, while the simulator separates the epidemic's two
             parameters from the batch settings around them.</td>
-        <td><span class="src">dispatch.rs:434</span></td></tr>
+        <td><span class="src">dispatch.rs:461</span></td></tr>
     <tr><td><code>erase</code></td>
         <td>Drops the genome type and converts the fitness back to the objective's units.</td>
-        <td><span class="src">dispatch.rs:398</span></td></tr>
+        <td><span class="src">dispatch.rs:411</span></td></tr>
   </tbody>
 </table>
 </div>
@@ -321,7 +321,7 @@ which objective it is holding.</figcaption>
   config schema so <a href="sir.html">sir.rs</a> never depends on how a TOML key is spelled.
   <code>sir_sample_params</code> is the seam between them. A field mapped to the wrong place still
   compiles when the types agree, so there is a test that checks each one individually
-  (<span class="src">dispatch.rs:539</span>).
+  (<span class="src">dispatch.rs:565</span>).
 </div>
 
 <p>
@@ -355,7 +355,7 @@ which objective it is holding.</figcaption>
 
 <p>
   All four combinations of strategy and genome are exercised end to end by a single test
-  (<span class="src">dispatch.rs:823</span>), which exists because the types line up whether or not
+  (<span class="src">dispatch.rs:848</span>), which exists because the types line up whether or not
   each arm is wired to the right evolver — before it, three of the four had never actually been
   executed.
 </p>
@@ -365,7 +365,7 @@ which objective it is holding.</figcaption>
 <p>
   One seed argument reproduces an entire run: the starting population, the evolution, and the
   epidemics all derive from it. Two tests pin this — the same seed gives the same score and the same
-  network, and a different seed does not (<span class="src">dispatch.rs:880</span>).
+  network, and a different seed does not (<span class="src">dispatch.rs:962</span>).
 </p>
 
 <p>
@@ -422,21 +422,23 @@ which objective it is holding.</figcaption>
   comfortably. See <a href="../guide/performance.html">Performance &amp; memory</a>.
 </div>
 
-<h3>The full result object <span class="badge badge-planned">planned</span></h3>
+<h3>The full result object</h3>
 
 <p>
   A run produces two things: a best individual and a convergence log. The erased outcome carries
-  both — best fitness, the best graph's edge list, the best genome's printed form, and the log rows —
-  and that object <i>is</i> the return value of <code>run</code>. The printed genome is what the
-  genome trait's <code>print</code> method exists for: it lets a non-generic entry point record which
-  individual won without knowing its representation.
+  both — best fitness, the best graph's edge list, the best genome's printed form, and the log rows
+  (<span class="src">dispatch.rs:57</span>) — and that object <i>is</i> the return value of
+  <code>run</code>. The printed genome is what the genome trait's <code>print</code> method exists
+  for: it lets a non-generic entry point record which individual won without knowing its
+  representation.
 </p>
 
-<div class="plan-note">
-  <b>Today:</b> <code>ErasedOutcome</code> carries two fields — best fitness and the edge list — and
-  the private <code>erase</code> function <b>drops the convergence history on the floor</b>
-  (<span class="src">dispatch.rs:398</span>). The genome's printed form is not collected at all. The
-  log format is GitHub #21 and the result object is GitHub #27; the code comments name both.
+<div class="note">
+  <b>The private <code>erase</code> function is the orientation boundary</b>
+  (<span class="src">dispatch.rs:411</span>), and it converts the log row by row as well as the
+  headline number. Only the two fitness columns are converted: <code>std_dev</code> is left exactly
+  as the engine computed it, because a spread is identical under negation. Orienting it too would
+  be a silent defect — the number stays positive, so nothing would look wrong.
 </div>
 
 <h3>Starting from an existing graph <span class="badge badge-planned">planned</span></h3>
@@ -450,7 +452,7 @@ which objective it is holding.</figcaption>
 
 <div class="plan-note">
   <b>Today:</b> <code>edge_edit_start</code> always builds an empty base graph
-  (<span class="src">dispatch.rs:224</span>) and there is no setter to supply one. The consequence —
+  (<span class="src">dispatch.rs:236</span>) and there is no setter to supply one. The consequence —
   five of the nine operations inert until Add or Toggle build structure — is live right now. Tracked
   as GitHub #28; the validation the setter owes is described on
   <a href="config.html">config.rs</a>.

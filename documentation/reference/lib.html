@@ -14,12 +14,12 @@
 <h1>lib.rs</h1>
 <p class="lede">
   The crate root and the Python front door. This is the entire surface a Python user touches:
-  one class, six methods, and the module registration that gives them their names. Everything
-  else in this reference section sits behind it.
+  one class, six methods, the result types a run hands back, and the module registration that gives
+  them their names. Everything else in this reference section sits behind it.
 </p>
 
 <p>
-  Source: <code>get/src/lib.rs</code>, 705 lines, of which about 430 are tests. For the task-level
+  Source: <code>get/src/lib.rs</code>, 722 lines, of which about 440 are tests. For the task-level
   view of the same API, see <a href="../guide/python-api.html">Python API</a>.
 </p>
 
@@ -33,11 +33,12 @@ pub mod fitness;
 pub mod genomes;
 pub mod graph;
 pub mod py_config;
+pub mod py_result;
 pub mod sir;</div>
   <div class="api-body">
-    <span class="src">lib.rs:1-11</span>
+    <span class="src">lib.rs:1-12</span>
     <p>
-      Eight modules, seven of them public. <b><code>dispatch</code> is deliberately private</b>
+      Nine modules, eight of them public. <b><code>dispatch</code> is deliberately private</b>
       (<code>lib.rs:2-5</code>): it is the config-to-concrete-type layer that <code>run</code>
       goes through — machinery rather than API. A Rust user who wants to embed the engine uses the
       engine types directly instead of going through dispatch, so nothing is lost by hiding it.
@@ -60,18 +61,21 @@ pub mod sir;</div>
   <div class="api-sig">#[pyclass]
 pub struct GraphEvolver {
     config: Config,
-    best_fitness: Option&lt;f64&gt;,
     fitness_function: Option&lt;PyFitness&gt;,
 }</div>
   <div class="api-body">
-    <span class="src">lib.rs:28 — fields at :29, :30, :37</span>
+    <span class="src">lib.rs:35 — fields at :36, :43</span>
     <p>
-      The Python-facing entry point to the engine. All three fields are private; Python sees only
+      The Python-facing entry point to the engine. Both fields are private; Python sees only
       the methods below.
+    </p>
+    <p>
+      <b>It holds no results.</b> A run's state lives in the <code>RunResult</code> that
+      <code>run</code> returns and nowhere else, so one evolver drives replicate runs without a
+      previous run's numbers surviving into the next.
     </p>
     <ul>
       <li><code>config</code> — the parsed and validated run configuration.</li>
-      <li><code>best_fitness</code> — cached after a run, in the objective's own units.</li>
       <li><code>fitness_function</code> — the objective registered by
           <a href="#set-fitness-function"><code>set_fitness_function</code></a>, set only when
           <code>[fitness] type = "python"</code>. Runtime configuration that cannot live in a config
@@ -86,12 +90,12 @@ pub struct GraphEvolver {
 <div class="api-item">
   <div class="api-sig">GraphEvolver(config_path: str) -&gt; GraphEvolver</div>
   <div class="api-body">
-    <span class="src">lib.rs:44</span>
+    <span class="src">lib.rs:50</span>
     <p>
       Loads configuration from a <code>config.toml</code> file. Raises <code>ValueError</code> if
       the file cannot be read, parsed, or validated — the message names the offending field and its
       constraint, which is what a bad config is required to reach the user as
-      (<code>lib.rs:46-49</code>).
+      (<code>lib.rs:52-55</code>).
     </p>
     <pre><code class="language-python">import get
 
@@ -102,13 +106,13 @@ evolver = get.GraphEvolver("config.toml")</code></pre>
 <div class="api-item">
   <div class="api-sig">GraphEvolver.from_config(config: Config) -&gt; GraphEvolver</div>
   <div class="api-body">
-    <span class="src">lib.rs:90</span>
+    <span class="src">lib.rs:95</span>
     <p>
       Builds from configuration assembled in Python rather than from a file. A static method.
     </p>
     <p>
       The config object is rendered to TOML and parsed by <b>exactly the same parser and validator</b>
-      the file path goes through (<code>lib.rs:91-109</code>). Python is a <i>builder</i> for the
+      the file path goes through (<code>lib.rs:96-114</code>). Python is a <i>builder</i> for the
       config format, not a second parser of it — so this cannot accept a configuration a
       <code>config.toml</code> would reject, and both front ends report the same constraint in the
       same words.
@@ -128,7 +132,7 @@ evolver = get.GraphEvolver("config.toml")</code></pre>
 evolver = get.GraphEvolver.from_config(config)</code></pre>
     <p>
       Errors are reported through a translation layer that rewrites the TOML field name into the
-      <b>Python attribute path</b> that produced it (<code>lib.rs:104-109</code>) — the bare field
+      <b>Python attribute path</b> that produced it (<code>lib.rs:109-114</code>) — the bare field
       name is right for the file front end and unhelpful here, where the user never saw a document.
     </p>
   </div>
@@ -144,7 +148,7 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 <div class="api-item">
   <div class="api-sig">evolver.set_fitness_function(callable, direction: str) -&gt; None</div>
   <div class="api-body">
-    <span class="src">lib.rs:144</span>
+    <span class="src">lib.rs:148</span>
     <p>
       Registers a Python callable as the objective, together with the direction it is meant to be
       optimised in. <code>direction</code> is <code>"minimize"</code> or <code>"maximize"</code>,
@@ -154,7 +158,7 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
       The direction is supplied here rather than in the config because <b>nothing can infer whether
       a user's function wants its value large or small</b>. It is spelled as a string rather than
       an imported enum so the Python side needs no import to say which way is better
-      (<code>lib.rs:167-177</code>).
+      (<code>lib.rs:171-181</code>).
     </p>
     <pre><code class="language-python">evolver.set_fitness_function(
     lambda batch: [score(n, edges) for (n, edges) in batch],
@@ -175,11 +179,11 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
   <thead><tr><th>Case</th><th>Message names</th><th>Site</th></tr></thead>
   <tbody>
     <tr><td><code>callable</code> is not callable</td><td>the type you passed instead</td>
-        <td><code>lib.rs:160-166</code></td></tr>
+        <td><code>lib.rs:164-170</code></td></tr>
     <tr><td><code>direction</code> is neither word</td><td>what you gave and what is allowed</td>
-        <td><code>lib.rs:173-177</code></td></tr>
+        <td><code>lib.rs:177-181</code></td></tr>
     <tr><td>the config did not select Python</td><td>the configured <code>type</code>, and what to
-        change it to</td><td><code>lib.rs:152-158</code></td></tr>
+        change it to</td><td><code>lib.rs:156-162</code></td></tr>
   </tbody>
 </table>
 </div>
@@ -195,18 +199,20 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
   <b><code>"maximise"</code> is rejected.</b> The British spelling is the most likely near-miss, and
   silently defaulting it to <code>Minimize</code> would run a maximising search <b>backwards</b> —
   which looks exactly like a run that is failing to converge. The accepted spellings are closed and
-  the error names both. Test: <code>lib.rs:383</code>.
+  the error names both. Test: <code>lib.rs:401</code>.
 </div>
 
 <h3 id="run">Running</h3>
 
 <div class="api-item">
-  <div class="api-sig">evolver.run(seed: int) -&gt; list[tuple[int, int, int]]</div>
+  <div class="api-sig">evolver.run(seed: int) -&gt; RunResult</div>
   <div class="api-body">
-    <span class="src">lib.rs:218</span>
+    <span class="src">lib.rs:235</span>
     <p>
-      Evolves a population and returns the best graph found as a weighted edge list —
-      <code>(u, v, multiplicity)</code> triples, each edge once, with <code>u &lt; v</code>. That is
+      Evolves a population and returns everything that run produced —
+      <code>best_fitness</code>, <code>best_edges</code>, <code>best_genome_repr</code> and
+      <code>history</code>. The edge list is <code>(u, v, multiplicity)</code> triples, each edge
+      once, with <code>u &lt; v</code>: that is
       <a href="graph.html"><code>Graph::get_edge_list</code></a>'s output.
     </p>
     <p>
@@ -214,24 +220,31 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
       epidemics. There is no seed in the config, deliberately — the config describes the
       <i>experiment</i>, while the seed describes <i>this invocation</i>.
     </p>
+    <p>
+      <b>Nothing is stored on the evolver.</b> The result <i>is</i> the return value, so there is
+      no accessor that has to answer something before a run has happened, and one evolver is
+      reusable across replicates with nothing stale hanging off it.
+    </p>
   </div>
 </div>
 
-<p>The method does three things, in this order (<code>lib.rs:218-243</code>):</p>
+<p>The method does three things, in this order (<code>lib.rs:235-259</code>):</p>
 
 <ol>
-  <li><b>Builds the objective first, and fallibly</b> (<code>lib.rs:226</code>). The objective is
+  <li><b>Builds the objective first, and fallibly</b> (<code>lib.rs:243</code>). The objective is
       erased to a box <i>before</i> any strategy or genome is chosen. Doing it first means a config
       selecting Python with no callable registered is reported before any population is built,
       which is cheaper than discovering it at the first scoring call.</li>
-  <li><b>Releases the Python lock for the whole run</b> (<code>lib.rs:236</code>), then calls into
+  <li><b>Releases the Python lock for the whole run</b> (<code>lib.rs:253</code>), then calls into
       dispatch. Holding it would buy nothing — everything between scoring calls is pure Rust, and
       the Python adapter re-acquires the lock per batch on its own. Keeping it would block every
       other Python thread for the entire run and serialise the thread pool against any Python
       caller: a run that works and is inexplicably slow, or a host application that freezes,
       neither pointing back here.</li>
-  <li><b>Caches the best fitness and returns the edges</b> (<code>lib.rs:241-242</code>). The
-      cached value is already converted back into the objective's own units.</li>
+  <li><b>Wraps the erased outcome and returns it</b> (<code>lib.rs:258</code>). Every number in it
+      has already been converted back into the objective's own units, by
+      <a href="dispatch.html"><code>dispatch</code></a>'s erase step — this only re-homes them onto
+      the Python-visible type.</li>
 </ol>
 
 <h4 id="memory">Memory: the three sizes multiply, they do not add</h4>
@@ -264,7 +277,7 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 
 <div class="warn">
   <b>The failure mode is unintuitive, which is why it is documented on the call itself</b>
-  (<code>lib.rs:186-217</code>). A configuration that ran fine, given a larger core count to exploit
+  (<code>lib.rs:203-234</code>). A configuration that ran fine, given a larger core count to exploit
   a bigger machine, <b>multiplies peak memory by that same factor</b> and can exhaust hardware that
   handled the smaller setting comfortably. The three parameters interact rather than adding, so
   raising any one of them scales the whole product.
@@ -273,17 +286,34 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 <h3>Reading results</h3>
 
 <div class="api-item">
-  <div class="api-sig">evolver.best_fitness() -&gt; float</div>
+  <div class="api-sig">RunResult</div>
   <div class="api-body">
-    <span class="src">lib.rs:246</span>
+    <span class="src">py_result.rs:68</span>
     <p>
-      The best fitness found so far, <b>in the objective's own units and sign</b> — the engine's
-      internal lower-is-better orientation never leaks out here. For
+      Frozen and read-only. <code>best_fitness</code> is <b>in the objective's own units and
+      sign</b> — the engine's internal lower-is-better orientation never leaks out here. For
       <code>epi_spread</code> that is a node count, and bigger is better.
     </p>
     <p>
-      Returns <code>inf</code> before any run has completed (<code>lib.rs:247</code>). Not an error,
-      not <code>None</code>.
+      <code>best_edges</code> is the winning network; <code>best_genome_repr</code> is the winning
+      genome through the genome trait's own print method, which is the type-erasure hook that lets
+      a non-generic entry point record which individual won without knowing its representation.
+    </p>
+    <p>
+      <code>history</code> builds a fresh list of <code>GenerationStats</code> on each access, so
+      bind it once rather than re-reading it in a loop.
+    </p>
+  </div>
+</div>
+
+<div class="api-item">
+  <div class="api-sig">GenerationStats</div>
+  <div class="api-body">
+    <span class="src">py_result.rs:34</span>
+    <p>
+      One log row: <code>iteration</code>, <code>best_fitness</code>, <code>mean_fitness</code>,
+      <code>std_dev</code>. The two fitness columns are converted into the objective's units;
+      <code>std_dev</code> is not, because a spread is identical under negation.
     </p>
   </div>
 </div>
@@ -291,7 +321,7 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 <div class="api-item">
   <div class="api-sig">evolver.save_logs(filename: str) -&gt; None</div>
   <div class="api-body">
-    <span class="src">lib.rs:251</span>
+    <span class="src">lib.rs:266</span>
     <p><span class="badge badge-planned">planned</span></p>
     <p>
       Writes the per-iteration evolution log to <code>filename</code> as CSV — one row per logged
@@ -335,7 +365,7 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 <div class="api-item">
   <div class="api-sig">evolver.save_results(filename: str) -&gt; None</div>
   <div class="api-body">
-    <span class="src">lib.rs:257</span>
+    <span class="src">lib.rs:272</span>
     <p><span class="badge badge-planned">planned</span></p>
     <p>
       Writes the best individual to <code>filename</code>: the winning genome in its own textual
@@ -352,12 +382,12 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 <div class="plan-note">
   <b>What exists today.</b> Both methods are declared and registered on the class, so
   <code>evolver.save_logs("x.csv")</code> resolves — but the body of each is a
-  <code>todo!()</code> placeholder (<code>lib.rs:251-254</code> and <code>:257-260</code>), so
-  calling either <b>panics</b> rather than writing a file. The run history is currently discarded on
-  the way out of the engine as well (<code>dispatch.rs:396</code>), and
-  <code>GenerationStats</code> does not yet carry a <code>ci_95</code> field. Capturing the log is
-  tracked as GitHub #21. Until it lands, take <a href="#run"><code>run</code></a>'s returned edge
-  list and <a href="#run"><code>best_fitness()</code></a> and write them yourself.
+  <code>todo!()</code> placeholder (<code>lib.rs:266-269</code> and <code>:272-275</code>), so
+  calling either <b>panics</b> rather than writing a file. They also still take <code>&amp;self</code>,
+  and the evolver holds nothing to write now that a run's state lives in the returned result —
+  re-homing them onto <code>RunResult</code> is part of GitHub #21, along with the
+  <code>ci_95</code> field <code>GenerationStats</code> does not yet carry. Until that lands, take
+  <a href="#run"><code>run</code></a>'s returned <code>history</code> and write the CSV yourself.
 </div>
 
 <h3 id="replicates">Replicate runs <span class="badge badge-planned">planned</span></h3>
@@ -372,7 +402,7 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 <div class="api-item">
   <div class="api-sig">evolver.run(seed: int, n_runs: int = 1, max_cores: int | None = None)</div>
   <div class="api-body">
-    <span class="src">lib.rs:218</span>
+    <span class="src">lib.rs:235</span>
     <p><span class="badge badge-planned">planned</span> — the <code>seed</code> parameter exists
        today; the other two are designed.</p>
     <p>
@@ -421,12 +451,12 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 
 <div class="plan-note">
   <b>What exists today.</b> <code>run</code> takes a seed and nothing else, performs exactly
-  <b>one</b> run, and returns <b>one</b> edge list — the signature at <code>lib.rs:218</code> is
-  <code>run(&amp;mut self, seed: u64) -&gt; PyResult&lt;Vec&lt;(usize, usize, u32)&gt;&gt;</code>.
+  <b>one</b> run, and returns <b>one</b> result — the signature at <code>lib.rs:235</code> is
+  <code>run(&amp;mut self, seed: u64) -&gt; PyResult&lt;PyRunResult&gt;</code>.
   There is no <code>n_runs</code>, no <code>max_cores</code>, and no local thread pool anywhere in
   the crate. The <i>per-run</i> machinery the replicate layer depends on is already in place and
   correct: the objective is rebuilt per call so each run gets its own epidemic counter
-  (<code>dispatch.rs:106</code>), and a Python callable is shared by reference count rather than
+  (<code>dispatch.rs:117</code>), and a Python callable is shared by reference count rather than
   duplicated (<a href="fitness.html#pyfitness"><code>PyFitness::clone_ref</code></a>). To run
   replicates today, call <code>run</code> in a Python loop with your own seeds and collect the
   results yourself.
@@ -438,7 +468,7 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
   <div class="api-sig">#[pymodule]
 fn get(m: &amp;Bound&lt;'_, PyModule&gt;) -&gt; PyResult&lt;()&gt;</div>
   <div class="api-body">
-    <span class="src">lib.rs:264-276</span>
+    <span class="src">lib.rs:279-295</span>
     <p>
       Builds the <code>get</code> extension module. Seven classes are registered: the evolver, and
       the six config builders from <a href="py-config.html">py_config.rs</a>.
@@ -446,7 +476,7 @@ fn get(m: &amp;Bound&lt;'_, PyModule&gt;) -&gt; PyResult&lt;()&gt;</div>
     <p>
       The builders are registered under their <b>unprefixed</b> names — the <code>Py</code> prefix
       on the Rust types is a disambiguator for Rust's benefit and is not part of the API
-      (<code>lib.rs:266-267</code>).
+      (<code>lib.rs:281-282</code>).
     </p>
   </div>
 </div>
@@ -455,14 +485,14 @@ fn get(m: &amp;Bound&lt;'_, PyModule&gt;) -&gt; PyResult&lt;()&gt;</div>
 <table>
   <thead><tr><th>Python name</th><th>Rust type</th><th>Site</th></tr></thead>
   <tbody>
-    <tr><td><code>get.GraphEvolver</code></td><td><code>GraphEvolver</code></td><td><code>lib.rs:265</code></td></tr>
-    <tr><td><code>get.Config</code></td><td><code>PyConfig</code></td><td><code>lib.rs:268</code></td></tr>
-    <tr><td><code>get.EvolutionConfig</code></td><td><code>PyEvolutionConfig</code></td><td><code>lib.rs:269</code></td></tr>
-    <tr><td><code>get.SelectionConfig</code></td><td><code>PySelectionConfig</code></td><td><code>lib.rs:270</code></td></tr>
-    <tr><td><code>get.GenomeConfig</code></td><td><code>PyGenomeConfig</code></td><td><code>lib.rs:271</code></td></tr>
-    <tr><td><code>get.FitnessConfig</code></td><td><code>PyFitnessConfig</code></td><td><code>lib.rs:272</code></td></tr>
-    <tr><td><code>get.SirParams</code></td><td><code>PySirParams</code></td><td><code>lib.rs:273</code></td></tr>
-    <tr><td><code>get.OperationWeights</code></td><td><code>PyOperationWeights</code></td><td><code>lib.rs:274</code></td></tr>
+    <tr><td><code>get.GraphEvolver</code></td><td><code>GraphEvolver</code></td><td><code>lib.rs:280</code></td></tr>
+    <tr><td><code>get.Config</code></td><td><code>PyConfig</code></td><td><code>lib.rs:283</code></td></tr>
+    <tr><td><code>get.EvolutionConfig</code></td><td><code>PyEvolutionConfig</code></td><td><code>lib.rs:284</code></td></tr>
+    <tr><td><code>get.SelectionConfig</code></td><td><code>PySelectionConfig</code></td><td><code>lib.rs:285</code></td></tr>
+    <tr><td><code>get.GenomeConfig</code></td><td><code>PyGenomeConfig</code></td><td><code>lib.rs:286</code></td></tr>
+    <tr><td><code>get.FitnessConfig</code></td><td><code>PyFitnessConfig</code></td><td><code>lib.rs:287</code></td></tr>
+    <tr><td><code>get.SirParams</code></td><td><code>PySirParams</code></td><td><code>lib.rs:288</code></td></tr>
+    <tr><td><code>get.OperationWeights</code></td><td><code>PyOperationWeights</code></td><td><code>lib.rs:289</code></td></tr>
   </tbody>
 </table>
 </div>
@@ -488,14 +518,15 @@ evolver.set_fitness_function(
 )
 
 # 3. Evolve. One seed drives the population, the evolution and the epidemics.
-edges = evolver.run(seed=2026)
+result = evolver.run(seed=2026)
 
-# 4. Read the result. `edges` is [(u, v, multiplicity), ...] with u &lt; v.
-print(evolver.best_fitness())   # in your objective's own units
-print(len(edges), "edges in the best network")</code></pre>
+# 4. Read the result. `best_edges` is [(u, v, multiplicity), ...] with u &lt; v.
+print(result.best_fitness)      # in your objective's own units
+print(len(result.best_edges), "edges in the best network")
+print(len(result.history), "rows of convergence log")</code></pre>
 
 <p>
-  The returned edge list is also the input format for a future run's base graph, so the two genome
+  <code>best_edges</code> is also the input format for a future run's base graph, so the two genome
   representations <b>stack with no new data format</b> — evolve a topology with one, then refine it
   with the other.
 </p>
@@ -509,13 +540,6 @@ print(len(edges), "edges in the best network")</code></pre>
   <b>panic</b> crossing the FFI boundary — the fitness trait has no error path. See
   <a href="fitness.html#pyfitness">PyFitness</a> for the exact messages, which do at least name the
   offending batch item.
-</div>
-
-<div class="note">
-  <b><code>best_fitness()</code> is a cache, not a query.</b> It reports whatever the last completed
-  <code>run</code> stored, and <code>inf</code> if none has. It is also expected to disappear:
-  <code>lib.rs:239-241</code> notes that GitHub #27 replaces both the field and this getter with a
-  proper returned result object.
 </div>
 
 <div class="note">

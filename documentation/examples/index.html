@@ -38,10 +38,10 @@ config = get.Config(
 )
 
 evolver = get.GraphEvolver.from_config(config)
-edges   = evolver.run(20260812)
+result  = evolver.run(20260812)
 
-print(f"infected {evolver.best_fitness():.1f} of {config.network_size} nodes")
-print(f"network has {len(edges)} edges")
+print(f"infected {result.best_fitness:.1f} of {config.network_size} nodes")
+print(f"network has {len(result.best_edges)} edges")
 
 # Keep the provenance record. This document plus the seed reproduces the run exactly.
 with open("run.toml", "w") as f:
@@ -75,7 +75,7 @@ num_epidemics  = 30</code></pre>
 
 <pre><code class="language-python">import get
 evolver = get.GraphEvolver("spread.toml")     # reads, parses AND validates
-edges   = evolver.run(20260812)</code></pre>
+result  = evolver.run(20260812)</code></pre>
 
 <h2>3. SDA genomes, building networks from scratch</h2>
 
@@ -107,8 +107,8 @@ config = get.Config(
 )
 
 evolver = get.GraphEvolver.from_config(config)
-edges   = evolver.run(7)
-print(f"epidemic lasted {evolver.best_fitness():.2f} timesteps on average")</code></pre>
+result  = evolver.run(7)
+print(f"epidemic lasted {result.best_fitness:.2f} timesteps on average")</code></pre>
 
 <h2>4. Matching a real epidemic curve</h2>
 
@@ -144,8 +144,8 @@ config = get.Config(
 )
 
 evolver = get.GraphEvolver.from_config(config)
-edges   = evolver.run(20260812)
-print(f"RMSE against the target: {evolver.best_fitness():.4f}")   # lower is better here</code></pre>
+result  = evolver.run(20260812)
+print(f"RMSE against the target: {result.best_fitness:.4f}")   # lower is better here</code></pre>
 
 <div class="warn">
   <b>Do not paste a profile from a legacy C++ run.</b> The old loader prepended patient zero and
@@ -178,7 +178,7 @@ config = get.Config(
 )
 
 evolver = get.GraphEvolver.from_config(config)
-edges   = evolver.run(20260812)</code></pre>
+result  = evolver.run(20260812)</code></pre>
 
 <div class="note">
   <b>With a stochastic objective, prefer generational.</b> Steady-state scores only the two new
@@ -260,7 +260,7 @@ config = get.Config(
 
 evolver = get.GraphEvolver.from_config(config)
 evolver.set_fitness_function(even_degrees, "minimize")  # direction is declared HERE
-edges = evolver.run(1)</code></pre>
+result = evolver.run(1)</code></pre>
 
 <p>Full contract, and the traps, on <a href="../guide/new-fitness.html">Add an objective</a>.</p>
 
@@ -331,7 +331,7 @@ results = evolver.run(seed=20260812, runs=30, max_cores=8)
 # epi_spread maximizes, so the best replicate is the largest
 best = max(results, key=lambda r: r.best_fitness)
 print(best.best_fitness, len(best.best_edges))
-print(best.best_genome)                   # the winning genome, printed
+print(best.best_genome_repr)              # the winning genome, printed
 
 with open("convergence.csv", "w", newline="") as f:
     w = csv.writer(f)
@@ -382,8 +382,8 @@ def build(infection_rate):
 for rate in (0.02, 0.04, 0.06, 0.08, 0.10):
     config  = build(rate)
     evolver = get.GraphEvolver.from_config(config)
-    evolver.run(20260812)                      # same seed across the sweep
-    print(f"rate={rate:.2f}  spread={evolver.best_fitness():8.2f}")
+    result  = evolver.run(20260812)            # same seed across the sweep
+    print(f"rate={rate:.2f}  spread={result.best_fitness:8.2f}")
 
     with open(f"sweep_{rate:.2f}.toml", "w") as f:
         f.write(config.to_toml())</code></pre>

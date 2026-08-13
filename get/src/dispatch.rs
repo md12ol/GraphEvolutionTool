@@ -32,8 +32,8 @@ use crate::GraphEvolver;
 use crate::config::{self, Config, EvolutionConfig, FitnessConfig, GenomeConfig, SelectionConfig};
 use crate::evolver::common::Selection;
 use crate::evolver::{
-    EvolutionOutcome, Evolver, GenerationalContext, GenerationalEvolver, SharedEvolutionContext,
-    SteadyStateContext, SteadyStateEvolver,
+    EvolutionOutcome, Evolver, GenerationStats, GenerationalContext, GenerationalEvolver,
+    SharedEvolutionContext, SteadyStateContext, SteadyStateEvolver,
 };
 use crate::fitness::{EpiLength, EpiProfMatch, EpiSpread, Fitness};
 use crate::genomes::edge_edit::EdgeEditOperators;
@@ -49,10 +49,11 @@ use crate::sir::{self, SirSampleParams};
 /// so every dispatch arm erases `G` before returning (§8). What survives is what
 /// a caller can use without knowing the representation.
 ///
-/// GitHub **#27** replaces this with the full result object — adding the genome's
-/// `print()` string and the convergence history, and returning it to Python
-/// instead of the bare edge list `run` currently promises. Kept minimal until
-/// then rather than growing fields nothing reads.
+/// **Everything in here has already been converted out of engine orientation.**
+/// That is the difference between this type and [`EvolutionOutcome`], which is
+/// engine-oriented throughout and says so in its field names. This is the far
+/// side of the boundary [`erase`] draws, and no field here needs converting
+/// again.
 pub(crate) struct ErasedOutcome {
     /// Best fitness in the objective's **own units and sign**, not engine
     /// orientation.
@@ -65,6 +66,16 @@ pub(crate) struct ErasedOutcome {
     pub best_fitness: f64,
     /// The best individual's expressed network as `(u, v, multiplicity)`.
     pub best_edges: Vec<(usize, usize, u32)>,
+    /// The winning genome's `Genome::print()` string.
+    ///
+    /// The entry point is not generic over the genome, so this is the only way
+    /// it can record *which* individual won.
+    pub best_genome_repr: String,
+    /// The convergence log, one row per logged iteration.
+    ///
+    /// Reuses the engine's [`GenerationStats`] row, but the two fitness columns
+    /// have been oriented by [`erase`] — see this struct's own note above.
+    pub history: Vec<GenerationStats>,
 }
 
 /// The parts of dispatch that need the evolver itself, not just its config.
@@ -386,19 +397,35 @@ fn run_strategy<G: Genome, F: Fitness>(
     }
 }
 
-/// Drop the genome type, converting the fitness back to the objective's units.
+/// Drop the genome type, converting every fitness back to the objective's units.
 ///
-/// One generic function rather than the same three lines in each arm. The
-/// conversion is the part that matters: everything inside the engine is
-/// lower-is-better, and this is the boundary where that stops being true (§5.1).
+/// One generic function rather than the same lines in each arm. The conversion
+/// is the part that matters: everything inside the engine is lower-is-better,
+/// and this is the boundary where that stops being true.
 /// `Direction::orient` is its own inverse, so it is also what undoes itself.
 ///
-/// The convergence history is dropped for now — GitHub **#21** defines the log
-/// format and **#27** the result object that carries it out to Python.
+/// **The history needs converting too, row by row** — and only its two fitness
+/// columns. `std_dev` is left exactly as the engine computed it, because a
+/// spread is identical under negation. Orienting it as well would be a silent
+/// defect: the number stays positive, so nothing looks wrong.
 fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
+    let direction = outcome.direction;
+
+    let mut history = Vec::with_capacity(outcome.history.len());
+    for row in outcome.history {
+        history.push(GenerationStats {
+            iteration: row.iteration,
+            best_fitness: direction.orient(row.best_fitness),
+            mean_fitness: direction.orient(row.mean_fitness),
+            std_dev: row.std_dev,
+        });
+    }
+
     ErasedOutcome {
-        best_fitness: outcome.direction.orient(outcome.best_fitness_engine),
+        best_fitness: direction.orient(outcome.best_fitness_engine),
         best_edges: outcome.best_graph.get_edge_list(),
+        best_genome_repr: outcome.best_genome.print(),
+        history,
     }
 }
 
@@ -492,7 +519,6 @@ mod tests {
     fn evolver_with(fitness_block: &str) -> GraphEvolver {
         GraphEvolver {
             config: config_with(fitness_block),
-            best_fitness: None,
             fitness_function: None,
         }
     }
@@ -616,7 +642,6 @@ mod tests {
     fn evolver_with_genome(genome_block: &str) -> GraphEvolver {
         GraphEvolver {
             config: config_with_genome(genome_block),
-            best_fitness: None,
             fitness_function: None,
         }
     }
@@ -868,6 +893,63 @@ mod tests {
         }
     }
 
+    #[test]
+    fn the_erased_history_comes_out_in_the_objectives_own_units() {
+        // `epi_spread` is maximized, so every row is negative inside the engine
+        // and must be positive here. The failure this catches is silent in the
+        // worst way: an unconverted log plots upside down while every value in
+        // it still looks like a plausible epidemic size.
+        let config = runnable(GENERATIONAL, EDGE_EDIT);
+        let objective: Box<dyn Fitness> =
+            Box::new(EpiSpread::new(sir_sample_params(sir_of(&config)), 6));
+
+        let outcome = evolve(&config, &objective, 6).expect("run completes");
+
+        // Row 0 is the starting population, then one per generation.
+        assert_eq!(outcome.history.len(), 4, "num_generations + 1 rows");
+
+        for row in &outcome.history {
+            assert!(
+                row.best_fitness >= 1.0,
+                "iteration {}: best fitness should be a positive spread, got {}",
+                row.iteration,
+                row.best_fitness,
+            );
+            assert!(
+                row.mean_fitness >= 1.0,
+                "iteration {}: mean fitness should be a positive spread, got {}",
+                row.iteration,
+                row.mean_fitness,
+            );
+            // Left alone by `erase` on purpose — a spread is identical under
+            // negation, so orienting it would make it negative here.
+            assert!(
+                row.std_dev >= 0.0,
+                "iteration {}: a deviation is never negative, got {}",
+                row.iteration,
+                row.std_dev,
+            );
+        }
+
+        // The **last** row must agree with the headline number, because both are
+        // read from the same final scoring pass (`generational.rs:208`) — so this
+        // pins that the log and `best_fitness` went through the same conversion.
+        //
+        // Deliberately not the best row of the whole log: under a stochastic
+        // objective an earlier generation can out-score the final one, and the
+        // reported best is the best of the *final* population, not best-ever.
+        let last = &outcome.history[outcome.history.len() - 1];
+        assert_eq!(
+            last.best_fitness, outcome.best_fitness,
+            "the final log row and the reported best fitness must be the same number",
+        );
+
+        assert!(
+            !outcome.best_genome_repr.is_empty(),
+            "the winning genome's printed form must survive erasure",
+        );
+    }
+
     /// The `[fitness]` block of a config known to be `epi_spread`.
     fn sir_of(config: &Config) -> &config::SirParams {
         match &config.fitness {
@@ -928,31 +1010,56 @@ mod tests {
     }
 
     #[test]
-    fn run_caches_the_best_fitness_and_returns_the_edges() {
-        // Through the Python entry point, so this also exercises the GIL release
-        // and the caching `best_fitness()` reports.
+    fn run_returns_a_complete_result_object() {
+        // Through the Python entry point, so this also exercises the GIL release.
         let mut evolver = GraphEvolver {
             config: runnable(GENERATIONAL, EDGE_EDIT),
-            best_fitness: None,
             fitness_function: None,
         };
-        assert_eq!(
-            evolver.best_fitness(),
-            f64::INFINITY,
-            "nothing meaningful before a run",
-        );
 
-        let edges = evolver.run(8).expect("a full config run completes");
+        let result = evolver.run(8).expect("a full config run completes");
 
-        assert!(evolver.best_fitness().is_finite(), "the score was cached");
         assert!(
-            evolver.best_fitness() >= 1.0,
-            "cached in the objective's own units, got {}",
-            evolver.best_fitness(),
+            result.best_fitness >= 1.0,
+            "in the objective's own units, got {}",
+            result.best_fitness,
         );
-        for &(u, v, _) in &edges {
+        assert!(
+            !result.best_genome_repr.is_empty(),
+            "the winning genome's printed form comes back",
+        );
+        assert_eq!(result.history.len(), 4, "num_generations + 1 log rows");
+        for &(u, v, _) in &result.best_edges {
             assert!(u < 8 && v < 8);
         }
+    }
+
+    #[test]
+    fn two_runs_on_one_evolver_do_not_leak_state() {
+        // The reason `run` returns a value instead of caching one: an evolver
+        // that held the previous run's result would hand the next run the wrong
+        // numbers, and nothing about them would look wrong.
+        let mut evolver = GraphEvolver {
+            config: runnable(GENERATIONAL, EDGE_EDIT),
+            fitness_function: None,
+        };
+
+        let first = evolver.run(4).expect("first run");
+        let second = evolver.run(5).expect("second run");
+        let first_again = evolver.run(4).expect("first run, repeated");
+
+        // Seed 4 reproduces exactly, after seed 5 has run through the same
+        // evolver — so nothing the second run did survived into the third.
+        assert_eq!(first.best_fitness, first_again.best_fitness);
+        assert_eq!(first.best_edges, first_again.best_edges);
+        assert_eq!(first.best_genome_repr, first_again.best_genome_repr);
+        assert_eq!(first.history.len(), first_again.history.len());
+
+        // And the middle run is its own result rather than a copy of the first.
+        assert!(
+            second.best_fitness != first.best_fitness || second.best_edges != first.best_edges,
+            "a different seed should not reproduce the same run",
+        );
     }
 
     #[test]

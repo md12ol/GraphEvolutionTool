@@ -142,10 +142,11 @@ config = get.Config(
 )
 
 evolver = get.GraphEvolver.from_config(config)
-edges   = evolver.run(20260812)      # one master seed drives everything
+result  = evolver.run(20260812)      # one master seed drives everything
 
-print(evolver.best_fitness())        # nodes infected, in your units
-print(len(edges))                    # the winning network, as (u, v, weight) triples
+print(result.best_fitness)           # nodes infected, in your units
+print(len(result.best_edges))        # the winning network, as (u, v, weight) triples
+print(len(result.history))           # the convergence log, one row per generation
 </code></pre>
 
 <p>

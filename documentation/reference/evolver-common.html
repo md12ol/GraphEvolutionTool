@@ -327,14 +327,12 @@ where
 <div class="plan-note">
   <b>What exists today.</b> <code>GenerationStats</code> has the four fields shown in the signature
   above — <code>ci_95</code>, the seed and the run index are not fields yet, and nothing computes
-  them. Separately, and more importantly for anyone reading a log: both evolvers <i>do</i> build a
-  complete <code>history</code> and hand it back on the outcome, but the Python boundary
-  (<code>dispatch::erase</code>, <code>get/src/dispatch.rs:398</code>) currently keeps only the best
-  fitness and the best graph's edge list and <b>drops the history on the floor</b>. So a
-  config-driven run cannot read its own convergence log at all today — the rows are built, then
-  discarded before they reach you. A Rust embedder calling <code>Evolver::run</code> directly does
-  get the full <code>history</code> on the returned <code>EvolutionOutcome</code>. Progress is
-  tracked on <a href="../status.html">Status</a>.
+  them. The rows themselves do reach Python: the boundary (<code>dispatch::erase</code>,
+  <code>get/src/dispatch.rs:411</code>) converts each row's two fitness columns out of engine
+  orientation and carries the whole log out on the result object. A Rust embedder calling
+  <code>Evolver::run</code> directly gets the same <code>history</code> on
+  <code>EvolutionOutcome</code>, unconverted. Progress is tracked on
+  <a href="../status.html">Status</a>.
 </div>
 
 <h2>Selection — picking parents</h2>

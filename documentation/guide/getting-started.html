@@ -115,25 +115,33 @@ config = get.Config(
 
 evolver = get.GraphEvolver("experiment.toml")     # or .from_config(config)
 
-edges = evolver.run(20260812)                     # one master seed drives everything
+result = evolver.run(20260812)                    # one master seed drives everything
+edges = result.best_edges
 
-print("fitness:", evolver.best_fitness())         # in your objective's units
+print("fitness:", result.best_fitness)            # in your objective's units
 print("edges:  ", len(edges))
 print(edges[:5])                                  # [(0, 3, 1), (0, 7, 1), ...]</code></pre>
 
 <p>
-  <code>run</code> returns the best network found, as <code>(u, v, multiplicity)</code> triples with
-  <code>u &lt; v</code>. Pairs with no edge are not listed. The seed reproduces the entire run —
-  same seed and same config, same answer, on any machine.
+  <code>run</code> returns everything the run produced. <code>best_edges</code> is the best network
+  found, as <code>(u, v, multiplicity)</code> triples with <code>u &lt; v</code>; pairs with no edge
+  are not listed. The seed reproduces the entire run — same seed and same config, same answer, on
+  any machine.
 </p>
 
 <h2>4. Read the result</h2>
 
 <p>
-  <code>best_fitness()</code> is in <b>your</b> units: infected nodes for
+  <code>best_fitness</code> is in <b>your</b> units: infected nodes for
   <code>epi_spread</code>, an RMSE for <code>epi_prof_match</code>. GET minimizes internally and
   converts back on the way out, so you never see a negated number —
   <a href="fitness.html">the whole scheme is here</a>.
+</p>
+
+<p>
+  <code>result.history</code> is the convergence log, one row per generation, and
+  <code>result.best_genome_repr</code> is the winning genome printed. Nothing is stored on the
+  evolver, so a second <code>run</code> cannot be confused with the first.
 </p>
 
 <p>The edge list drops straight into the usual tools:</p>
@@ -186,8 +194,6 @@ print(nx.number_of_edges(g), nx.average_clustering(g))</code></pre>
       <code>Add</code> and <code>Toggle</code> have to build something before the rest can do
       anything. Self-correcting, not a bug — see <a href="genomes.html#operations">the
       operations</a>.</li>
-  <li><b><code>best_fitness()</code> before any run returns <code>+inf</code></b>, which under a
-      maximizing objective reads as a fantastic score.</li>
   <li><b>Probabilities are not range-checked.</b> A <code>mutation_rate</code> of <code>2.0</code>
       runs happily.</li>
   <li><b>Two error messages name the wrong field</b> —

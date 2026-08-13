@@ -96,24 +96,6 @@
       <td><a href="guide/performance.html">Performance &amp; memory</a></td>
     </tr>
     <tr>
-      <td><b>A result object</b></td>
-      <td><code>run</code> returns best fitness, best edge list, the winning genome's printed form
-          and the convergence history — and there is no <code>best_fitness()</code> accessor,
-          because a cached accessor has to answer something before any run has happened.</td>
-      <td><code>run</code> returns the bare edge list;
-          <code>best_fitness()</code> exists and returns <code>+inf</code> before the first
-          run.</td>
-      <td><a href="guide/python-api.html">Python API</a></td>
-    </tr>
-    <tr>
-      <td><b>The convergence log reaching Python</b></td>
-      <td>One row per logged iteration, carried out of the engine with the rest of the
-          outcome.</td>
-      <td>The history is built correctly inside the engine and then <b>discarded</b> when the
-          genome type is erased, so a config-driven run cannot read its own log at all.</td>
-      <td><a href="guide/output.html">Logs &amp; results</a></td>
-    </tr>
-    <tr>
       <td><b><code>ci_95</code>, and the per-row seed and run index</b></td>
       <td>Five log columns plus the two provenance columns that let replicate logs be concatenated
           and still separated.</td>

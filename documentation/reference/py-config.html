@@ -269,7 +269,7 @@ with open("provenance.toml", "w") as f:
     f.write(config.to_toml())
 
 evolver = get.GraphEvolver.from_config(config)   # renders, parses, validates
-edges = evolver.run(20260812)</code></pre>
+result = evolver.run(20260812)</code></pre>
 
 <p>With a Python objective instead:</p>
 
@@ -285,7 +285,7 @@ evolver.set_fitness_function(
     lambda batch: [score(n, edges) for (n, edges) in batch],
     "maximize",
 )
-edges = evolver.run(1)</code></pre>
+result = evolver.run(1)</code></pre>
 
 <p>
   Runnable versions of every objective, both genomes and both strategies live in
