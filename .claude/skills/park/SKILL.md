@@ -34,6 +34,23 @@ directory they did not expect to have work in.
 The same table is in `.claude/hooks/session_brief.sh` and `documentation/mdube_edits.md`. If you add
 an address, add it in all three.
 
+## 0.5. Work in the dedicated `main` worktree, not the branch checked out here
+
+**Every `.claude/work/` path below is inside a separate worktree pinned to `main`**, never the
+working tree this session is coding in — `CLAUDE.md`, "`.claude/work/` lives in a dedicated `main`
+worktree" has the full reasoning.
+
+```bash
+MAIN_TREE="$(git rev-parse --show-toplevel)"
+DOCS_WT="$(dirname "$MAIN_TREE")/$(basename "$MAIN_TREE")-docs"
+[[ -d "$DOCS_WT" ]] || { echo "Missing docs worktree — run: git worktree add \"$DOCS_WT\" main"; exit 1; }
+cd "$DOCS_WT" && git pull
+```
+
+Steps 1, 4 and 5 below all run inside `$DOCS_WT`. The main tree's checked-out branch is never
+switched, stashed, or touched — the whole point of parking is that the code branch stays exactly
+as it is.
+
 ## 1. Refuse the cases that would lose work
 
 Check all of these **before** running `/save`, and stop with a plain report if any fails:
@@ -83,6 +100,7 @@ line rather than leaving an instruction that has already been carried out.
 ## 4. Move, don't copy
 
 ```bash
+cd "$DOCS_WT"
 mkdir -p .claude/work/<owner>/parked/<slug>
 git mv .claude/work/<owner>/current/* .claude/work/<owner>/parked/<slug>/
 ```
@@ -95,9 +113,9 @@ untracked (a plan written before its first save), plain `mv` it and let the next
 
 ## 5. Commit and push
 
-Same rule as `/save`: `work/<owner>/` is committed and pushed to `main` as the last step, because a
-parked task that exists on one laptop defeats the reason these directories are tracked. Commit
-message: `Park <slug> — blocked on <the short form>`.
+Same rule as `/save`, and in the same worktree: from `$DOCS_WT`, commit and push `work/<owner>/` to
+`main` as the last step, because a parked task that exists on one laptop defeats the reason these
+directories are tracked. Commit message: `Park <slug> — blocked on <the short form>`.
 
 The routing table in `CLAUDE.md` puts `.claude/work/` on the direct-push path, so this does not need
 a branch or a PR.

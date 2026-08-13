@@ -62,6 +62,58 @@ with. So `handoff.md` carries `Machine: <hostname> · saved <ts> · <SHA>`, and 
 reports** on divergence rather than merging or resetting. Note `pull_main.sh` fast-forwards `main`
 at session start but **refuses on a dirty tree** — a divergence usually means it declined.
 
+### `.claude/work/` lives in a dedicated `main` worktree, not in the branch you're coding on
+
+**Added 2026-08-13 — Michael, `collab.md` #58.** This is a bug fix, not a new convention layered
+on the old one: `work/<owner>/current/` and `parked/` are ordinary tracked files, so a feature
+branch's copy of them is frozen at the moment the branch was cut, and every `/save` on `main`
+afterwards — including a task closing and archiving out of `parked/` — is invisible from that
+branch until it merges. Hit directly: `mdube_run_output` was cut mid-task, `result-object` and
+`per-owner-work-dirs` both closed and archived on `main` while `run-output` sat parked, and
+switching back to `mdube_run_output` showed both as still parked. The routing table already says
+these directories go "Direct push to `main`" (below); the actual bug was `/save`'s own push step
+saying "`main`, or the current branch, if this session is on one," which is what let the drift
+happen in the first place. That wording is corrected by this section, not layered under it.
+
+**The fix.** A linked git worktree, permanently checked out to `main`, at the fixed sibling path:
+
+    ../<repo-name>-docs      # e.g. ../GraphEvolutionTool-docs, next to the main checkout
+
+computed from `git rev-parse --show-toplevel` (its dirname, plus `-docs`) rather than hand-typed,
+so the convention needs no per-machine configuration to agree on. **Sparse-checked-out to
+`.claude/work/` only** — it is not a second full clone of the repo, so it carries none of `get/`,
+`documentation/`, or even `.claude/skills`/`.claude/hooks`; those stay in the main tree, versioned
+with whatever branch is checked out there, exactly as before. One-time setup, from the main tree's
+repo root — `bash .claude/scripts/setup_docs_worktree.sh` does all of this and checks your tree is
+in a safe state first; the manual equivalent:
+
+    git worktree add --no-checkout ../GraphEvolutionTool-docs main
+    cd ../GraphEvolutionTool-docs
+    git sparse-checkout init --no-cone
+    git sparse-checkout set '/.claude/work/*'
+    git checkout main
+
+**Every skill that touches `.claude/work/`** — `save`, `park`, `load`, `done`, `start` — reads and
+writes exclusively through that worktree, never through whatever the main tree has checked out for
+code. Concretely: `cd` into the worktree, `git pull`, do the read/write/commit/push there, and
+never switch, stash, or otherwise touch the branch the code work is on. Because the worktree is
+always `main`, `current/` and `parked/` can no longer disagree with which branch happens to be
+checked out elsewhere — there is exactly one live copy, and it is always current.
+
+**The `SessionStart` hook doesn't need the worktree at all.** `session_brief.sh` reads
+`git show main:.claude/work/...` directly — no setup dependency, and it never touched the working
+tree for writes anyway, so this was a strict improvement with no downside for the hook specifically.
+
+**What this does to union-merge.** `decisions.md` and `collab.md` stop being touched by feature
+branches under this model — every write goes straight to the worktree's `main`, so a feature-branch
+PR should carry no diff to either file, and `merge=union` stops mattering for PR merges. It still
+matters for its original case: two people running `/save` on `main` at close to the same real time.
+That case, and the union-merge formatting rules above, are unchanged.
+
+**Setup is per-machine, one time, both owners.** Nothing about *invoking* `/save`, `/park`, `/load`,
+`/done` or `/start` changes — the worktree swap is internal to what the skills do, not something
+either owner types differently.
+
 **Parking a blocked task.** `/park <slug>` runs `/save`, stamps `handoff.md` with `Blocked on:` —
 the concrete unblocking event, not "waiting on James" — and moves `current/` to `parked/<slug>/`,
 leaving the desk clear for `/start`. `/load <slug>` brings it back, parking whatever is live to make
@@ -83,6 +135,14 @@ actually finished the work.
 
 Finished tasks land in `.claude/work/archive/<YYYY-MM>_<slug>/` — **tracked and shared**, with no
 owner in the path. A finished task is the project's history; only *live* tasks are per-owner.
+
+**Meeting agendas and minutes** — `.claude/work/meetings/<YYYY-MM-DD>.md`, one file per joint
+meeting, added 2026-08-13. **No owner in the path**, for the same reason as `archive/`: a meeting
+belongs to both of us. Each file is an agenda derived from `collab.md` before the meeting and the
+minutes of that meeting afterwards, carrying a `Status:` of `prepared` → `in progress` → `closed` →
+`executed` that the three meeting skills below read and advance. Direct push to `main`, like the
+rest of `work/`. It is **not** union-merged — one file per date means two people cannot append to
+the same one, which is the condition union merge exists for.
 
 **Reference notes** — `.claude/reference/`, added 2026-08-07. Longer-form notes about how a
 *dependency or toolchain* behaves, where a `traps.md` entry would be too long and a `decisions.md`
@@ -234,7 +294,7 @@ where review actually buys something:
 | `settings.json`, `hooks/` | **Feature branch + PR** — these execute on the other person's machine at session start (see rule 2 above) |
 | `/official_spec_sheet.md` | **PR, and only after a joint meeting** — see the top of this file |
 | `.claude/work/*.md` — `decisions.md`, `traps.md`, `issues.md`, `hotfixes.md`, `collab.md` | Direct push to `main` is fine. They carry no behaviour, and a trap that is not on `main` protects nobody. Note only `decisions.md` and `collab.md` are union-merged (rule 1 above) |
-| `.claude/work/<owner>/` — live and parked task directories | Direct push to `main`, **by `/save` and `/park` automatically** (added 2026-08-13). Nobody reviews your own plan, and an unpushed handoff is the failure these directories were tracked to prevent. Union merge does not reach them — verified with `git check-attr merge` |
+| `.claude/work/<owner>/` — live and parked task directories | Direct push to `main`, **by `/save` and `/park` automatically, from the dedicated `main` worktree** (added 2026-08-13, corrected 2026-08-13 — see "`.claude/work/` lives in a dedicated `main` worktree" above). Nobody reviews your own plan, and an unpushed handoff is the failure these directories were tracked to prevent. Union merge does not reach them — verified with `git check-attr merge` |
 | `.claude/CLAUDE.md` | Direct push is permitted, but **prefer a PR when the change binds the other owner's practice** rather than recording a fact |
 | `.claude/skills/*/SKILL.md` — **frontmatter** (`model:`, `allowed-tools:`, any hook-adjacent key) | **Feature branch + PR.** Changing it changes what executes on the other person's machine on their next pull, without them reading it |
 | `.claude/skills/*/SKILL.md` — **body** | Direct push to `main` is fine. It is prose we both read anyway, and a PR round-trip in front of a typo fix is how a rule starts being skipped |
@@ -345,6 +405,31 @@ Mechanism in `traps.md`, `auto-delete-does-not-fire-on-a-locally-merged-pr`.
 
 Docs can go stale between sessions. Where the docs and the repo disagree, **the repo wins** —
 report the discrepancy rather than following the stale version.
+
+### Joint meetings — a separate loop, added 2026-08-13
+
+The spec sheet changes only at a joint meeting, and `collab.md` is where the questions for one
+accumulate. Three skills turn that pile into an agenda, a decision, and the edits it implies:
+
+- **`/makeAgenda [date]`** — reads `collab.md`, classifies every unsettled item as
+  **Decide · Ratify · Acknowledge · FYI · Park · Close**, orders them blockers-first, and writes
+  `work/meetings/<date>.md` with a proportionate brief and click-to-answer questions per item.
+  **Rerunnable** — a second call diffs `collab.md` against the SHA in the agenda header and folds in
+  what is new *without touching any section a human already edited or decided*. It never edits
+  `collab.md`.
+- **`/startMeeting [date]`** — walks the agenda one item at a time, asks the prepared questions as
+  buttons, and writes each decision and the file changes it implies into that item's block. It
+  carries a `**Cursor:**`, so a meeting that breaks resumes at the right item. **It edits exactly one
+  file** — every other document waits, because a decision taken at item 3 is routinely changed by
+  item 14.
+- **`/endMeeting [date]`** — executes the consolidated checklist. Working docs go **direct to
+  `main`**; `official_spec_sheet.md`, `get/src/`, `documentation/` and skill frontmatter go on a
+  **branch with a PR**, per the routing table. Both owners decided it, so its commits carry
+  `Co-Authored-By:` the other owner — and it never merges the PR.
+
+**The split between deciding and executing is the point.** A meeting that edits files as it goes
+leaves half-applied decisions when it overruns, and a half-applied meeting is indistinguishable from
+a finished one to the next session.
 
 
 ## Filing issues

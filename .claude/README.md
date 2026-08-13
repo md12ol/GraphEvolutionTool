@@ -114,6 +114,13 @@ naming what would prove it.
   remaining conflict *you against yourself*, from two laptops. `handoff.md` carries a `Machine:`
   stamp for exactly that, and `/load` stops and reports rather than merging a plan file.
 - **`[x]` is per-machine.** Never promote someone else's `[~]` because their notes read as done.
+- **One-time setup: a dedicated `main` worktree.** `work/<owner>/` and the persistent docs are read
+  and written from `../<repo-name>-docs`, a linked worktree pinned to `main` and sparse-checked-out
+  to `.claude/work/` only (not a second full clone) — `bash .claude/scripts/setup_docs_worktree.sh`
+  from the repo root, once, on each machine; it checks your tree is safe to run from and reports
+  each step. Fixes a real bug (a feature branch's copy of `current/`/`parked/` going stale the
+  moment `main` moves); full reasoning in `CLAUDE.md`, "`.claude/work/` lives in a dedicated `main`
+  worktree", and `collab.md` #58.
 
 ## Backups
 
