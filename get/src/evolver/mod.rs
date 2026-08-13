@@ -86,13 +86,19 @@ pub struct SteadyStateContext {
 ///
 /// `best_fitness` and `mean_fitness` are in **engine orientation** — lower is
 /// better — like everything else inside the engine. The boundary converts them
-/// when it writes the log, and leaves `std_dev` alone because a spread is
-/// identical under negation. Spec §5.1, §6.4.
+/// when it writes the log, and leaves `std_dev` and `ci_95` alone because a
+/// spread is identical under negation. Spec §5.1, §6.4.
 pub struct GenerationStats {
     pub iteration: usize,
     pub best_fitness: f64,
     pub mean_fitness: f64,
     pub std_dev: f64,
+    /// Half-width of the 95% confidence interval on `mean_fitness`, using the
+    /// *sample* deviation (divides by `n - 1`) rather than `std_dev`'s
+    /// population deviation (divides by `n`) — the population is being used to
+    /// estimate a distribution here, not fully described by it. Zero when
+    /// `n == 1`, never `NaN`.
+    pub ci_95: f64,
 }
 
 /// The result of an evolution run.

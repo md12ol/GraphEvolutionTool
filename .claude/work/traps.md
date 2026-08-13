@@ -509,3 +509,42 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
 - **Measured:** 2026-08-13. `session_brief.sh` had carried the heading-anchored form since it was
   written and had therefore never once printed a `Start here` block on any handoff in this repo.
 - **Added:** 2026-08-13 — handoff-start-here-is-a-bold-label-not-a-heading
+
+### A folder-local `files.exclude` in the docs worktree can render its whole Explorer root as empty
+- **Bites when:** you (or a future setup step) add a `.vscode/settings.json` inside the
+  `<repo>-docs` worktree with a `files.exclude` pattern meant to hide everything except
+  `.claude/work/` — e.g. `{"**": true, "!.claude": false, ...}`. VS Code sometimes renders that
+  entire workspace root as having no children at all, including after **Developer: Reload
+  Window**, even though the files genuinely exist on disk (`ls`/`find` show them fine).
+- **Do this instead:** don't add that settings file. The docs worktree is already
+  sparse-checked-out to `.claude/work/*` (`CLAUDE.md`, "dedicated `main` worktree"), so there is
+  nothing else on disk left to hide — the exclude rule was always redundant on top of being the
+  bug. If a docs-worktree Explorer root ever looks empty, check for a stray
+  `.vscode/settings.json` there before suspecting the worktree or sparse-checkout is broken.
+- **Why:** not fully root-caused — plausibly VS Code collapsing a root it determines has nothing
+  visible under it, rather than an ordinary exclude-pattern bug. Not worth chasing further since
+  the fix (delete the file) is strictly simpler than the setting it was trying to express.
+- **Measured:** 2026-08-13. Removing the settings file and reloading fixed it immediately;
+  `setup_docs_worktree.sh` never writes one.
+- **Added:** 2026-08-13 — docs-worktree-files-exclude-can-render-the-whole-root-empty
+
+### Two sessions sharing one code checkout can silently apply your edits to the wrong branch
+- **Bites when:** two Claude Code sessions (or a session and a human) work in the *same* checkout
+  directory of `GraphEvolutionTool` at once, on different branches. Nothing stops either from
+  running `git checkout <other-branch>` while the other has uncommitted edits pending — git allows
+  the checkout as long as the modified files are byte-identical between the two branches at that
+  instant. If an edit tool then writes to a file whose surrounding text happens to match on both
+  branches (a struct-field addition after an unrelated line, say), it succeeds silently and lands
+  on the wrong branch's tree. `git status`/`diff` right afterward look completely normal.
+- **Do this instead:** if a file you just edited shows a "modified on disk since you last read it"
+  note, or `git log -1`/`git branch --show-current` shows a commit or branch you didn't create,
+  stop and check `git reflog` before continuing — it shows every checkout, and the timestamps make
+  the interleaving obvious. Recover by `git stash push -- <the files>`, switch back to the intended
+  branch, `git stash apply`, and diff the result before trusting it.
+- **Why:** git worktrees exist precisely to give each branch its own directory, but this repo's
+  main checkout and the docs worktree are the only two — every *other* branch (`mdube_run_output`,
+  `mdube_docs_worktree`, etc.) still shares the one main checkout, so nothing prevents this.
+- **Measured:** 2026-08-13. A second session checked out `mdube_docs_worktree` and committed
+  `f343402` mid-session while this one had uncommitted `RunResult` field edits pending; the stash/
+  switch/apply recovery worked cleanly and nothing was lost, but it cost a full stop-and-diagnose.
+- **Added:** 2026-08-13 — two-sessions-sharing-one-checkout-can-cross-wires-on-different-branches

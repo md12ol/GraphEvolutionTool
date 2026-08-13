@@ -76,21 +76,18 @@ visibility, archive, push policy, divergence handling and the machine stamp. `/s
       `collab.md` #55 went direct to `main` (`9d097eb`) ahead of it, as the notification.
       Routing reasoning in `decisions.md` 2026-08-13 03:09.
 
-- [ ] **Waiting on James** — PR #69 needs his merge, and `collab.md` #55 his reply, especially on the
-      `/save` push carve-out. Nothing here is actionable until then; the layout is already live on
-      this machine, so the next task can start regardless.
-      **Verify by:** `gh pr list --state open` no longer lists #69, and #55 carries an appended
-      answer.
+- [x] **Waiting on James** — PR #69 merged 2026-08-13T00:53 (confirmed via `gh pr list --state
+      all`). `collab.md` #55 remains unanswered; Michael decided 2026-08-13 not to hold this task on
+      it, same reasoning as `result-object`'s close (`decisions.md` 2026-08-13). Carries forward as
+      a standing collab item.
 
-- [ ] **Exercise `/park` and `/load <slug>` for real, once**, rather than by the hand-run file moves
-      this session used. The mechanics round-tripped losslessly, but no session has yet driven the
-      skills themselves end to end — including `/park`'s `/save`-first step, which is the part that
-      writes the `Blocked on:` stamp the whole design leans on.
-      **Verify by:** `/park` a real task, `/load` it back, and confirm `handoff.md` gained both the
-      `Machine:` and `Blocked on:` lines without hand-editing.
+- [x] **Exercised `/park` and `/load <slug>` for real** — `/park run-output` (2026-08-13, this
+      session) ran the skill proper, writing `Machine:`/`Blocked on:` via its own step 3; `/load
+      result-object` and `/load per-owner-work-dirs` (same session) both drove the real unpark path.
+      No hand-run file moves.
 
-- [ ] Open the PR for the hook and the new skill's frontmatter. Do not merge it.
-      **Verify by:** `gh pr list --state open` shows it.
+- [x] Open the PR for the hook and the new skill's frontmatter — already satisfied: PR #69's file
+      list includes `hooks/session_brief.sh` and `skills/park/SKILL.md`, merged.
 
 ## Open questions
 

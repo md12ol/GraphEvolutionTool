@@ -4,6 +4,21 @@ Append-only session log for this task, newest session first.
 Maintained by `/save`; archived by `/done`.
 
 ---
+## Session 2026-08-13 (cont.): closed — PR #69 merged, the skills exercised for real this session
+
+Unparked via `/load per-owner-work-dirs`, no swap needed (`current/` was empty). Confirmed PR #69
+merged (`gh pr list --state all`) and that it already carries the hook/skill-frontmatter changes,
+closing the third open task item without a separate PR. `collab.md` #55 remains unanswered by
+James; carried forward rather than holding the task, same call as `result-object`'s close
+(`decisions.md` 2026-08-13). The second open item — exercising `/park`/`/load` for real — is closed
+by this session's own actions: `/park run-output`, `/load result-object` and
+`/load per-owner-work-dirs` all ran as the actual skills, not hand-run file moves, and
+`run-output`'s `handoff.md` gained `Machine:`/`Blocked on:` via the skill's own step 3.
+
+**Git manifest.** `main`, clean except this save's own doc edits. No source touched.
+
+*Logged 2026-08-13 — Michael.*
+
 ## Session 2026-08-13: the layout shipped to PR #69, and testing it found two dead code paths
 
 **What changed.** `.claude/work/current/` became `.claude/work/<owner>/current/`, with

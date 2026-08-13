@@ -62,10 +62,10 @@ columns and CSV writing (#21), `set_base_graph` (#28). `save_logs` / `save_resul
 - [x] File the two cleanup issues at tier (8): #67 for `documentation/`, #68 for `get/src`
       comments. Both verified with `gh issue view --json`.
 
-- [ ] **Waiting on James** — nothing to do until he responds.
-      PR #65 and PR #66 both need his merge; `collab.md` #53 (per-owner doc queue,
-      `jsargant_edits.md`) and #54 (the sheet-linking amendment, pushed direct) both need a reply.
-      **Verify by:** `gh pr list --state open` is empty and #53/#54 carry an appended answer.
+- [x] **Waiting on James** — PR #65 and #66 both merged (confirmed 2026-08-13,
+      `gh pr list --state all`). `collab.md` #53 and #54 remain unanswered; Michael decided
+      2026-08-13 not to hold this task on them, since neither gates #27's correctness — they carry
+      forward as open collab items, not as this task's business.
 
 - [x] Sharpened GitHub #68's evidence for `dispatch.rs` — the diluted 29% row is now flagged and a
       new subsection carries the non-test figures. Verified via `gh issue view 68 --json body`.

@@ -31,6 +31,27 @@ git config user.email
 `.claude/skills/load/SKILL.md`, `.claude/skills/park/SKILL.md` and `documentation/mdube_edits.md`.
 Below, `<owner>` means whichever this resolved to; never write to the other owner's directory.
 
+## 0.5. Work in the dedicated `main` worktree, not the branch checked out here
+
+**Every path below is inside a separate worktree pinned to `main`, never the working tree this
+session is coding in.** `CLAUDE.md`, "`.claude/work/` lives in a dedicated `main` worktree" has the
+full reasoning; the short version is that `.claude/work/<owner>/` on a feature branch goes stale
+the moment `main` moves, which defeats the entire point of tracking it.
+
+```bash
+MAIN_TREE="$(git rev-parse --show-toplevel)"
+DOCS_WT="$(dirname "$MAIN_TREE")/$(basename "$MAIN_TREE")-docs"
+[[ -d "$DOCS_WT" ]] || { echo "Missing docs worktree — run: git worktree add \"$DOCS_WT\" main"; exit 1; }
+cd "$DOCS_WT" && git pull
+```
+
+If the worktree doesn't exist on this machine, create it once (`git worktree add "$DOCS_WT" main`
+from the main tree) and say so in the report — this is a one-time, per-machine setup, not something
+to silently work around.
+
+Everything from here — reading `plan.md`, editing `decisions.md`, the final commit and push — happens
+**inside `$DOCS_WT`**. The main tree's checked-out branch is never switched, stashed, or touched.
+
 ## The files
 
 All live under `.claude/`.
@@ -373,18 +394,22 @@ must be known before reading any of them goes in `CLAUDE.md`.
 
 A handoff that was never pushed is not a handoff. The whole reason these directories are tracked is
 so the next session can be on a different machine, and that only works if the save reaches `origin`.
+**This runs inside `$DOCS_WT` (step 0.5), always against `main` — never the code branch.**
 
 ```bash
+cd "$DOCS_WT"
 git add .claude/work/<owner>/
 git status --short .claude/work/<owner>/     # read it — nothing outside this path may be staged
 git commit -m "Save <task slug> — <one line>"
-git push origin main                          # or the current branch, if this session is on one
+git push origin main
 ```
 
 **Scope it to `work/<owner>/` and nothing else.** The persistent docs (`decisions.md`, `traps.md`,
 `issues.md`, `hotfixes.md`, `collab.md`) are a separate concern with their own routing, and code is
-absolutely not part of a save. If this session has uncommitted code, leave it uncommitted and say so
-in the brief — a save must never quietly commit a half-finished source file.
+absolutely not part of a save — and code can't leak in by accident here anyway, since `$DOCS_WT` has
+no uncommitted code to stage: it's a separate worktree that was never used to edit source. If the
+main tree (where the code work happened) has uncommitted code, leave it uncommitted and say so in
+the brief — a save must never quietly commit a half-finished source file there either.
 
 **This is a deliberate, narrow exception to `CLAUDE.md`'s "don't commit or push unless asked."** It
 covers this path, at this step, only. Agreed 2026-08-13: an unpushed handoff fails silently and is

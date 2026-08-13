@@ -11,7 +11,7 @@ pub mod py_config;
 pub mod py_result;
 pub mod sir;
 
-use crate::config::{Config, FitnessConfig, GenomeConfig};
+use crate::config::{Config, ConfigError, FitnessConfig, GenomeConfig};
 use crate::fitness::{Direction, PyFitness};
 use crate::graph::Graph;
 use crate::py_config::{
@@ -54,6 +54,9 @@ pub struct GraphEvolver {
     /// one — the setter rejects a call on an SDA-configured evolver instead of
     /// storing something nothing will read.
     base_graph: Option<Graph>,
+    /// The TOML document `config` was parsed from — the run's provenance
+    /// record, written alongside its results.
+    config_toml: String,
 }
 
 #[pymethods]
@@ -61,15 +64,25 @@ impl GraphEvolver {
     /// Load configuration from a `config.toml` file.
     #[new]
     fn new(config_path: String) -> PyResult<Self> {
-        let config = Config::from_path(&config_path)
+        // Read separately from `Config::from_toml_str`, rather than through
+        // `Config::from_path`, because the raw text is the provenance record
+        // and `from_path` does not hand it back.
+        let text = std::fs::read_to_string(&config_path).map_err(|err| {
+            PyValueError::new_err(format!("failed to load config: {}", ConfigError::Io(err)))
+        })?;
+        let config = Config::from_toml_str(&text)
             // `{err}`, not `{err:?}`: `ConfigError`'s `Display` names the
             // offending field and its constraint, which is what spec §7 says a
             // bad config must reach the user as.
+            .map_err(|err| PyValueError::new_err(format!("failed to load config: {err}")))?;
+        config
+            .validate()
             .map_err(|err| PyValueError::new_err(format!("failed to load config: {err}")))?;
         Ok(Self {
             config,
             fitness_function: None,
             base_graph: None,
+            config_toml: text,
         })
     }
 
@@ -131,6 +144,7 @@ impl GraphEvolver {
             config: parsed,
             fitness_function: None,
             base_graph: None,
+            config_toml: text,
         })
     }
 
@@ -349,23 +363,15 @@ impl GraphEvolver {
         // Nothing is stored. `dispatch::erase` has already converted every
         // number out of engine orientation, so this only re-homes the erased
         // outcome onto the Python-visible type.
-        Ok(PyRunResult::from_erased(outcome))
-    }
-
-    /// Write the per-iteration evolution log to `filename` as CSV.
-    ///
-    /// **These two take `&self` and the evolver holds nothing to write** — the
-    /// log and the best individual live on the value `run` returns, so both need
-    /// re-homing onto `PyRunResult` before they can be implemented.
-    fn save_logs(&self, filename: &str) -> PyResult<()> {
-        let _ = filename;
-        todo!("write the run history to `filename`; it belongs on PyRunResult")
-    }
-
-    /// Write the best individual and its graph to `filename`. See `save_logs`.
-    fn save_results(&self, filename: &str) -> PyResult<()> {
-        let _ = filename;
-        todo!("write the best genome and edge list to `filename`")
+        //
+        // `run_index` is a hard `0`: this call only ever produces one run.
+        // GitHub #20 is what makes it vary.
+        Ok(PyRunResult::from_erased(
+            outcome,
+            seed,
+            0,
+            self.config_toml.clone(),
+        ))
     }
 }
 
@@ -434,6 +440,7 @@ mod tests {
             config: config_with(fitness_block),
             fitness_function: None,
             base_graph: None,
+            config_toml: String::new(),
         }
     }
 

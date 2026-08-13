@@ -11,15 +11,34 @@
 # table documentation/mdube_edits.md uses; an unrecognised address prints one line and exits 0,
 # because a hook that blocks a session is worse than a hook that says nothing.
 #
+# CHANGED 2026-08-13 (2): reads `.claude/work/` from the `main` branch directly via `git show`,
+# never from whatever the working tree has checked out. A feature branch's own copy of
+# work/<owner>/current/ and parked/ is frozen at the moment it was cut and goes stale the instant
+# `main` moves — hit directly when `run-output` sat parked on a feature branch while two other
+# tasks closed and archived on `main`, and switching back showed both as still parked. `main` is
+# the authoritative copy now (`collab.md` #58); this hook never touched the working tree for
+# writes anyway, so reading via `git show` costs nothing and fixes the staleness for free.
+#
 # Test:  .claude/hooks/session_brief.sh
 
 set -uo pipefail
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$DIR" || exit 0
 
 rule_top="─── .claude ───────────────────────────────────────────────"
 rule_bot="───────────────────────────────────────────────────────────"
+
+# Reads the local `refs/heads/main`, not `origin/main` — no fetch here, so this is only as fresh
+# as the last time anything updated that ref. In practice that's often, because the docs worktree
+# (CLAUDE.md, "dedicated main worktree") shares this repo's refs and `git pull`s on every skill
+# invocation that touches `.claude/work/`. If it's stale, /load's own divergence check catches it.
+#
+# All three helpers read main's committed copy of a `.claude/<path>` file or directory, regardless
+# of what is checked out locally.
+git_show() { git show "main:.claude/$1" 2>/dev/null; }
+git_exists() { git cat-file -e "main:.claude/$1" 2>/dev/null; }
+git_list_dirs() { git ls-tree -d --name-only "main:.claude/$1" 2>/dev/null; }
 
 email="$(git config user.email 2>/dev/null || true)"
 case "$email" in
@@ -41,24 +60,23 @@ parked="work/$owner/parked"
 # One line about the other owner, so their parked work is visible without being readable noise.
 other_line=""
 other_cur=0
-[[ -f "work/$other/current/plan.md" ]] && other_cur=1
-other_parked=$(find "work/$other/parked" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+git_exists "work/$other/current/plan.md" && other_cur=1
+other_parked=$(git_list_dirs "work/$other/parked" | wc -l | tr -d ' ')
 if [[ "$other_cur" -gt 0 || "$other_parked" -gt 0 ]]; then
     other_line="$other_name: $other_cur current, $other_parked parked"
 fi
 
 # Parked tasks of your own, with what each is blocked on — the question you actually ask on return.
 parked_report() {
-    local d slug blocked
-    for d in "$parked"/*/; do
-        [[ -d "$d" ]] || continue
-        slug="$(basename "$d")"
-        blocked="$(grep -m1 -o '\*\*Blocked on:\*\*.*' "$d/handoff.md" 2>/dev/null | sed 's/\*\*Blocked on:\*\* *//')"
+    local slug blocked
+    while IFS= read -r slug; do
+        [[ -n "$slug" ]] || continue
+        blocked="$(git_show "$parked/$slug/handoff.md" | grep -m1 -o '\*\*Blocked on:\*\*.*' | sed 's/\*\*Blocked on:\*\* *//')"
         printf '  parked: %-24s %s\n' "$slug" "${blocked:-no blocker recorded}"
-    done
+    done < <(git_list_dirs "$parked")
 }
 
-if [[ ! -f "$cur/plan.md" ]]; then
+if ! git_exists "$cur/plan.md"; then
     echo "$rule_top"
     if [[ -n "$(parked_report)" ]]; then
         echo "No active task in .claude/$cur/ — these are parked:"
@@ -74,7 +92,7 @@ fi
 
 # `grep -c` prints its count AND exits 1 when the count is zero, so the obvious `|| echo 0` appends
 # a SECOND zero and the counts line breaks across two lines. Take the first line and default empty.
-count() { local n; n=$(grep -c "$1" "$2" 2>/dev/null | head -1); echo "${n:-0}"; }
+count() { local n; n=$(git_show "$2" | grep -c "$1" 2>/dev/null | head -1); echo "${n:-0}"; }
 
 open=$(count '^- \[ \]' "$cur/plan.md")
 unver=$(count '^- \[~\]' "$cur/plan.md")
@@ -82,18 +100,15 @@ unfiled=$(count 'Filed:.*not yet' work/issues.md)
 traps=$(count '^### ' work/traps.md)
 
 echo "$rule_top"
-if [[ -f "$cur/handoff.md" ]]; then
-    sed -n '1p' "$cur/handoff.md"
+if git_exists "$cur/handoff.md"; then
+    handoff="$(git_show "$cur/handoff.md")"
+    sed -n '1p' <<<"$handoff"
     # The machine stamp, if the handoff carries one — this is how a stale cross-machine handoff shows.
-    grep -m1 '^\*\*Machine:' "$cur/handoff.md" 2>/dev/null
+    grep -m1 '^\*\*Machine:' <<<"$handoff"
     # The "Start here" section, up to the next heading or the next bold label.
-    #
-    # FIXED 2026-08-13: this matched only a `## Start here` HEADING, and no handoff has ever had one
-    # — /save's template writes `**Start here:**` inline, so this printed nothing from the day it was
-    # written. Found while testing the parked-task swap. Both forms are accepted now.
     awk '/^(## .*Start here|\*\*Start here)/{f=1; print; next}
          f && /^(## |\*\*[A-Z⏰])/{exit}
-         f' "$cur/handoff.md" | head -12
+         f' <<<"$handoff" | head -12
 fi
 printf '\nopen [ ]: %s   unverified [~]: %s   unfiled issues: %s   traps: %s\n' \
     "$open" "$unver" "$unfiled" "$traps"

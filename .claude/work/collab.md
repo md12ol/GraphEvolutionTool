@@ -2315,3 +2315,302 @@ either way (39 pages, 38 nav entries), because a stale table row is neither a br
 missing anchor. Nothing automated will catch this one.
 
 *#57 · raised 2026-08-12 21:24 — James.*
+
+### 58. `.claude/work/<owner>/` now lives in a dedicated worktree on `main` — your setup needed, one time
+
+James, 2026-08-13. Not asking permission first because this fixes a bug rather than adding a
+convention, but it does bind your practice (the skills now read/write a different path than the
+one in your working tree), so it needs your setup and your sign-off.
+
+**The bug.** `.claude/work/<owner>/current/` and `parked/` are ordinary tracked files, so their
+content is whatever the checked-out branch's history says. Cut a feature branch, and its copy of
+`work/mdube/current/` is frozen at that moment; every `/save` on `main` afterwards — including a
+task closing and moving out of `parked/` — is invisible from the feature branch until it merges.
+Hit this directly today: `mdube_run_output` was cut mid-task, then `result-object` and
+`per-owner-work-dirs` were both closed and archived on `main` while `run-output` sat parked, and
+switching back to `mdube_run_output` showed both of them still listed as parked — stale, because
+the branch's own tree had never seen the archive commits. `CLAUDE.md`'s routing table already says
+these directories go "Direct push to `main`" — the bug was that `/save`'s own step 10 said "`main`,
+or the current branch, if this session is on one," which is what actually let this drift happen.
+
+**The fix.** A linked git worktree, checked out to `main` permanently, at the fixed sibling path
+`../<repo-name>-docs` (computed from `git rev-parse --show-toplevel`, so it needs no hand-typed
+absolute path and is identical in form on both machines):
+
+    git worktree add ../GraphEvolutionTool-docs main
+
+Every skill that touches `.claude/work/` — `save`, `park`, `load`, `done`, `start` — now reads and
+writes through that worktree instead of the working tree the code branch happens to be on. Because
+the worktree is always `main`, `work/<owner>/current/` and `parked/` can no longer disagree with
+which branch is checked out in the main tree — there is only one live copy, and it is always
+current. The `SessionStart` hook (`session_brief.sh`) doesn't need the worktree at all: it reads
+`git show main:.claude/work/...` directly, which needs no setup and never touches your working
+tree.
+
+**What this does to the union-merge question you might be about to ask, since I know you will.**
+`decisions.md` and `collab.md` stop being touched by feature branches at all under this model —
+every write goes straight to the worktree's `main` checkout, so a feature-branch PR should never
+carry a diff to either file, and the `merge=union` driver stops mattering for PR merges. It still
+matters for the one case it was always really for: two people running `/save` on `main` at close
+to the same real time, which is unaffected by any of this.
+
+**Your one-time setup, before your next session:** run the `git worktree add` command above from
+your repo root. Nothing else changes about how you invoke `/save`, `/park`, `/load`, `/done` or
+`/start` — the path swap is internal to what the skills do, not something you type.
+
+**What I have not done:** pushed anything to your machine. The skill and hook changes are on a
+branch (`mdube_docs_worktree`) with a PR to follow, per the routing table's rule that hook changes
+and skill-body changes affecting shared practice go through review — bundled into one PR rather
+than split, same reasoning as PR #69: splitting would leave a state where neither of us has a
+working setup, since the hook and the skills have to agree on where the worktree lives.
+
+*#58 · raised 2026-08-13 — Michael.*
+
+**Addendum to #58, same session:** the worktree above was a full second checkout of `main` — every
+file in the repo, twice on disk. Michael's own reaction to seeing `get/`, `documentation/` and a
+second `.claude/skills` sitting in that folder was "I don't want this duplicated," which is the
+right instinct: none of it is used by anything, it was just what `git worktree add` gives you by
+default. **Now sparse-checked-out to `.claude/work/` only** via `git sparse-checkout`, so the
+worktree contains nothing else — no `get/`, no `documentation/`, no second copy of
+`.claude/skills`/`.claude/hooks`. Verified: a fresh scratch clone through the setup script ends up
+1.1 MB and `find .claude` lists only `work/`. The one-time setup command changed to match — either
+run `bash .claude/scripts/setup_docs_worktree.sh` (now added, checks your tree is safe first and
+reports each step) or the manual four-line sparse-checkout sequence in `CLAUDE.md`. If you already
+ran the plain `git worktree add ... main` from the original wording above, re-run the script — it's
+a no-op once sparse, and safe either way.
+
+*#58 addendum · 2026-08-13 — Michael.*
+
+**Second addendum to #58, same session:** the setup script now also writes and opens a two-folder
+VS Code workspace, so the whole thing is `git pull` → run the script → done — no separate step to
+wire up seeing both. It writes `<repo-name>.code-workspace` at your repo root (gitignored) with the
+code folder and the docs worktree as the two roots, and launches it with `code` if that's on your
+`PATH`; otherwise it prints the command to run yourself. Safe to re-run — rewrites and reopens the
+workspace every time, which is also how you'd get the window back if you close it.
+
+**One caution, found the hard way this session:** an earlier version tried to hide everything
+except `.claude/work` inside the docs root via a folder-local `.vscode/settings.json`
+(`files.exclude`). VS Code intermittently rendered that whole root as empty — no children shown,
+sometimes not even after a reload — and it took a while to pin down. Removed rather than fixed:
+the sparse checkout already keeps that folder down to just `.claude/work/` on disk, so the exclude
+rule was redundant on top of being the likely cause. If your workspace ever shows an empty root
+after this, that's the shape of bug to suspect — check for a stray `.vscode/settings.json` in the
+docs worktree before assuming the worktree itself is broken.
+
+*#58 second addendum · 2026-08-13 — Michael.*
+
+**Third addendum to #58, same session:** the script now asks before touching anything outside
+`.claude/work/` and the worktree itself. After the worktree and workspace are set up, it offers —
+with a one-line explanation and a `[y/N]` prompt — to hide `.claude/work/` in your *code* folder's
+Explorer (a cosmetic `files.exclude` tweak, since that copy is stale once the worktree exists). Say
+no and nothing is written. Say yes and it only ever touches the single `"files.exclude"` key in
+your `.vscode/settings.json` — merged with `jq` if it's on your `PATH` and the file already has
+other content, created fresh if it doesn't exist yet, or left alone with the exact line to add by
+hand if `jq` isn't available and the file already exists (a blind text edit without `jq` risks
+corrupting whatever else is in there). Non-interactive runs (no TTY) skip this step entirely rather
+than silently applying or silently guessing.
+
+*#58 third addendum · 2026-08-13 — Michael.*
+
+**Summary for James, so you don't have to reconstruct it from four blocks:** once PR #70 merges
+and you've pulled `main`, your entire setup is two commands from your repo root:
+
+    git checkout main && git pull
+    bash .claude/scripts/setup_docs_worktree.sh
+
+That's it. The script checks your tree is in a safe state, creates a sparse `main` worktree at
+`../GraphEvolutionTool-docs` (only `.claude/work/`, not a second full checkout), writes and opens
+a two-folder VS Code workspace so you can see it, and — with your explicit `[y/N]` confirmation,
+never applied silently — offers to hide the now-stale `.claude/work/` in your code folder's
+Explorer. Say no to that last part and nothing is written; nothing else about your setup depends
+on it. Re-running the script any time is safe and is also how you get the workspace window back if
+you close it. Nothing about how you invoke `/save`, `/park`, `/load`, `/done` or `/start`
+changes — this is all internal to what those skills do.
+
+*#58 summary · 2026-08-13 — Michael.*
+
+**Signed off — #58 · 2026-08-13 11:57 — James.** Setup run and verified on `pop-os`: sparse
+worktree at `../GraphEvolutionTool-docs`, checked out to `main`, 1.2 MB, containing only
+`.claude/work/`. Workspace opened, and I took the `files.exclude` offer. Agreed on all three
+bindings, including the one that costs me something — a feature branch carries no `.claude/work/`
+diff, so the three files my branch is currently carrying get migrated to `main` rather than riding
+the `#28` PR.
+
+**Also, so an unreviewed resolution leaves a trace:** PR #70 was `CONFLICTING` when I came to merge
+it — `.gitignore`, where `main` had gained `.venv/` and your branch added `*.code-workspace`. Two
+independent additions; I merged locally and kept both. Nothing else in the PR was touched.
+
+**Caveat 1 — the script cannot be reached from any branch cut before #70 merged.** It exists only
+on `main`, and it refuses to run while `main` is the checked-out branch, which is correct. But that
+pair is a bootstrap trap: `jsargant_set_base_graph` predates #70, so the file is simply absent from
+my tree, and the one branch that does have it is the one branch I am not allowed to be on. I got
+round it by extracting `git show main:.claude/scripts/setup_docs_worktree.sh` to a file outside the
+repo and running that — it works unchanged, because the script locates everything through
+`git rev-parse --show-toplevel` relative to the working directory rather than from its own path.
+Your `git checkout -b scratch main` suggestion also works, for the same reason git's one-branch-one-
+worktree rule is about names rather than commits. Worth a line in the script's header or
+`CLAUDE.md`, since every branch cut before today hits it and the error message points at the one
+workaround that does not by itself solve it.
+
+**Caveat 2 — the model assumes each owner's live task is already on `main`, and mine never was.**
+`.claude/work/jsargant/` does not exist on `main` at all, so my worktree came up with no `jsargant/`
+directory. My original `/save` for #28 landed on the feature branch under the old rules, which was
+legal at the time and is exactly the drift #58 closes. No action needed from you — I am migrating
+it — but a fresh worktree showing an empty owner directory reads like a broken setup rather than an
+absent task, and it would be worth `/load` saying which of the two it is.
+
+*(Sign-off inside #58 · 2026-08-13 11:57 — James.)*
+
+### 59. This file's `## Open` / `## Settled` headings stopped meaning anything around #48 — and there's a genuine duplicate item number
+
+James, 2026-08-13. Not proposing a fix here — reorganizing this file is exactly the kind of edit
+that needs the announce-first rule (`CLAUDE.md`, "Append; do not edit an existing entry in
+place"), since it means moving lines that already exist rather than appending new ones. Flagging
+it so it's on the list for when we're both looking at it, and so nothing in the disorganized
+stretch gets missed at the next meeting.
+
+**What's actually wrong, verified just now:**
+
+- `## Open` is only at line 58, `## Settled` only at line 558. Every item from **#48 onward**
+  physically landed *after* `## Settled` — including items filed weeks apart, by both of us —
+  because "append" has always meant "append to wherever the file currently ends," and the file
+  end drifted past the `## Settled` boundary somewhere around #48 without anyone noticing.
+- **Items #14–#39 are physically located between #49 and the rest of #40–#58** (roughly lines
+  621–1820), even though they're dated earlier (#14 is from the #10/#14/#15 file-overlap era).
+  Numeric order and file order have diverged.
+- **`### 48` is used twice** — line 464, "Discussion, parked: what should `config.example.toml`
+  actually demonstrate?" (raised 2026-08-11 16:56), and line 1886, "FYI: auto-delete-on-merge is
+  on" (raised 2026-08-12 14:20). Both mine, a day apart — I lost track of the last number used,
+  which is exactly the failure mode a 2400-line file with no reliable "you are here" makes easy.
+  `uniq -d` doesn't catch this (checked — clean), since the two items' *bodies* differ; only the
+  heading number collides.
+
+**What needs deciding, together, not unilaterally:** how to renumber/reorder without breaking the
+`#N` references already scattered through `decisions.md`, `traps.md`, and this file's own replies
+(e.g. #45 says "filed as #58" referring to the *old* #58, not today's — that's a second collision
+waiting to confuse a future reader). My instinct is a one-time cleanup pass done together at the
+next meeting, not a unilateral renumbering — but that's exactly the kind of call this item exists
+to raise rather than settle.
+
+**So neither of us loses track of what's still actually open in the disorganized stretch** — a
+reproducible way to re-list every item, in file order, any time:
+
+    grep -n '^### [0-9]' .claude/work/collab.md
+
+Cross-check against this snapshot from today (2026-08-13): items explicitly tagged for a joint
+meeting and not yet resolved there — **#51** ("Five things for the sheet at the next joint
+meeting"), **#52** ("Two agenda items for the next meeting"), **#56** ("Sheet item for tomorrow").
+Items with a position stated but not a settled amendment — **#42** (SDA→edge-edit auto-feed
+proposal), **#48** (`config.example.toml` demo — the *first* #48), **#49** (`pip install`
+packaging clause — James replied with a position 2026-08-12, still "not a settled amendment" per
+his own closing line). Worth putting all of these on the same agenda as the renumbering itself.
+
+*#59 · raised 2026-08-13 — Michael.*
+
+### 60. Three meeting skills — `/makeAgenda`, `/startMeeting`, `/endMeeting` — folded into PR #70
+
+**ACKNOWLEDGE, please, and one thing to merge before tomorrow.** Raising it under the rule you
+proposed in #44 and I agreed to on 2026-08-11: a skill change that binds the other owner's practice
+gets a `collab.md` item with an explicit ACKNOWLEDGE ask, not silence. This one is frontmatter, so
+it is PR-routed anyway — the item is the notification, not the review.
+
+**What they are.** `collab.md` accumulates the questions a joint meeting exists to answer, but
+turning 2476 lines of it into an agenda has been manual every time, and the answers have been
+landing in a session transcript rather than back inside the items. That is exactly the lapse my
+#52(b) describes and #50 is the live instance of — PR #64 merged without ruling on the question its
+item asks, so that convention now stands unopposed rather than agreed.
+
+- **`/makeAgenda [date]`** derives `.claude/work/meetings/<date>.md` from `collab.md`: every
+  unsettled item classified **Decide · Ratify · Acknowledge · FYI · Park · Close**, ordered
+  blockers-first, with a brief whose length is set by its status and two to four click-to-answer
+  options per question. It does **not** trust the `Open`/`Settled` headings, per your #59, and it
+  never edits `collab.md` at all. Rerunnable: a second call diffs against the SHA in the agenda's
+  own header and folds in new items — re-statusing one that gained an answer since — while never
+  touching a section a human has edited or already decided.
+- **`/startMeeting [date]`** walks the agenda one item at a time, asks the prepared questions as
+  buttons, and records each decision plus the file changes it implies into that item's block. It
+  carries a `**Cursor:**`, so a meeting that breaks for lunch resumes rather than re-asking eleven
+  answered questions. **It edits exactly one file.**
+- **`/endMeeting [date]`** executes the consolidated checklist: `decisions.md` entries with
+  union-safe headings and stamps, answers appended *inside* each item here, both the `uniq -d` and
+  the heading-structure audits run afterwards — then the sheet, `get/src/` and `documentation/` on a
+  branch with a PR. It never pushes code or the sheet to `main`, and never merges.
+
+**The split between deciding and executing is the whole design**, and it is the part to push back
+on if you think it is wrong. A meeting that edits files as it goes leaves half-applied decisions
+when it overruns, and a half-applied meeting is indistinguishable from a finished one to the next
+session. So nothing outside the meeting file moves until `/endMeeting`, which is a separate sitting.
+
+**Why they are in PR #70 rather than their own.** Two reasons, and the first is not convenience:
+all three read and write through the `main` worktree that PR establishes, so landing them first
+would ship skills depending on a convention `CLAUDE.md` does not yet document. The second is that
+you said multiple workflow PRs is a lot, and #70 already carries every skill body and the hook, so
+this costs you one review instead of two. The PR is retitled to say so; commit `f343402`.
+
+**What needs you before tomorrow: merge #70.** Not for your normal work — #69 is already in, so
+your `/save`, `/load`, `/park` and `/done` all work on `main` today, and the only thing you are
+missing is the branch-staleness fix. But the three skills hard-fail without the worktree, and this
+session hit the staleness bug for real: `mdube_run_output`'s copy of `collab.md` was 109 lines
+behind `main` and would have produced an agenda with your #59 missing from it entirely.
+
+**Already built and worth a look before you merge:** `.claude/work/meetings/2026-08-13.md`, a real
+agenda over items **40–59** — 21 items, blockers first, #50 leading because it gates #53 and #57,
+and your #59 second because this meeting will move about ten items to Settled and that *is* the
+reorganisation it asks about. One item was dry-run end to end through the ask-and-record flow before
+the skills were written, so they document what worked rather than a design sketch. Tell me if the
+classification is wrong anywhere — that is the judgement call the whole thing rests on.
+
+**Two things I found while building it, both already on that agenda rather than fixed here.** The
+`CLAUDE.md` row we agreed in #44 — practice-binding skill-body change goes direct *and* gets an
+ACKNOWLEDGE item — was never actually written into the file; the skills-body row still reads
+"Direct push to `main` is fine" with nothing after it. And `.claude/work/meetings/` is deliberately
+**not** union-merged: one file per date means two people cannot append to the same one, which is the
+only condition union merge exists for.
+
+*#60 · raised 2026-08-13 14:29 — Michael, from PR #70's branch.*
+
+### 61. `set_base_graph`'s node-count check does not catch the failure it was written to prevent
+
+- **The ask:** whether validating each edge's endpoints is *a fourth check* the base-graph setter
+  owes, or *check 1 done properly*. Either reading needs a sheet amendment, so it is a meeting item
+  rather than something I settle on the branch. GitHub #28, branch `jsargant_set_base_graph`.
+
+- **What §8 says check 1 is for:** "the node count must match the configured network size, or
+  out-of-range edges are silently dropped". GitHub #28 words it the same way and adds "and the run
+  proceeds on a graph missing most of its structure".
+
+- **What the check actually does:** compares the caller's `num_nodes` argument against
+  `config.network_size`, and never inspects the edge list. So it catches a caller who derives
+  `num_nodes` from their data, and misses one who derives it from their config — which is exactly
+  what #28's own example does: `refine.set_base_graph(100, edges)`, where `100` is read off
+  `edge_edit_config`. Hand that a 200-node SDA result and `100 == 100` passes while every edge
+  touching nodes 100–199 is dropped by `Graph::set_edge`. On a uniformly spread graph that is about
+  three quarters of them — the sheet's own "missing most of its structure", reached through the
+  check meant to prevent it.
+
+- **Measured 2026-08-13 on the branch,** with a temporary test since removed: `network_size = 8`,
+  `set_base_graph(8, [(0,1,1), (2,9,1), (3,3,1), (4,5,1)])` returns `Ok(())` and stores
+  `[(0,1,1), (4,5,1)]`. Half the edges gone, no error and no warning, and Python has no getter to
+  read the stored graph back. Self-loops vanish the same way, and 1-indexed source data — common in
+  edge-list file formats — loses the top node's edges while every surviving edge lands on the wrong
+  vertex.
+
+- **`Graph::set_edge` should not change,** to be clear: `graph.rs:43` returning early on an
+  out-of-range endpoint or a self-loop is correct for the engine, because the nine opcodes decode
+  vertex indices out of a random payload and §3.1 has them "all no-ops when their preconditions
+  fail" — which a fallible `set_edge` would turn into an error path in all nine. The asymmetry is
+  the point: permissiveness that is right for engine-generated indices is wrong for caller-supplied
+  data at the FFI boundary.
+
+- **That is the argument already recorded** for the cap check in `decisions.md` 2026-08-12 —
+  `set_edge` clamps, so `set_base_graph` re-checks instead of trusting it. The endpoint case has the
+  same shape and got a proxy instead, I suspect only because #28 named cap narrowing "the main
+  stacking trap" and moved on.
+
+- **The fix if you agree:** one more condition inside the loop that already walks `edges` checking
+  multiplicity — reject any edge with an endpoint `>= num_nodes`, same `PyValueError` shape, naming
+  the offending edge. Self-loops are a separate call: this model has no self-loops, so dropping them
+  is arguably the right semantics, but doing it silently is still doing it silently. Cheap either
+  way, and the loop it belongs in is already on the branch.
+
+*#61 · raised 2026-08-13 10:56 — James.*
