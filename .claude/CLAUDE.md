@@ -80,10 +80,18 @@ happen in the first place. That wording is corrected by this section, not layere
     ../<repo-name>-docs      # e.g. ../GraphEvolutionTool-docs, next to the main checkout
 
 computed from `git rev-parse --show-toplevel` (its dirname, plus `-docs`) rather than hand-typed,
-so the convention needs no per-machine configuration to agree on. One-time setup, from the main
-tree's repo root:
+so the convention needs no per-machine configuration to agree on. **Sparse-checked-out to
+`.claude/work/` only** — it is not a second full clone of the repo, so it carries none of `get/`,
+`documentation/`, or even `.claude/skills`/`.claude/hooks`; those stay in the main tree, versioned
+with whatever branch is checked out there, exactly as before. One-time setup, from the main tree's
+repo root — `bash .claude/scripts/setup_docs_worktree.sh` does all of this and checks your tree is
+in a safe state first; the manual equivalent:
 
-    git worktree add ../GraphEvolutionTool-docs main
+    git worktree add --no-checkout ../GraphEvolutionTool-docs main
+    cd ../GraphEvolutionTool-docs
+    git sparse-checkout init --no-cone
+    git sparse-checkout set '/.claude/work/*'
+    git checkout main
 
 **Every skill that touches `.claude/work/`** — `save`, `park`, `load`, `done`, `start` — reads and
 writes exclusively through that worktree, never through whatever the main tree has checked out for
