@@ -90,6 +90,25 @@ pub struct PyRunResult {
     /// it once (`rows = result.history`) rather than re-reading it in a loop.
     #[pyo3(get)]
     pub history: Vec<PyGenerationStats>,
+    /// The seed `run` was called with.
+    ///
+    /// Run-level rather than per-row: it lives here once and `save_logs`
+    /// stamps it onto every CSV row it writes, rather than every in-memory
+    /// row carrying its own copy of a value that never varies within a run.
+    #[pyo3(get)]
+    pub seed: u64,
+    /// Which replicate this is, `0`-based.
+    ///
+    /// A hard `0` until GitHub #20 gives `run` more than one replicate to
+    /// number — reserved now so the CSV schema does not change under users
+    /// once it does.
+    #[pyo3(get)]
+    pub run_index: usize,
+    /// The TOML document this run's config was parsed from — the provenance
+    /// record `save_results` writes alongside the best individual, so the run
+    /// can be reproduced verbatim.
+    #[pyo3(get)]
+    pub config_toml: String,
 }
 
 #[pymethods]
@@ -110,7 +129,16 @@ impl PyRunResult {
     /// No conversion happens here — `dispatch::erase` has already done it, and
     /// doing it twice would put a maximizing objective's numbers back into
     /// engine orientation while every one of them still looked plausible.
-    pub(crate) fn from_erased(outcome: ErasedOutcome) -> Self {
+    ///
+    /// `seed`, `run_index` and `config_toml` are run-level rather than part of
+    /// `ErasedOutcome`: dispatch knows nothing of the config document or which
+    /// replicate it's building, so those three arrive from the caller instead.
+    pub(crate) fn from_erased(
+        outcome: ErasedOutcome,
+        seed: u64,
+        run_index: usize,
+        config_toml: String,
+    ) -> Self {
         let mut history = Vec::with_capacity(outcome.history.len());
         for row in outcome.history {
             history.push(PyGenerationStats {
@@ -127,6 +155,9 @@ impl PyRunResult {
             best_edges: outcome.best_edges,
             best_genome_repr: outcome.best_genome_repr,
             history,
+            seed,
+            run_index,
+            config_toml,
         }
     }
 }

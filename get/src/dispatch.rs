@@ -521,6 +521,7 @@ mod tests {
         GraphEvolver {
             config: config_with(fitness_block),
             fitness_function: None,
+            config_toml: String::new(),
         }
     }
 
@@ -644,6 +645,7 @@ mod tests {
         GraphEvolver {
             config: config_with_genome(genome_block),
             fitness_function: None,
+            config_toml: String::new(),
         }
     }
 
@@ -1020,10 +1022,34 @@ mod tests {
 
     #[test]
     fn run_returns_a_complete_result_object() {
+        let config_toml = "population_size = 6\n\
+             network_size = 8\n\
+             max_edge_multiplicity = 2\n\
+             crossover_rate = 0.8\n\
+             mutation_rate = 0.5\n\
+             \n\
+             [evolution]\n\
+             type = \"generational\"\n\
+             num_generations = 3\n\
+             \n\
+             [selection]\n\
+             type = \"tournament\"\n\
+             tournament_size = 4\n\
+             \n\
+             [genome]\n\
+             type = \"edge_edit\"\n\
+             gene_length = 12\n\
+             \n\
+             [fitness]\n\
+             type = \"epi_spread\"\n\
+             infection_rate = 0.3\n\
+             num_epidemics = 2\n"
+            .to_string();
         // Through the Python entry point, so this also exercises the GIL release.
         let mut evolver = GraphEvolver {
-            config: runnable(GENERATIONAL, EDGE_EDIT),
+            config: Config::from_toml_str(&config_toml).expect("the fixture parses"),
             fitness_function: None,
+            config_toml: config_toml.clone(),
         };
 
         let result = evolver.run(8).expect("a full config run completes");
@@ -1041,6 +1067,13 @@ mod tests {
         for &(u, v, _) in &result.best_edges {
             assert!(u < 8 && v < 8);
         }
+
+        // Task 4's verify-by: seed, run_index and the config TOML reach the
+        // result and the TOML round-trips.
+        assert_eq!(result.seed, 8, "the seed run was called with");
+        assert_eq!(result.run_index, 0, "hard 0 until replicates land (#20)");
+        Config::from_toml_str(&result.config_toml).expect("the provenance TOML round-trips");
+        assert_eq!(result.config_toml, config_toml);
     }
 
     #[test]
@@ -1051,6 +1084,7 @@ mod tests {
         let mut evolver = GraphEvolver {
             config: runnable(GENERATIONAL, EDGE_EDIT),
             fitness_function: None,
+            config_toml: String::new(),
         };
 
         let first = evolver.run(4).expect("first run");
