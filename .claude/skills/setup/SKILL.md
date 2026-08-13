@@ -102,7 +102,7 @@ so the boundary is exact.
 |---|---|---|
 | Does the agent file issues for you, and where? | a git remote exists | the detected project · a different one · never files issues |
 | Which paths are off-limits or owned by someone else? | vendored dirs or multiple repos found | the detected paths · none · free-text |
-| Track `.claude/` in git? | `.claude/` is currently ignored | track the machinery, ignore only `work/current` **(Recommended)** · keep it all ignored |
+| Track `.claude/` in git? | `.claude/` is currently ignored | track all of it, ignoring only `settings.local.json` **(Recommended)** · also ignore the live task dir · keep it all ignored |
 | Will anyone else use this `.claude/`? | a git remote exists | yes — add `merge=union` + keep the collab section **(Recommended if a remote has other contributors)** · no, solo |
 | Enable the optional hooks? | always | see step 4 — one question per hook that applies |
 
@@ -186,12 +186,30 @@ fix it is now, before there's history to lose:
 > version control, no recovery, and teammates never see them. Recommended instead:
 > ```gitignore
 > .claude/settings.local.json
-> .claude/work/current/
 > ```
 
-`work/current/` is the only per-person thing — two people cannot hold one live plan. **Do not
-ignore `work/archive/`**: a finished task's record is shared history, and ignoring it strands every
-`/done` on one laptop.
+**Do not ignore `work/archive/`**: a finished task's record is shared history, and ignoring it
+strands every `/done` on one laptop.
+
+**Ignoring the live task directory is no longer the default** — changed 2026-08-13. It used to be
+`.claude/work/current/`, on the grounds that two people cannot hold one live plan. That reason is
+real, but ignoring is the wrong tool for it, and it costs something: an ignored plan lives on **one
+machine**, so the same person cannot resume a task on their laptop that they started on their
+desktop. That is the identical failure that stopped `work/archive/` being ignored.
+
+The fix is the **path**, not the ignore. If more than one person will use this `.claude/`, put live
+tasks under a per-owner directory — `work/<owner>/current/` and `work/<owner>/parked/<slug>/`,
+resolved from `git config user.email` — and track them. Neither person ever writes to the other's
+directory, so there is nothing to collide over, and a task survives the machine it was started on.
+
+State the remaining hazard when you offer it, because it is real and it is new: tracking live tasks
+makes the conflict **one person against themselves, from two machines**. `plan.md` is rewritten in
+place, so no merge strategy helps. The mitigation is a `Machine:` stamp in `handoff.md` and a
+`/load` that stops and reports on divergence instead of merging — see this project's `CLAUDE.md`,
+"Two people, one `.claude/`", for a worked example.
+
+If the user genuinely works alone on one machine, a plain `work/current/` is fine and the per-owner
+layout is ceremony. Ask; don't assume either way.
 
 ### If more than one person will use this `.claude/`
 
@@ -224,7 +242,7 @@ version-control disposition. Then:
 > Setup is done — `CLAUDE.md` is now this project's rules. Start your first piece of work with
 > `/start`.
 
-Don't create `work/current/plan.md`. `/setup` configures the project; `/start` opens the task, and it
+Don't create the task's `plan.md`. `/setup` configures the project; `/start` opens the task, and it
 needs an objective agreed with the user that `/setup` has no way to know.
 
 ## Constraints
