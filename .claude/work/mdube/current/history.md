@@ -5,6 +5,59 @@ Maintained by `/save`; archived by `/done`.
 
 ---
 
+## Session 2026-08-13 (cont. 4): tasks 4–10 implemented, verified from real Python, and pushed
+
+**All of #21's remaining code tasks landed**, one commit per task-list item, each gated on its own
+`cargo test`/`clippy`/`fmt` pass:
+
+- `d187d10` — `seed`, `run_index` (hard `0`), `config_toml` on `RunResult`. `GraphEvolver::new`
+  reads the config file's raw text itself (`Config::from_toml_str` + `.validate()` inline) rather
+  than through `Config::from_path`, since the raw text is the provenance record and `from_path`
+  doesn't hand it back; `from_config` already had `text` in scope from `PyConfig::to_toml()`.
+- `79003ac` — `save_logs` on `PyRunResult`, CSV with a header row, `iteration,best_fitness,
+  mean_fitness,std_dev,ci_95,seed,run_index`. No `csv` crate — the data is all-numeric, so hand-
+  rolled `writeln!` avoided a new dependency. `pymethods` are private by default; needed `pub fn`
+  to call from a Rust test directly (matches `PyConfig::to_toml`'s existing precedent).
+- `d30d31d` — `save_results` on `PyRunResult`, writing the best genome/edges/fitness to `filename`
+  and the provenance TOML to `{filename}.toml` — derived, not a second argument, so it can't be
+  forgotten (the plan's open question on this was never actually settled by James; went with the
+  planned default).
+- `b4e3bb7` — doc comment on `PyRunResult::best_fitness` explaining the final-population-not-best-
+  ever caveat; `guide/evolvers.html` already had the full reasoning, so no site edit was needed —
+  this was a genuinely skipped plan task, caught by `/save`'s sweep, not done inline with the rest.
+- `24c3cc0` — two `documentation/mdube_edits.md` entries (ci_95/seed/run_index/config_toml;
+  save_logs/save_results), naming every page each de-badges and the `run`→`run_index` naming fix
+  the site's example code needs.
+
+**Verified against real Python, not just `cargo test`** — task 8's own gate. No `pyproject.toml`
+in this repo (per `reference/pyo3-maturin.md`) and Debian's PEP 668 blocks a bare `pip install`, so
+built `.venv` + `maturin develop`, `pip install pandas matplotlib`. A full run through the built
+module: `save_logs` → `pandas.read_csv` (correct dtypes) → matplotlib plot (sent to Michael);
+`save_results` → `{path}.toml` → `Config::from_toml_str` round-trip. `.venv/` gitignored — see
+below, landed on `main` directly rather than in this branch, since it isn't specific to #21.
+
+**Branch pushed and merged with `main`.** `mdube_run_output` is at `b4e3bb7`, includes a clean
+`git merge main` (`49dc100`, only `.claude/work/` and `.gitignore` touched — same auto-resolve
+pattern as the earlier merge). PR **not yet opened** — on explicit instruction only, not yet given.
+
+**A branch collision mid-session**, worth knowing about rather than acting on: another session
+checked out `mdube_docs_worktree` in this same checkout and committed to it (`f343402`, the
+`/makeAgenda`/`/startMeeting`/`/endMeeting` skills, later part of PR #70) while this session had
+uncommitted task-4 edits pending. Recovered cleanly — `git stash`, switch back, `git stash apply` —
+nothing lost, verified by diff before continuing. See `traps.md` for the durable version of this.
+
+**Off-task, landed on `main` directly:** `.gitignore` gained `.venv/` (`092b944`) — repo hygiene,
+not #21-specific, so it didn't belong in this branch; done via a temporary sparse-checkout widen in
+the docs worktree (`git sparse-checkout set '/.claude/work/*' '/.gitignore'`, commit, push, narrow
+back) since `main` can't be checked out twice across the two working trees.
+
+**Git manifest at end of session:**
+- `GraphEvolutionTool` (code) — branch `mdube_run_output` @ `b4e3bb7`, pushed, matches origin. Clean
+  except one untracked `GraphEvolutionTool.code-workspace` (belongs to PR #70, not this branch).
+- `GraphEvolutionTool-docs` — branch `main` @ (this save's commit), pushed. Clean.
+
+---
+
 ## Session 2026-08-13 (cont. 3): `ci_95` committed; a large side-quest built and fixed the docs worktree
 
 **#21 itself.** `ci_95` committed on `mdube_run_output` at `007d3cf` (see previous session entry for

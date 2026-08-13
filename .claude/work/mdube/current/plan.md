@@ -35,49 +35,36 @@ is **done** — clean, 4 rename/delete conflicts in `.claude/work/` auto-resolve
       `the_erased_history_comes_out_in_the_objectives_own_units` extended to assert `ci_95 >= 0.0`
       under a maximizing objective; 235 tests pass.
 
-- [ ] `seed`, `run_index` and the generating config TOML reach `RunResult` —
-      `get/src/lib.rs`, `get/src/dispatch.rs`, `get/src/py_result.rs`. Run-level, so they live on the
-      result rather than on every in-memory row; the CSV writer emits them per row, which is what
-      §6.4 actually asks for. `run_index` is `0` until #20.
-      **Verify by:** a Rust test reading `result.seed` and `result.run_index` after a run; the TOML
-      round-trips through `Config::from_toml_str`.
+- [x] `seed`, `run_index` (hard `0`) and `config_toml` reach `RunResult` — `lib.rs`, `dispatch.rs`,
+      `py_result.rs`. Verified: `run_returns_a_complete_result_object` reads both fields and
+      round-trips `config_toml` through `Config::from_toml_str`. Commit `d187d10`.
 
-- [ ] `save_logs` becomes a method on `RunResult` and the evolver-side `&self` stub is deleted —
-      `get/src/py_result.rs`, `get/src/lib.rs:266`. Header + one row per logged iteration, columns
-      in §6.4's order with `seed` and `run_index` last.
-      **Verify by:** a test writing to a temp path and re-reading it; row count is
-      `num_generations + 1` (generational) and `num_mating_events / population_size + 1`
-      (steady-state).
+- [x] `save_logs` is a method on `RunResult`; evolver stub deleted. Verified:
+      `save_logs_writes_one_row_per_logged_iteration_plus_a_header` checks both row-count formulas
+      and every column. Commit `79003ac`.
 
-- [ ] `save_results` becomes a method on `RunResult`; the evolver stub at `get/src/lib.rs:272` is
-      deleted. Writes the best genome's `print()` string, its edge list and its fitness, and the
-      config TOML alongside as the provenance record (§6.4, §8).
-      **Verify by:** a test asserting both files exist and the config file parses back;
-      `grep -rn "todo!" get/src` finds neither method.
+- [x] `save_results` is a method on `RunResult`; evolver stub deleted, `{filename}.toml` alongside.
+      Verified: `save_results_writes_the_best_individual_and_a_reparseable_config`; `grep -rn
+      "todo!" get/src` empty. Commit `d30d31d`.
 
-- [ ] Document why the log's best row can beat the reported `best_fitness` — in the column
-      documentation the CSV's consumers read, per #21's 2026-08-13 amendment. The final population
-      is re-scored, so a stochastic objective's earlier lucky draw is not kept.
-      **Verify by:** the explanation is present wherever the columns are described and does not cite
-      the spec sheet or an issue number (`CLAUDE.md`, amended 2026-08-13).
+- [x] Documented why the log's best row can beat reported `best_fitness` — doc comment on
+      `PyRunResult::best_fitness`; `guide/evolvers.html` already carried the full reasoning.
+      Commit `b4e3bb7`.
 
-- [ ] Exercise it from real Python — `maturin develop`, run a config, `pandas.read_csv` the log and
-      plot it. Nothing on this stack has been run from Python yet.
-      **Verify by:** the issue's own gate — the CSV loads in pandas and plots. Python is not on
-      `PATH` here; see `traps.md`, `python3-is-absent-and-bare-python-is-the-store-stub`.
+- [x] Exercised from real Python — `.venv`, `maturin develop`, a real run, `save_logs` +
+      `pandas.read_csv` + a matplotlib plot, `save_results` + TOML round-trip. All passed
+      2026-08-13; plot sent to Michael.
 
-- [ ] File the documentation consequences in `documentation/mdube_edits.md` — do not edit the site.
-      At least: `guide/output.html`, `reference/lib.html`, `reference/py-result.html` if it exists,
-      and any `status.html` row this de-badges.
-      **Verify by:** the queue file names each page and what is now false in it.
+- [x] Documentation consequences filed in `documentation/mdube_edits.md`, not the site — two
+      entries naming `guide/output.html`, `reference/lib.html`, `status.html` and what's false in
+      each. Commit `24c3cc0`. No `reference/py-result.html` exists.
 
-- [ ] Full gate before the PR: `cargo test`, `cargo clippy --all-targets -- -D warnings`,
-      `cargo fmt --check`. `cargo test` needs Python on `PATH` on this machine — `traps.md`,
-      `cargo-test-cannot-link-python-unless-extension-module-is-off`.
-      **Verify by:** all three clean, test count reported.
+- [x] Full gate: `cargo test` (237 pass), `cargo clippy --all-targets -- -D warnings`, `cargo fmt
+      --check` — all clean, re-verified after every subsequent commit through `b4e3bb7`.
 
-- [ ] Commit each verified step separately, then push and open the PR — **on explicit instruction
-      only**, per `CLAUDE.md`. Note the stacked base in the PR body.
+- [ ] Open the PR — commits are made and pushed (`5b1f066` .. `b4e3bb7`, `mdube_run_output` merged
+      with `main` at `49dc100`); opening the PR itself is still **on explicit instruction only**,
+      per `CLAUDE.md`. Note the stacked base (#65, #69, both merged) in the PR body.
       **Verify by:** `gh pr view <n> --json body` shows the body survived.
 
 ## Open questions

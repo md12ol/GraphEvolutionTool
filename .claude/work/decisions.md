@@ -2385,3 +2385,50 @@ yet document. Michael also asked not to have several workflow PRs open at once. 
 items 40–60. `collab.md` #60 is the notification to James, with an ACKNOWLEDGE ask.
 
 *meetings-directory-and-skills · recorded 2026-08-13 14:52 — Michael.*
+
+## 2026-08-13 16:40 — Michael — how #21's remaining tasks were implemented
+
+**Chose:** `GraphEvolver` captures the config's raw TOML text itself, in both constructors, rather
+than adding `Serialize` to `Config` or re-serializing it. `new()` reads the file text before parsing
+(`Config::from_toml_str` + `.validate()` inline, replacing the `Config::from_path` call, since
+`from_path` doesn't hand the text back); `from_config()` already had `text` in scope from
+`PyConfig::to_toml()`.
+
+**Why:** the provenance record has to be *exactly* what produced the run, byte for byte — a
+re-serialization of the parsed `Config` risks losing comments, key order, or anything `Deserialize`
+drops on the floor. The text that was actually parsed is the only thing that's certainly identical.
+
+**Chose:** `save_logs` hand-rolls CSV with `writeln!` rather than adding the `csv` crate.
+
+**Why:** every column is numeric (`iteration`, four `f64`s, `seed`, `run_index`) — nothing needs
+quoting or escaping, so a dependency buys nothing here that isn't already free.
+
+**Chose:** `save_results`'s provenance TOML lands at `{filename}.toml` — derived from the results
+filename, not a second argument.
+
+**Why:** answers the plan's open question; James never weighed in, so went with the plan's own
+stated default. A derived path means the provenance record can't be forgotten by a caller who
+only thinks to pass one filename — the same reasoning `CLAUDE.md`'s de-badge convention uses for
+"the obligation moved; it did not go away."
+
+**Chose:** `pymethods` needed `pub fn` (not just `fn`) on `save_logs`/`save_results` to call them
+from a Rust test directly — `pyo3`'s `#[pymethods]` are private by default, only exposed to Python.
+Matches existing precedent (`PyConfig::to_toml` is already `pub fn`), not a new pattern.
+
+**Chose:** the "log's best row can beat reported `best_fitness`" plan task turned out to need no
+site edit — `guide/evolvers.html`'s "What a run reports" section already carries the full reasoning,
+correctly and without stale citations. Added only a doc comment on `PyRunResult::best_fitness`
+pointing at the same reasoning, for readers who never leave the API.
+
+**Chose:** `.gitignore`'s `.venv/` line landed on `main` directly (`092b944`), not on
+`mdube_run_output`. It exists because task 8's real-Python verification needed a venv (this repo
+has no `pyproject.toml` — `reference/pyo3-maturin.md` — and Debian's PEP 668 blocks a bare `pip
+install`), but the entry isn't specific to #21 and every future task will want it. Landed by
+temporarily widening the docs worktree's sparse-checkout to include `/.gitignore`, committing,
+pushing, then narrowing back — `main` can't be checked out in two working trees at once, so this
+was the only way to touch a `main`-only file without disturbing either checkout's branch.
+
+**Affects:** `get/src/lib.rs`, `get/src/py_result.rs`, `get/src/dispatch.rs` (commits `d187d10`,
+`79003ac`, `d30d31d`, `b4e3bb7` on `mdube_run_output`); `.gitignore` (`092b944` on `main`).
+
+*run-output-remaining-tasks · recorded 2026-08-13 16:40 — Michael.*

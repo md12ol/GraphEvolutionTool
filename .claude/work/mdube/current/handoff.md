@@ -1,49 +1,37 @@
 # Next session — 2026-08-13
 
-**Machine:** `skynet` · saved 2026-08-13 · `007d3cf`
+**Machine:** `skynet` · saved 2026-08-13 16:32 · `b4e3bb7`
 
 Read this task's `plan.md` and `.claude/work/decisions.md` first, then `.claude/work/traps.md` —
-one new entry there is about tooling you may touch (VS Code + the docs worktree).
+two new entries there are worth knowing before you touch this checkout again.
 
-**Where things stand:** GitHub #21, on branch `mdube_run_output`. Tasks 1–3 of 11 done: the stacked
-branch, `ci_95` in the engine (`evolver/mod.rs`, `evolver/common.rs`), and `ci_95` carried through
-erasure unconverted (`dispatch.rs`, `py_result.rs`). Committed at `007d3cf`. 235 tests pass, clippy
-and fmt clean. **3 local commits not yet pushed to `origin/mdube_run_output`** — pushing needs its
-own explicit instruction.
+**Where things stand:** GitHub #21 is code-complete. All 10 task-list items are `[x]` and verified —
+`ci_95`/`seed`/`run_index`/`config_toml` on `RunResult`, `save_logs`/`save_results` as real methods,
+the best-row-vs-`best_fitness` doc comment, documentation consequences filed, and the full gate
+(237 tests, clippy, fmt) clean. Verified against real Python, not just `cargo test`: `.venv` +
+`maturin develop`, a real run, `save_logs` → `pandas.read_csv` → matplotlib plot, `save_results` →
+TOML round-trip. `mdube_run_output` is at `b4e3bb7`, pushed, merged with `main` (`49dc100`).
 
-A large side-quest this session built `.claude/work/`'s new home: a dedicated, sparse `main`
-worktree at `../GraphEvolutionTool-docs`, plus a setup script and a two-folder VS Code workspace.
-It's PR #70 on `mdube_docs_worktree`, **open, not merged** — unrelated to #21's own code but
-touched every session from here on, since `/save`/`/park`/`/load`/`/done` all use it now.
-
-**Start here:** task 4 — `seed`, `run_index` and the generating config TOML on `RunResult`
-(`get/src/lib.rs`, `get/src/dispatch.rs`, `get/src/py_result.rs`). Run-level fields, not per-row;
-`run_index` ships as a hard `0` until #20. Verify with a Rust test reading `result.seed` and
-`result.run_index` after a run, and that the TOML round-trips through `Config::from_toml_str`.
+**Start here:** open the PR for `mdube_run_output` against `main` — the only thing left on the
+plan. Needs its own explicit instruction (not yet given). Note the stacked base (#65, #69 — both
+already merged) in the body, and that `.claude/work/`, `.gitignore`'s `.venv/` line, and the three
+meeting skills are *not* this PR's changes (they landed separately, on `main`).
 
 **Watch out for:**
 
-- **`.claude/work/` is read/written from `$DOCS_WT` (`../GraphEvolutionTool-docs`) now, never from
-  whatever branch this tree has checked out.** Every skill handles this itself — `cd`s there first —
-  so you don't need to think about it, but if you ever see `.claude/work/mdube/current/` missing or
-  empty in *this* tree, that's expected: it only exists in the worktree now, not here.
-- **`cargo test` needs Python on `PATH`** — `traps.md`,
-  `cargo-test-cannot-link-python-unless-extension-module-is-off`.
-- **The two denominators differ on purpose.** `std_dev` divides by `n`, `ci_95` by `n-1`. Already
-  shipped correctly; don't "fix" it if you're back in this code.
-- **Shipped source must not reference `official_spec_sheet.md` or issue numbers** (amended
-  2026-08-13).
-- **Do not edit `documentation/`.** File what the site now gets wrong in
-  `documentation/mdube_edits.md` — `collab.md` #53.
-- **`collab.md` #59, filed this session, not fixed:** `## Open`/`## Settled` stopped bounding
-  anything around item `#48`, and `### 48` is used twice. Don't be surprised the file looks
-  disorganized past that point — it's known, and flagged for the next joint meeting, not a sign
-  something else broke.
+- **`.venv/` is real but untracked-and-ignored** (`.gitignore`'s `.venv/`, landed on `main` at
+  `092b944` — separate from this PR since it isn't #21-specific). `source .venv/bin/activate` before
+  any Python work; it has `maturin`, `pandas`, `matplotlib` installed.
+- **Two sessions shared this checkout mid-task and it cost a stop-and-diagnose** —
+  `traps.md`, `two-sessions-sharing-one-checkout-can-cross-wires-on-different-branches`. If a file
+  you edit shows a stale-content warning, check `git reflog` before trusting anything.
+- **The provenance TOML path is derived** (`{filename}.toml`), not a second argument to
+  `save_results` — this answers the plan's open question; James never weighed in, so it went with
+  the plan's stated default. Worth confirming with him before or during PR review.
+- **`cargo test` needs Python on `PATH`** on this machine — but on `skynet` specifically,
+  `/usr/bin/python3` is already there and no `PATH` hack was needed this session (unlike the
+  Windows note in `traps.md`, which is a different machine).
 
-**Two open questions in `plan.md`, neither blocking yet:** `run_index` as a hard `0` (planned: yes),
-provenance TOML naming (planned: derived from `save_results`'s path).
-
-**⏰ Time-sensitive:** PR #70 needs James's setup and review — `collab.md` #58 (3 addenda + a
-summary) has his one-time command. `collab.md` #59 (the reorg) and the still-meeting-bound items it
-lists (`#51`, `#52`, `#56`, `#42`, the first `#48`, `#49`) are all candidates for the next joint
-meeting.
+**⏰ Time-sensitive:** nothing dated on this task itself. `collab.md` items from the meeting sweep
+(`#40`–`#60`) are unrelated to #21 and already handled by the earlier session that built the docs
+worktree — nothing here blocks on them.
