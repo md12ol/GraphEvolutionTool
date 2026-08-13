@@ -1,6 +1,9 @@
 # Next session — 2026-08-13
 
-**Machine:** `skynet` · saved 2026-08-13 · `6b8346d`
+**Machine:** `skynet` · parked 2026-08-13 · `fc66715`
+**Blocked on:** nothing external — parked to let `result-object` go first, since it has real queued
+work (tracker edits for #21 and #68) and its own blockers are cleared. Resume with
+`/load run-output` whenever result-object is done or set down again.
 
 Read this task's `plan.md` and `.claude/work/decisions.md` first, then `.claude/work/hotfixes.md`.
 
