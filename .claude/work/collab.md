@@ -2536,3 +2536,49 @@ ACKNOWLEDGE item — was never actually written into the file; the skills-body r
 only condition union merge exists for.
 
 *#60 · raised 2026-08-13 14:29 — Michael, from PR #70's branch.*
+
+### 61. `set_base_graph`'s node-count check does not catch the failure it was written to prevent
+
+- **The ask:** whether validating each edge's endpoints is *a fourth check* the base-graph setter
+  owes, or *check 1 done properly*. Either reading needs a sheet amendment, so it is a meeting item
+  rather than something I settle on the branch. GitHub #28, branch `jsargant_set_base_graph`.
+
+- **What §8 says check 1 is for:** "the node count must match the configured network size, or
+  out-of-range edges are silently dropped". GitHub #28 words it the same way and adds "and the run
+  proceeds on a graph missing most of its structure".
+
+- **What the check actually does:** compares the caller's `num_nodes` argument against
+  `config.network_size`, and never inspects the edge list. So it catches a caller who derives
+  `num_nodes` from their data, and misses one who derives it from their config — which is exactly
+  what #28's own example does: `refine.set_base_graph(100, edges)`, where `100` is read off
+  `edge_edit_config`. Hand that a 200-node SDA result and `100 == 100` passes while every edge
+  touching nodes 100–199 is dropped by `Graph::set_edge`. On a uniformly spread graph that is about
+  three quarters of them — the sheet's own "missing most of its structure", reached through the
+  check meant to prevent it.
+
+- **Measured 2026-08-13 on the branch,** with a temporary test since removed: `network_size = 8`,
+  `set_base_graph(8, [(0,1,1), (2,9,1), (3,3,1), (4,5,1)])` returns `Ok(())` and stores
+  `[(0,1,1), (4,5,1)]`. Half the edges gone, no error and no warning, and Python has no getter to
+  read the stored graph back. Self-loops vanish the same way, and 1-indexed source data — common in
+  edge-list file formats — loses the top node's edges while every surviving edge lands on the wrong
+  vertex.
+
+- **`Graph::set_edge` should not change,** to be clear: `graph.rs:43` returning early on an
+  out-of-range endpoint or a self-loop is correct for the engine, because the nine opcodes decode
+  vertex indices out of a random payload and §3.1 has them "all no-ops when their preconditions
+  fail" — which a fallible `set_edge` would turn into an error path in all nine. The asymmetry is
+  the point: permissiveness that is right for engine-generated indices is wrong for caller-supplied
+  data at the FFI boundary.
+
+- **That is the argument already recorded** for the cap check in `decisions.md` 2026-08-12 —
+  `set_edge` clamps, so `set_base_graph` re-checks instead of trusting it. The endpoint case has the
+  same shape and got a proxy instead, I suspect only because #28 named cap narrowing "the main
+  stacking trap" and moved on.
+
+- **The fix if you agree:** one more condition inside the loop that already walks `edges` checking
+  multiplicity — reject any edge with an endpoint `>= num_nodes`, same `PyValueError` shape, naming
+  the offending edge. Self-loops are a separate call: this model has no self-loops, so dropping them
+  is arguably the right semantics, but doing it silently is still doing it silently. Cheap either
+  way, and the loop it belongs in is already on the branch.
+
+*#61 · raised 2026-08-13 10:56 — James.*

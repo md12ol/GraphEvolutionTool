@@ -2432,3 +2432,24 @@ was the only way to touch a `main`-only file without disturbing either checkout'
 `79003ac`, `d30d31d`, `b4e3bb7` on `mdube_run_output`); `.gitignore` (`092b944` on `main`).
 
 *run-output-remaining-tasks · recorded 2026-08-13 16:40 — Michael.*
+
+## 2026-08-12 — James — `set_base_graph`'s cap-narrowing check rejects, it does not warn
+
+**Chose:** issue #28's second validation check — a base graph built at a wider
+`max_edge_multiplicity` than the config it's being fed into — rejects with `PyValueError` rather
+than warning and clamping. Same treatment as check 1 (node-count mismatch) and check 3
+(non-`edge_edit` genome).
+
+**Why:** the issue's own text leaves it open ("Reject or warn on cap narrowing"), but every other
+validation path in this crate that can catch a silent-corruption case fails loudly rather than
+logging past it — `Config::validate`, `python_fitness`'s unregistered-callable check. A warning
+is only useful if something reads it; nothing downstream of `set_base_graph` does, so a warning
+here is functionally silent, which is exactly the failure mode this check exists to close
+(`Graph::set_edge` clamps instead of rejecting, spec §2).
+
+**Rejected:** warn-and-clamp, which would make `set_base_graph` the one validation path in the
+crate that degrades instead of failing, for no offsetting benefit — the caller can always resubmit
+edges with weights lowered to the new cap.
+
+**Affects:** `get/src/lib.rs`, `set_base_graph` (GitHub #28, branch `jsargant_set_base_graph`).
+*Recorded 2026-08-12 — James, at task 3 of #28.*
