@@ -11,7 +11,7 @@ pub mod py_config;
 pub mod py_result;
 pub mod sir;
 
-use crate::config::{Config, FitnessConfig};
+use crate::config::{Config, FitnessConfig, GenomeConfig};
 use crate::fitness::{Direction, PyFitness};
 use crate::graph::Graph;
 use crate::py_config::{
@@ -196,6 +196,84 @@ impl GraphEvolver {
         };
 
         self.fitness_function = Some(PyFitness::new(callable.clone().unbind(), direction));
+        Ok(())
+    }
+
+    /// Seed an edge-edit run from a graph the caller already has.
+    ///
+    /// `edges` is `(u, v, multiplicity)` — the same shape `run` hands back as
+    /// `best_edges`, so one run's output feeds the next without reshaping:
+    ///
+    /// ```python
+    /// first = sda_evolver.run(seed=1)
+    /// edge_evolver.set_base_graph(64, first.best_edges)
+    /// second = edge_evolver.run(seed=2)
+    /// ```
+    ///
+    /// **Left unset, every run starts from an empty graph** — that is the
+    /// default, and it is worth stating rather than leaving to be discovered:
+    /// five of the nine edit opcodes are inert on an empty graph. `Swap`, `Hop`
+    /// and the three `Local*` all need existing structure to walk, so early
+    /// generations do nothing until `Add`/`Toggle` have built something. That
+    /// is self-correcting and not a defect.
+    ///
+    /// Endpoints outside `0..num_nodes` and self-loops are dropped rather than
+    /// rejected, which is [`Graph::set_edge`]'s behaviour and not re-litigated
+    /// here.
+    ///
+    /// # Errors
+    ///
+    /// `ValueError` if `num_nodes` disagrees with the config's `network_size`,
+    /// if the config selected the SDA genome, or if any edge's multiplicity
+    /// exceeds the config's `max_edge_multiplicity`.
+    ///
+    /// The SDA case is a rejection rather than a no-op because an SDA run
+    /// generates its graph from scratch instead of editing one: storing a base
+    /// graph nothing would ever read is indistinguishable, from Python, from
+    /// having seeded the run successfully.
+    ///
+    /// The cap case rejects rather than clamping, unlike [`Graph::set_edge`].
+    /// Handing a graph built under a wider cap into a narrower one is the
+    /// stacking trap: clamping would silently evolve against a different graph
+    /// from the one passed in, and nothing downstream of here reads a warning.
+    /// Lower the weights and resubmit.
+    fn set_base_graph(
+        &mut self,
+        num_nodes: usize,
+        edges: Vec<(usize, usize, u32)>,
+    ) -> PyResult<()> {
+        if num_nodes != self.config.network_size {
+            return Err(PyValueError::new_err(format!(
+                "base graph has {} nodes but [evolution] network_size is {}; \
+                 the graph an edit script is applied to must be the size the run evolves",
+                num_nodes, self.config.network_size,
+            )));
+        }
+
+        if !matches!(self.config.genome, GenomeConfig::EdgeEdit { .. }) {
+            return Err(PyValueError::new_err(
+                "[genome] type is \"sda\", which generates its graph rather than editing one, \
+                 so a base graph would never be read; set type = \"edge_edit\" to seed a run",
+            ));
+        }
+
+        // Checked before anything is built, because `Graph::set_edge` clamps an
+        // over-cap weight instead of refusing it — so a graph constructed first
+        // and validated after would already have lost the offending value.
+        for &(u, v, multiplicity) in &edges {
+            if multiplicity > self.config.max_edge_multiplicity {
+                return Err(PyValueError::new_err(format!(
+                    "edge ({u}, {v}) has multiplicity {multiplicity}, above this config's \
+                     max_edge_multiplicity of {}; lower it and resubmit rather than having \
+                     it silently clamped",
+                    self.config.max_edge_multiplicity,
+                )));
+            }
+        }
+
+        let mut graph = Graph::new(self.config.network_size, self.config.max_edge_multiplicity);
+        graph.set_edges(&edges);
+        self.base_graph = Some(graph);
         Ok(())
     }
 
