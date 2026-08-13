@@ -1,6 +1,14 @@
 # Next session — 2026-08-13
 
-**Machine:** `MDUBE-Lenovo` · saved 2026-08-13 02:25 · 76bd7b9
+**Machine:** `MDUBE-Lenovo` · parked 2026-08-13 02:32 · 8d8c7b9
+**Blocked on:** PR #69 merged, and `collab.md` #55 answered — especially the `/save` push carve-out.
+Resume with `/load per-owner-work-dirs` once that lands.
+
+**Ordering, agreed 2026-08-13:** the next issue is on a branch cut from
+`mdube_per_owner_work_dirs`, so that branch's PR carries #69's commits until #69 merges. **#69
+merges first**; Michael is telling James the order directly. If you find #69 merged and the newer PR
+still open, rebase it onto `main` — `git rebase --onto main mdube_per_owner_work_dirs <branch>` —
+before asking for review again.
 
 Read this task's `plan.md` and `.claude/work/decisions.md` first, then `.claude/work/traps.md` —
 two new entries there are about tooling you are likely to touch.

@@ -39,4 +39,10 @@ unmerged**. `main` carries `collab.md` #55 alone (`9d097eb`), pushed direct as t
 `decisions.md` (three entries) and `traps.md` (two entries) are appended in the working tree and go
 direct to `main` under the routing table, not into the PR. No code outside `.claude/` was touched.
 
+**UPDATE 2026-08-13, after the save:** parked. The next issue is being started on a branch cut from
+`mdube_per_owner_work_dirs` rather than from `main`, on Michael's call — that branch is the only
+place `work/mdube/` exists until #69 merges, so branching from it keeps the parked tasks visible and
+the working layout intact. The cost, accepted knowingly: the new PR carries #69's commits until #69
+lands, so **#69 must merge first**. Michael is telling James the order directly.
+
 *Logged 2026-08-13 — Michael.*
