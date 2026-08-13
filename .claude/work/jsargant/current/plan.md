@@ -57,8 +57,11 @@ script showing the edge-edit run's starting population expresses the seeded edge
       FFI, and `save_logs`/`save_results` wrote the CSV and the provenance TOML. Script is
       scratch-only, not committed.
 
-- [ ] Open PR, request review from Michael. `CLAUDE.md`: I don't merge my own PR.
-      **Verify by:** `gh pr view` shows it open against `main`.
+- [x] **PR #72** open against `main`, review requested from Michael, `mergeable=MERGEABLE`,
+      carrying exactly `get/src/lib.rs`, `get/src/dispatch.rs` and `documentation/jsargant_edits.md`
+      — no `.claude/work/` diff, per `collab.md` #58. Body verified by read-back (tables and code
+      spans intact). The body flags `collab.md` #61 as the one thing for the reviewer to weigh.
+      Not merged: `CLAUDE.md`, I don't merge my own PR.
 
 ## Open questions
 - None currently — the issue's own text resolves "reject or warn" toward reject, matching every
