@@ -2182,3 +2182,70 @@ would touch, so doing them first means doing them twice.
 it.
 
 *#54 · raised 2026-08-13 02:14 — Michael.*
+
+### 55. Live task directories are now per-owner and tracked, and there is a `/park` skill (55)
+
+Michael, 2026-08-13. The hook change is in PR — see below — but the shape binds your practice, so
+here is what changed and what is yours.
+
+**The layout.** `.claude/work/current/` is gone. Live tasks are at `.claude/work/<owner>/current/`,
+and a blocked task moves to `.claude/work/<owner>/parked/<slug>/`. Yours is
+`.claude/work/jsargant/`; it does not exist until your first `/start` creates it. `work/archive/`
+is unchanged — still shared, still no owner in the path, because a finished task is the project's
+history rather than one person's.
+
+**They are tracked now, and `work/current/` was un-ignored to do it.** The old reason for ignoring
+it was that two people must not fight over one live plan. The per-owner path serves that reason
+better, and ignoring cost something real: a task lives on one laptop. I want to pick work up on a
+second machine, which is the whole driver here.
+
+**Which directory is yours is resolved from `git config user.email`, not from memory** — the same
+table `documentation/mdube_edits.md` already uses, now also in `.claude/hooks/session_brief.sh` and
+the `load`, `save`, `park` and `start` skills. An address in none of them stops and asks. If you use
+another address on another machine, add it in all five places rather than letting it guess.
+
+**The rule change you should push back on if you disagree:** `/save` now commits and pushes
+`.claude/work/<owner>/` to `main` as its last step, which is a narrow exception to "don't commit or
+push unless asked". Only that path, only at that step — code, the persistent docs and the sheet all
+still need an explicit instruction every time. The argument is that an unpushed handoff fails
+silently and you find out on the other machine a day later, which defeats the reason for tracking
+these at all. It also means nobody reviews your own plan file, which I think is correct and you may
+not.
+
+**`/park <slug>`** runs `/save`, stamps `handoff.md` with a `Blocked on:` line — the concrete
+unblocking event, not "waiting on Michael" — and moves the task into `parked/`. `/load <slug>`
+brings it back and parks whatever was live to make room. `/done` refuses a parked task outright,
+because its final save has to run against the session that actually finished the work.
+
+**The new failure mode, stated plainly:** it is you against yourself from two machines, not you
+against me. Two machines editing one `plan.md` is a genuine conflict on a file rewritten in place.
+So `handoff.md` carries `Machine: <hostname> · saved <ts> · <SHA>` and `/load` **stops and reports**
+on divergence instead of merging or resetting. Note `pull_main.sh` only fast-forwards on a clean
+tree, so a divergence usually means it declined rather than that nothing happened.
+
+**Verified rather than assumed:** `git check-attr merge` reports `unspecified` for both
+`work/mdube/current/plan.md` and a `parked/<slug>/` file, so the union driver does not reach the new
+paths. It never did — gitattributes globs do not cross `/` — but that is exactly the kind of thing
+this repo has been bitten by, so it was measured.
+
+**All of it is in one PR, including the parts the routing table would let me push direct.** The
+table's test is "does this change what runs", and here the skill *bodies* are what runs — they tell
+an agent to move task directories between paths and to push commits, which is not the typo-fix case
+the direct-push row was written for. Splitting it would also leave a state where neither of us has a
+working setup: skills writing to `work/jsargant/current/` while the brief still reads
+`work/current/`. This item is the one exception, pushed direct ahead of the PR, because a
+notification sitting on a branch notifies nobody.
+
+**Two pre-existing bugs in `session_brief.sh` are fixed in the same PR**, both found while testing
+the swap rather than by reading. A `grep -c` prints `0` *and* exits 1, so the `|| echo 0` fallback
+appended a second zero and split the counts line across two lines. Worse, the "Start here"
+extraction matched only a `## Start here` heading — and `/save`'s template has always written
+`**Start here:**` inline, so that block has printed nothing since the day it was written. If you
+wondered why the session brief only ever showed a title and some counts, that is why.
+
+**Tested against a backup before anything was committed:** park-then-unpark round trip is lossless
+(md5-identical across all five files), the two-parked case lists both slugs with their blockers
+rather than guessing, and a parked task with no handoff reports `no blocker recorded` instead of
+going quiet.
+
+*#55 · raised 2026-08-13 02:10 — Michael.*
