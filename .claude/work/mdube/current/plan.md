@@ -69,10 +69,25 @@ visibility, archive, push policy, divergence handling and the machine stamp. `/s
       `## Start here` heading and so had **never** fired against a real handoff, and `/park`'s
       `Machine:` stamp used a shape the hook's grep could not see. Both verified by re-running.
 
-- [ ] **Await approval, then commit and push.** Nothing is committed. The hook and the new skill's
-      frontmatter go through the PR; skill bodies, `CLAUDE.md`, `README.md`, `.gitignore` and
-      `collab.md` #55 may go direct to `main` under the routing table.
-      **Verify by:** `gh pr list --state open` shows the PR, and `main` carries the direct-push half.
+- [x] `/setup` no longer recommends ignoring the live task directory, and explains why the path
+      rather than the ignore is the fix. Verified: no stale `work/current/` references left in it.
+
+- [x] Committed in seven reviewable steps and **PR #69 opened**, body verified via `--json`.
+      `collab.md` #55 went direct to `main` (`9d097eb`) ahead of it, as the notification.
+      Routing reasoning in `decisions.md` 2026-08-13 03:09.
+
+- [ ] **Waiting on James** — PR #69 needs his merge, and `collab.md` #55 his reply, especially on the
+      `/save` push carve-out. Nothing here is actionable until then; the layout is already live on
+      this machine, so the next task can start regardless.
+      **Verify by:** `gh pr list --state open` no longer lists #69, and #55 carries an appended
+      answer.
+
+- [ ] **Exercise `/park` and `/load <slug>` for real, once**, rather than by the hand-run file moves
+      this session used. The mechanics round-tripped losslessly, but no session has yet driven the
+      skills themselves end to end — including `/park`'s `/save`-first step, which is the part that
+      writes the `Blocked on:` stamp the whole design leans on.
+      **Verify by:** `/park` a real task, `/load` it back, and confirm `handoff.md` gained both the
+      `Machine:` and `Blocked on:` lines without hand-editing.
 
 - [ ] Open the PR for the hook and the new skill's frontmatter. Do not merge it.
       **Verify by:** `gh pr list --state open` shows it.
