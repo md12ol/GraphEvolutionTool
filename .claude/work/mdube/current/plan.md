@@ -62,10 +62,8 @@ is **done** — clean, 4 rename/delete conflicts in `.claude/work/` auto-resolve
 - [x] Full gate: `cargo test` (237 pass), `cargo clippy --all-targets -- -D warnings`, `cargo fmt
       --check` — all clean, re-verified after every subsequent commit through `b4e3bb7`.
 
-- [ ] Open the PR — commits are made and pushed (`5b1f066` .. `b4e3bb7`, `mdube_run_output` merged
-      with `main` at `49dc100`); opening the PR itself is still **on explicit instruction only**,
-      per `CLAUDE.md`. Note the stacked base (#65, #69, both merged) in the PR body.
-      **Verify by:** `gh pr view <n> --json body` shows the body survived.
+- [x] PR opened: **#71**. Verified: `gh api .../pulls/71` shows the body survived intact. Waiting
+      on James to merge — nobody merges their own PR, per `CLAUDE.md`.
 
 ## Open questions
 

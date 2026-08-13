@@ -38,7 +38,11 @@ below, landed on `main` directly rather than in this branch, since it isn't spec
 
 **Branch pushed and merged with `main`.** `mdube_run_output` is at `b4e3bb7`, includes a clean
 `git merge main` (`49dc100`, only `.claude/work/` and `.gitignore` touched — same auto-resolve
-pattern as the earlier merge). PR **not yet opened** — on explicit instruction only, not yet given.
+pattern as the earlier merge).
+
+**PR opened: #71**, on explicit instruction, after this save's plan/handoff update. Body verified
+with `gh api repos/md12ol/GraphEvolutionTool/pulls/71 -q '.title, .body'` — survived intact. Task
+is now fully `[x]`; waiting on James to merge.
 
 **A branch collision mid-session**, worth knowing about rather than acting on: another session
 checked out `mdube_docs_worktree` in this same checkout and committed to it (`f343402`, the
