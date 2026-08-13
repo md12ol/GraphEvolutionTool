@@ -2,11 +2,16 @@
 
 **Do not edit the site during an ordinary task. File the edit here instead.**
 
-Created 2026-08-13 **by Michael, on James's behalf and not yet agreed by him** — the ask is
-`collab.md` #53. It is here rather than waiting so that the convention is usable the moment James
-says yes, and so a session working under his identity has somewhere to file instead of guessing.
-**James: if you would rather not work this way, deleting this file is the whole of the rejection** —
-nothing else depends on it existing.
+Created 2026-08-13 by Michael on James's behalf, and **agreed by both owners at the joint meeting of
+2026-08-13** (`collab_settled.md` #53). James had already been running it before agreeing to it —
+GitHub #28 filed two entries here, and PR #72 carried them.
+
+**Three things the meeting made binding**, because each fails quietly otherwise: a sweep reads
+*every* queue file, not only its own — a page owed edits by both owners that gets half-corrected
+looks deliberate, which is worse than one that is obviously stale. An applied entry is tagged
+`edited — please verify` by whoever ran the sweep, and **only the queue's owner deletes it**, because
+the person who knows what the page should say is the one who raised the entry. And the sweep is a
+standing task on an alternating owner, one per meeting cycle.
 
 The companion file is `documentation/mdube_edits.md`, which carries the same rules and the same
 format. Neither is the master copy; if the two ever disagree about *process*, `collab.md` #53 and
