@@ -68,37 +68,48 @@ Loading a parked task while another is active means both move, because everythin
 Never read a parked task's plan "in place" as a shortcut. Two directories containing a live plan is
 the state this whole layout exists to prevent.
 
-## 0.5. Check for cross-machine divergence — before reading anything as true
+## 0.4. Work in the dedicated `main` worktree, not the branch checked out here
 
-These directories are tracked so a task can be picked up on another machine, which introduces the
-one failure the old per-person layout could not have: **you, against yourself, from two machines.**
-
-`handoff.md` carries a stamp written by `/save`:
-
-```markdown
-**Machine:** `<hostname>` · saved <YYYY-MM-DD HH:MM> · <commit SHA>
-```
-
-Check three things and **stop and report if any disagrees** — do not merge, do not reset, do not
-"fix" it:
+**Every `.claude/work/` path in this skill is inside a separate worktree pinned to `main`**, never
+the working tree this session is coding in — `CLAUDE.md`, "`.claude/work/` lives in a dedicated
+`main` worktree" has the full reasoning.
 
 ```bash
-git status --short .claude/work/<owner>/     # uncommitted local work the other machine cannot see
-git fetch origin main --quiet && git log --oneline HEAD..origin/main -- .claude/work/<owner>/
-hostname                                      # against the handoff's Machine: line
+MAIN_TREE="$(git rev-parse --show-toplevel)"
+DOCS_WT="$(dirname "$MAIN_TREE")/$(basename "$MAIN_TREE")-docs"
+[[ -d "$DOCS_WT" ]] || { echo "Missing docs worktree — run: git worktree add \"$DOCS_WT\" main"; exit 1; }
+cd "$DOCS_WT"
 ```
 
-- **A different hostname and origin is ahead** → the other machine did work you do not have. The
-  `pull_main.sh` hook fast-forwards `main` automatically, but **it refuses on a dirty tree**, so a
-  divergence here usually means it declined. Report what it declined and let the user decide.
-- **A different hostname and origin is not ahead** → the other machine ended without `/save`. Its
-  uncommitted work is on that laptop and is invisible from here. Say so explicitly: it is the one
-  failure that looks exactly like "nothing happened".
-- **Local uncommitted changes under `work/<owner>/`** → this machine ended without `/save`. Report
-  them; they are probably the real state.
+The unpark move (step 0), the divergence check (0.5) and every read in step 1 happen inside
+`$DOCS_WT`. The main tree's checked-out branch is never switched or touched by `/load`.
+
+## 0.5. Check for cross-machine divergence — before reading anything as true
+
+Because `$DOCS_WT` is always `main`, this is no longer a "which branch" question — it's whether
+*this machine's* copy of `main` in `$DOCS_WT` agrees with `origin/main`. The one failure the old
+per-person layout could not have still applies: **you, against yourself, from two machines**, each
+running a session and pushing to `main` without the other having pulled first.
+
+```bash
+cd "$DOCS_WT"
+git status --short                  # uncommitted local work from an interrupted session
+git fetch origin main --quiet
+git log --oneline HEAD..origin/main # commits on origin you don't have yet
+git log --oneline origin/main..HEAD # commits you have that origin doesn't — the real divergence
+```
+
+- **Behind, not ahead** → the normal case. `git pull --ff-only` and continue; this is not a
+  divergence, just a worktree that hadn't synced yet.
+- **Both ahead and behind** → a genuine divergence: this machine and another each committed to
+  `main` without syncing. **Stop and report** — do not merge, rebase, or reset. Name both sets of
+  commits and let the user decide. `handoff.md`'s `Machine:` stamp tells you which session wrote
+  which side.
+- **Local uncommitted changes** → this machine ended a previous session without `/save` reaching
+  its push step. Report them; they are probably the real state.
 
 `plan.md` and `history.md` are rewritten in place, so a merge of two versions is a plausible-looking
-file that is nobody's plan. Stopping is always correct here.
+file that is nobody's plan. Stopping on real divergence is always correct here.
 
 ## 1. Read, in this order
 
@@ -127,7 +138,9 @@ a merge artefact to fix, not a decision to follow.
 
 ## 2. Verify the handoff against reality
 
-The handoff may be days old. Treat it as a claim to check, not a fact. Confirm before relying on it:
+**This step runs in the main tree** (`$MAIN_TREE` from step 0.4), not `$DOCS_WT` — it's checking
+the state of the code the handoff describes, not the docs. The handoff may be days old. Treat it as
+a claim to check, not a fact. Confirm before relying on it:
 
 - **Branches.** `git branch --show-current` for every repo the work spans — see `CLAUDE.md`'s repo
   layout. The handoff's manifest may name a branch you are no longer on.
@@ -167,7 +180,8 @@ was written, which is exactly the information the docs can't have.
 - Read-only **except for the unpark move in step 0**, which is the one thing `/load` is allowed to
   change — and only by moving whole files between `parked/<slug>/` and `current/`, never by editing
   their contents. If the docs are wrong, report it and let `/save` or the user fix it.
-- Don't commit, push, or start edits. The unpark move is committed by the next `/save`, not here.
+- Don't commit, push, or start edits. The unpark move is committed by the next `/save`, not here —
+  it happens in `$DOCS_WT` and is left staged/uncommitted there until then.
 - Never touch the other owner's `work/<owner>/` directory.
 - Respect `CLAUDE.md`'s rule on who runs the environment. If verifying something requires a run you
   are not allowed to make, say what you need and ask the user to run it.
