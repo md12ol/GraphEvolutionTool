@@ -2411,3 +2411,20 @@ corrupting whatever else is in there). Non-interactive runs (no TTY) skip this s
 than silently applying or silently guessing.
 
 *#58 third addendum · 2026-08-13 — Michael.*
+
+**Summary for James, so you don't have to reconstruct it from four blocks:** once PR #70 merges
+and you've pulled `main`, your entire setup is two commands from your repo root:
+
+    git checkout main && git pull
+    bash .claude/scripts/setup_docs_worktree.sh
+
+That's it. The script checks your tree is in a safe state, creates a sparse `main` worktree at
+`../GraphEvolutionTool-docs` (only `.claude/work/`, not a second full checkout), writes and opens
+a two-folder VS Code workspace so you can see it, and — with your explicit `[y/N]` confirmation,
+never applied silently — offers to hide the now-stale `.claude/work/` in your code folder's
+Explorer. Say no to that last part and nothing is written; nothing else about your setup depends
+on it. Re-running the script any time is safe and is also how you get the workspace window back if
+you close it. Nothing about how you invoke `/save`, `/park`, `/load`, `/done` or `/start`
+changes — this is all internal to what those skills do.
+
+*#58 summary · 2026-08-13 — Michael.*
