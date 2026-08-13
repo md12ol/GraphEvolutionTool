@@ -136,6 +136,14 @@ actually finished the work.
 Finished tasks land in `.claude/work/archive/<YYYY-MM>_<slug>/` — **tracked and shared**, with no
 owner in the path. A finished task is the project's history; only *live* tasks are per-owner.
 
+**Meeting agendas and minutes** — `.claude/work/meetings/<YYYY-MM-DD>.md`, one file per joint
+meeting, added 2026-08-13. **No owner in the path**, for the same reason as `archive/`: a meeting
+belongs to both of us. Each file is an agenda derived from `collab.md` before the meeting and the
+minutes of that meeting afterwards, carrying a `Status:` of `prepared` → `in progress` → `closed` →
+`executed` that the three meeting skills below read and advance. Direct push to `main`, like the
+rest of `work/`. It is **not** union-merged — one file per date means two people cannot append to
+the same one, which is the condition union merge exists for.
+
 **Reference notes** — `.claude/reference/`, added 2026-08-07. Longer-form notes about how a
 *dependency or toolchain* behaves, where a `traps.md` entry would be too long and a `decisions.md`
 entry would be the wrong shape because nothing was decided. Deliberately **outside `work/`**, so it
@@ -397,6 +405,31 @@ Mechanism in `traps.md`, `auto-delete-does-not-fire-on-a-locally-merged-pr`.
 
 Docs can go stale between sessions. Where the docs and the repo disagree, **the repo wins** —
 report the discrepancy rather than following the stale version.
+
+### Joint meetings — a separate loop, added 2026-08-13
+
+The spec sheet changes only at a joint meeting, and `collab.md` is where the questions for one
+accumulate. Three skills turn that pile into an agenda, a decision, and the edits it implies:
+
+- **`/makeAgenda [date]`** — reads `collab.md`, classifies every unsettled item as
+  **Decide · Ratify · Acknowledge · FYI · Park · Close**, orders them blockers-first, and writes
+  `work/meetings/<date>.md` with a proportionate brief and click-to-answer questions per item.
+  **Rerunnable** — a second call diffs `collab.md` against the SHA in the agenda header and folds in
+  what is new *without touching any section a human already edited or decided*. It never edits
+  `collab.md`.
+- **`/startMeeting [date]`** — walks the agenda one item at a time, asks the prepared questions as
+  buttons, and writes each decision and the file changes it implies into that item's block. It
+  carries a `**Cursor:**`, so a meeting that breaks resumes at the right item. **It edits exactly one
+  file** — every other document waits, because a decision taken at item 3 is routinely changed by
+  item 14.
+- **`/endMeeting [date]`** — executes the consolidated checklist. Working docs go **direct to
+  `main`**; `official_spec_sheet.md`, `get/src/`, `documentation/` and skill frontmatter go on a
+  **branch with a PR**, per the routing table. Both owners decided it, so its commits carry
+  `Co-Authored-By:` the other owner — and it never merges the PR.
+
+**The split between deciding and executing is the point.** A meeting that edits files as it goes
+leaves half-applied decisions when it overruns, and a half-applied meeting is indistinguishable from
+a finished one to the next session.
 
 
 ## Filing issues
