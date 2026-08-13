@@ -342,8 +342,9 @@ impl GraphEvolver {
         // rayon against any Python caller — a run that works and is inexplicably
         // slow, or a host application that freezes, neither pointing back here.
         // `.claude/reference/pyo3-maturin.md` §2 has the measured deadlock.
-        let outcome =
-            Python::attach(|py| py.detach(|| dispatch::evolve(&self.config, &fitness, seed)))?;
+        let outcome = Python::attach(|py| {
+            py.detach(|| dispatch::evolve(&self.config, &fitness, self.base_graph.as_ref(), seed))
+        })?;
 
         // Nothing is stored. `dispatch::erase` has already converted every
         // number out of engine orientation, so this only re-homes the erased

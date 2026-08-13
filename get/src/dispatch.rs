@@ -202,13 +202,17 @@ impl GraphEvolver {
 /// `WeightedIndex` sampler, and doing that per individual would rebuild the
 /// same table `population_size` times.
 ///
-/// The base graph is empty here. `set_base_graph` (GitHub #28) is what will
-/// let a previous run's output seed it; until then every edge-edit run starts
-/// from nothing, which matters because **five of the nine opcodes are inert
-/// on an empty graph** — `Swap`, `Hop` and the three `Local*` all need
-/// existing structure to walk, so early generations do nothing until
-/// `Add`/`Toggle` have built something. Self-correcting, and stated here so
-/// it is not read as a defect.
+/// `base_graph` is what the edit script is applied to: `Some` seeds the run
+/// from a caller-supplied graph — raw data, or a previous run's best edges —
+/// and `None` starts from an empty one. It is cloned rather than borrowed
+/// because the context owns its graph for the whole run, while the caller
+/// keeps theirs for any further runs.
+///
+/// An empty base is the case worth knowing about, because **five of the nine
+/// opcodes are inert on an empty graph** — `Swap`, `Hop` and the three
+/// `Local*` all need existing structure to walk, so early generations do
+/// nothing until `Add`/`Toggle` have built something. Self-correcting, and
+/// stated here so it is not read as a defect.
 ///
 /// # Errors
 ///
@@ -219,6 +223,7 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
     config: &Config,
     gene_length: usize,
     weights: EdgeEditOperationWeights,
+    base_graph: Option<&Graph>,
     rng: &mut R,
 ) -> PyResult<(EdgeEditContext, Vec<EdgeEditGenome>)> {
     let operators = EdgeEditOperators::new(weights).map_err(PyValueError::new_err)?;
@@ -232,8 +237,14 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
         ));
     }
 
+    // Unset means empty, which is the default an unseeded run gets.
+    let starting_graph = match base_graph {
+        Some(graph) => graph.clone(),
+        None => Graph::new(config.network_size, config.max_edge_multiplicity),
+    };
+
     let context = EdgeEditContext {
-        base_graph: Graph::new(config.network_size, config.max_edge_multiplicity),
+        base_graph: starting_graph,
     };
     Ok((context, population))
 }
@@ -304,6 +315,11 @@ pub(crate) fn sda_start<R: Rng + ?Sized>(
 /// which the evolver would use to re-seed its own ChaCha8 and thereby replay the
 /// exact draws that just built the population.
 ///
+/// `base_graph` reaches only the edge-edit arm. The SDA genome generates its
+/// graph rather than editing one, so there is nothing for a base to seed —
+/// which is why `set_base_graph` refuses an SDA-configured evolver outright
+/// instead of accepting a value that dies here.
+///
 /// # Errors
 ///
 /// `ValueError` for any dimension the genome constructors reject. `Config::validate`
@@ -312,6 +328,7 @@ pub(crate) fn sda_start<R: Rng + ?Sized>(
 pub(crate) fn evolve<F: Fitness>(
     config: &Config,
     fitness: &F,
+    base_graph: Option<&Graph>,
     seed: u64,
 ) -> PyResult<ErasedOutcome> {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
@@ -324,8 +341,13 @@ pub(crate) fn evolve<F: Fitness>(
             gene_length,
             operation_weights,
         } => {
-            let (genome_context, population) =
-                edge_edit_start(config, *gene_length, *operation_weights, &mut rng)?;
+            let (genome_context, population) = edge_edit_start(
+                config,
+                *gene_length,
+                *operation_weights,
+                base_graph,
+                &mut rng,
+            )?;
             Ok(run_strategy(
                 config,
                 genome_context,
@@ -657,16 +679,17 @@ mod tests {
         let evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
         let weights = EdgeEditOperationWeights::default();
 
-        let (context, population) = edge_edit_start(&evolver.config, 16, weights, &mut test_rng())
-            .expect("default weights are usable");
+        let (context, population) =
+            edge_edit_start(&evolver.config, 16, weights, None, &mut test_rng())
+                .expect("default weights are usable");
 
         assert_eq!(population.len(), 4, "one individual per population_size");
         for genome in &population {
             assert_eq!(genome.genes.len(), 16, "each genome gets gene_length genes");
         }
 
-        // The base graph comes from config, and is empty until `set_base_graph`
-        // (GitHub #28) exists to seed it.
+        // No base graph passed, so the context gets an empty one sized from
+        // config — the default an unseeded run starts from.
         assert_eq!(context.base_graph.num_nodes, 8);
         assert_eq!(
             context.base_graph.get_edge_list().len(),
@@ -733,6 +756,7 @@ mod tests {
             &evolver.config,
             12,
             weights,
+            None,
             &mut ChaCha8Rng::seed_from_u64(5),
         )
         .expect("first build");
@@ -740,6 +764,7 @@ mod tests {
             &evolver.config,
             12,
             weights,
+            None,
             &mut ChaCha8Rng::seed_from_u64(5),
         )
         .expect("second build");
@@ -747,6 +772,7 @@ mod tests {
             &evolver.config,
             12,
             weights,
+            None,
             &mut ChaCha8Rng::seed_from_u64(6),
         )
         .expect("third build");
@@ -774,6 +800,7 @@ mod tests {
             &evolver.config,
             8,
             EdgeEditOperationWeights::default(),
+            None,
             &mut rng,
         )
         .expect("build");
@@ -863,7 +890,7 @@ mod tests {
             let objective: Box<dyn Fitness> =
                 Box::new(EpiSpread::new(sir_sample_params(sir_of(&config)), 1));
 
-            let outcome = evolve(&config, &objective, 1)
+            let outcome = evolve(&config, &objective, None, 1)
                 .unwrap_or_else(|err| panic!("{name} should complete: {err}"));
 
             // `epi_spread` counts ever-infected and patient zero always counts,
@@ -905,7 +932,7 @@ mod tests {
         let objective: Box<dyn Fitness> =
             Box::new(EpiSpread::new(sir_sample_params(sir_of(&config)), 6));
 
-        let outcome = evolve(&config, &objective, 6).expect("run completes");
+        let outcome = evolve(&config, &objective, None, 6).expect("run completes");
 
         // Row 0 is the starting population, then one per generation.
         assert_eq!(outcome.history.len(), 4, "num_generations + 1 rows");
@@ -969,7 +996,7 @@ mod tests {
         let run = |seed: u64| {
             let objective: Box<dyn Fitness> =
                 Box::new(EpiSpread::new(sir_sample_params(sir_of(&config)), seed));
-            evolve(&config, &objective, seed).expect("run completes")
+            evolve(&config, &objective, None, seed).expect("run completes")
         };
 
         let first = run(4);
@@ -1002,8 +1029,8 @@ mod tests {
         let second: Box<dyn Fitness> =
             Box::new(EpiSpread::new(sir_sample_params(sir_of(&steady)), 2));
 
-        let a = evolve(&generational, &first, 2).expect("generational runs");
-        let b = evolve(&steady, &second, 2).expect("steady-state runs");
+        let a = evolve(&generational, &first, None, 2).expect("generational runs");
+        let b = evolve(&steady, &second, None, 2).expect("steady-state runs");
 
         assert_ne!(
             a.best_edges, b.best_edges,
@@ -1107,7 +1134,9 @@ mod tests {
             config.validate().expect("validates");
             let objective: Box<dyn Fitness> =
                 Box::new(EpiSpread::new(sir_sample_params(sir_of(&config)), 3));
-            evolve(&config, &objective, 3).expect("runs").best_fitness
+            evolve(&config, &objective, None, 3)
+                .expect("runs")
+                .best_fitness
         };
 
         let start = spread_after(unevolved);
