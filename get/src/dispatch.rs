@@ -639,12 +639,15 @@ mod tests {
         assert_eq!(first.evaluate(&graph), second.evaluate(&graph));
     }
 
-    /// A config whose `[genome]` block is `genome_block`, everything else fixed.
-    fn config_with_genome(genome_block: &str) -> Config {
+    /// A config whose `[genome]` block is `genome_block` and whose edge cap is
+    /// `cap`, everything else fixed. The cap is a parameter because the
+    /// cap-narrowing check only bites when a base graph was built under a wider
+    /// one than the run it is fed into.
+    fn config_with_genome_and_cap(genome_block: &str, cap: u32) -> Config {
         let text = format!(
             "population_size = 4\n\
              network_size = 8\n\
-             max_edge_multiplicity = 3\n\
+             max_edge_multiplicity = {cap}\n\
              crossover_rate = 0.8\n\
              mutation_rate = 0.2\n\
              \n\
@@ -663,8 +666,12 @@ mod tests {
     }
 
     fn evolver_with_genome(genome_block: &str) -> GraphEvolver {
+        evolver_with_genome_and_cap(genome_block, 3)
+    }
+
+    fn evolver_with_genome_and_cap(genome_block: &str, cap: u32) -> GraphEvolver {
         GraphEvolver {
-            config: config_with_genome(genome_block),
+            config: config_with_genome_and_cap(genome_block, cap),
             fitness_function: None,
             base_graph: None,
         }
@@ -696,6 +703,93 @@ mod tests {
             0,
             "no edges to start",
         );
+    }
+
+    #[test]
+    fn a_set_base_graph_is_what_the_edge_edit_population_expresses_against() {
+        let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+        let seeded = vec![(0, 1, 2), (3, 4, 1)];
+        evolver
+            .set_base_graph(8, seeded.clone())
+            .expect("a graph matching the config is accepted");
+
+        let (context, _) = edge_edit_start(
+            &evolver.config,
+            16,
+            EdgeEditOperationWeights::default(),
+            evolver.base_graph.as_ref(),
+            &mut test_rng(),
+        )
+        .expect("default weights are usable");
+
+        assert_eq!(
+            context.base_graph.get_edge_list(),
+            seeded,
+            "the population expresses against what was set, not an empty graph",
+        );
+    }
+
+    #[test]
+    fn a_base_graph_whose_node_count_disagrees_with_the_config_is_rejected() {
+        let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+
+        let err = evolver
+            .set_base_graph(9, vec![(0, 1, 1)])
+            .expect_err("9 nodes against a network_size of 8 must be rejected");
+
+        let message = err.to_string();
+        assert!(message.contains('9'), "names the graph's size: {message}");
+        assert!(message.contains('8'), "names network_size: {message}");
+        assert!(evolver.base_graph.is_none(), "nothing stored on rejection");
+    }
+
+    #[test]
+    fn a_base_graph_edge_above_the_configs_cap_is_rejected_rather_than_clamped() {
+        // `Graph::set_edge` clamps an over-cap weight instead of refusing it, so
+        // a graph built under a wider cap would otherwise be narrowed silently
+        // and evolved against — the caller never seeing a different graph from
+        // the one they handed in.
+        let mut evolver =
+            evolver_with_genome_and_cap("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n", 1);
+
+        let err = evolver
+            .set_base_graph(8, vec![(0, 1, 1), (2, 3, 3)])
+            .expect_err("multiplicity 3 against a cap of 1 must be rejected");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("(2, 3)"),
+            "names the offending edge: {message}",
+        );
+        assert!(
+            message.contains("multiplicity 3"),
+            "names the offending value, not just the edge: {message}",
+        );
+        assert!(
+            message.contains('1'),
+            "names the cap it exceeded: {message}"
+        );
+        assert!(evolver.base_graph.is_none(), "nothing stored on rejection");
+    }
+
+    #[test]
+    fn a_base_graph_is_rejected_on_an_sda_configured_evolver() {
+        // The SDA genome generates its graph rather than editing one, so a
+        // stored base would never be read. Accepting it looks, from Python,
+        // exactly like having seeded the run.
+        let mut evolver =
+            evolver_with_genome("[genome]\ntype = \"sda\"\nnum_states = 5\nmax_resp_len = 3\n");
+
+        let err = evolver
+            .set_base_graph(8, vec![(0, 1, 1)])
+            .expect_err("an SDA run has no base graph to seed");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("edge_edit"),
+            "points at what would work: {message}",
+        );
+        assert!(evolver.base_graph.is_none(), "nothing stored on rejection");
     }
 
     #[test]
