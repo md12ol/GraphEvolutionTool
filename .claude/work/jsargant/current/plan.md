@@ -24,26 +24,16 @@ script showing the edge-edit run's starting population expresses the seeded edge
       constructors and all 5 test literals. `cargo test -p get`: 235 passed, 0 failed. Committed
       `f02cdce`, not pushed.
 
-- [ ] Implement `set_base_graph(&mut self, num_nodes: usize, edges: Vec<(usize, usize, u32)>) ->
-      PyResult<()>` as a `#[pymethods]` fn in `lib.rs`, next to `set_fitness_function`. Three
-      checks, all `PyValueError`:
-      1. `num_nodes != self.config.network_size` → reject (§3.1 check 1).
-      2. Genome is not `GenomeConfig::EdgeEdit` → reject (SDA has no base graph, §3.2).
-      3. Any edge's multiplicity exceeds `self.config.max_edge_multiplicity` → reject rather than
-         silently clamp (§3.1 check 2 — "the main stacking trap"). Build the graph with
-         `Graph::new` + `set_edges` only after this check passes.
-      Store the built `Graph` in `self.base_graph`.
-      **Verify by:** unit tests below; `cargo doc -p get --no-deps` renders without warnings.
+- [~] `set_base_graph` landed in `lib.rs` next to `set_fitness_function`, three `PyValueError`
+      checks in the documented order, `Graph` built only after all three pass. `cargo doc` renders
+      it clean (the 8 remaining warnings all pre-date it). **Still `[~]`:** its own behaviour is
+      untested until task 5 below.
 
-- [ ] Thread it through dispatch: add `base_graph: Option<&Graph>` param to
-      `dispatch::evolve` and `dispatch::edge_edit_start` (`dispatch.rs:218,312`);
-      `edge_edit_start` uses `base_graph.cloned().unwrap_or_else(|| Graph::new(config.network_size,
-      config.max_edge_multiplicity))` in place of the current unconditional `Graph::new` at
-      `dispatch.rs:236`. `lib.rs`'s `run()` (`lib.rs:253`) passes `self.base_graph.as_ref()`.
-      Update the doc comment at `dispatch.rs:205` — it currently says #28 "will" do this.
-      **Verify by:** `cargo test -p get` — existing
-      `the_edge_edit_start_sizes_the_population_and_the_empty_base_graph` still passes unmodified
-      (unset case).
+- [x] Threaded through dispatch: `base_graph: Option<&Graph>` on `dispatch::evolve` and
+      `dispatch::edge_edit_start`, `run()` passes `self.base_graph.as_ref()`, stale "#28 will do
+      this" comments replaced. `cargo test -p get` 235 passed; `dead_code` on the field gone.
+      Existing `..._sizes_the_population_and_the_empty_base_graph` passes with its assertions
+      untouched (its call site gained the new `None` argument, unavoidably).
 
 - [ ] Tests in `dispatch.rs`'s `#[cfg(test)]` module: a set base graph is what `edge_edit_start`
       expresses against (context.base_graph equals what was set, not empty); node-count mismatch
