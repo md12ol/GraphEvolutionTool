@@ -24,10 +24,9 @@ script showing the edge-edit run's starting population expresses the seeded edge
       constructors and all 5 test literals. `cargo test -p get`: 235 passed, 0 failed. Committed
       `f02cdce`, not pushed.
 
-- [~] `set_base_graph` landed in `lib.rs` next to `set_fitness_function`, three `PyValueError`
-      checks in the documented order, `Graph` built only after all three pass. `cargo doc` renders
-      it clean (the 8 remaining warnings all pre-date it). **Still `[~]`:** its own behaviour is
-      untested until task 5 below.
+- [x] `set_base_graph` landed in `lib.rs` next to `set_fitness_function`, three `PyValueError`
+      checks in the documented order, `Graph` built only after all three pass. `cargo doc` clean
+      (the 8 remaining warnings all pre-date it); behaviour covered by task 5's tests. `3af041c`.
 
 - [x] Threaded through dispatch: `base_graph: Option<&Graph>` on `dispatch::evolve` and
       `dispatch::edge_edit_start`, `run()` passes `self.base_graph.as_ref()`, stale "#28 will do
@@ -35,12 +34,9 @@ script showing the edge-edit run's starting population expresses the seeded edge
       Existing `..._sizes_the_population_and_the_empty_base_graph` passes with its assertions
       untouched (its call site gained the new `None` argument, unavoidably).
 
-- [ ] Tests in `dispatch.rs`'s `#[cfg(test)]` module: a set base graph is what `edge_edit_start`
-      expresses against (context.base_graph equals what was set, not empty); node-count mismatch
-      rejected with a message naming both numbers; cap-narrowing rejected (e.g. set with weight 3
-      against a cap-1 config) with a message naming the offending edge; `set_base_graph` on an
-      SDA-configured evolver rejected.
-      **Verify by:** `cargo test -p get`, each new test named for the behaviour it checks.
+- [x] Four tests in `dispatch.rs`, one per behaviour, plus a "nothing stored on rejection" assert
+      on each rejecting case. `cargo test -p get`: 239 passed. Teeth verified by disabling the
+      threading and all three checks — exactly those four failed, other 235 passed. `0e48a01`.
 
 - [ ] Doc note on empty-base opcode inertness, per the issue ("needs a doc note so it is not
       misread as a bug") — fold into `set_base_graph`'s own doc comment: unset means empty, and
