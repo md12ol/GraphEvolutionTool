@@ -279,17 +279,6 @@ impl GraphEvolver {
             self.config_toml.clone(),
         ))
     }
-
-    /// Write the best individual and its graph to `filename`.
-    ///
-    /// **Takes `&self` and the evolver holds nothing to write** — the best
-    /// individual lives on the value `run` returns, so this needs re-homing
-    /// onto `PyRunResult` before it can be implemented. `save_logs` already
-    /// made that move; see [`crate::py_result::PyRunResult::save_logs`].
-    fn save_results(&self, filename: &str) -> PyResult<()> {
-        let _ = filename;
-        todo!("write the best genome and edge list to `filename`")
-    }
 }
 
 #[pymodule]

@@ -159,6 +159,37 @@ impl PyRunResult {
 
         Ok(())
     }
+
+    /// Write the best individual to `filename`, and the run's config TOML
+    /// alongside it at `{filename}.toml` — the provenance record §8 promises,
+    /// derived rather than a second argument so callers cannot forget it.
+    ///
+    /// Three sections: the best fitness, the winning genome's
+    /// `Genome::print()` string, and its expressed network as a weighted edge
+    /// list — §6.4's "best individual".
+    pub fn save_results(&self, filename: &str) -> PyResult<()> {
+        let mut file = File::create(filename)
+            .map_err(|err| PyIOError::new_err(format!("could not create {filename}: {err}")))?;
+
+        writeln!(file, "best_fitness = {}", self.best_fitness)
+            .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
+        writeln!(file, "genome = {}", self.best_genome_repr)
+            .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
+        writeln!(file, "\nedges (u,v,multiplicity):")
+            .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
+        for &(u, v, weight) in &self.best_edges {
+            writeln!(file, "{u},{v},{weight}").map_err(|err| {
+                PyIOError::new_err(format!("could not write to {filename}: {err}"))
+            })?;
+        }
+
+        let config_path = format!("{filename}.toml");
+        std::fs::write(&config_path, &self.config_toml).map_err(|err| {
+            PyIOError::new_err(format!("could not write to {config_path}: {err}"))
+        })?;
+
+        Ok(())
+    }
 }
 
 impl PyRunResult {
