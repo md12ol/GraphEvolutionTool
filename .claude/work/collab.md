@@ -2145,6 +2145,28 @@ behalf and is not yet agreed. **Deleting the file is the whole of the rejection*
 it existing. Checked while writing it: James had no open PR and no remote branch, so this collides
 with nothing in flight.
 
+**Agreed — #53 · 2026-08-13 13:27 — James.** Yes to the per-owner queue, and I have been running it
+today rather than only agreeing to it: GitHub #28 filed `#set-base-graph-ships` and
+`#set-base-graph-cap-rejects` into `documentation/jsargant_edits.md`, and PR #72 carries that file
+exactly as PR #71 carried yours. Keeping the file is the whole of the acceptance, by your own terms.
+
+**The rider goes in with it, because it is the part that fails silently:** a sweep reads *every*
+queue file, not only its own. A page owed edits by both of us that gets half-corrected looks
+deliberate, which is worse than one that is obviously stale. Same reasoning as the wrong-owner
+filing case you already designed against.
+
+**On the `CLAUDE.md` bullet:** amend it for *timing* only — the de-badging still has to happen, in
+the sweep rather than the shipping PR — and put my name on it, since you declined to change a rule
+that binds me. I have not touched it here; that is `/endMeeting`'s job or a follow-up commit, not
+something to do inside a `collab.md` reply.
+
+**One caveat I am recording rather than resolving:** this is still downstream of #50. If #50 lands
+on present-only, most of the de-badging obligation this defers stops existing, and the queue becomes
+a smaller thing about `src` line references and stale prose. That does not change my answer — the
+batching argument stands on #27's ten files either way — but #50 should still be taken first.
+
+*(Agreement inside #53 · 2026-08-13 13:27 — James.)*
+
 *#53 addendum · 2026-08-13 01:31 — Michael.*
 
 ### 54. FYI — `get/src` no longer links the spec sheet, and both docs reworks are levelled (8)
@@ -2661,3 +2683,28 @@ only condition union merge exists for.
   half-migrated layout is worse than either end state.
 
 *#62 · raised 2026-08-13 18:45 — Michael.*
+
+**Agreed jointly — #62 · 2026-08-13 13:27 — James and Michael, together in the room.** The migration
+goes ahead: `.claude/` leaves GET's tree entirely, GET gitignores it, and a second repository
+`GET-claude` is cloned *as* that path on each machine. The `main`-pinned worktree from #58 and
+`setup_docs_worktree.sh` are removed as part of the same pass.
+
+**What decided it was the release requirement, not yesterday's friction.** The bootstrap workaround
+and the stale-`collab.md` near-miss are real but are symptoms of pinning a worktree to the one branch
+you also want checked out. The thing neither a worktree nor a `claude-work` branch can do is keep
+`.claude/` out of a wheel and out of a public clone, because `skills/`, `hooks/` and `CLAUDE.md` have
+to sit in the checked-out tree for Claude Code to read them at all — so they ride `main` into every
+clone, and deleting them on a release branch turns every later `main → release` merge into a
+modify/delete conflict on every skill touched since.
+
+**Accepted with the costs named in the item, not waved past.** Archaeology gets harder — "what did
+the plan say when this commit landed" becomes a timestamp lookup across two repos rather than one
+SHA — and we accept that at this size. The sharp edge is that per-machine setup fails *silently*: a
+clone that skipped it has no conventions loaded and says nothing. The `SessionStart` guard checking
+for `.claude/skills/` and stopping with the clone command is part of the migration, not a follow-up.
+
+**It lands as one tracker issue with a checklist, done in one pass** — the directory move is the
+easy part; what makes it work is everything pointing at it. A half-migrated layout is worse than
+either end state.
+
+*(Joint agreement inside #62 · 2026-08-13 13:27 — James and Michael.)*
