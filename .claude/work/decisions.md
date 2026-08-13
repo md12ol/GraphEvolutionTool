@@ -2223,3 +2223,26 @@ table routes by what a change *is*, and this is the case where the same change i
 **Affects:** PR #69; `.claude/CLAUDE.md`'s routing table, which is unchanged — this entry records
 when to route *above* it, not a new row.
 *Recorded 2026-08-13 03:09 — Michael, on the user's question about where each half belonged.*
+
+## 2026-08-13 02:41 — Michael — #21 is built on a stacked branch, not on `main`
+
+**Chose:** branched `mdube_run_output` off `mdube_result_object` (PR #65, open) and merged
+`mdube_per_owner_work_dirs` (PR #69, open) into it, rather than branching GitHub #21 off `main`.
+The merge was clean — the two PRs' file sets are disjoint, `.claude/` + `.gitignore` against
+`get/src` + `documentation/` + `examples/`.
+
+**Why:** #21's scope changed underneath it when #27 landed the result object. `save_logs` and
+`save_results` now have to be re-homed onto `RunResult`, and `RunResult` exists only on #65's
+branch. Branching off `main` would mean writing #21 against the deleted API and then writing it
+again. #69 comes along because its skills and hook are the workflow this session actually runs
+under, and having them absent from the tree makes every `/save` and `/load` behave as the old
+layout.
+
+**Rejected:** waiting for #65 to merge — it is blocked on James, with no date, and #21 is the only
+unblocked issue assigned to Michael. Also rejected cherry-picking just `py_result.rs` out of #65,
+which would fork a file that is under review.
+
+**Affects:** branch `mdube_run_output`, `db5d863`. A PR opened from it before #65 and #69 merge
+shows their commits too; the PR body has to say so. Once both land, merge `main` in and the stack
+flattens.
+*Recorded 2026-08-13 02:41 — Michael, at the `/start` of #21.*
