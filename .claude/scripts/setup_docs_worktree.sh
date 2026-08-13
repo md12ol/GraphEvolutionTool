@@ -77,13 +77,21 @@ else
     say "OK: local 'main' created at $(git rev-parse main)."
 fi
 
-step "Creating the worktree"
-git worktree add "$DOCS_WT" main
+step "Creating the worktree (sparse — only .claude/work/, not a second full checkout)"
+git worktree add --no-checkout "$DOCS_WT" main
+(
+    cd "$DOCS_WT"
+    git sparse-checkout init --no-cone
+    git sparse-checkout set '/.claude/work/*'
+    git checkout main --quiet
+)
 say ""
-say "Done. $DOCS_WT is a permanent checkout of 'main' now. /save, /park, /load, /done and /start"
-say "read and write everything under .claude/work/ there instead of wherever your primary tree"
-say "happens to be checked out — that's the whole fix. You don't do anything differently; the"
-say "skills find it automatically from here on."
+say "Done. $DOCS_WT is a permanent checkout of 'main' now, containing only .claude/work/ — not a"
+say "second copy of the whole repo. /save, /park, /load, /done and /start read and write"
+say "everything under .claude/work/ there instead of wherever your primary tree happens to be"
+say "checked out — that's the whole fix. You don't do anything differently; the skills find it"
+say "automatically from here on. The hook (session_brief.sh) still runs from your primary tree as"
+say "usual — it reads main's content via 'git show', not from this worktree."
 say ""
 say "Verify it end to end:"
-say "  bash \"$DOCS_WT/.claude/hooks/session_brief.sh\""
+say "  ls \"$DOCS_WT/.claude/work\""
