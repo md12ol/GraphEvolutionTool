@@ -2267,6 +2267,27 @@ code), it would leave the task open indefinitely for no gain.
 **Affects:** `.claude/work/mdube/current/plan.md` (now archived) — the "Waiting on James" item
 marked `[x]` with the split noted. `collab.md` #53/#54 remain **Open**, unaffected by this task's
 close.
-*Recorded 2026-08-13 — Michael.*
+*Recorded 2026-08-13 11:20 — Michael.*
 
 ## Task complete: result-object — 2026-08-13
+
+## 2026-08-13 — Michael — closed `per-owner-work-dirs` with `collab.md` #55 still unanswered
+
+**Chose:** to run `/done` on `per-owner-work-dirs` with PR #69 merged but `collab.md` #55 (the
+`/save`/`/park` push carve-out and the rest of the layout write-up) still unreplied. Same reasoning
+as the `result-object` close earlier the same day: the PR-merge half of the "Waiting on James" gate
+is satisfied, and #55 is a courtesy notification rather than something #69's shipped code depends
+on.
+
+**Why:** the layout, hook fixes and skills are already live and working on this machine — this
+session used `/park` and `/load` as real skills against `run-output` and `result-object` and both
+round-tripped correctly, which is direct evidence the shipped design works independent of whether
+James has replied.
+
+**Affects:** `.claude/work/mdube/current/plan.md` (now archived) — all three remaining items closed:
+the PR-merge half of "Waiting on James", the `/park`/`/load` exercise (satisfied by this session's
+own real skill runs), and the hook/skill-frontmatter PR (already inside #69). `collab.md` #55
+remains **Open**, unaffected.
+*Recorded 2026-08-13 11:35 — Michael.*
+
+## Task complete: per-owner-work-dirs — 2026-08-13
