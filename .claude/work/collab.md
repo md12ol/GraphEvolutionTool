@@ -2365,3 +2365,18 @@ than split, same reasoning as PR #69: splitting would leave a state where neithe
 working setup, since the hook and the skills have to agree on where the worktree lives.
 
 *#58 · raised 2026-08-13 — Michael.*
+
+**Addendum to #58, same session:** the worktree above was a full second checkout of `main` — every
+file in the repo, twice on disk. Michael's own reaction to seeing `get/`, `documentation/` and a
+second `.claude/skills` sitting in that folder was "I don't want this duplicated," which is the
+right instinct: none of it is used by anything, it was just what `git worktree add` gives you by
+default. **Now sparse-checked-out to `.claude/work/` only** via `git sparse-checkout`, so the
+worktree contains nothing else — no `get/`, no `documentation/`, no second copy of
+`.claude/skills`/`.claude/hooks`. Verified: a fresh scratch clone through the setup script ends up
+1.1 MB and `find .claude` lists only `work/`. The one-time setup command changed to match — either
+run `bash .claude/scripts/setup_docs_worktree.sh` (now added, checks your tree is safe first and
+reports each step) or the manual four-line sparse-checkout sequence in `CLAUDE.md`. If you already
+ran the plain `git worktree add ... main` from the original wording above, re-run the script — it's
+a no-op once sparse, and safe either way.
+
+*#58 addendum · 2026-08-13 — Michael.*
