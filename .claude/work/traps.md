@@ -548,3 +548,30 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   `f343402` mid-session while this one had uncommitted `RunResult` field edits pending; the stash/
   switch/apply recovery worked cleanly and nothing was lost, but it cost a full stop-and-diagnose.
 - **Added:** 2026-08-13 — two-sessions-sharing-one-checkout-can-cross-wires-on-different-branches
+
+### A failed `gh issue view` writes an empty file, and `-F body=@file` then wipes the issue
+
+- **The trap:** `gh issue view <n> --json body -q .body > body.md` **fails when the working
+  directory is not inside a git repository** — it prints `failed to run git: fatal: not a git
+  repository` to stderr, exits non-zero, and leaves `body.md` **empty**. If the next command is
+  `gh api repos/<owner>/<repo>/issues/<n> -X PATCH -F body=@body.md`, the issue's entire body is
+  replaced with nothing. No warning, no confirmation, and the PATCH reports success.
+- **Why it bites here specifically:** the documented way to append to an issue on this repo is
+  read-modify-write through a file, because `gh issue edit` is broken by the Projects-classic
+  deprecation. A scratchpad directory outside the repo is the natural place to put that file — and
+  that is exactly where the read fails.
+- **The fix:** `cd` into the repo before any `gh issue view`, and **check the file is non-empty
+  before PATCHing it**. `[[ -s body.md ]] || exit 1` is the whole guard.
+- **Recovery, if it already happened:** the previous body is retrievable, and this is the part worth
+  knowing before panicking. GitHub keeps issue-body edit history, reachable only through GraphQL:
+
+  ```
+  gh api graphql -f query='{ repository(owner:"md12ol", name:"GraphEvolutionTool") {
+    issue(number:68) { userContentEdits(first:10) { nodes { editedAt diff } } } } }'
+  ```
+
+  `nodes[0].diff` is the clobbered state, `nodes[1].diff` is the body as it stood before it. Write
+  that back with the same PATCH. Full recovery, nothing lost but the edit trail.
+- **Measured:** 2026-08-13, on issues #68 and #56 — both bodies destroyed and both restored from
+  `userContentEdits` within a few minutes.
+- **Added:** 2026-08-13 — failed-gh-read-plus-file-patch-silently-empties-an-issue-body
