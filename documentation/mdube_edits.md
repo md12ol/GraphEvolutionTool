@@ -71,5 +71,59 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
 
 ## Pending
 
-*Nothing pending. GitHub #27's documentation was applied directly, in the PR that shipped it, before
-this file existed — the site is current as of 2026-08-13.*
+## 2026-08-13 15:04 — Michael — ci_95, seed and run_index now ship on RunResult
+
+- **Trigger:** GitHub #21, `mdube_run_output` branch, commits `5b1f066` and `d187d10`.
+  `GenerationStats` gained `ci_95`; `RunResult` gained `seed`, `run_index` (hard `0` until
+  replicates, #20) and `config_toml`.
+- **Files:** `guide/output.html` (log column table ~L34-51; "Getting the data out" section and its
+  plan-note ~L138-165; the CSV example's `run` column ~L179); `reference/lib.html`
+  (`RunResult`/`GenerationStats` signature blocks ~L288-319; `save_logs`'s own column table already
+  names `ci_95` correctly at ~L342 but the surrounding badge is stale — see the next entry);
+  `status.html` (the "`ci_95`, and the per-row seed and run index" row, ~L98-105).
+- **Now false:** `output.html` marks the `ci_95` and `seed`/`run` log columns `planned`.
+  `lib.rs.html`'s `GenerationStats` signature block lists only `iteration, best_fitness,
+  mean_fitness, std_dev`, with no mention of `RunResult`'s new `seed`, `run_index`, `config_toml`.
+  `status.html`'s row says today's log has only four columns.
+- **Should say:** All shipped. `GenerationStats` is `iteration, best_fitness, mean_fitness,
+  std_dev, ci_95`; `RunResult` additionally carries `seed: int`, `run_index: int` (hard `0` until
+  #20) and `config_toml: str` — the TOML document the run's config was parsed from.
+- **Naming correction:** the site's example column and prose call it `run` (`output.html` L48,
+  L179; `lib.rs.html` L350). The shipped column is `run_index`. Rename throughout.
+- **Badges:** `output.html` — drop `badge-planned` from the `ci_95` row (L44) and the `seed, run`
+  row (L48). `status.html` — delete the "`ci_95`, and the per-row seed and run index" table row
+  (~L98-105) entirely.
+
+*#run-output-ci95-seed · filed 2026-08-13 15:04 — Michael.*
+
+## 2026-08-13 15:04 — Michael — save_logs and save_results are real, and live on RunResult, not the evolver
+
+- **Trigger:** GitHub #21, same branch, commits `79003ac` and `d30d31d`. Both are `pub fn` on
+  `py_result::PyRunResult`, not `&self` stubs on `GraphEvolver`. `grep -rn "todo!" get/src` is now
+  empty.
+- **Files:** `reference/lib.html` (the two `api-item` blocks ~L321-380, and the `plan-note` at
+  ~L382-391); `guide/output.html` ("Getting the data out" section ~L138-165, and its plan-note);
+  `status.html` (the "`save_logs` / `save_results`" row, ~L106-113).
+- **Now false:** the site calls these as `evolver.save_logs(...)` / `evolver.save_results(...)`
+  everywhere. `lib.rs.html`'s plan-note says both are `todo!()` placeholders that panic, at
+  `lib.rs:266-269` and `:272-275`, and still take `&self` on the evolver. `status.html` says "Both
+  raise."
+- **Should say:** both are called on the **result**, not the evolver:
+  `result.save_logs(filename: str) -> None` and `result.save_results(filename: str) -> None`,
+  defined in `py_result.rs` (`PyRunResult::save_logs`, `PyRunResult::save_results`). `save_logs`
+  writes a header then one row per logged iteration, columns
+  `iteration,best_fitness,mean_fitness,std_dev,ci_95,seed,run_index`. `save_results` writes the
+  best fitness, the winning genome's `print()` string and its edge list to `filename`, and the
+  run's config TOML to `{filename}.toml` alongside it — derived from `filename` rather than a
+  second argument, so it can't be forgotten. Verified against real Python: `maturin develop`, a
+  full run, `save_logs` + `pandas.read_csv` + a matplotlib plot, `save_results` +
+  `Config::from_toml_str` round-tripping the written TOML.
+- **Badges:** `reference/lib.html` — drop `badge-planned` from both `api-item` blocks (L325, L369)
+  and delete the now-false plan-note (L382-391); replace with what the methods actually do, or
+  drop it — sweep's call. `guide/output.html` — the "Getting the data out" section (L138) mixes a
+  shipped half (single-run `save_logs`/`save_results`) with an unshipped half (`runs=30,
+  max_cores=8`, the list return, #20) under one `planned` badge; split it rather than dropping the
+  badge outright — the single-run calls are real, the replicate signature is not.
+  `status.html` — delete the "`save_logs` / `save_results`" row (~L106-113) entirely.
+
+*#run-output-save-methods · filed 2026-08-13 15:04 — Michael.*
