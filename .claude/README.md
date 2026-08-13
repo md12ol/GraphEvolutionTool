@@ -1,7 +1,7 @@
 # `.claude/` — how work is tracked in this project
 
 Claude Code sessions are stateless. This directory is the memory: what we're building, what was
-decided, what's temporarily hacked, and where the last session stopped. Four slash commands
+decided, what's temporarily hacked, and where the last session stopped. Five slash commands
 maintain it.
 
 You don't have to read the rest of this file to use it. The short version:
@@ -10,7 +10,8 @@ You don't have to read the rest of this file to use it. The short version:
 /setup   once per project, right after install — fills in CLAUDE.md
 /start   at the beginning of a piece of work
 /save    last thing before you stop, every session
-/load    first thing when you come back
+/load    first thing when you come back — /load <slug> resumes a parked task
+/park    set a blocked task down without losing it
 /done    when the work is finished
 ```
 
@@ -24,32 +25,41 @@ You don't have to read the rest of this file to use it. The short version:
                             └── /load ◀────┘   (once per session)
                                   │
                             finished? ──▶ /done <slug> ──▶ archive/
+                                  │
+                            blocked?  ──▶ /park <slug> ──▶ parked/<slug>/
+                                                              │
+                                            /load <slug> ◀────┘
 ```
 
 - **`/setup`** runs once, ever. It inspects the repo, asks what it can't infer — above all *which
   commands you run yourself and the agent must not* — and turns the template's `FILL IN` blocks into
   this project's rules. If `CLAUDE.md` has no `FILL IN` blocks left, it's already done.
 
-- **`/start`** agrees the objective and writes `work/current/plan.md` **before any code**. It refuses to
-  run if there's an unfinished task in `work/current/`.
+- **`/start`** agrees the objective and writes `current/plan.md` **before any code**. It refuses to
+  run if there's an unfinished task in `current/`.
 - **`/save`** is the important one. It re-reads the session for things that were *discussed but
   never landed* — agreed then diverted, noticed in passing, asked and unanswered — and asks you
-  about the ones it can't settle. Then it updates every doc and writes the next-session prompt.
+  about the ones it can't settle. Then it updates every doc, writes the next-session prompt, and
+  commits and pushes your work directory so the next session can be on another machine.
 - **`/load`** reads that prompt and **checks it against the repo** before trusting it. Docs go
-  stale; where they disagree with the code, the code wins.
+  stale; where they disagree with the code, the code wins. `/load <slug>` resumes a parked task.
+- **`/park <slug>`** saves, then sets a **blocked** task down in `parked/<slug>/` with a
+  `Blocked on:` line, so you can start something else without losing it.
 - **`/done`** settles every loose end — unfiled issues, hotfixes whose removal condition is now
-  met, unverified items — then archives the task.
+  met, unverified items — then archives the task. It refuses a parked task; resume it first.
 
 ## The files
 
-**Task-scoped** — `work/current/`, archived by `/done`:
+**Task-scoped** — `work/<owner>/current/`, archived by `/done`, or parked by `/park` into
+`work/<owner>/parked/<slug>/`. `<owner>` is `mdube` or `jsargant`, resolved from
+`git config user.email` — never assumed:
 
 | | |
 |---|---|
-| `work/current/plan.md` | objective + task list. **A task list, not a record** — kept under ~600 lines |
-| `work/current/plan_superseded.md` | original wording of finished tasks. Reference only |
-| `work/current/history.md` | append-only session log for this task |
-| `work/current/handoff.md` | the next-session prompt. Overwritten every save |
+| `current/plan.md` | objective + task list. **A task list, not a record** — kept under ~600 lines |
+| `current/plan_superseded.md` | original wording of finished tasks. Reference only |
+| `current/history.md` | append-only session log for this task |
+| `current/handoff.md` | the next-session prompt, with a `Machine:` stamp. Overwritten every save |
 
 **Persistent** — these describe the *code*, so they outlive any one task:
 
@@ -99,7 +109,10 @@ naming what would prove it.
 - **Check `Owner:` in `hotfixes.md`.** An uncommitted hotfix of theirs is not in your tree.
 - **Hook and `settings.json` changes go through a PR, both ways.** They execute on the other
   person's machine at session start, on their next pull, without them reading the diff.
-- **`work/current/` is yours alone; `work/archive/` is shared**, so finished tasks reach both.
+- **`work/<owner>/` is yours alone but tracked; `work/archive/` is shared**, so finished tasks reach
+  both. Tracked live tasks are what let you pick one up on another machine — which makes the
+  remaining conflict *you against yourself*, from two laptops. `handoff.md` carries a `Machine:`
+  stamp for exactly that, and `/load` stops and reports rather than merging a plan file.
 - **`[x]` is per-machine.** Never promote someone else's `[~]` because their notes read as done.
 
 ## Backups
