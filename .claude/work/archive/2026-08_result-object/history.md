@@ -4,6 +4,19 @@ Append-only session log for this task, newest session first.
 Maintained by `/save`; archived by `/done`.
 
 ---
+## Session 2026-08-13 (cont. 3): unparked and closed — PR #65/#66 merged, #53/#54 carried forward
+
+Unparked via `/load result-object`, swapping `run-output` out to make room. Confirmed PR #65 and
+#66 both merged (`gh pr list --state all`); `collab.md` #53 and #54 remain unanswered by James on
+`main`. Michael decided not to hold the task open on those two collab items — neither gates #27's
+own correctness — so the last plan task ("Waiting on James") closed on the PR-merge half of its
+`Verify by:` and carries the collab replies forward as open collab business, not task business.
+
+**Git manifest.** `mdube_run_output`, clean, nothing uncommitted beyond this save's own doc edits.
+`main` carries #65 and #66's commits. No source touched this session.
+
+*Logged 2026-08-13 — Michael.*
+
 ## Session 2026-08-13 (cont. 2): both queued tracker edits pushed, then the task was parked
 
 Sent the two edits `plan.md` had been holding, each by `gh api ... -X PATCH -F body=@file` because

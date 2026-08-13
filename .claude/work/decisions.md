@@ -2246,3 +2246,27 @@ which would fork a file that is under review.
 shows their commits too; the PR body has to say so. Once both land, merge `main` in and the stack
 flattens.
 *Recorded 2026-08-13 02:41 — Michael, at the `/start` of #21.*
+## 2026-08-13 — Michael — closed `result-object` (#27) with `collab.md` #53/#54 still unanswered
+
+**Chose:** to run `/done` on the `result-object` task even though its last plan item's own
+`Verify by:` named two conditions — PR #65/#66 merged, and `collab.md` #53/#54 answered — and only
+the first had happened. The PR-merge half is done (confirmed via `gh pr list --state all`); #53 and
+#54 carry forward as open `collab.md` items rather than blocking this task's close.
+
+**Why:** #53 (per-owner doc-queue convention) and #54 (sheet-linking amendment, an FYI already
+pushed direct) are both about future process, not about whether GitHub #27's shipped code is
+correct. The task's own `Verify by:` bundled a real gate (the PR merges) with a courtesy check-in
+that doesn't actually gate this task's deliverable. Holding a finished, merged feature open
+indefinitely on an unrelated unanswered reply is the kind of program-not-task drift `CLAUDE.md`
+warns `/done` exists to prevent.
+
+**Rejected:** waiting for James's reply before closing — the safer literal reading of the plan's
+`Verify by:`, but with no forcing function (no deadline, no dependency of #53/#54 on this task's
+code), it would leave the task open indefinitely for no gain.
+
+**Affects:** `.claude/work/mdube/current/plan.md` (now archived) — the "Waiting on James" item
+marked `[x]` with the split noted. `collab.md` #53/#54 remain **Open**, unaffected by this task's
+close.
+*Recorded 2026-08-13 — Michael.*
+
+## Task complete: result-object — 2026-08-13
