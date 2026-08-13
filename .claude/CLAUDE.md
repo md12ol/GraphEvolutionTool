@@ -34,14 +34,41 @@ sheet.
 
 Session state lives in `.claude/`:
 
-**Task-scoped** — `.claude/work/current/`, archived by `/done` when the task ends:
+**Task-scoped** — `.claude/work/<owner>/current/`, archived by `/done` when the task ends, or moved
+to `.claude/work/<owner>/parked/<slug>/` by `/park` when the task is blocked:
 
 | File | |
 |---|---|
-| `work/current/plan.md` | objective + tasks. `[ ]` pending · `[x]` done **and verified** · `[~]` done, NOT verified. **A task list, not a record** — see the size rules below |
-| `work/current/plan_superseded.md` | original wording of tasks now done. Reference only, never actionable |
-| `work/current/history.md` | append-only session log for this task |
-| `work/current/handoff.md` | prompt for the next session — **read this first** |
+| `current/plan.md` | objective + tasks. `[ ]` pending · `[x]` done **and verified** · `[~]` done, NOT verified. **A task list, not a record** — see the size rules below |
+| `current/plan_superseded.md` | original wording of tasks now done. Reference only, never actionable |
+| `current/history.md` | append-only session log for this task |
+| `current/handoff.md` | prompt for the next session — **read this first**. Carries a `Machine:` stamp and the SHA the save was written against |
+
+**`<owner>` is `mdube` or `jsargant`, resolved from `git config user.email` — checked, never
+assumed** (added 2026-08-13). The mapping table lives in `.claude/hooks/session_brief.sh` and in the
+`load`, `save`, `park` and `start` skills; an unrecognised address stops and asks. Never read or
+write the other owner's directory.
+
+**These are tracked, and that is the point** — changed 2026-08-13, when `work/current/` stopped
+being gitignored. The old reason for ignoring it was that two people must not fight over one live
+plan; the per-owner *path* now serves that reason, so nothing is gained by hiding the files and one
+thing is lost: a task that lives on one laptop cannot be picked up on another. `/save` commits and
+pushes `work/<owner>/` as its last step, which is a deliberate, narrow exception to "don't commit or
+push unless asked" — see Conventions.
+
+**The hazard this introduces is you-versus-you, not you-versus-James.** Two machines editing one
+`plan.md` is a real conflict on a file that is rewritten in place, which no merge strategy can help
+with. So `handoff.md` carries `Machine: <hostname> · saved <ts> · <SHA>`, and `/load` **stops and
+reports** on divergence rather than merging or resetting. Note `pull_main.sh` fast-forwards `main`
+at session start but **refuses on a dirty tree** — a divergence usually means it declined.
+
+**Parking a blocked task.** `/park <slug>` runs `/save`, stamps `handoff.md` with `Blocked on:` —
+the concrete unblocking event, not "waiting on James" — and moves `current/` to `parked/<slug>/`,
+leaving the desk clear for `/start`. `/load <slug>` brings it back, parking whatever is live to make
+room. Parked slugs carry **no date prefix**: `work/archive/` uses `<YYYY-MM>_<slug>` because it is a
+chronological record, while a parked task is live and takes its date from the plan. `/done` refuses
+a parked task — resume it first, because `/done`'s final save has to run against the session that
+actually finished the work.
 
 **Persistent** — these describe the *code*, not the work, so they outlive the task:
 
@@ -54,8 +81,8 @@ Session state lives in `.claude/`:
 | `traps.md` | permanent gotchas about this workspace — the things that bite every session |
 | `collab.md` | **questions and overrides between the owners.** Post a question for the other to answer, or flag a decision on your side that conflicts with theirs. Answers are appended *inside* the item, stamped. Settled items move to **Settled** and compress to a one-line disposition once their reasoning lives in `decisions.md` or the spec — never edit someone else's words, and never drop the only copy of a reason |
 
-Finished tasks land in `.claude/work/archive/<YYYY-MM>_<slug>/` — **tracked**, so a finished
-task's record reaches the other owner. Only `work/current/` is per-person.
+Finished tasks land in `.claude/work/archive/<YYYY-MM>_<slug>/` — **tracked and shared**, with no
+owner in the path. A finished task is the project's history; only *live* tasks are per-owner.
 
 **Reference notes** — `.claude/reference/`, added 2026-08-07. Longer-form notes about how a
 *dependency or toolchain* behaves, where a `traps.md` entry would be too long and a `decisions.md`
@@ -73,8 +100,8 @@ borrowed configuration is evidence that something works somewhere, not that it i
 
 Left alone it grows without bound. In the project this template came from it reached **1432 lines**
 and had to be halved by hand. Evidence, rationale and superseded wording had all piled up in it, and
-each of those already has a file that owns it: what happened → `work/current/history.md` · why →
-`decisions.md` · original wording of a finished task → `work/current/plan_superseded.md` · temporary code
+each of those already has a file that owns it: what happened → `work/<owner>/current/history.md` · why →
+`decisions.md` · original wording of a finished task → `work/<owner>/current/plan_superseded.md` · temporary code
 → `hotfixes.md` · someone else's work → `issues.md`.
 
 - **Completed item: ≤ 3 lines**, compressed **when you tick it** — what was done, the one piece of
@@ -207,6 +234,7 @@ where review actually buys something:
 | `settings.json`, `hooks/` | **Feature branch + PR** — these execute on the other person's machine at session start (see rule 2 above) |
 | `/official_spec_sheet.md` | **PR, and only after a joint meeting** — see the top of this file |
 | `.claude/work/*.md` — `decisions.md`, `traps.md`, `issues.md`, `hotfixes.md`, `collab.md` | Direct push to `main` is fine. They carry no behaviour, and a trap that is not on `main` protects nobody. Note only `decisions.md` and `collab.md` are union-merged (rule 1 above) |
+| `.claude/work/<owner>/` — live and parked task directories | Direct push to `main`, **by `/save` and `/park` automatically** (added 2026-08-13). Nobody reviews your own plan, and an unpushed handoff is the failure these directories were tracked to prevent. Union merge does not reach them — verified with `git check-attr merge` |
 | `.claude/CLAUDE.md` | Direct push is permitted, but **prefer a PR when the change binds the other owner's practice** rather than recording a fact |
 | `.claude/skills/*/SKILL.md` — **frontmatter** (`model:`, `allowed-tools:`, any hook-adjacent key) | **Feature branch + PR.** Changing it changes what executes on the other person's machine on their next pull, without them reading it |
 | `.claude/skills/*/SKILL.md` — **body** | Direct push to `main` is fine. It is prose we both read anyway, and a PR round-trip in front of a typo fix is how a rule starts being skipped |
@@ -296,19 +324,24 @@ Mechanism in `traps.md`, `auto-delete-does-not-fire-on-a-locally-merged-pr`.
 **Start the task**
 
 1. New task
-2. `/start` — agree the objective, write `work/current/plan.md` **before any code**
+2. `/start` — agree the objective, write `work/<owner>/current/plan.md` **before any code**
 3. Work
 
 **Then loop, once per session** ⟳
 
-4. `/save` — update every doc, write the next-session prompt · *last thing before you stop*
-5. `/load` — read the handoff, check it against the repo, report · *first thing when you return*
+4. `/save` — update every doc, write the next-session prompt, push · *last thing before you stop*
+5. `/load [slug]` — read the handoff, check it against the repo, report · *first thing when you return*
 6. Work
 7. Not finished? → back to **4**
 
+**Blocked, not finished**
+
+- `/park <slug>` — save, then set the task down in `work/<owner>/parked/<slug>/` and `/start`
+  something else. `/load <slug>` picks it up again, parking whatever is live to make room.
+
 **Finish the task**
 
-8. `/done <slug>` — settle every loose end, then archive `work/current/` → `archive/<YYYY-MM>_<slug>/`
+8. `/done <slug>` — settle every loose end, then archive `work/<owner>/current/` → `archive/<YYYY-MM>_<slug>/`
 
 Docs can go stale between sessions. Where the docs and the repo disagree, **the repo wins** —
 report the discrepancy rather than following the stale version.
@@ -438,7 +471,13 @@ reach for `--json` on reads and the REST API on writes:
   introduced a problem, rather than auditing one large diff at PR time. Added 2026-08-05 — Michael.
 - Absolute dates only, never "today" or "last session".
 - Reference code as `path:line`.
-- Don't commit or push unless asked.
+- Don't commit or push unless asked. **One exception, added 2026-08-13: `/save` and `/park` commit
+  and push `.claude/work/<owner>/` — that path, at that step, and nothing else.** The exception
+  exists because the live task directories are tracked precisely so a task can be resumed on another
+  machine, and a save that never reaches `origin` fails silently: you find out on the other laptop,
+  usually a day late. It does not widen. Code, the persistent docs and the spec sheet each still
+  need their own explicit instruction, every time, and a `/save` that finds uncommitted source
+  leaves it alone and says so.
 - Flag temporary work as temporary and add it to `hotfixes.md`.
 - Date rules when you change them, and supersede rather than overwrite: strike the old line through
   and add the new one with its date and reason. The reversal trail is worth more than a tidy file.
@@ -447,7 +486,7 @@ reach for `--json` on reads and the REST API on writes:
 
 **Write project state into the file that owns that lifetime**, not into a memory file:
 temporary code → `hotfixes.md` · someone else's work → `issues.md` · why → `decisions.md` ·
-what happened → `work/current/history.md` · what's next → `work/current/plan.md` · workspace gotchas →
+what happened → `work/<owner>/current/history.md` · what's next → `work/<owner>/current/plan.md` · workspace gotchas →
 `traps.md` · how we work → this file.
 
 The reason is not that memory is useless — it is that a second, auto-loading store of the same facts
