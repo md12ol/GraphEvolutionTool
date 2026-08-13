@@ -5,6 +5,20 @@ Maintained by `/save`; archived by `/done`.
 
 ---
 
+## Session 2026-08-13: parked to pick up `result-object` — PRs #65, #66, #69 confirmed merged
+
+**What this session did.** No code changes. Confirmed via `gh pr list --state all` that PR #65
+(`RunResult`), #66 (LF `.gitattributes`) and #69 (per-owner work dirs) are all now merged — none of
+task 1's stacked-branch premise changed, but `plan.md`'s "stacked on unmerged work" note was stale
+and is corrected. `result-object` (blocked on #65/#66 and `collab.md` #53/#54) is now unblocked on
+the PR side and has real queued work (tracker edits for #21 and #68, pending user confirmation), so
+this task is parked to pick it up. `per-owner-work-dirs` remains parked — unblocked on #69 but its
+`collab.md` #55 reply is still outstanding.
+
+**Git manifest.** `mdube_run_output`, clean, nothing uncommitted, not pushed, no PR open. `origin/main`
+is 8 commits ahead of this branch (collab items #55–#57 landed there); merging `main` in is the
+first thing the next session on this task should do.
+
 ## Session 2026-08-13: task opened and the stacked branch created
 
 **What this session did.** `/start` for GitHub #21, chosen over #27 because #27's task

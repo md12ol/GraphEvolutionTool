@@ -13,10 +13,11 @@ single run this API still does, so #20 only has to fill it in. `set_base_graph` 
 confidence band, which §6.4 assigns to the user aggregating replicate logs. Any edit to
 `documentation/` — those go in `documentation/mdube_edits.md` per `collab.md` #53.
 
-**Stacked on unmerged work.** `RunResult` exists only on `mdube_result_object` (PR #65, open), and
-the per-owner workflow only on `mdube_per_owner_work_dirs` (PR #69, open). Task 1 branches off the
-first and merges the second; their file sets are disjoint. When #65 and #69 land, merge `main` in
-and the stack flattens. A PR from this branch before then shows their commits too — say so in it.
+**Stacked on unmerged work.** `RunResult` was added on `mdube_result_object` (PR #65) and the
+per-owner workflow on `mdube_per_owner_work_dirs` (PR #69); task 1 branched off the first and merged
+the second. **Both merged 2026-08-13** (confirmed via `gh pr list --state all`), along with PR #66 —
+`git merge main` into this branch is now safe and should happen before the next task starts, per
+the stack-cost note in `handoff.md`.
 
 ## Tasks
 
