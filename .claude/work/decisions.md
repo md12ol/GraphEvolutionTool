@@ -2590,3 +2590,43 @@ to write, so they move onto `RunResult` under GitHub #21.
 `run() -> RunResult`, which would be correct now and stale the moment #21 lands.
 
 *boundary-diagram-locates-only · decided at the joint meeting of 2026-08-13 — Michael & James.*
+
+## 2026-08-13 — James — `run` always returns a list, even at `n_runs=1`
+
+**Chose:** `GraphEvolver.run` returns `Vec<PyRunResult>` unconditionally rather than a bare
+`RunResult` at `n_runs=1` and a list only for `n_runs>1`. Matches §8.1 literally.
+
+**Why:** a return type that changes shape with an argument's *value* rather than its type is worse
+than one that is uniformly a list — a caller can't know from the call site alone which they're
+getting. Blast radius was measured before writing any code, not assumed: 7 `GraphEvolver::run` call
+sites, all in `dispatch.rs`'s own test module, nothing external, since nothing has shipped to PyPI
+yet.
+
+**Rejected:** list only when `n_runs>1`, which keeps today's single-run call backward compatible but
+diverges from the sheet's literal wording without a `collab.md` item recording the divergence.
+
+**Affects:** `get/src/lib.rs`, `GraphEvolver::run` (GitHub #20, branch `jsargant_replicate_runs`).
+The single-run call sites in `dispatch.rs`'s tests now destructure a one-element array, which
+asserts the length rather than ignoring it.
+*run-always-returns-a-list · recorded 2026-08-13 — James, before coding task 3 of #20.*
+
+## 2026-08-13 — James — a replicate's `RunResult.seed` is the master, not its own drawn seed
+
+**Chose:** every `RunResult` in a replicate batch carries the **master** seed the caller passed to
+`run`, not the seed `replicate_seeds` derived for that particular run.
+
+**Why:** `(master, run_index)` is the pair that reproduces a replicate — call `run` again with the
+same master and take that index. The derived per-run seed cannot do this: handing it back as `seed`
+would make the stream draw from *it* instead, producing a different run. Recording the derived seed
+would look like provenance while being unusable as provenance.
+
+**Caught, not designed in advance.** The first implementation recorded the derived seed.
+`dispatch::tests::run_returns_a_complete_result_object` — an existing test, not one written for this
+task — failed on it (`left: <derived>, right: 8`), which is what surfaced the reasoning above.
+
+**Rejected:** the derived seed, for the reason above.
+
+**Affects:** `get/src/lib.rs`, `GraphEvolver::run` (GitHub #20). `save_logs`'s per-row provenance
+columns inherit this: every row of a replicate's log carries the master, not a value unique to that
+run.
+*replicate-seed-is-the-master · recorded 2026-08-13 — James, at task 3 of #20.*

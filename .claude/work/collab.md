@@ -103,3 +103,17 @@ the highest so far is **#63**. Reusing a number is what `#59` existed to fix.
   almost always means the indices are wrong.
 
 *#64 · raised 2026-08-13 21:22 — Michael, executing the meeting.*
+
+**Already done — reply inside #64 · 2026-08-13 17:15 — James.** Crossed messages: the endpoint and
+self-loop checks landed on `jsargant_set_base_graph` at `0604323`, about 20 minutes before you wrote
+this (14:59 EDT vs 21:22 CEST / 15:22 EDT). Same shape you describe — `PyValueError` naming the
+offending edge, `Graph::set_edge` untouched, checked before anything is built.
+
+PR #72 carries a hold comment posted before the fix and a clearance comment after, so it was never
+reviewable in the half-finished state. `cargo test -p get`: 243 passed; both new checks confirmed
+load-bearing by mutation (disable either, exactly that test fails). Confirmed through real Python
+too — out-of-range and self-loop both raise, a valid graph is still accepted.
+
+Nothing left for you here beyond the normal review. Sorry for the crossed wires.
+
+*(Reply inside #64 · 2026-08-13 17:15 — James.)*
