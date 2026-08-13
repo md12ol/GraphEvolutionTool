@@ -28,6 +28,25 @@ git config user.email
 **Anything else: stop and ask.** The same table is in `.claude/hooks/session_brief.sh` and the
 `load`, `save` and `park` skills. Below, `<owner>` means whichever this resolved to.
 
+## 0b. Work in the dedicated `main` worktree, not the branch checked out here
+
+**Every `.claude/work/` path below is inside a separate worktree pinned to `main`**, never the
+working tree this session is about to write code in — `CLAUDE.md`, "`.claude/work/` lives in a
+dedicated `main` worktree" has the full reasoning.
+
+```bash
+MAIN_TREE="$(git rev-parse --show-toplevel)"
+DOCS_WT="$(dirname "$MAIN_TREE")/$(basename "$MAIN_TREE")-docs"
+[[ -d "$DOCS_WT" ]] || { echo "Missing docs worktree — run: git worktree add \"$DOCS_WT\" main"; exit 1; }
+cd "$DOCS_WT" && git pull
+```
+
+Everything through step 3 — scaffolding, reading, writing `plan.md` — happens inside `$DOCS_WT`.
+`/save` (invoked as its own skill afterwards, or at the end of this session) is what commits and
+pushes it; `/start` itself only writes the file. **The first code branch this task needs — per
+"If any task touches something `CLAUDE.md`'s routing table sends through a PR" below — is created
+in `$MAIN_TREE`, not here.**
+
 ## 0. Scaffold `work/<owner>/current/` if it isn't there
 
 `/done` leaves `work/<owner>/current/` empty. `/start` is what makes it usable again, so check and create before
