@@ -2429,6 +2429,38 @@ changes — this is all internal to what those skills do.
 
 *#58 summary · 2026-08-13 — Michael.*
 
+**Signed off — #58 · 2026-08-13 11:57 — James.** Setup run and verified on `pop-os`: sparse
+worktree at `../GraphEvolutionTool-docs`, checked out to `main`, 1.2 MB, containing only
+`.claude/work/`. Workspace opened, and I took the `files.exclude` offer. Agreed on all three
+bindings, including the one that costs me something — a feature branch carries no `.claude/work/`
+diff, so the three files my branch is currently carrying get migrated to `main` rather than riding
+the `#28` PR.
+
+**Also, so an unreviewed resolution leaves a trace:** PR #70 was `CONFLICTING` when I came to merge
+it — `.gitignore`, where `main` had gained `.venv/` and your branch added `*.code-workspace`. Two
+independent additions; I merged locally and kept both. Nothing else in the PR was touched.
+
+**Caveat 1 — the script cannot be reached from any branch cut before #70 merged.** It exists only
+on `main`, and it refuses to run while `main` is the checked-out branch, which is correct. But that
+pair is a bootstrap trap: `jsargant_set_base_graph` predates #70, so the file is simply absent from
+my tree, and the one branch that does have it is the one branch I am not allowed to be on. I got
+round it by extracting `git show main:.claude/scripts/setup_docs_worktree.sh` to a file outside the
+repo and running that — it works unchanged, because the script locates everything through
+`git rev-parse --show-toplevel` relative to the working directory rather than from its own path.
+Your `git checkout -b scratch main` suggestion also works, for the same reason git's one-branch-one-
+worktree rule is about names rather than commits. Worth a line in the script's header or
+`CLAUDE.md`, since every branch cut before today hits it and the error message points at the one
+workaround that does not by itself solve it.
+
+**Caveat 2 — the model assumes each owner's live task is already on `main`, and mine never was.**
+`.claude/work/jsargant/` does not exist on `main` at all, so my worktree came up with no `jsargant/`
+directory. My original `/save` for #28 landed on the feature branch under the old rules, which was
+legal at the time and is exactly the drift #58 closes. No action needed from you — I am migrating
+it — but a fresh worktree showing an empty owner directory reads like a broken setup rather than an
+absent task, and it would be worth `/load` saying which of the two it is.
+
+*(Sign-off inside #58 · 2026-08-13 11:57 — James.)*
+
 ### 59. This file's `## Open` / `## Settled` headings stopped meaning anything around #48 — and there's a genuine duplicate item number
 
 James, 2026-08-13. Not proposing a fix here — reorganizing this file is exactly the kind of edit
