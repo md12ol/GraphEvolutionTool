@@ -11,9 +11,19 @@ handoff_transfer_from_c++.md
 handoff_edge_multiplicity_cap_simplification.md
 **/target/
 
-# .claude machinery is tracked; personal settings and the LIVE task are not.
-# work/archive/ is deliberately tracked — a finished task's record is shared history, and ignoring
-# it left every /done stranded on one laptop. Only work/current/ stays per-person, because two
-# people must not fight over one live plan.
+# .claude machinery is tracked; only personal settings are not.
+#
+# CHANGED 2026-08-13: `.claude/work/current/` used to be ignored, on the grounds that two people must
+# not fight over one live plan. That reason is now served by the PATH rather than by ignoring —
+# live tasks live in `work/<owner>/current/` and `work/<owner>/parked/<slug>/`, so neither owner
+# ever writes to the other's directory and there is nothing to fight over.
+#
+# They are TRACKED because the point is to pick a task up on ANOTHER MACHINE. An ignored plan lives
+# on one laptop, which is the same failure that made `work/archive/` tracked earlier: a /done was
+# stranded wherever it was run. `/save` commits and pushes `work/<owner>/` as its last step, so the
+# handoff a second machine reads is the one the first machine wrote.
+#
+# The remaining hazard is you-versus-you, not you-versus-James: two machines editing the same
+# `work/<owner>/current/plan.md`. That is why handoff.md carries a `Machine:` stamp and /load stops
+# and reports on divergence instead of merging a plan file. See .claude/CLAUDE.md.
 .claude/settings.local.json
-.claude/work/current/
