@@ -76,6 +76,13 @@ impl PyGenerationStats {
 #[derive(Debug)]
 pub struct PyRunResult {
     /// Best fitness found, in the **objective's own units and sign**.
+    ///
+    /// This is the best of the **final** population, not the best ever seen —
+    /// it matches `history`'s last row rather than the highest `best_fitness`
+    /// across every row. Under a stochastic objective an earlier generation
+    /// can score higher by a lucky draw that a later, better-adapted
+    /// individual does not repeat; reporting that draw instead would credit
+    /// noise rather than the search.
     #[pyo3(get)]
     pub best_fitness: f64,
     /// The best individual's expressed network, as `(u, v, multiplicity)`.
