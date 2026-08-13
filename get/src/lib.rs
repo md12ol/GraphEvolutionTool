@@ -231,26 +231,36 @@ impl GraphEvolver {
     /// generations do nothing until `Add`/`Toggle` have built something. That
     /// is self-correcting and not a defect.
     ///
-    /// Endpoints outside `0..num_nodes` and self-loops are dropped rather than
-    /// rejected, which is [`Graph::set_edge`]'s behaviour and not re-litigated
-    /// here.
-    ///
     /// # Errors
     ///
     /// `ValueError` if `num_nodes` disagrees with the config's `network_size`,
-    /// if the config selected the SDA genome, or if any edge's multiplicity
-    /// exceeds the config's `max_edge_multiplicity`.
+    /// if the config selected the SDA genome, or if any edge names a node
+    /// outside `0..num_nodes`, is a self-loop, or carries a multiplicity above
+    /// the config's `max_edge_multiplicity`.
     ///
     /// The SDA case is a rejection rather than a no-op because an SDA run
     /// generates its graph from scratch instead of editing one: storing a base
     /// graph nothing would ever read is indistinguishable, from Python, from
     /// having seeded the run successfully.
     ///
-    /// The cap case rejects rather than clamping, unlike [`Graph::set_edge`].
-    /// Handing a graph built under a wider cap into a narrower one is the
-    /// stacking trap: clamping would silently evolve against a different graph
-    /// from the one passed in, and nothing downstream of here reads a warning.
-    /// Lower the weights and resubmit.
+    /// **The three per-edge checks all reject what [`Graph::set_edge`] would
+    /// absorb**, and that asymmetry is deliberate. `set_edge` returns early on
+    /// a bad endpoint or a self-loop and clamps an over-cap weight, which is
+    /// right for the engine — the edit opcodes decode vertex indices out of a
+    /// random payload and are all no-ops when their preconditions fail, so a
+    /// fallible `set_edge` would turn that into an error path in every one of
+    /// them. Permissiveness that suits engine-generated indices is wrong for
+    /// data a caller handed over.
+    ///
+    /// Each failure is one a caller cannot otherwise see. A node count equal to
+    /// `network_size` does not make the *edges* in range: a caller who takes
+    /// `num_nodes` from their config rather than their data passes the first
+    /// check while every edge above the network size vanishes. A self-loop
+    /// almost always means the indices are wrong — 1-indexed data is the common
+    /// case, and it also lands every surviving edge on the wrong vertex. And a
+    /// graph built under a wider cap would be narrowed silently, evolving
+    /// against a different graph from the one passed in. Nothing downstream
+    /// reads a warning, so all three raise.
     fn set_base_graph(
         &mut self,
         num_nodes: usize,
@@ -271,10 +281,28 @@ impl GraphEvolver {
             ));
         }
 
-        // Checked before anything is built, because `Graph::set_edge` clamps an
-        // over-cap weight instead of refusing it — so a graph constructed first
-        // and validated after would already have lost the offending value.
+        // Every check runs before anything is built, because `Graph::set_edge`
+        // absorbs all three failures rather than reporting them: it returns
+        // early on a bad endpoint or a self-loop and clamps an over-cap weight.
+        // A graph constructed first and validated after would already have lost
+        // the offending edge, leaving nothing to report.
         for &(u, v, multiplicity) in &edges {
+            if u >= num_nodes || v >= num_nodes {
+                return Err(PyValueError::new_err(format!(
+                    "edge ({u}, {v}) names a node outside 0..{num_nodes}; the node count \
+                     matching network_size does not make the edges in range, and an \
+                     out-of-range edge would be dropped without a word",
+                )));
+            }
+
+            if u == v {
+                return Err(PyValueError::new_err(format!(
+                    "edge ({u}, {v}) is a self-loop, which this graph has no representation \
+                     for; a self-loop in caller data usually means the indices are wrong, so \
+                     it is reported rather than dropped",
+                )));
+            }
+
             if multiplicity > self.config.max_edge_multiplicity {
                 return Err(PyValueError::new_err(format!(
                     "edge ({u}, {v}) has multiplicity {multiplicity}, above this config's \

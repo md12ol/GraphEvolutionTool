@@ -776,6 +776,54 @@ mod tests {
     }
 
     #[test]
+    fn a_base_graph_edge_naming_a_node_outside_the_network_is_rejected() {
+        // The node-count check compares one number against another and never
+        // looks at the edges, so a caller taking `num_nodes` from their config
+        // rather than their data passes it while every out-of-range edge is
+        // dropped by `Graph::set_edge` without a word.
+        let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+
+        let err = evolver
+            .set_base_graph(8, vec![(0, 1, 1), (2, 9, 1)])
+            .expect_err("node 9 in an 8-node network must be rejected");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("(2, 9)"),
+            "names the offending edge: {message}",
+        );
+        assert!(
+            message.contains('8'),
+            "names the range it fell outside: {message}",
+        );
+        assert!(evolver.base_graph.is_none(), "nothing stored on rejection");
+    }
+
+    #[test]
+    fn a_base_graph_self_loop_is_rejected_rather_than_dropped() {
+        // This graph has no representation for a self-loop, and one in caller
+        // data almost always means the indices are wrong — 1-indexed edge lists
+        // being the common case, which also lands every survivor on the wrong
+        // vertex. Reported rather than absorbed.
+        let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+
+        let err = evolver
+            .set_base_graph(8, vec![(0, 1, 1), (3, 3, 1)])
+            .expect_err("a self-loop must be rejected");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("(3, 3)"),
+            "names the offending edge: {message}",
+        );
+        assert!(
+            message.contains("self-loop"),
+            "says what is wrong with it: {message}",
+        );
+        assert!(evolver.base_graph.is_none(), "nothing stored on rejection");
+    }
+
+    #[test]
     fn a_base_graph_is_rejected_on_an_sda_configured_evolver() {
         // The SDA genome generates its graph rather than editing one, so a
         // stored base would never be read. Accepting it looks, from Python,
