@@ -77,5 +77,41 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
 
 ## Pending
 
-*Nothing pending. James had no work in flight when this file was created on 2026-08-13 — no open PR
-and no remote branch — and the site was current as of that date.*
+## 2026-08-13 16:43 — James — replicate runs shipped: de-badge six pages, and three code samples name the wrong parameter
+
+- **Trigger:** GitHub #20, branch `jsargant_replicate_runs`. `run(seed, n_runs=1, max_cores=None)`
+  now returns a **list** of `RunResult`, always — even at `n_runs=1` — with the master seed feeding
+  a draw stream, native-Rust replicates running through a per-call rayon pool, and `python` fitness
+  running them sequentially. Commits `6f8fc5c`, `50e4f7b`, `1abd10f`, `aa3e05c`.
+- **Files:** `guide/python-api.html` (the "Replicates" section, ~L240, and its `.plan-note` at
+  ~L288); `guide/reproducibility.html` ("Replicate seeding", ~L94); `guide/performance.html` (the
+  `max_cores` heading, ~L112); `reference/lib.html` ("Replicate runs" ~L393 and the `api-item` at
+  ~L403); `examples/index.html` (section 9, ~L320, and its `.plan-note` at ~L352); `status.html`
+  (the "Replicate runs" row ~L83-90 and the `max_cores` row ~L92-97).
+- **Now false:** every "Today:" note describing a single-run `run(seed)`. `python-api.html` says
+  "`run(seed)` takes exactly one seed and performs one run, returning a single `RunResult` rather
+  than a list" and advises a Python loop; `examples/index.html` says "`run(seed)` performs a single
+  run and returns the edge list"; `status.html`'s two rows list both features as unbuilt.
+  `reference/lib.html`'s api-item says "the `seed` parameter exists today; the other two are
+  designed" — all three exist now.
+- **Should say:** the prose describing the design is already accurate and needs no rewriting — this
+  is badge and callout removal, not correction. The one substantive addition worth making is that
+  the list is returned **unconditionally**, so `run(seed=1)` gives a one-element list rather than a
+  bare result; that is the only part of the shipped behaviour the site does not already describe.
+- **Naming correction — this one is a defect, not a badge.** Three pages show
+  `evolver.run(seed=20260812, runs=30, max_cores=8)`: `guide/output.html` L140,
+  `guide/python-api.html` L247, `examples/index.html` L329. The shipped parameter is **`n_runs`**,
+  as `reference/lib.html` L403 already has it, so those three samples raise `TypeError` if copied.
+  Rename `runs=` to `n_runs=` in all three.
+- **Stale `src` reference:** `reference/lib.html` L405 points at `lib.rs:235` for `run`; the
+  signature has moved with this change and the line is no longer right.
+- **Badges:** drop `badge-planned` from `python-api.html` L240, `reproducibility.html` L94,
+  `performance.html` L112, `lib.html` L393 and L406, `examples/index.html` L320; delete the
+  `.plan-note` blocks at `python-api.html` ~L288 and `examples/index.html` ~L352; delete both
+  `status.html` rows.
+- **Adjacent, and not mine to file:** `reproducibility.html` L234 still badges "the seed and the run
+  index on every log row" as planned. That shipped with GitHub #21 (PR #71), so it belongs in
+  `mdube_edits.md` — flagged here because it sits four lines from a badge this entry does remove,
+  and whoever sweeps this page will be looking straight at it.
+
+*#replicate-runs-ship · filed 2026-08-13 16:43 — James.*
