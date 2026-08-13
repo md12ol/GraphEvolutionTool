@@ -291,6 +291,30 @@ pub(crate) fn sda_start<R: Rng + ?Sized>(
     Ok((context, population))
 }
 
+/// The per-run seed list for a replicate request: one master seed in, `n_runs`
+/// seeds out, in run order.
+///
+/// The master seeds a generator whose output stream *is* the seed list — run
+/// `i` takes draw `i`. That buys one property deliberately: **a run's seed does
+/// not depend on how many runs were asked for.** Extending an experiment from 30
+/// replicates to 50 reproduces the first 30 exactly, so replicates already
+/// collected are never invalidated by asking for more.
+///
+/// `master + i` or `hash(master, i)` would give the same property. `master ^ i`
+/// would not — nearby masters collide across run indices, so master 4 run 1 and
+/// master 5 run 0 are the same run.
+///
+/// Each seed returned is then a whole run's `seed` argument, drawn from
+/// independent generator state rather than shared with any other replicate.
+pub(crate) fn replicate_seeds(master: u64, n_runs: usize) -> Vec<u64> {
+    let mut rng = ChaCha8Rng::seed_from_u64(master);
+    let mut seeds = Vec::with_capacity(n_runs);
+    for _ in 0..n_runs {
+        seeds.push(rng.random::<u64>());
+    }
+    seeds
+}
+
 /// Run one evolution and hand back its result with the genome type erased.
 ///
 /// **Step 2 of the dispatch** (§1, §8). The objective has already been erased to
@@ -722,6 +746,60 @@ mod tests {
         let message = err.to_string();
         assert!(message.contains("init_state"), "names the field: {message}");
         assert!(message.contains('4'), "names num_states: {message}");
+    }
+
+    #[test]
+    fn asking_for_more_replicates_does_not_move_the_earlier_ones() {
+        // The property the stream exists for: run `i`'s seed is a function of
+        // the master and `i` alone, never of how many runs were requested. A
+        // user who collects 30 replicates and later wants 50 keeps the 30.
+        let thirty = replicate_seeds(20260813, 30);
+        let fifty = replicate_seeds(20260813, 50);
+
+        assert_eq!(thirty.len(), 30, "one seed per requested run");
+        assert_eq!(fifty.len(), 50, "one seed per requested run");
+        assert_eq!(
+            fifty[..30],
+            thirty[..],
+            "the first 30 of a 50-run request must be the 30-run request, exactly",
+        );
+    }
+
+    #[test]
+    fn replicate_seeds_do_not_collide_across_nearby_masters() {
+        // `master ^ i` is the anti-pattern this rules out: under it, master 4
+        // run 1 and master 5 run 0 are the same run. Two adjacent masters must
+        // share no seed at any index.
+        let first = replicate_seeds(4, 8);
+        let second = replicate_seeds(5, 8);
+
+        for (index, seed) in first.iter().enumerate() {
+            assert!(
+                !second.contains(seed),
+                "seed {seed} from master 4 (run {index}) also appears under master 5",
+            );
+        }
+    }
+
+    #[test]
+    fn each_replicate_gets_a_distinct_seed() {
+        // Two replicates sharing a seed would be the same run twice, which is
+        // not a replicate — it reports as agreement between independent runs.
+        let seeds = replicate_seeds(7, 32);
+
+        for (index, seed) in seeds.iter().enumerate() {
+            assert!(
+                !seeds[index + 1..].contains(seed),
+                "seed at run {index} repeats later in the same request",
+            );
+        }
+    }
+
+    #[test]
+    fn a_zero_run_request_yields_no_seeds() {
+        // The degenerate end of `min(max_cores, n_runs)`: nothing to run, and
+        // nothing drawn, rather than one seed drawn and discarded.
+        assert!(replicate_seeds(1, 0).is_empty());
     }
 
     #[test]
