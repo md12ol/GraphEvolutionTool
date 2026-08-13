@@ -5,6 +5,26 @@ Maintained by `/save`; archived by `/done`.
 
 ---
 
+## Session 2026-08-13 (cont. 2): `ci_95` shipped in the engine and through erasure; task 3 of 11
+
+**What changed.** `GenerationStats::ci_95` (`get/src/evolver/mod.rs`) and its computation in
+`generation_stats()` (`get/src/evolver/common.rs:297`) — half-width `1.96 · s / √n` on the sample
+deviation (`n-1`), `0.0` when `n=1`. Carried through `erase()` (`dispatch.rs:416`) and
+`PyGenerationStats`/`PyRunResult::from_erased` (`py_result.rs`) unconverted, matching `std_dev`.
+
+**Tests.** Extended `generation_stats_computes_best_mean_and_population_deviation` (asserts `ci_95`
+against a hand-computed value, and that it actually differs from `std_dev` on the same data — so
+the test can't pass by `ci_95` accidentally equaling `std_dev`), `a_single_individual_has_zero_deviation`
+(`ci_95 == 0.0`, not NaN), `generation_stats_stays_in_engine_orientation_under_maximize` (`ci_95`
+unchanged under negation), and `the_erased_history_comes_out_in_the_objectives_own_units`
+(`ci_95 >= 0.0` post-erasure). **Validated:** 235 tests pass (up from 232 pre-merge — 3 new
+assertions added to existing tests, no new `#[test]` functions), clippy and fmt both clean.
+
+**Git manifest.** `mdube_run_output`, clean, nothing uncommitted. Not yet pushed this session's
+code commits.
+
+*Logged 2026-08-13 — Michael.*
+
 ## Session 2026-08-13 (cont.): unparked again, migrated into the new dedicated `main` worktree
 
 Unparked via `/load run-output` while still on the old model (`.claude/work/mdube/` tracked inside

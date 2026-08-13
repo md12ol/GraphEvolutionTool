@@ -15,9 +15,9 @@ confidence band, which §6.4 assigns to the user aggregating replicate logs. Any
 
 **Stacked on unmerged work.** `RunResult` was added on `mdube_result_object` (PR #65) and the
 per-owner workflow on `mdube_per_owner_work_dirs` (PR #69); task 1 branched off the first and merged
-the second. **Both merged 2026-08-13** (confirmed via `gh pr list --state all`), along with PR #66 —
-`git merge main` into this branch is now safe and should happen before the next task starts, per
-the stack-cost note in `handoff.md`.
+the second. **Both merged 2026-08-13**, along with PR #66. `git merge main` into `mdube_run_output`
+is **done** — clean, 4 rename/delete conflicts in `.claude/work/` auto-resolved to `main`'s content
+(expected, see `decisions.md` 2026-08-13 — the worktree migration).
 
 ## Tasks
 
@@ -25,18 +25,15 @@ the stack-cost note in `handoff.md`.
       merged in — clean, no shared files. Verified: both are ancestors of `HEAD`
       (`git merge-base --is-ancestor`). Rationale in `decisions.md` 2026-08-13 02:41.
 
-- [ ] `ci_95` on the engine's `GenerationStats` and computed in `generation_stats()` —
-      `get/src/evolver/common.rs:292`. Half-width `1.96 · s / √n` with the **sample** deviation
-      (`n-1`), beside the existing population `std_dev` (`n`). `n = 1` → `0.0`, not NaN.
-      The two denominators differ deliberately; the comment states the reason, not the citation.
-      **Verify by:** a unit test with a hand-computed population — one asserting both columns on the
-      same data, and one asserting `n = 1` gives `std_dev = 0` and `ci_95 = 0`.
+- [x] `ci_95` added to `GenerationStats` (`evolver/mod.rs`) and computed in `generation_stats()`
+      (`evolver/common.rs:297`) — sample deviation (`n-1`), `n=1` gives `0.0`. Verified:
+      `generation_stats_computes_best_mean_and_population_deviation` and
+      `a_single_individual_has_zero_deviation` both extended; 235 tests, clippy, fmt all clean.
 
-- [ ] `ci_95` carried through erasure unconverted — `get/src/dispatch.rs:411` and
-      `PyGenerationStats` in `get/src/py_result.rs`. A spread is identical under negation, so it is
-      passed through like `std_dev`, never oriented.
-      **Verify by:** extend `the_erased_history_comes_out_in_the_objectives_own_units` to assert
-      `ci_95` is unchanged under a maximizing objective.
+- [x] `ci_95` carried through `erase` (`dispatch.rs`) and `PyGenerationStats::from_erased`
+      (`py_result.rs`) unconverted, same as `std_dev`. Verified:
+      `the_erased_history_comes_out_in_the_objectives_own_units` extended to assert `ci_95 >= 0.0`
+      under a maximizing objective; 235 tests pass.
 
 - [ ] `seed`, `run_index` and the generating config TOML reach `RunResult` —
       `get/src/lib.rs`, `get/src/dispatch.rs`, `get/src/py_result.rs`. Run-level, so they live on the

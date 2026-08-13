@@ -2291,3 +2291,50 @@ remains **Open**, unaffected.
 *Recorded 2026-08-13 11:35 — Michael.*
 
 ## Task complete: per-owner-work-dirs — 2026-08-13
+
+## 2026-08-13 — Michael — `.claude/work/<owner>/` moved into a dedicated `main` worktree (`collab.md` #58, PR #70)
+
+**Chose:** a linked git worktree, permanently checked out to `main` at the fixed sibling path
+`../<repo-name>-docs`, as the sole place every skill (`save`, `park`, `load`, `done`, `start`)
+reads and writes `.claude/work/<owner>/` and the persistent docs. `session_brief.sh` reads
+`git show main:.claude/work/...` instead, needing no worktree setup since it was read-only anyway.
+
+**Why:** `.claude/work/<owner>/current/` and `parked/` are ordinary tracked files, so a feature
+branch's copy is frozen at the moment it was cut. `main` moving afterwards — including a task
+closing and archiving out of `parked/` — was invisible from that branch until merge. Hit directly
+this session: `mdube_run_output` was cut mid-task, then `result-object` and `per-owner-work-dirs`
+both closed and archived on `main`, and switching back to `mdube_run_output` showed both still
+listed as parked. The routing table already said these directories go "direct push to `main`" —
+the actual bug was `/save`'s own push step saying "`main`, or the current branch, if this session
+is on one," which is what let the drift happen.
+
+**Rejected:** always `git checkout main` in the same working tree before touching `.claude/work/`,
+then checking back out to the code branch afterward (the "checkout dance") — this session did
+exactly that by hand for the `result-object` and `per-owner-work-dirs` closes, and it produced a
+real bug: a `git stash pop` after the dance restored stale pre-edit content over freshly-written
+files, silently, because the stash captured the git index's stale staged content rather than the
+edited working-tree content. A worktree has no equivalent failure mode — there's no stash, no
+checkout, no shared index to race with itself. Also rejected: a fully separate `.claude/`-only repo
+(the user's original suggestion) — decoupling the docs from the code's commit history the sheet
+and `CLAUDE.md` rely on ("where the sheet and the code disagree, fix the code, or write a dated
+entry") loses more than the branch-drift bug costs.
+
+**Consequence for union merge:** `decisions.md` and `collab.md` stop being touched by feature
+branches under this model, since every write goes straight to the worktree's `main`. A
+feature-branch PR should now carry no diff to either file, so `merge=union` stops mattering for PR
+merges specifically — it still matters for two people running `/save` on `main` around the same
+real time, which this change doesn't touch.
+
+**Migration performed this session:** `mdube_run_output`'s stale `.claude/work/mdube/` (frozen at
+branch creation, still carrying `result-object` and `per-owner-work-dirs` as parked even though
+both had since archived on `main`) was removed from that branch entirely (`git rm -r`), and its one
+live task (`run-output`) was copied into the new `main` worktree by hand, since the branch's copy
+was staged-but-uncommitted and had no history worth carrying across. Merging `main` into
+`mdube_run_output` afterward produced four `rename/delete` conflicts, all auto-resolving to
+`main`'s content (`git add` on files git had already written correctly) — confirms the branch
+cleanup was sufficient for a clean merge.
+
+**Affects:** `.claude/hooks/session_brief.sh`, `.claude/skills/{save,park,load,done,start}/SKILL.md`,
+`.claude/CLAUDE.md`, `.claude/README.md` — PR #70, open. `collab.md` #58 is the notification to
+James, including his one-time setup step.
+*Recorded 2026-08-13 — Michael.*
