@@ -72,12 +72,60 @@ open_workspace() {
     fi
 }
 
+# Optional, confirmed: hides .claude/work/ in the CODE folder's Explorer, since the live copy
+# lives in the docs worktree now and this branch's copy is stale (its own current/parked was
+# removed; decisions.md/traps.md/etc. here are only whatever was last merged in). Purely cosmetic
+# — nothing about how /save, /park, /load, /done or /start behave. Never applied without asking,
+# and only ever touches the single "files.exclude" key in your settings.json.
+offer_hide_stale_work() {
+    local settings="$MAIN_TREE/.vscode/settings.json"
+
+    say "One more, optional: hide .claude/work/ in this folder's Explorer view."
+    say "  Why: the copy of .claude/work/ tracked on this branch is stale now — the live one is"
+    say "  in the docs worktree you just opened. Hiding it here just avoids reading the wrong"
+    say "  copy by accident; nothing about how the skills behave changes either way."
+    say "  What it touches: adds/merges one key, \"files.exclude\": {\".claude/work\": true}, into"
+    say "  $settings — nothing else in that file is changed."
+
+    if [[ ! -t 0 ]]; then
+        say "  (not an interactive terminal — skipping; re-run interactively if you want this.)"
+        return 0
+    fi
+
+    read -r -p "  Apply it? [y/N] " reply
+    case "$reply" in
+        [yY]|[yY][eE][sS]) ;;
+        *) say "  Skipped — nothing written."; return 0 ;;
+    esac
+
+    mkdir -p "$MAIN_TREE/.vscode"
+    if [[ ! -f "$settings" ]]; then
+        printf '{\n    "files.exclude": {\n        ".claude/work": true\n    }\n}\n' > "$settings"
+        say "  Created $settings."
+    elif command -v jq >/dev/null 2>&1; then
+        tmp="$(mktemp)"
+        jq '.["files.exclude"][".claude/work"] = true' "$settings" > "$tmp" \
+            && mv "$tmp" "$settings" \
+            && say "  Merged into existing $settings." \
+            || { rm -f "$tmp"; say "  jq failed to merge — left your settings.json untouched. Add by hand:"; \
+                 say "    \"files.exclude\": { \".claude/work\": true }"; }
+    else
+        say "  $settings already exists and 'jq' isn't on PATH, so this won't try to merge it"
+        say "  automatically — a blind text edit risks corrupting your existing settings. Add"
+        say "  this key yourself, inside the existing \"files.exclude\" object if you have one,"
+        say "  or as a new top-level key if you don't:"
+        say "    \"files.exclude\": { \".claude/work\": true }"
+    fi
+}
+
 if [[ -d "$DOCS_WT" ]]; then
     say "Already set up — $DOCS_WT exists."
     say "If it looks wrong: git worktree remove \"$DOCS_WT\"   (then re-run this script)"
     say ""
     write_workspace_file
     open_workspace
+    say ""
+    offer_hide_stale_work
     exit 0
 fi
 
@@ -145,3 +193,5 @@ say ""
 step "Setting up the editor workspace"
 write_workspace_file
 open_workspace
+say ""
+offer_hide_stale_work
