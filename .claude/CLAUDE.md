@@ -62,6 +62,50 @@ with. So `handoff.md` carries `Machine: <hostname> · saved <ts> · <SHA>`, and 
 reports** on divergence rather than merging or resetting. Note `pull_main.sh` fast-forwards `main`
 at session start but **refuses on a dirty tree** — a divergence usually means it declined.
 
+### `.claude/work/` lives in a dedicated `main` worktree, not in the branch you're coding on
+
+**Added 2026-08-13 — Michael, `collab.md` #58.** This is a bug fix, not a new convention layered
+on the old one: `work/<owner>/current/` and `parked/` are ordinary tracked files, so a feature
+branch's copy of them is frozen at the moment the branch was cut, and every `/save` on `main`
+afterwards — including a task closing and archiving out of `parked/` — is invisible from that
+branch until it merges. Hit directly: `mdube_run_output` was cut mid-task, `result-object` and
+`per-owner-work-dirs` both closed and archived on `main` while `run-output` sat parked, and
+switching back to `mdube_run_output` showed both as still parked. The routing table already says
+these directories go "Direct push to `main`" (below); the actual bug was `/save`'s own push step
+saying "`main`, or the current branch, if this session is on one," which is what let the drift
+happen in the first place. That wording is corrected by this section, not layered under it.
+
+**The fix.** A linked git worktree, permanently checked out to `main`, at the fixed sibling path:
+
+    ../<repo-name>-docs      # e.g. ../GraphEvolutionTool-docs, next to the main checkout
+
+computed from `git rev-parse --show-toplevel` (its dirname, plus `-docs`) rather than hand-typed,
+so the convention needs no per-machine configuration to agree on. One-time setup, from the main
+tree's repo root:
+
+    git worktree add ../GraphEvolutionTool-docs main
+
+**Every skill that touches `.claude/work/`** — `save`, `park`, `load`, `done`, `start` — reads and
+writes exclusively through that worktree, never through whatever the main tree has checked out for
+code. Concretely: `cd` into the worktree, `git pull`, do the read/write/commit/push there, and
+never switch, stash, or otherwise touch the branch the code work is on. Because the worktree is
+always `main`, `current/` and `parked/` can no longer disagree with which branch happens to be
+checked out elsewhere — there is exactly one live copy, and it is always current.
+
+**The `SessionStart` hook doesn't need the worktree at all.** `session_brief.sh` reads
+`git show main:.claude/work/...` directly — no setup dependency, and it never touched the working
+tree for writes anyway, so this was a strict improvement with no downside for the hook specifically.
+
+**What this does to union-merge.** `decisions.md` and `collab.md` stop being touched by feature
+branches under this model — every write goes straight to the worktree's `main`, so a feature-branch
+PR should carry no diff to either file, and `merge=union` stops mattering for PR merges. It still
+matters for its original case: two people running `/save` on `main` at close to the same real time.
+That case, and the union-merge formatting rules above, are unchanged.
+
+**Setup is per-machine, one time, both owners.** Nothing about *invoking* `/save`, `/park`, `/load`,
+`/done` or `/start` changes — the worktree swap is internal to what the skills do, not something
+either owner types differently.
+
 **Parking a blocked task.** `/park <slug>` runs `/save`, stamps `handoff.md` with `Blocked on:` —
 the concrete unblocking event, not "waiting on James" — and moves `current/` to `parked/<slug>/`,
 leaving the desk clear for `/start`. `/load <slug>` brings it back, parking whatever is live to make
@@ -234,7 +278,7 @@ where review actually buys something:
 | `settings.json`, `hooks/` | **Feature branch + PR** — these execute on the other person's machine at session start (see rule 2 above) |
 | `/official_spec_sheet.md` | **PR, and only after a joint meeting** — see the top of this file |
 | `.claude/work/*.md` — `decisions.md`, `traps.md`, `issues.md`, `hotfixes.md`, `collab.md` | Direct push to `main` is fine. They carry no behaviour, and a trap that is not on `main` protects nobody. Note only `decisions.md` and `collab.md` are union-merged (rule 1 above) |
-| `.claude/work/<owner>/` — live and parked task directories | Direct push to `main`, **by `/save` and `/park` automatically** (added 2026-08-13). Nobody reviews your own plan, and an unpushed handoff is the failure these directories were tracked to prevent. Union merge does not reach them — verified with `git check-attr merge` |
+| `.claude/work/<owner>/` — live and parked task directories | Direct push to `main`, **by `/save` and `/park` automatically, from the dedicated `main` worktree** (added 2026-08-13, corrected 2026-08-13 — see "`.claude/work/` lives in a dedicated `main` worktree" above). Nobody reviews your own plan, and an unpushed handoff is the failure these directories were tracked to prevent. Union merge does not reach them — verified with `git check-attr merge` |
 | `.claude/CLAUDE.md` | Direct push is permitted, but **prefer a PR when the change binds the other owner's practice** rather than recording a fact |
 | `.claude/skills/*/SKILL.md` — **frontmatter** (`model:`, `allowed-tools:`, any hook-adjacent key) | **Feature branch + PR.** Changing it changes what executes on the other person's machine on their next pull, without them reading it |
 | `.claude/skills/*/SKILL.md` — **body** | Direct push to `main` is fine. It is prose we both read anyway, and a PR round-trip in front of a typo fix is how a rule starts being skipped |
