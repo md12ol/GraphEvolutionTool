@@ -405,9 +405,9 @@ fn run_strategy<G: Genome, F: Fitness>(
 /// `Direction::orient` is its own inverse, so it is also what undoes itself.
 ///
 /// **The history needs converting too, row by row** — and only its two fitness
-/// columns. `std_dev` is left exactly as the engine computed it, because a
-/// spread is identical under negation. Orienting it as well would be a silent
-/// defect: the number stays positive, so nothing looks wrong.
+/// columns. `std_dev` and `ci_95` are left exactly as the engine computed them,
+/// because a spread is identical under negation. Orienting either would be a
+/// silent defect: the number stays positive, so nothing looks wrong.
 fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
     let direction = outcome.direction;
 
@@ -418,6 +418,7 @@ fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
             best_fitness: direction.orient(row.best_fitness),
             mean_fitness: direction.orient(row.mean_fitness),
             std_dev: row.std_dev,
+            ci_95: row.ci_95,
         });
     }
 
@@ -520,6 +521,7 @@ mod tests {
         GraphEvolver {
             config: config_with(fitness_block),
             fitness_function: None,
+            config_toml: String::new(),
         }
     }
 
@@ -643,6 +645,7 @@ mod tests {
         GraphEvolver {
             config: config_with_genome(genome_block),
             fitness_function: None,
+            config_toml: String::new(),
         }
     }
 
@@ -929,6 +932,14 @@ mod tests {
                 row.iteration,
                 row.std_dev,
             );
+            // Same reasoning as std_dev: ci_95 is a spread, so erase must leave
+            // it alone rather than orient it.
+            assert!(
+                row.ci_95 >= 0.0,
+                "iteration {}: ci_95 is never negative, got {}",
+                row.iteration,
+                row.ci_95,
+            );
         }
 
         // The **last** row must agree with the headline number, because both are
@@ -1011,10 +1022,34 @@ mod tests {
 
     #[test]
     fn run_returns_a_complete_result_object() {
+        let config_toml = "population_size = 6\n\
+             network_size = 8\n\
+             max_edge_multiplicity = 2\n\
+             crossover_rate = 0.8\n\
+             mutation_rate = 0.5\n\
+             \n\
+             [evolution]\n\
+             type = \"generational\"\n\
+             num_generations = 3\n\
+             \n\
+             [selection]\n\
+             type = \"tournament\"\n\
+             tournament_size = 4\n\
+             \n\
+             [genome]\n\
+             type = \"edge_edit\"\n\
+             gene_length = 12\n\
+             \n\
+             [fitness]\n\
+             type = \"epi_spread\"\n\
+             infection_rate = 0.3\n\
+             num_epidemics = 2\n"
+            .to_string();
         // Through the Python entry point, so this also exercises the GIL release.
         let mut evolver = GraphEvolver {
-            config: runnable(GENERATIONAL, EDGE_EDIT),
+            config: Config::from_toml_str(&config_toml).expect("the fixture parses"),
             fitness_function: None,
+            config_toml: config_toml.clone(),
         };
 
         let result = evolver.run(8).expect("a full config run completes");
@@ -1032,6 +1067,13 @@ mod tests {
         for &(u, v, _) in &result.best_edges {
             assert!(u < 8 && v < 8);
         }
+
+        // Task 4's verify-by: seed, run_index and the config TOML reach the
+        // result and the TOML round-trips.
+        assert_eq!(result.seed, 8, "the seed run was called with");
+        assert_eq!(result.run_index, 0, "hard 0 until replicates land (#20)");
+        Config::from_toml_str(&result.config_toml).expect("the provenance TOML round-trips");
+        assert_eq!(result.config_toml, config_toml);
     }
 
     #[test]
@@ -1042,6 +1084,7 @@ mod tests {
         let mut evolver = GraphEvolver {
             config: runnable(GENERATIONAL, EDGE_EDIT),
             fitness_function: None,
+            config_toml: String::new(),
         };
 
         let first = evolver.run(4).expect("first run");
@@ -1060,6 +1103,109 @@ mod tests {
             second.best_fitness != first.best_fitness || second.best_edges != first.best_edges,
             "a different seed should not reproduce the same run",
         );
+    }
+
+    #[test]
+    fn save_logs_writes_one_row_per_logged_iteration_plus_a_header() {
+        // Task 5's verify-by: row count is `num_generations + 1` under
+        // generational and `num_mating_events / population_size + 1` under
+        // steady-state. `GENERATIONAL` and `STEADY_STATE` are `runnable`'s
+        // fixtures: population_size 6, num_generations 3, num_mating_events 12
+        // — 4 and 3 rows respectively.
+        for (evolution, expected_rows) in [(GENERATIONAL, 4), (STEADY_STATE, 3)] {
+            let mut evolver = GraphEvolver {
+                config: runnable(evolution, EDGE_EDIT),
+                fitness_function: None,
+                config_toml: String::new(),
+            };
+            let result = evolver.run(3).expect("a full config run completes");
+            assert_eq!(result.history.len(), expected_rows);
+
+            let path = std::env::temp_dir().join(format!(
+                "get_save_logs_test_{}_{expected_rows}.csv",
+                std::process::id(),
+            ));
+            result
+                .save_logs(path.to_str().expect("temp path is valid UTF-8"))
+                .expect("save_logs writes successfully");
+
+            let contents = std::fs::read_to_string(&path).expect("the file was written");
+            std::fs::remove_file(&path).expect("temp file cleans up");
+
+            let lines: Vec<&str> = contents.lines().collect();
+            assert_eq!(
+                lines[0],
+                "iteration,best_fitness,mean_fitness,std_dev,ci_95,seed,run_index",
+            );
+            assert_eq!(
+                lines.len(),
+                expected_rows + 1,
+                "header plus one row per logged iteration",
+            );
+            for line in &lines[1..] {
+                let fields: Vec<&str> = line.split(',').collect();
+                assert_eq!(fields.len(), 7);
+                assert_eq!(fields[5], "3", "seed column carries the run's seed");
+                assert_eq!(fields[6], "0", "run_index column is the hard 0");
+            }
+        }
+    }
+
+    #[test]
+    fn save_results_writes_the_best_individual_and_a_reparseable_config() {
+        // Task 6's verify-by: both files exist, and the derived TOML path
+        // parses back through the same `Config::from_toml_str` the run itself
+        // used — that round-trip is the whole point of the provenance record.
+        let config_toml = "population_size = 6\n\
+             network_size = 8\n\
+             max_edge_multiplicity = 2\n\
+             crossover_rate = 0.8\n\
+             mutation_rate = 0.5\n\
+             \n\
+             [evolution]\n\
+             type = \"generational\"\n\
+             num_generations = 3\n\
+             \n\
+             [selection]\n\
+             type = \"tournament\"\n\
+             tournament_size = 4\n\
+             \n\
+             [genome]\n\
+             type = \"edge_edit\"\n\
+             gene_length = 12\n\
+             \n\
+             [fitness]\n\
+             type = \"epi_spread\"\n\
+             infection_rate = 0.3\n\
+             num_epidemics = 2\n"
+            .to_string();
+        let mut evolver = GraphEvolver {
+            config: Config::from_toml_str(&config_toml).expect("the fixture parses"),
+            fitness_function: None,
+            config_toml: config_toml.clone(),
+        };
+        let result = evolver.run(7).expect("a full config run completes");
+
+        let path =
+            std::env::temp_dir().join(format!("get_save_results_test_{}", std::process::id()));
+        let path_str = path.to_str().expect("temp path is valid UTF-8");
+        result
+            .save_results(path_str)
+            .expect("save_results writes successfully");
+
+        let contents = std::fs::read_to_string(&path).expect("the results file was written");
+        std::fs::remove_file(&path).expect("results temp file cleans up");
+        assert!(contents.contains(&format!("best_fitness = {}", result.best_fitness)));
+        assert!(contents.contains(&result.best_genome_repr));
+        for &(u, v, weight) in &result.best_edges {
+            assert!(contents.contains(&format!("{u},{v},{weight}")));
+        }
+
+        let toml_path = format!("{path_str}.toml");
+        let toml_contents = std::fs::read_to_string(&toml_path).expect("the TOML file was written");
+        std::fs::remove_file(&toml_path).expect("TOML temp file cleans up");
+        assert_eq!(toml_contents, config_toml);
+        Config::from_toml_str(&toml_contents).expect("the provenance TOML round-trips");
     }
 
     #[test]
