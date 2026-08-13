@@ -23,7 +23,7 @@ standalone chore.*
 as **#34** (assigned to md12ol), same obligation. Open count refreshed from the tracker.*
 
 *Synced 2026-08-10 — James: the `evaluate_population`/`SirRun` rename removed, filed as **#52**
-(assigned to md12ol) once the 2026-08-09 meeting unblocked it — `collab.md` #32. Its scope table
+(assigned to md12ol) once the 2026-08-09 meeting unblocked it — `collab_settled.md` #32. Its scope table
 was already a stale fork: #52 found occurrences in `lib.rs` and `generational.rs`, and sheet line
 269, that the staged entry did not list. Open count corrected 17 → 8, counted from
 `gh issue list --state open --json number -q 'length'`.*
@@ -69,7 +69,7 @@ it was filed directly.*
   is no error to lead them back. Suggested constraint is `0.0 <= v <= 1.0` on all three.
 - **Blocked on the sheet, not on effort.** §7's constraint list omits them too, so this is a gap in
   the design before it is one in the code — fixing `config.rs` alone would make the code stricter
-  than the sheet it is built to. Raised as `collab.md` #51 item 3, for a joint meeting; parked here
+  than the sheet it is built to. Raised as `collab_settled.md` #51 item 3, for a joint meeting; parked here
   so it survives if that meeting slips. Once §7 is amended this is a small, self-contained change.
 - **Noticed:** 2026-08-12, surveying `config.rs` to write the documentation site's config reference.
 
@@ -101,7 +101,7 @@ it was filed directly.*
   impression that `epi_spread` is a weak objective.
 - **Not investigated:** what the example *should* say. Raising the rate makes the example converge
   but stops it resembling a realistic epidemic; keeping it needs a comment saying the run is
-  deliberately hard and why. That choice is `collab.md` #48, parked behind the current issue set.
+  deliberately hard and why. That choice is `collab_settled.md` #48, parked behind the current issue set.
 - **Noticed:** 2026-08-11, verifying #26's dispatch end to end rather than trusting the four arms
   to compile.
 

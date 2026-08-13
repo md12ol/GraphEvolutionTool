@@ -141,3 +141,24 @@ graphs read as permanently closed when nobody had actually decided that.*
   An objective that does not read an epidemic at all — anything purely structural over the graph —
   would be the first to test whether `SirParams` sitting inside `FitnessConfig` still fits.
 - **Raised:** 2026-08-11 — Michael, explicitly as an open question with nothing settled.
+
+### An SDA run's best graph feeding an edge-edit run as its base graph
+
+- **What:** run SDA to generate a network from scratch, then run edge-edit to refine it, with the
+  first run's best graph becoming the second's base graph automatically rather than being hand-fed
+  as an edge list. It fits the design as it stands: five of the nine edge-edit operations are inert
+  on an empty base graph — `Swap`, `Hop` and the three `Local*` all need existing structure to walk
+  (§3.1) — so a from-scratch edge-edit run spends its early generations building the structure those
+  operators need before they can do anything with it.
+- **Admitting it requires:** seven answers, none of which exist. One run or two, from the caller's
+  point of view; the config shape that expresses a two-stage run; which graph carries over, the best
+  of the final population or the best ever seen; replicate semantics, and whether replicate *n* of
+  stage two starts from replicate *n* of stage one; cross-stage validation of `network_size` and
+  `max_edge_multiplicity`; one objective across both stages or one per stage; and log provenance —
+  how a row in the convergence log says which stage produced it. The delivery path it extends is
+  `set_base_graph`, GitHub #28.
+- **Raised:** 2026-08-11 — Michael. Moved here from `collab_settled.md` #42 at the joint meeting of
+  2026-08-13, having been parked since. It lived in `collab.md` because the sheet has nowhere for a
+  live want: §9 opens "Open decisions — none" and §10 Non-goals would say we decided *against* it.
+  The meeting considered and **refused** a §11 "Wanted, not scheduled" on the sheet — that section
+  would be the build order the sheet exists to refuse, and this file already is it.

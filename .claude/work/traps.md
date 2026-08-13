@@ -241,7 +241,7 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   descends into every `mod x;` it declares, so naming one file does **not** bound what it rewrites.
 - **Measured 2026-08-04 — James, during #15.** `rustfmt --edition 2024 get/src/evolver/mod.rs`
   alone reformatted `get/src/evolver/generational.rs` (reordered a `use super::{...}` list). That
-  file is **issue #22, Michael's**, and one of the files `collab.md` #14 flags as claimed by two
+  file is **issue #22, Michael's**, and one of the files `collab_settled.md` #14 flags as claimed by two
   workstreams. It reached `git diff` but not a commit; the only thing that caught it was reading
   `git diff --stat` and noticing a fourth file in a three-file change.
 - **Do this instead:** pass the config option, and check the stat afterwards regardless.
@@ -261,7 +261,7 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   `main`, so most stray descents are now no-ops — which means the occasional one that *does* produce
   diff is the only signal there is, where before it might have been lost in the noise. Whatever it
   produces still lands in whichever file the other owner has claimed. Amendment proposed by Michael
-  in `collab.md` #31 and applied by James, its author.
+  in `collab_settled.md` #31 and applied by James, its author.
 - **Added:** 2026-08-04 — rustfmt-descends-into-submodules-of-a-mod-rs
 
 ### `deny_unknown_fields` does nothing through a `#[serde(flatten)]`, and reports no error either
@@ -307,7 +307,7 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   was 7 commits behind `origin/main` (PR #45 merged, #17 archived, a trap deleted), with
   `collab.md` and `decisions.md` modified in the tree. The hook is right to refuse — `merge
   --ff-only` will not overwrite local changes, and refusing non-destructively is the design
-  (`collab.md` #30) — but **no `pull_main:` line appeared in the session's context**, only
+  (`collab_settled.md` #30) — but **no `pull_main:` line appeared in the session's context**, only
   `session_brief.sh`'s block. Whether the line was printed and not surfaced, or not printed, was
   not established from inside the session; what is certain is that the warning did not arrive.
 - **Do this instead:** check for yourself before branching, rather than trusting that a silent
@@ -365,7 +365,7 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   argument against the manifest change: bare `python` on that machine resolves to the Microsoft
   Store stub, and the real interpreters are reachable only through the `py` launcher. James's
   offered fallback — putting the pyo3-touching tests behind a cargo feature — is therefore **not
-  needed**. `collab.md` #37 is settled by this.
+  needed**. `collab_settled.md` #37 is settled by this.
 - **Why:** full mechanism, and what transfers from `graph_refiner` versus what doesn't, in
   `.claude/reference/pyo3-maturin.md` §1.
 - **Added:** 2026-08-07 — cargo-test-cannot-link-python-unless-extension-module-is-off
@@ -421,7 +421,7 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   helpers name concrete types (`EdgeEditGenome`, `SdaGenome`) and return `PyResult`; dropping them
   into `common.rs` drags both dependencies into the engine core and costs the ability to test the
   engine without a config or a Python interpreter. Reasoning in `decisions.md` 2026-08-11 11:26,
-  the rejected-option writeup in `collab.md` #47.
+  the rejected-option writeup in `collab_settled.md` #47.
 - **Added:** 2026-08-11 — dispatch-goes-in-dispatch-rs-not-common-rs, while building #26's dispatch.
 
 ### GitHub's auto-delete does not fire on a PR you merged locally
