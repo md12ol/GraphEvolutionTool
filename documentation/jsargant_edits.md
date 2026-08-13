@@ -2,11 +2,13 @@
 
 **Do not edit the site during an ordinary task. File the edit here instead.**
 
-Created 2026-08-13 **by Michael, on James's behalf and not yet agreed by him** — the ask is
-`collab.md` #53. It is here rather than waiting so that the convention is usable the moment James
-says yes, and so a session working under his identity has somewhere to file instead of guessing.
-**James: if you would rather not work this way, deleting this file is the whole of the rejection** —
-nothing else depends on it existing.
+Created 2026-08-13 by Michael, on James's behalf, ahead of the ask in `collab.md` #53 — so the
+convention was usable the moment James said yes, and so a session working under his identity had
+somewhere to file instead of guessing.
+
+**Agreed by James 2026-08-13**, at the joint meeting; the item is in `collab_settled.md`. The
+rejection route described here originally — deleting the file — is spent, and the queue is now the
+standing convention for both owners.
 
 The companion file is `documentation/mdube_edits.md`, which carries the same rules and the same
 format. Neither is the master copy; if the two ever disagree about *process*, `collab.md` #53 and
@@ -24,10 +26,10 @@ up to date is part of finishing a task, not optional tidying.** A task that chan
 files nothing here has left the site quietly lying, which is the exact failure the `badge-planned`
 convention was built to prevent. The obligation moved; it did not go away.
 
-**It supersedes `CLAUDE.md`'s "de-badge its documentation in the same PR" rule** for the *timing*
-only. The de-badging still has to happen — badge, `.plan-note` callout, and the `status.html` row —
-just in the sweep rather than in the shipping PR. That bullet has not been amended, because it binds
-both owners and the amendment is part of what `collab.md` #53 asks for.
+**It replaces `CLAUDE.md`'s "de-badge its documentation in the same PR" rule** on *timing* only. The
+de-badging still has to happen — badge, `.plan-note` callout, and the `status.html` row — just in the
+sweep rather than in the shipping PR. That bullet was struck through in `CLAUDE.md` on 2026-08-13
+(`a73af39`) once both owners agreed, so the two documents no longer disagree.
 
 ## Which file — check, do not assume
 

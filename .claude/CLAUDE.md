@@ -152,7 +152,7 @@ is never mistaken for a churn list and never picks up a merge driver.
 
 | File | |
 |---|---|
-| `reference/pyo3-maturin.md` | the Python boundary: why `extension-module` breaks `cargo test`, why calling Python from a rayon closure deadlocks, and what GET still lacks (a `pyproject.toml`) |
+| `reference/pyo3-maturin.md` | the Python boundary: why `extension-module` breaks `cargo test`, why calling Python from a rayon closure deadlocks, and how GET's `pyproject.toml` is shaped (§3 — it was added 2026-08-07; this row said it was still missing until 2026-08-13) |
 
 Each note says whether a claim was **measured here** or came from elsewhere. Keep that split — a
 borrowed configuration is evidence that something works somewhere, not that it is right here.
