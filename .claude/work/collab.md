@@ -2249,3 +2249,69 @@ rather than guessing, and a parked task with no handoff reports `no blocker reco
 going quiet.
 
 *#55 · raised 2026-08-13 02:10 — Michael.*
+
+### 56. Sheet item for tomorrow: §5.1's boundary diagram still names `best_fitness()`, which §8 says does not exist
+
+James, 2026-08-12. For the joint meeting — this is a sheet change, so it waits for one. Found while
+reviewing PR #65 before merging it, not by reading the sheet.
+
+**The contradiction.** `official_spec_sheet.md:351` is the "Python boundary" line inside the
+orientation diagram, and it reads:
+
+    best_fitness()  ·  save_logs()  ·  save_results()
+    ORIENT BACK — the one and only flip outward
+
+`official_spec_sheet.md:866` says the opposite in prose: *"`run` returns a result object, and there
+is no `best_fitness()` accessor."* Both are in the sheet as it stands on `main`.
+
+**It is stale twice over, not once.** Deleting the dead name is not the whole fix:
+
+- `best_fitness()` no longer exists anywhere — PR #65 removed the field and the accessor, and the
+  sheet's own §8 had already said it should not.
+- `save_logs()` and `save_results()` are still `todo!()`, and PR #65 established they are now
+  *structurally* wrong rather than merely unbuilt: both take `&self` and the evolver holds nothing
+  to write. They move onto `RunResult` under #21. So naming them as the functions that cross the
+  boundary is describing a shape we have agreed to change.
+- What actually performs the flip today is `dispatch::erase`, and what crosses is `run()` returning
+  a `RunResult`. None of those three names appear on the line.
+
+**Why it is worth a meeting slot rather than a quiet correction.** The self-merge carve-out agreed
+2026-08-09 covers a change that *subtracts* a falsehood. Striking `best_fitness()` alone would
+qualify, but it would leave the line asserting that two `todo!()` functions are the outward
+boundary, which is a new claim about a design we are actively changing in #21. That is the case the
+carve-out deliberately excludes.
+
+**The ask:** agree replacement wording for `:351`, or agree to strike the function list from the
+diagram entirely and let §8 carry the surface on its own. My preference is the second — the diagram
+earns its place by showing *where* the flip happens, and enumerating the API in a second place is
+what let the two lines drift apart in the first place.
+
+*#56 · raised 2026-08-12 21:24 — James.*
+
+### 57. `documentation/HANDOFF.md`'s planned table kept two rows that PR #65 deleted from `status.html`
+
+James, 2026-08-12. Not a meeting item — it needs one of us to make a two-line edit, and #53 decides
+who. Raising it rather than fixing it because the doc queue is still unagreed.
+
+**What happened.** PR #65 correctly removed two rows from `documentation/status.html` — **"A result
+object"** and **"The convergence log reaching Python"** — because it shipped both. `HANDOFF.md`
+carries a mirror of that same table at `documentation/HANDOFF.md:78`, and the PR did not touch that
+file, so both rows are still listed there as planned. I merged it anyway; this is a stale line in a
+working note, not a defect in the change.
+
+**Why the duplication exists at all** is the part worth a second's thought before anyone patches it.
+`HANDOFF.md`'s table and `status.html`'s table are the same list maintained in two files, so this
+was going to happen on whichever one the next PR forgot. Michael's `collab.md` #50 already asks
+whether `status.html` should be the *only* page that mentions unbuilt features; if the answer is
+yes, the natural companion is that `HANDOFF.md` stops carrying a copy and points at `status.html`
+instead.
+
+**So it is one edit or the other, not both:** delete the two rows and leave the duplication in
+place, or resolve #50 first and let the fix be the de-duplication. I would rather it waited for #50
+than be patched twice.
+
+**No verification needed beyond reading it** — `documentation/README.md`'s checker passes clean
+either way (39 pages, 38 nav entries), because a stale table row is neither a broken link nor a
+missing anchor. Nothing automated will catch this one.
+
+*#57 · raised 2026-08-12 21:24 — James.*
