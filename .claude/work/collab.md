@@ -2614,3 +2614,50 @@ only condition union merge exists for.
   way, and the loop it belongs in is already on the branch.
 
 *#61 · raised 2026-08-13 10:56 — James.*
+
+### 62. Move `.claude/` into its own repo — the `main`-pinned worktree cannot hide itself from package users
+
+- **The ask:** replace #58's worktree with a second repository holding `.claude/` wholesale, cloned
+  into place as the directory itself. Binds both owners' setup and supersedes machinery agreed one
+  day ago, so it is a meeting item. Raised after the worktree's first day in real use.
+
+- **What broke, and it is not the worktree.** Pinning it to `main` is the defect: `main` is also the
+  branch you want checked out, and git forbids one branch in two worktrees. James's bootstrap
+  workaround this morning and this session's near-miss on a `collab.md` 109 lines behind both trace
+  to that one choice, not to worktrees as an idea.
+
+- **The new requirement that decides it.** We want a testing and a release branch, and neither the
+  wheel nor a clone of the Rust repo should expose `.claude/` to anyone using or modifying GET.
+  A dedicated `claude-work` branch — the minimal fix, and my first recommendation — cannot do this:
+  `skills/`, `hooks/` and `CLAUDE.md` must sit in the checked-out tree for Claude Code to read them,
+  so they live on `main` and land in every clone. Deleting them on `release` makes every later
+  `main → release` merge a modify/delete conflict on every skill touched since.
+
+- **The shape.** `.claude/` goes into GET's `.gitignore` and is tracked nowhere in GET. A second
+  repo — `GET-claude` — holds the whole directory, and each machine clones it *as* that path
+  (`git clone <url> GraphEvolutionTool/.claude`), giving a real nested repo with its own `.git` and
+  no symlink. No worktree, one branch for every Claude file by construction, so `/park` and `/load`
+  work with no branch rules at all. The wheel needs no exclude rule because the files are absent,
+  and `GET-claude` can stay private after GET goes public.
+
+- **The two costs, and why they are small at two people.** Cross-repo reference ambiguity dies if
+  `GET-claude` has issues disabled — one tracker, so `#43` stays unambiguous, and the clones sit
+  side by side so `git -C ../GraphEvolutionTool show <sha>` resolves either way. Non-atomic commits
+  across the two repos we already pay: `/done` pushes `decisions.md` to `main` while the code it
+  describes waits in an open PR, by design. What genuinely gets harder is archaeology — "what did
+  the plan say when this commit landed" becomes a timestamp lookup across two repos instead of one
+  SHA — which a project this young rarely asks.
+
+- **The one sharp edge, because it does not shrink with team size.** Setup is per-machine and fails
+  *silently*: a session in a clone that skipped it simply has no conventions loaded and says nothing.
+  A `SessionStart` hook that checks for `.claude/skills/` and stops with the clone command closes it.
+
+- **This needs one tracker issue covering the whole migration, not a patch here and there.** Moving
+  the directory is the easy part; what makes it work afterwards is everything that points at it —
+  `setup_docs_worktree.sh` and the worktree it creates deleted, every skill that resolves `$DOCS_WT`
+  rewritten to plain paths, `CLAUDE.md`'s worktree rules and the PR-route table, `.gitignore`, the
+  `SessionStart` hook and its guard, `traps.md`'s worktree entries, and the packaging include list
+  so the wheel is verified clean. Filed as one issue with a checklist, done in one pass, because a
+  half-migrated layout is worse than either end state.
+
+*#62 · raised 2026-08-13 18:45 — Michael.*
