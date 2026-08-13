@@ -127,3 +127,36 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   `status.html` — delete the "`save_logs` / `save_results`" row (~L106-113) entirely.
 
 *#run-output-save-methods · filed 2026-08-13 15:04 — Michael.*
+
+## #present-tense-convention-dropped
+
+- **Pages:** every page carrying a `badge-planned` span, plus `status.html`.
+- **Now false:** the whole convention. `documentation/` describes designed-but-unbuilt features in
+  the present tense with a `planned` badge and a `.plan-note` callout naming what actually happens,
+  and `status.html` indexes them.
+- **Should say:** pages describe **present behaviour only**. Drop every `badge-planned` span and its
+  `.plan-note` callout, rewriting the surrounding prose to what the code does today. `status.html`
+  stays, and becomes the **single** place in the site that names unbuilt work — the roadmap lives
+  there and nowhere else.
+- **Why:** decided at the joint meeting of 2026-08-13 (`collab_settled.md` #50). The convention was
+  never actually agreed — it was flagged as the site's biggest risk on PR #64 and merged without a
+  ruling, so it stood unopposed rather than settled. It is a single-pass change now and a much
+  larger one after a few more edits.
+- **Note for the sweep:** this entry overlaps every other entry in both queues that mentions a
+  badge. Apply this one **last**, so the per-feature entries do not fight it.
+
+*#present-tense-convention-dropped · filed 2026-08-13 20:55 — Michael, from the joint meeting.*
+
+## #handoff-planned-table-de-duplicated
+
+- **Page:** `documentation/HANDOFF.md`, the planned table at L78.
+- **Now false:** it mirrors `status.html`'s table and still carries "A result object" and "The
+  convergence log reaching Python", both of which PR #65 shipped and removed from `status.html`.
+- **Should say:** nothing — delete the table and replace it with a pointer to `status.html`.
+- **Why:** the stale rows are the symptom; one list maintained in two files is the defect, and it
+  was always going to break on whichever PR updated one and forgot the other. `documentation/README.md`'s
+  checker passes clean either way, because a stale row is neither a broken link nor a missing
+  anchor. Decided at the joint meeting of 2026-08-13 (`collab_settled.md` #57), and it follows from
+  #50 making `status.html` the sole index.
+
+*#handoff-planned-table-de-duplicated · filed 2026-08-13 20:56 — Michael, from the joint meeting.*
