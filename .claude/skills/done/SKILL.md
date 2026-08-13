@@ -43,6 +43,25 @@ ago. The one-line rule: **parked is unfinished by definition; `/done` is for fin
 The **archive stays shared and un-namespaced** at `work/archive/<YYYY-MM>_<slug>/`. Only live tasks
 are per-owner. A finished task is the project's history, and it already reaches both owners there.
 
+## 0.5. Work in the dedicated `main` worktree, not the branch checked out here
+
+**Every `.claude/work/` path in this skill — including the archive — is inside a separate worktree
+pinned to `main`**, never the main tree's checked-out branch. `CLAUDE.md`, "`.claude/work/` lives
+in a dedicated `main` worktree" has the full reasoning.
+
+```bash
+MAIN_TREE="$(git rev-parse --show-toplevel)"
+DOCS_WT="$(dirname "$MAIN_TREE")/$(basename "$MAIN_TREE")-docs"
+[[ -d "$DOCS_WT" ]] || { echo "Missing docs worktree — run: git worktree add \"$DOCS_WT\" main"; exit 1; }
+cd "$DOCS_WT" && git pull
+```
+
+Steps 1–6 and the commit in step 7 all happen inside `$DOCS_WT`, which is always `main` — **this
+removes the need step 7 used to describe for switching the main tree's branch to commit the
+close-out**, since the close-out was never on the code branch to begin with. Only the branch
+*deletion* at the end of step 7 still touches `$MAIN_TREE`, because that's where the task's
+feature branch actually lives.
+
 ## The argument
 
 The argument is normally the **archive slug** — the name that follows `<YYYY-MM>_` in the archive
@@ -160,31 +179,33 @@ outlived the task.
 **6. Leave `work/<owner>/current/` empty.** Do **not** write a stub `plan.md` or seed `history.md` — `/start`
 scaffolds the next task, and an empty directory makes it obvious there isn't one.
 
-**7. Land the close-out on `main` — and check where you are standing first.** Added 2026-08-12,
-Michael. The Constraints section already said the close-out belongs on `main`; it never said how to
-get there, and the sweep runs at the end of a task, which is exactly when the task's own code branch
-is the checked-out one. Committing there puts the archive on the feature branch, where it waits for
-someone else's review — the stall the two-independent-tracks rule exists to prevent.
+**7. Land the close-out on `main`.** Added 2026-08-12, Michael; simplified 2026-08-13 when
+`.claude/work/` moved into the dedicated `main` worktree — the close-out was landing on the task's
+feature branch because the sweep ran wherever the main tree happened to be checked out, which is
+exactly the drift the worktree exists to remove. Now it's just an ordinary commit in `$DOCS_WT`,
+which was never on the feature branch to begin with:
 
-Ask for the OK first (Constraints below — every time, no exceptions), then:
+Ask for the OK first (Constraints below — every time, no exceptions), then, **from `$DOCS_WT`**:
 
 ```bash
-git checkout main && git pull          # even if you think you are already on it
+cd "$DOCS_WT"
 git add .claude && git commit          # archive, decisions marker, hotfix stamps, traps
 git push origin main
 ```
 
 The docs are staged from `.claude/` only. **Never** add the task's source changes here — they
-belong to their own branch and PR, and the two tracks stay separate.
+belong to their own branch and PR in `$MAIN_TREE`, and the two tracks stay separate.
 
 **Then delete the task's branch, but only once it is merged — and expect the remote copy to be
-gone already.** Nobody merges their own PR here, so by the time you close your own task the other
+gone already.** This part happens **in `$MAIN_TREE`**, not `$DOCS_WT` — the branch being deleted is
+code, not docs. Nobody merges their own PR here, so by the time you close your own task the other
 owner has usually merged it and deleted the remote branch in the same breath. **The copy that
 reliably survives is the local one**, and it survives on *your* machine only, which is why this
 belongs in `/done` rather than in the merge snippet. A `remote ref does not exist` error here is
 the normal case, not a fault:
 
 ```bash
+cd "$MAIN_TREE"
 git fetch --prune                                 # drop remote-tracking refs already deleted
 git branch --merged main | grep -qx "  <branch>" || echo "NOT merged — stop"
 git branch -d <branch>                            # the copy that is usually still here
