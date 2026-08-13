@@ -2428,3 +2428,49 @@ you close it. Nothing about how you invoke `/save`, `/park`, `/load`, `/done` or
 changes — this is all internal to what those skills do.
 
 *#58 summary · 2026-08-13 — Michael.*
+
+### 59. This file's `## Open` / `## Settled` headings stopped meaning anything around #48 — and there's a genuine duplicate item number
+
+James, 2026-08-13. Not proposing a fix here — reorganizing this file is exactly the kind of edit
+that needs the announce-first rule (`CLAUDE.md`, "Append; do not edit an existing entry in
+place"), since it means moving lines that already exist rather than appending new ones. Flagging
+it so it's on the list for when we're both looking at it, and so nothing in the disorganized
+stretch gets missed at the next meeting.
+
+**What's actually wrong, verified just now:**
+
+- `## Open` is only at line 58, `## Settled` only at line 558. Every item from **#48 onward**
+  physically landed *after* `## Settled` — including items filed weeks apart, by both of us —
+  because "append" has always meant "append to wherever the file currently ends," and the file
+  end drifted past the `## Settled` boundary somewhere around #48 without anyone noticing.
+- **Items #14–#39 are physically located between #49 and the rest of #40–#58** (roughly lines
+  621–1820), even though they're dated earlier (#14 is from the #10/#14/#15 file-overlap era).
+  Numeric order and file order have diverged.
+- **`### 48` is used twice** — line 464, "Discussion, parked: what should `config.example.toml`
+  actually demonstrate?" (raised 2026-08-11 16:56), and line 1886, "FYI: auto-delete-on-merge is
+  on" (raised 2026-08-12 14:20). Both mine, a day apart — I lost track of the last number used,
+  which is exactly the failure mode a 2400-line file with no reliable "you are here" makes easy.
+  `uniq -d` doesn't catch this (checked — clean), since the two items' *bodies* differ; only the
+  heading number collides.
+
+**What needs deciding, together, not unilaterally:** how to renumber/reorder without breaking the
+`#N` references already scattered through `decisions.md`, `traps.md`, and this file's own replies
+(e.g. #45 says "filed as #58" referring to the *old* #58, not today's — that's a second collision
+waiting to confuse a future reader). My instinct is a one-time cleanup pass done together at the
+next meeting, not a unilateral renumbering — but that's exactly the kind of call this item exists
+to raise rather than settle.
+
+**So neither of us loses track of what's still actually open in the disorganized stretch** — a
+reproducible way to re-list every item, in file order, any time:
+
+    grep -n '^### [0-9]' .claude/work/collab.md
+
+Cross-check against this snapshot from today (2026-08-13): items explicitly tagged for a joint
+meeting and not yet resolved there — **#51** ("Five things for the sheet at the next joint
+meeting"), **#52** ("Two agenda items for the next meeting"), **#56** ("Sheet item for tomorrow").
+Items with a position stated but not a settled amendment — **#42** (SDA→edge-edit auto-feed
+proposal), **#48** (`config.example.toml` demo — the *first* #48), **#49** (`pip install`
+packaging clause — James replied with a position 2026-08-12, still "not a settled amendment" per
+his own closing line). Worth putting all of these on the same agenda as the renumbering itself.
+
+*#59 · raised 2026-08-13 — Michael.*
