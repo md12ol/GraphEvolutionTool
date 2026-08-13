@@ -13,6 +13,7 @@ pub mod sir;
 
 use crate::config::{Config, FitnessConfig};
 use crate::fitness::{Direction, PyFitness};
+use crate::graph::Graph;
 use crate::py_config::{
     PyConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig, PyOperationWeights,
     PySelectionConfig, PySirParams, config_error_to_py,
@@ -41,6 +42,18 @@ pub struct GraphEvolver {
     /// a setter instead (§8): the config *selects* Python, this *is* the
     /// callable.
     fitness_function: Option<PyFitness>,
+    /// The graph an edge-edit script is applied to, set by
+    /// [`GraphEvolver::set_base_graph`].
+    ///
+    /// A setter rather than a config field for the same reason as the objective
+    /// above: this is either data the caller brought or the output of a previous
+    /// run, and neither belongs in a `config.toml`. `None` means every run starts
+    /// from an empty graph, which is the default.
+    ///
+    /// Unused by SDA, which generates its graph from scratch rather than editing
+    /// one — the setter rejects a call on an SDA-configured evolver instead of
+    /// storing something nothing will read.
+    base_graph: Option<Graph>,
 }
 
 #[pymethods]
@@ -56,6 +69,7 @@ impl GraphEvolver {
         Ok(Self {
             config,
             fitness_function: None,
+            base_graph: None,
         })
     }
 
@@ -116,6 +130,7 @@ impl GraphEvolver {
         Ok(Self {
             config: parsed,
             fitness_function: None,
+            base_graph: None,
         })
     }
 
@@ -339,6 +354,7 @@ mod tests {
         GraphEvolver {
             config: config_with(fitness_block),
             fitness_function: None,
+            base_graph: None,
         }
     }
 

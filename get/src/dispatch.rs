@@ -520,6 +520,7 @@ mod tests {
         GraphEvolver {
             config: config_with(fitness_block),
             fitness_function: None,
+            base_graph: None,
         }
     }
 
@@ -643,6 +644,7 @@ mod tests {
         GraphEvolver {
             config: config_with_genome(genome_block),
             fitness_function: None,
+            base_graph: None,
         }
     }
 
@@ -1015,6 +1017,7 @@ mod tests {
         let mut evolver = GraphEvolver {
             config: runnable(GENERATIONAL, EDGE_EDIT),
             fitness_function: None,
+            base_graph: None,
         };
 
         let result = evolver.run(8).expect("a full config run completes");
@@ -1042,6 +1045,7 @@ mod tests {
         let mut evolver = GraphEvolver {
             config: runnable(GENERATIONAL, EDGE_EDIT),
             fitness_function: None,
+            base_graph: None,
         };
 
         let first = evolver.run(4).expect("first run");
