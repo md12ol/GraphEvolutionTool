@@ -38,10 +38,20 @@ script showing the edge-edit run's starting population expresses the seeded edge
       on each rejecting case. `cargo test -p get`: 239 passed. Teeth verified by disabling the
       threading and all three checks — exactly those four failed, other 235 passed. `0e48a01`.
 
-- [ ] Doc note on empty-base opcode inertness, per the issue ("needs a doc note so it is not
-      misread as a bug") — fold into `set_base_graph`'s own doc comment: unset means empty, and
-      five of nine opcodes (`Swap`, `Hop`, the three `Local*`) are no-ops on an empty graph.
-      **Verify by:** read the rendered doc, `cargo doc -p get --no-deps`.
+- [x] Doc note on empty-base opcode inertness — in `set_base_graph`'s doc comment and again in
+      `edge_edit_start`'s, naming all five opcodes and saying it is self-correcting, not a defect.
+      `cargo doc -p get --no-deps` clean for this item (8 warnings, all pre-existing, none in
+      range). Python docstring reach to be confirmed in task 7, when maturin builds anyway.
+
+- [ ] `documentation/` consequences of shipping `set_base_graph` — six claims the site makes that
+      this branch falsifies: `status.html`'s "Supplying a base graph" row; `python-api.html`'s
+      `badge-planned` on `#base-graph` and its "rejected **or warned**" (settled as rejects,
+      `decisions.md` 2026-08-12); `examples/index.html`'s plan-note "there is no `set_base_graph`"
+      and its warn block saying a narrowed cap "silently collapses" (it now raises); and
+      `HANDOFF.md`'s mirror row, which `collab.md` #57 says should wait on #50.
+      Route undecided — this PR, per `CLAUDE.md`'s de-badge rule, or `jsargant_edits.md`, per the
+      queue Michael used for #71.
+      **Verify by:** `grep -rn 'set_base_graph' documentation/` shows nothing claiming it unbuilt.
 
 - [ ] Manual stacked-run check: a small script (SDA config → `run()` → `best_edges`; edge-edit
       config with matching `network_size`/`max_edge_multiplicity` → `set_base_graph(n, edges)` →
