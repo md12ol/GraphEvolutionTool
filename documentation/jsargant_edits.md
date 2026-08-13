@@ -121,3 +121,25 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   correctness fix to prose, not a de-badging, and it is separable from `#set-base-graph-ships`.
 
 *#set-base-graph-cap-rejects · filed 2026-08-13 12:45 — James.*
+
+## 2026-08-13 14:41 — James — the setter owes five checks now, not three, and two of them are new
+
+- **Trigger:** the joint meeting of 2026-08-13 settled `collab.md` #61 — `decisions.md` 20:16,
+  "Caller-supplied graph data is rejected, not silently dropped". `set_base_graph` now rejects an
+  out-of-range endpoint and rejects a self-loop, each raising `ValueError` naming the offending
+  edge. Implemented on `jsargant_set_base_graph` for GitHub #28. `Graph::set_edge` is unchanged.
+- **Files:** `guide/python-api.html` — the "The setter owes three checks" list under `#base-graph`.
+- **Now false:** the list opens "the node count must match `network_size`, **or out-of-range edges
+  are silently dropped**". That was the rationale for check 1 and is no longer what happens: the
+  node count is still checked, and separately every edge is checked, so an out-of-range endpoint
+  raises rather than disappearing. The framing "three checks" is also now wrong.
+- **Should say:** the setter validates the declared node count against `network_size`, and then
+  each edge for an out-of-range endpoint, a self-loop, and a multiplicity above
+  `max_edge_multiplicity` — raising `ValueError` on the first failure and building nothing. Worth
+  keeping the reason, because it is the non-obvious part: a node count equal to `network_size` does
+  **not** make the edges in range, and a caller who takes `num_nodes` from their config rather than
+  their data hits exactly that. The unset-base bullet is unaffected and stays.
+- **Badges:** none — this list carries no `badge-planned` span or `.plan-note`. Prose correctness
+  only, and it stacks with `#set-base-graph-ships`, which de-badges the section this list sits in.
+
+*#set-base-graph-five-checks · filed 2026-08-13 14:41 — James.*
