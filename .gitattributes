@@ -41,3 +41,9 @@
 # where the shebang is never read — they were CRLF too. Without this line the fix is not durable:
 # the next checkout, merge or stash puts the CRs straight back.
 *.sh text eol=lf
+
+# Added 2026-08-13 at the joint meeting (collab #59): collab.md split into a live file and an
+# archive, so the archive needs the same union driver for the same reason — both owners append to
+# the tail of it from separate machines. Everything in the note above about union's two silent
+# failures applies to it unchanged.
+.claude/work/collab_settled.md merge=union
