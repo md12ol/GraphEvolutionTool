@@ -2130,3 +2130,164 @@ inconsistent pass later.
 non-test figure in place of the diluted 29% currently cited — queued in `plan.md`, not yet pushed
 to the tracker.
 *Recorded 2026-08-13 02:45 — Michael.*
+
+## 2026-08-13 03:05 — Michael — Live task directories go per-owner and tracked, and a blocked task is parked rather than held
+
+**Chose:** `.claude/work/current/` is replaced by `.claude/work/<owner>/current/`, with
+`.claude/work/<owner>/parked/<slug>/` beside it for tasks that cannot proceed. Both are **tracked**;
+the `.gitignore` line that hid the live task is gone. `work/archive/` is unchanged — shared, no
+owner in the path. `<owner>` is resolved from `git config user.email` against the table
+`documentation/mdube_edits.md` already uses, and an unrecognised address stops and asks. A new
+`/park <slug>` skill saves, stamps `handoff.md` with `Blocked on:`, and moves the task; `/load
+<slug>` brings it back, parking whatever was live to make room; `/done` refuses a parked task.
+
+**Why:** two problems with one shape. A task blocked on the other owner — #27, waiting on PR #65 and
+#66 — either squatted in `current/` or had to be falsely closed. And an ignored `current/` lived on
+one laptop, so a plan could not be resumed on another machine, which is the identical failure that
+made `work/archive/` tracked on 2026-07-31. The original reason for ignoring it was that two people
+must not fight over one live plan; the per-owner **path** serves that reason strictly better, since
+neither owner's directory is ever written by the other. Once the path does the work, the ignore only
+costs.
+
+**Rejected:** (a) `work/current_<owner>/` and `work/parked_<owner>/` — flatter, but namespaces two
+names instead of one and needs a second `.gitattributes` glob per owner. (b) Keeping `current/`
+shared and ignored with only `parked/` namespaced — the cross-machine half then still does not work,
+which was the actual driver. (c) A per-owner `archive/` — symmetric, but splits the project's
+history in two for no gain. (d) Reading a parked task in place rather than moving it — every
+downstream tool reads `current/` and nothing else, so two directories holding a live plan is exactly
+the state this prevents.
+
+**The new failure mode, accepted deliberately:** tracking live tasks makes the conflict *one person
+against themselves from two machines*, not one owner against the other. `plan.md` is rewritten in
+place, so no merge strategy helps and union merge would be actively wrong. Mitigation is a
+`**Machine:** <hostname> · saved <ts> · <SHA>` stamp in `handoff.md` and a `/load` that **stops and
+reports** on divergence instead of merging or resetting. Note `pull_main.sh` fast-forwards `main` at
+session start but refuses on a dirty tree, so a divergence usually means it declined.
+
+**Verified rather than assumed:** `git check-attr merge` reports `unspecified` for both
+`work/mdube/current/plan.md` and a `parked/<slug>/` file, so the union driver does not reach the new
+paths — gitattributes globs do not cross `/`. Park→unpark round trip is lossless, md5-identical
+across all five files, tested against a `backup_docs.sh --force` snapshot.
+
+**Affects:** `/.gitignore`, `.claude/CLAUDE.md`, `.claude/README.md`, `.claude/hooks/session_brief.sh`,
+`.claude/skills/{park,load,save,start,done,setup}/SKILL.md`. PR #69; FYI to James in `collab.md` #55.
+*Recorded 2026-08-13 03:05 — Michael, with PR #69 open and unmerged.*
+
+## 2026-08-13 03:07 — Michael — `/save` and `/park` push `work/<owner>/` themselves; a narrow carve-out to the push rule
+
+**Chose:** `/save` and `/park` commit and push `.claude/work/<owner>/` as their last step, without
+asking. That path, at that step, and nothing else. `CLAUDE.md`'s "don't commit or push unless asked"
+keeps its full force everywhere else, and a `/save` that finds uncommitted source leaves it alone
+and says so in the brief.
+
+**Why:** the directories were tracked so a task could be resumed on another machine, and that only
+works if the save reaches `origin`. Leaving the push to a separate human step reintroduces the
+failure the change was made to remove, in its worst form: it fails **silently**, and you find out on
+the other laptop, usually a day late. A rule whose correct application depends on remembering an
+extra step every single session is a rule that will be missed.
+
+**Rejected:** (a) `/save` stages and asks for an OK — one prompt per session end, and the prompt is
+skippable exactly when tired, which is when saves matter. (b) The user pushes manually — same silent
+failure, now with the docs claiming they were saved. (c) Widening the rule generally — the rule is
+load-bearing for code, where an unreviewed push is how a wrong number reaches `main`.
+
+**Cost, stated plainly:** nobody reviews your own plan file. That is correct — a plan carries no
+behaviour — but it is the part of this most likely to be objected to, so it is the part `collab.md`
+#55 puts to James explicitly rather than burying.
+
+**Affects:** `.claude/CLAUDE.md` Conventions and the routing table; `.claude/skills/save/SKILL.md`
+step 10; `.claude/skills/park/SKILL.md` step 5.
+*Recorded 2026-08-13 03:07 — Michael, amending the 2026-08-04 15:55 routing decision rather than superseding it.*
+
+## 2026-08-13 03:09 — Michael — A change that alters how the other owner's session behaves goes through one PR, whatever the routing table permits
+
+**Chose:** all of the per-owner work-directory change went through PR #69 — including the skill
+bodies, `CLAUDE.md`, `README.md` and `.gitignore`, every one of which the routing table would have
+allowed pushing straight to `main`. Only `collab.md` #55 went direct, ahead of the PR.
+
+**Why:** the routing table's own stated test is **"does this change what runs"**, and a skill body
+is what an agent executes. These particular bodies instruct it to move task directories between
+paths and to push commits — categorically unlike the typo fix the direct-push row was written for.
+Second and more concrete: splitting the change leaves a broken intermediate state on `main`, where
+skills write to `work/jsargant/current/` while the session brief still reads `work/current/`. The
+change is atomic in fact, so routing it as two things manufactures a window in which neither owner
+has a working setup.
+
+**Why `collab.md` #55 is the exception:** it is the notification. A notification sitting on a branch
+notifies nobody — the same argument that puts traps on `main` before the merge they exist to
+prevent. It went first so James can object before he is reviewing a fait accompli.
+
+**Rejected:** following the table literally and splitting the push. Permitted, and wrong here — the
+table routes by what a change *is*, and this is the case where the same change is both.
+
+**Affects:** PR #69; `.claude/CLAUDE.md`'s routing table, which is unchanged — this entry records
+when to route *above* it, not a new row.
+*Recorded 2026-08-13 03:09 — Michael, on the user's question about where each half belonged.*
+
+## 2026-08-13 02:41 — Michael — #21 is built on a stacked branch, not on `main`
+
+**Chose:** branched `mdube_run_output` off `mdube_result_object` (PR #65, open) and merged
+`mdube_per_owner_work_dirs` (PR #69, open) into it, rather than branching GitHub #21 off `main`.
+The merge was clean — the two PRs' file sets are disjoint, `.claude/` + `.gitignore` against
+`get/src` + `documentation/` + `examples/`.
+
+**Why:** #21's scope changed underneath it when #27 landed the result object. `save_logs` and
+`save_results` now have to be re-homed onto `RunResult`, and `RunResult` exists only on #65's
+branch. Branching off `main` would mean writing #21 against the deleted API and then writing it
+again. #69 comes along because its skills and hook are the workflow this session actually runs
+under, and having them absent from the tree makes every `/save` and `/load` behave as the old
+layout.
+
+**Rejected:** waiting for #65 to merge — it is blocked on James, with no date, and #21 is the only
+unblocked issue assigned to Michael. Also rejected cherry-picking just `py_result.rs` out of #65,
+which would fork a file that is under review.
+
+**Affects:** branch `mdube_run_output`, `db5d863`. A PR opened from it before #65 and #69 merge
+shows their commits too; the PR body has to say so. Once both land, merge `main` in and the stack
+flattens.
+*Recorded 2026-08-13 02:41 — Michael, at the `/start` of #21.*
+## 2026-08-13 — Michael — closed `result-object` (#27) with `collab.md` #53/#54 still unanswered
+
+**Chose:** to run `/done` on the `result-object` task even though its last plan item's own
+`Verify by:` named two conditions — PR #65/#66 merged, and `collab.md` #53/#54 answered — and only
+the first had happened. The PR-merge half is done (confirmed via `gh pr list --state all`); #53 and
+#54 carry forward as open `collab.md` items rather than blocking this task's close.
+
+**Why:** #53 (per-owner doc-queue convention) and #54 (sheet-linking amendment, an FYI already
+pushed direct) are both about future process, not about whether GitHub #27's shipped code is
+correct. The task's own `Verify by:` bundled a real gate (the PR merges) with a courtesy check-in
+that doesn't actually gate this task's deliverable. Holding a finished, merged feature open
+indefinitely on an unrelated unanswered reply is the kind of program-not-task drift `CLAUDE.md`
+warns `/done` exists to prevent.
+
+**Rejected:** waiting for James's reply before closing — the safer literal reading of the plan's
+`Verify by:`, but with no forcing function (no deadline, no dependency of #53/#54 on this task's
+code), it would leave the task open indefinitely for no gain.
+
+**Affects:** `.claude/work/mdube/current/plan.md` (now archived) — the "Waiting on James" item
+marked `[x]` with the split noted. `collab.md` #53/#54 remain **Open**, unaffected by this task's
+close.
+*Recorded 2026-08-13 11:20 — Michael.*
+
+## Task complete: result-object — 2026-08-13
+
+## 2026-08-13 — Michael — closed `per-owner-work-dirs` with `collab.md` #55 still unanswered
+
+**Chose:** to run `/done` on `per-owner-work-dirs` with PR #69 merged but `collab.md` #55 (the
+`/save`/`/park` push carve-out and the rest of the layout write-up) still unreplied. Same reasoning
+as the `result-object` close earlier the same day: the PR-merge half of the "Waiting on James" gate
+is satisfied, and #55 is a courtesy notification rather than something #69's shipped code depends
+on.
+
+**Why:** the layout, hook fixes and skills are already live and working on this machine — this
+session used `/park` and `/load` as real skills against `run-output` and `result-object` and both
+round-tripped correctly, which is direct evidence the shipped design works independent of whether
+James has replied.
+
+**Affects:** `.claude/work/mdube/current/plan.md` (now archived) — all three remaining items closed:
+the PR-merge half of "Waiting on James", the `/park`/`/load` exercise (satisfied by this session's
+own real skill runs), and the hook/skill-frontmatter PR (already inside #69). `collab.md` #55
+remains **Open**, unaffected.
+*Recorded 2026-08-13 11:35 — Michael.*
+
+## Task complete: per-owner-work-dirs — 2026-08-13

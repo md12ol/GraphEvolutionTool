@@ -480,3 +480,32 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
 - **Why:** the real interpreters are not on `PATH`; only the App Execution Alias stub is. Same root
   cause as the `cargo test` entry above, different symptom.
 - **Added:** 2026-08-13 — python3-is-absent-and-bare-python-is-the-store-stub
+
+### `grep -c` exits 1 when the count is zero, so `|| echo 0` prints TWO zeros
+- **Bites when:** you write the obvious defensive idiom in a shell hook —
+  `n=$(grep -c PATTERN file 2>/dev/null || echo 0)`. `grep -c` prints `0` **and** exits 1 on no
+  match, so the fallback fires anyway and `$n` becomes the two-line string `0\n0`. A `printf` of
+  several such counters then breaks across lines mid-sentence, which reads as a formatting bug
+  somewhere else entirely.
+- **Do this instead:** take the first line and default only if empty —
+  `n=$(grep -c PATTERN file 2>/dev/null | head -1); n=${n:-0}`. `session_brief.sh` has a `count()`
+  helper doing exactly this.
+- **Why:** `grep`'s exit status reports whether a line matched, independently of what `-c` printed.
+  It is not an error status, and `set -o pipefail` does not change it.
+- **Measured:** 2026-08-13 in `.claude/hooks/session_brief.sh`, which had shipped the broken form
+  since it was written. Found only because the parked-task work made the counts line print in a
+  state where a counter was genuinely zero.
+- **Added:** 2026-08-13 — grep-c-exits-1-on-zero-so-the-fallback-doubles-it
+
+### A handoff's `Start here` is a bold label, not a heading — greps for `## Start here` find nothing
+- **Bites when:** you write tooling that extracts the next action out of `handoff.md`. `/save`'s
+  template writes `**Start here:** ...` inline, so an `awk`/`grep` anchored on `^## .*Start here`
+  matches nothing and silently prints an empty block. It fails open, so the tool looks like it is
+  working and merely has nothing to say.
+- **Do this instead:** anchor on `^\*\*Start here` — or accept both forms, as `session_brief.sh`
+  now does — and terminate on the next `## ` heading **or** the next `**Bold label:**`.
+- **Why:** the handoff template uses bold labels for its sections and `##` for nothing but the
+  title, so heading-shaped assumptions about it are wrong throughout, not only here.
+- **Measured:** 2026-08-13. `session_brief.sh` had carried the heading-anchored form since it was
+  written and had therefore never once printed a `Start here` block on any handoff in this repo.
+- **Added:** 2026-08-13 — handoff-start-here-is-a-bold-label-not-a-heading

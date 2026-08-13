@@ -2182,3 +2182,186 @@ would touch, so doing them first means doing them twice.
 it.
 
 *#54 · raised 2026-08-13 02:14 — Michael.*
+
+### 55. Live task directories are now per-owner and tracked, and there is a `/park` skill (55)
+
+Michael, 2026-08-13. The hook change is in PR — see below — but the shape binds your practice, so
+here is what changed and what is yours.
+
+**The layout.** `.claude/work/current/` is gone. Live tasks are at `.claude/work/<owner>/current/`,
+and a blocked task moves to `.claude/work/<owner>/parked/<slug>/`. Yours is
+`.claude/work/jsargant/`; it does not exist until your first `/start` creates it. `work/archive/`
+is unchanged — still shared, still no owner in the path, because a finished task is the project's
+history rather than one person's.
+
+**They are tracked now, and `work/current/` was un-ignored to do it.** The old reason for ignoring
+it was that two people must not fight over one live plan. The per-owner path serves that reason
+better, and ignoring cost something real: a task lives on one laptop. I want to pick work up on a
+second machine, which is the whole driver here.
+
+**Which directory is yours is resolved from `git config user.email`, not from memory** — the same
+table `documentation/mdube_edits.md` already uses, now also in `.claude/hooks/session_brief.sh` and
+the `load`, `save`, `park` and `start` skills. An address in none of them stops and asks. If you use
+another address on another machine, add it in all five places rather than letting it guess.
+
+**The rule change you should push back on if you disagree:** `/save` now commits and pushes
+`.claude/work/<owner>/` to `main` as its last step, which is a narrow exception to "don't commit or
+push unless asked". Only that path, only at that step — code, the persistent docs and the sheet all
+still need an explicit instruction every time. The argument is that an unpushed handoff fails
+silently and you find out on the other machine a day later, which defeats the reason for tracking
+these at all. It also means nobody reviews your own plan file, which I think is correct and you may
+not.
+
+**`/park <slug>`** runs `/save`, stamps `handoff.md` with a `Blocked on:` line — the concrete
+unblocking event, not "waiting on Michael" — and moves the task into `parked/`. `/load <slug>`
+brings it back and parks whatever was live to make room. `/done` refuses a parked task outright,
+because its final save has to run against the session that actually finished the work.
+
+**The new failure mode, stated plainly:** it is you against yourself from two machines, not you
+against me. Two machines editing one `plan.md` is a genuine conflict on a file rewritten in place.
+So `handoff.md` carries `Machine: <hostname> · saved <ts> · <SHA>` and `/load` **stops and reports**
+on divergence instead of merging or resetting. Note `pull_main.sh` only fast-forwards on a clean
+tree, so a divergence usually means it declined rather than that nothing happened.
+
+**Verified rather than assumed:** `git check-attr merge` reports `unspecified` for both
+`work/mdube/current/plan.md` and a `parked/<slug>/` file, so the union driver does not reach the new
+paths. It never did — gitattributes globs do not cross `/` — but that is exactly the kind of thing
+this repo has been bitten by, so it was measured.
+
+**All of it is in one PR, including the parts the routing table would let me push direct.** The
+table's test is "does this change what runs", and here the skill *bodies* are what runs — they tell
+an agent to move task directories between paths and to push commits, which is not the typo-fix case
+the direct-push row was written for. Splitting it would also leave a state where neither of us has a
+working setup: skills writing to `work/jsargant/current/` while the brief still reads
+`work/current/`. This item is the one exception, pushed direct ahead of the PR, because a
+notification sitting on a branch notifies nobody.
+
+**Two pre-existing bugs in `session_brief.sh` are fixed in the same PR**, both found while testing
+the swap rather than by reading. A `grep -c` prints `0` *and* exits 1, so the `|| echo 0` fallback
+appended a second zero and split the counts line across two lines. Worse, the "Start here"
+extraction matched only a `## Start here` heading — and `/save`'s template has always written
+`**Start here:**` inline, so that block has printed nothing since the day it was written. If you
+wondered why the session brief only ever showed a title and some counts, that is why.
+
+**Tested against a backup before anything was committed:** park-then-unpark round trip is lossless
+(md5-identical across all five files), the two-parked case lists both slugs with their blockers
+rather than guessing, and a parked task with no handoff reports `no blocker recorded` instead of
+going quiet.
+
+*#55 · raised 2026-08-13 02:10 — Michael.*
+
+### 56. Sheet item for tomorrow: §5.1's boundary diagram still names `best_fitness()`, which §8 says does not exist
+
+James, 2026-08-12. For the joint meeting — this is a sheet change, so it waits for one. Found while
+reviewing PR #65 before merging it, not by reading the sheet.
+
+**The contradiction.** `official_spec_sheet.md:351` is the "Python boundary" line inside the
+orientation diagram, and it reads:
+
+    best_fitness()  ·  save_logs()  ·  save_results()
+    ORIENT BACK — the one and only flip outward
+
+`official_spec_sheet.md:866` says the opposite in prose: *"`run` returns a result object, and there
+is no `best_fitness()` accessor."* Both are in the sheet as it stands on `main`.
+
+**It is stale twice over, not once.** Deleting the dead name is not the whole fix:
+
+- `best_fitness()` no longer exists anywhere — PR #65 removed the field and the accessor, and the
+  sheet's own §8 had already said it should not.
+- `save_logs()` and `save_results()` are still `todo!()`, and PR #65 established they are now
+  *structurally* wrong rather than merely unbuilt: both take `&self` and the evolver holds nothing
+  to write. They move onto `RunResult` under #21. So naming them as the functions that cross the
+  boundary is describing a shape we have agreed to change.
+- What actually performs the flip today is `dispatch::erase`, and what crosses is `run()` returning
+  a `RunResult`. None of those three names appear on the line.
+
+**Why it is worth a meeting slot rather than a quiet correction.** The self-merge carve-out agreed
+2026-08-09 covers a change that *subtracts* a falsehood. Striking `best_fitness()` alone would
+qualify, but it would leave the line asserting that two `todo!()` functions are the outward
+boundary, which is a new claim about a design we are actively changing in #21. That is the case the
+carve-out deliberately excludes.
+
+**The ask:** agree replacement wording for `:351`, or agree to strike the function list from the
+diagram entirely and let §8 carry the surface on its own. My preference is the second — the diagram
+earns its place by showing *where* the flip happens, and enumerating the API in a second place is
+what let the two lines drift apart in the first place.
+
+*#56 · raised 2026-08-12 21:24 — James.*
+
+### 57. `documentation/HANDOFF.md`'s planned table kept two rows that PR #65 deleted from `status.html`
+
+James, 2026-08-12. Not a meeting item — it needs one of us to make a two-line edit, and #53 decides
+who. Raising it rather than fixing it because the doc queue is still unagreed.
+
+**What happened.** PR #65 correctly removed two rows from `documentation/status.html` — **"A result
+object"** and **"The convergence log reaching Python"** — because it shipped both. `HANDOFF.md`
+carries a mirror of that same table at `documentation/HANDOFF.md:78`, and the PR did not touch that
+file, so both rows are still listed there as planned. I merged it anyway; this is a stale line in a
+working note, not a defect in the change.
+
+**Why the duplication exists at all** is the part worth a second's thought before anyone patches it.
+`HANDOFF.md`'s table and `status.html`'s table are the same list maintained in two files, so this
+was going to happen on whichever one the next PR forgot. Michael's `collab.md` #50 already asks
+whether `status.html` should be the *only* page that mentions unbuilt features; if the answer is
+yes, the natural companion is that `HANDOFF.md` stops carrying a copy and points at `status.html`
+instead.
+
+**So it is one edit or the other, not both:** delete the two rows and leave the duplication in
+place, or resolve #50 first and let the fix be the de-duplication. I would rather it waited for #50
+than be patched twice.
+
+**No verification needed beyond reading it** — `documentation/README.md`'s checker passes clean
+either way (39 pages, 38 nav entries), because a stale table row is neither a broken link nor a
+missing anchor. Nothing automated will catch this one.
+
+*#57 · raised 2026-08-12 21:24 — James.*
+
+### 58. `.claude/work/<owner>/` now lives in a dedicated worktree on `main` — your setup needed, one time
+
+James, 2026-08-13. Not asking permission first because this fixes a bug rather than adding a
+convention, but it does bind your practice (the skills now read/write a different path than the
+one in your working tree), so it needs your setup and your sign-off.
+
+**The bug.** `.claude/work/<owner>/current/` and `parked/` are ordinary tracked files, so their
+content is whatever the checked-out branch's history says. Cut a feature branch, and its copy of
+`work/mdube/current/` is frozen at that moment; every `/save` on `main` afterwards — including a
+task closing and moving out of `parked/` — is invisible from the feature branch until it merges.
+Hit this directly today: `mdube_run_output` was cut mid-task, then `result-object` and
+`per-owner-work-dirs` were both closed and archived on `main` while `run-output` sat parked, and
+switching back to `mdube_run_output` showed both of them still listed as parked — stale, because
+the branch's own tree had never seen the archive commits. `CLAUDE.md`'s routing table already says
+these directories go "Direct push to `main`" — the bug was that `/save`'s own step 10 said "`main`,
+or the current branch, if this session is on one," which is what actually let this drift happen.
+
+**The fix.** A linked git worktree, checked out to `main` permanently, at the fixed sibling path
+`../<repo-name>-docs` (computed from `git rev-parse --show-toplevel`, so it needs no hand-typed
+absolute path and is identical in form on both machines):
+
+    git worktree add ../GraphEvolutionTool-docs main
+
+Every skill that touches `.claude/work/` — `save`, `park`, `load`, `done`, `start` — now reads and
+writes through that worktree instead of the working tree the code branch happens to be on. Because
+the worktree is always `main`, `work/<owner>/current/` and `parked/` can no longer disagree with
+which branch is checked out in the main tree — there is only one live copy, and it is always
+current. The `SessionStart` hook (`session_brief.sh`) doesn't need the worktree at all: it reads
+`git show main:.claude/work/...` directly, which needs no setup and never touches your working
+tree.
+
+**What this does to the union-merge question you might be about to ask, since I know you will.**
+`decisions.md` and `collab.md` stop being touched by feature branches at all under this model —
+every write goes straight to the worktree's `main` checkout, so a feature-branch PR should never
+carry a diff to either file, and the `merge=union` driver stops mattering for PR merges. It still
+matters for the one case it was always really for: two people running `/save` on `main` at close
+to the same real time, which is unaffected by any of this.
+
+**Your one-time setup, before your next session:** run the `git worktree add` command above from
+your repo root. Nothing else changes about how you invoke `/save`, `/park`, `/load`, `/done` or
+`/start` — the path swap is internal to what the skills do, not something you type.
+
+**What I have not done:** pushed anything to your machine. The skill and hook changes are on a
+branch (`mdube_docs_worktree`) with a PR to follow, per the routing table's rule that hook changes
+and skill-body changes affecting shared practice go through review — bundled into one PR rather
+than split, same reasoning as PR #69: splitting would leave a state where neither of us has a
+working setup, since the hook and the skills have to agree on where the worktree lives.
+
+*#58 · raised 2026-08-13 — Michael.*
