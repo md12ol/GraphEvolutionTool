@@ -63,10 +63,16 @@ script showing the edge-edit run's starting population expresses the seeded edge
       spans intact). The body flags `collab.md` #61 as the one thing for the reviewer to weigh.
       Not merged: `CLAUDE.md`, I don't merge my own PR.
 
+- [x] **Agreed mid-session, after the plan was complete:** implement the joint meeting's ruling on
+      `collab.md` #61 — reject out-of-range endpoints and self-loops, not just cap violations.
+      Two checks, two tests, and the doc comment, which had stated the opposite. `cargo test -p get`
+      243 passed; teeth verified (both checks disabled → exactly the two new tests fail); confirmed
+      through real Python that both raise and a valid graph is still accepted. `0604323`, `8ab7464`.
+
 ## Open questions
-- None currently — the issue's own text resolves "reject or warn" toward reject, matching every
-  other validation path in this crate (`Config::validate`, `python_fitness`) failing loudly rather
-  than warning into a log nothing reads.
+- ~~None currently — the issue's own text resolves "reject or warn" toward reject.~~ Settled at the
+  joint meeting of 2026-08-13: cap narrowing rejects (as already decided 2026-08-12), **and** so do
+  out-of-range endpoints and self-loops — `decisions.md` 20:16, `collab_settled.md` #61.
 
 ## Out of scope
 - #20 (replicate runs, `max_cores`) — separate issue, also assigned to me, not started.
