@@ -2315,3 +2315,53 @@ either way (39 pages, 38 nav entries), because a stale table row is neither a br
 missing anchor. Nothing automated will catch this one.
 
 *#57 · raised 2026-08-12 21:24 — James.*
+
+### 58. `.claude/work/<owner>/` now lives in a dedicated worktree on `main` — your setup needed, one time
+
+James, 2026-08-13. Not asking permission first because this fixes a bug rather than adding a
+convention, but it does bind your practice (the skills now read/write a different path than the
+one in your working tree), so it needs your setup and your sign-off.
+
+**The bug.** `.claude/work/<owner>/current/` and `parked/` are ordinary tracked files, so their
+content is whatever the checked-out branch's history says. Cut a feature branch, and its copy of
+`work/mdube/current/` is frozen at that moment; every `/save` on `main` afterwards — including a
+task closing and moving out of `parked/` — is invisible from the feature branch until it merges.
+Hit this directly today: `mdube_run_output` was cut mid-task, then `result-object` and
+`per-owner-work-dirs` were both closed and archived on `main` while `run-output` sat parked, and
+switching back to `mdube_run_output` showed both of them still listed as parked — stale, because
+the branch's own tree had never seen the archive commits. `CLAUDE.md`'s routing table already says
+these directories go "Direct push to `main`" — the bug was that `/save`'s own step 10 said "`main`,
+or the current branch, if this session is on one," which is what actually let this drift happen.
+
+**The fix.** A linked git worktree, checked out to `main` permanently, at the fixed sibling path
+`../<repo-name>-docs` (computed from `git rev-parse --show-toplevel`, so it needs no hand-typed
+absolute path and is identical in form on both machines):
+
+    git worktree add ../GraphEvolutionTool-docs main
+
+Every skill that touches `.claude/work/` — `save`, `park`, `load`, `done`, `start` — now reads and
+writes through that worktree instead of the working tree the code branch happens to be on. Because
+the worktree is always `main`, `work/<owner>/current/` and `parked/` can no longer disagree with
+which branch is checked out in the main tree — there is only one live copy, and it is always
+current. The `SessionStart` hook (`session_brief.sh`) doesn't need the worktree at all: it reads
+`git show main:.claude/work/...` directly, which needs no setup and never touches your working
+tree.
+
+**What this does to the union-merge question you might be about to ask, since I know you will.**
+`decisions.md` and `collab.md` stop being touched by feature branches at all under this model —
+every write goes straight to the worktree's `main` checkout, so a feature-branch PR should never
+carry a diff to either file, and the `merge=union` driver stops mattering for PR merges. It still
+matters for the one case it was always really for: two people running `/save` on `main` at close
+to the same real time, which is unaffected by any of this.
+
+**Your one-time setup, before your next session:** run the `git worktree add` command above from
+your repo root. Nothing else changes about how you invoke `/save`, `/park`, `/load`, `/done` or
+`/start` — the path swap is internal to what the skills do, not something you type.
+
+**What I have not done:** pushed anything to your machine. The skill and hook changes are on a
+branch (`mdube_docs_worktree`) with a PR to follow, per the routing table's rule that hook changes
+and skill-body changes affecting shared practice go through review — bundled into one PR rather
+than split, same reasoning as PR #69: splitting would leave a state where neither of us has a
+working setup, since the hook and the skills have to agree on where the worktree lives.
+
+*#58 · raised 2026-08-13 — Michael.*
