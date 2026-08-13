@@ -1993,3 +1993,140 @@ checked and confirmed rather than assumed.
 Archived to `.claude/work/archive/2026-08_initial-doc-site/`. The documentation site shipped in one
 session and merged as PR #64 (`d420b3e`). Entries below this line belong to a later task.
 *Marker written 2026-08-13 00:47 — Michael.*
+
+## 2026-08-13 01:47 — Michael — `run` returns a result object; the result types get their own module
+
+**Chose:** `GraphEvolver.run` returns a `RunResult` carrying `best_fitness` (objective units),
+`best_edges`, `best_genome_repr` and `history`; the `best_fitness` field and `best_fitness()`
+accessor are deleted. The Python-facing types live in a new `get/src/py_result.rs`, exposed as
+`RunResult` and `GenerationStats`, both `frozen` with read-only getters.
+
+**Why the separate module rather than `lib.rs`.** It mirrors `py_config.rs`, and the reason points
+the same way: `EvolutionOutcome` cannot carry `#[pyclass]` because it is generic over the genome
+(§8), and `GenerationStats` must stay engine-oriented because the engine compares in oriented values
+throughout (§5.1). Attaching `#[pyclass]` to either would drag pyo3 into the engine core and put a
+Python-visible type on numbers deliberately not in the user's units. `lib.rs` stays the entry point.
+
+**Why frozen and read-only.** The object records something that already happened, so there is
+nothing a caller could correctly change. `history` rebuilds its list on each access, which is stated
+on the getter so nobody reads it inside a loop.
+
+**The part that could have failed silently:** `erase` now converts the log row by row, and converts
+**only** `best_fitness` and `mean_fitness`. `std_dev` is left exactly as computed, because a spread
+is identical under negation (§6.4) — orienting it too would keep it positive, so nothing would look
+wrong while the log quietly disagreed with its own columns.
+
+**Rejected:** reusing `EvolutionOutcome` at the boundary (generic, cannot be a `#[pyclass]`);
+returning tuples or dicts (no names, no `repr`, and `history` rows would be positional); keeping
+`best_fitness()` alongside the returned object (a second way to read state the caller already holds,
+and it has to answer *something* before any run — infinity, which a maximizing objective converts
+back into a suspiciously excellent score).
+
+**Affects:** `get/src/py_result.rs`, `get/src/lib.rs:35` and `:235`, `get/src/dispatch.rs:57` and
+`:411`. GitHub #27, PR #65. Unblocks #20 and #28.
+*Recorded 2026-08-13 01:47 — Michael, with PR #65 open and unmerged.*
+
+## 2026-08-13 01:49 — Michael — The reported best fitness is the final population's, not best-ever
+
+**Chose:** leave the difference in place and document it rather than "fixing" it. `EvolutionOutcome`
+reports the best individual of the **final** population, scored in that final pass. The convergence
+log's best row can therefore be *better* than the reported `best_fitness`.
+
+**Why this is correct rather than a bug.** Both numbers come from the same final scoring pass
+(`generational.rs:208`), so the **last** log row always equals the headline number exactly. Earlier
+rows can beat it because a SIR objective is stochastic and re-samples: an elite carried forward is
+re-scored every generation, and spec §6.2 says that is deliberate — keeping the old number would let
+a lucky draw persist as a permanent high score.
+
+**Why it is written down.** It looks like an inconsistency and invites a "fix" that would either
+cache a lucky draw or make the log disagree with the result. It cost real time here: the first
+version of `the_erased_history_comes_out_in_the_objectives_own_units` asserted the log's *best* row
+equalled `best_fitness` and failed at 3.0 against 2.0. The assertion was wrong, not the code.
+
+**Rejected:** reporting best-ever (re-introduces the lucky-draw problem §6.2 rules out); re-scoring
+the winner once more at the end (a third number, no more authoritative than the other two).
+
+**Affects:** `get/src/dispatch.rs:411`, the test at `dispatch.rs` that pins the final row. Flagged
+for GitHub #21, which documents the log columns a user reads when the two numbers disagree.
+*Recorded 2026-08-13 01:49 — Michael, found while writing #27's orientation test.*
+
+## 2026-08-13 01:51 — Michael — Documentation edits are staged in a per-owner queue, not applied per task
+
+**Chose:** a task that invalidates something `documentation/` says no longer edits the HTML. It
+appends an entry to a per-owner queue — `documentation/mdube_edits.md` or
+`documentation/jsargant_edits.md` — naming what is now false and what it should say, and the site is
+corrected in one sweep as its own task. Routing is by `git config user.email`, checked rather than
+assumed, with anything unrecognised required to stop and ask.
+
+**Why:** shipping #27, a three-hour issue about a return type, touched ten HTML files. Worse, the
+first pass over them was not enough — a second pass found two pages nobody had edited still claiming
+the convergence log never reaches Python, and about forty-five `src` line references invalidated by
+the task's own edits. That is a whole task's worth of care hiding inside every code task, and it is
+exactly the care that gets skipped under time pressure.
+
+**Why per-owner rather than one shared file:** a queue is a **churn list** — an entry is deleted once
+applied — which is precisely what `merge=union` cannot express (see 2026-08-04 18:25). Two files mean
+neither owner ever touches the other's. The cost, written into both files: a sweep reads every queue
+file, not only its own, or a page owed edits by both owners gets half-corrected.
+
+**Rejected:** one shared queue under `merge=union` (a delete racing an edit silently resurrects the
+entry); a queue under `.claude/work/` (it is about the site, and `documentation/` is where a sweep
+starts); keeping the per-PR rule (measured above).
+
+**Supersedes, in timing only:** the `CLAUDE.md` bullet of 2026-08-13, "When a `planned` feature ships,
+de-badge its documentation in the same PR". The de-badging still happens — badge, `.plan-note`,
+`status.html` row — but in the sweep. **The bullet is not yet amended**, because it binds James;
+`collab.md` #53 asks him.
+
+**Affects:** `documentation/mdube_edits.md`, `documentation/jsargant_edits.md`, `.claude/CLAUDE.md`
+once #53 settles. #27's own docs were applied under the old rule, in PR #65.
+*Recorded 2026-08-13 01:51 — Michael, on his own instruction mid-task.*
+
+## 2026-08-13 02:16 — Michael — Shipped source does not reference the spec sheet, at all
+
+**Chose:** strike the "link `official_spec_sheet.md` rather than restating it" half of the comment
+convention. `get/src` references the sheet **not at all** — not by section number, not by name, not
+as a link. Where a comment needs the reason something is correct, it states the reason rather than
+citing where it was agreed. The rest of the 2026-08-04 convention stands: terse, written for someone
+new to the code, never a copy of the sheet.
+
+**Why:** the original clause was aimed at stopping *copies* of the sheet drifting out of step, and
+linking was the cheap alternative to copying. It was a reasonable rule that produced an unreasonable
+result. Measured 2026-08-13 on `main`: **135** sheet references in 10,251 lines of `get/src`,
+alongside 19 GitHub issue numbers, 13 dated "agreed on `<date>`" notes and 8 pointers at `.claude/`
+working docs. A reader of the published crate can open none of them, so each is a dead end rather
+than a shortcut — the opposite of what the clause was for.
+
+**The misreading worth recording.** "Keep comments terse … link the sheet rather than restating it"
+plainly asks for brevity, and it was read as licence to cite the sheet freely. Both halves were
+followed in letter and the result contradicts the first half. That is a rule stated wrong rather than
+a rule broken — the same conclusion the agent-merge and self-merge rewordings reached.
+
+**Rejected:** keeping the link clause and merely capping how often it is used (no threshold anyone
+could apply while writing); moving the citations to a mapping file (a second document that also does
+not ship); leaving it until the cleanup issues run (the convention would keep generating the debt the
+issues exist to pay off).
+
+**Affects:** `.claude/CLAUDE.md`, the "Prefer explicit loops" bullet — struck through and dated
+rather than overwritten. Cleanup is GitHub #68 for `get/src` and #67 for `documentation/`, both
+tier (8), behind #20, #21, #28 and #56. FYI to James in `collab.md` #54.
+**Supersedes, in part:** 2026-08-04 22:12 — the comment convention. Only the linking clause.
+*Recorded 2026-08-13 02:16 — Michael, pushed direct to `main` under collab #52(a)'s practice.*
+
+## 2026-08-13 02:45 — Michael — `dispatch.rs` confirmed to fail the new comment rule; fix stays with #68
+
+**Chose:** measured `dispatch.rs` against the 2026-08-13 comment amendment rather than assume it
+passes because it predates the rule. It does not pass: the non-test region is **214 comment lines
+against 210 of code** — more comment than code — with small functions worst affected (`selection`,
+4 doc lines for a 6-line pass-through; `erase`, 9 for 5). Decided to leave the fix to GitHub #68
+rather than pull it into PR #65 or cut it standalone.
+
+**Why leaving it to #68 rather than fixing now:** offered as an option and declined. The case for
+fixing now was that James is about to read this exact file for review; the case against, which
+stood, is that #68 already owns the whole-crate pass and a one-file cut ahead of it risks a second,
+inconsistent pass later.
+
+**Affects:** `get/src/dispatch.rs` (unchanged). GitHub #68's body should carry the sharper
+non-test figure in place of the diluted 29% currently cited — queued in `plan.md`, not yet pushed
+to the tracker.
+*Recorded 2026-08-13 02:45 — Michael.*

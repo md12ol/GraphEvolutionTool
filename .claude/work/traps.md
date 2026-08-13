@@ -452,3 +452,31 @@ Read by `/load` and `/start`. Entries leave only when no longer true.
   the behaviour is old. Hit 2026-08-12 while fixing the on-page contents: the fix was correct and
   two screenshots in a row showed it as not applied.
 - **Added:** 2026-08-12 — docs-site-asset-caching-hides-your-edit.
+
+### Changing an `eol` attribute makes files look modified while `git diff` shows nothing
+- **Bites when:** you add or change a line like `*.sh text eol=lf` in `.gitattributes`. `git status`
+  reports every matching file as ` M`, `git diff` on them prints **nothing at all**, and
+  `git update-index --refresh` does not clear it. It looks like a corrupted index.
+- **Do this instead:** confirm with `git ls-files --eol <paths>` before touching anything. Measured
+  2026-08-13 on the seven `.sh` files: every one reported `i/lf w/lf` — index and working tree
+  identical — so there was genuinely nothing to commit but `.gitattributes` itself. `git add` on
+  them stages zero changes, which is the confirmation.
+- **Why:** the attribute changes the *checkout representation* git would produce, so the entry is
+  marked out of date even when the content matches. `git add --renormalize .` settles it, and a
+  fresh checkout does too.
+- **Added:** 2026-08-13 — eol-attribute-change-shows-phantom-modified-files
+
+### `python3` does not exist on Michael's machine, and bare `python` is the Store stub
+- **Bites when:** you run any snippet documented with `python3`, including
+  `documentation/README.md`'s own site-verification script. `python3` is not found; bare `python`
+  prints *"Python was not found; run without arguments to install from the Microsoft Store"* and
+  exits **49**, which reads like a broken script rather than a missing interpreter.
+- **Do this instead:** call the interpreter by full path —
+  `/c/Users/micha/AppData/Local/Programs/Python/Python312/python.exe` from the Bash tool, or
+  `& "C:\Users\micha\AppData\Local\Programs\Python\Python312\python.exe"` from PowerShell. The `py`
+  launcher also works. **And do not pipe a heredoc containing backslashes through Bash into it** —
+  `\` in `'\'` is eaten before Python sees it, producing an unterminated-string SyntaxError.
+  Write the script to the scratchpad and run it by path instead.
+- **Why:** the real interpreters are not on `PATH`; only the App Execution Alias stub is. Same root
+  cause as the `cargo test` entry above, different symptom.
+- **Added:** 2026-08-13 — python3-is-absent-and-bare-python-is-the-store-stub

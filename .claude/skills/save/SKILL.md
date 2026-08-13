@@ -1,6 +1,6 @@
 ---
 name: save
-description: Save the current session state into the .claude/ working docs — sweep the conversation for loose threads, update current/plan.md progress, append new decisions to decisions.md, log team issues to issues.md and temporary code to hotfixes.md, append a session entry to current/history.md, and write the next-session prompt to current/handoff.md. Use when the user asks to save, wrap up, checkpoint, or hand off the session.
+description: Save the current session state into the .claude/ working docs — sweep the conversation for loose threads, update the task's plan.md progress, append new decisions to decisions.md, log team issues to issues.md and temporary code to hotfixes.md, append a session entry to history.md, write the next-session prompt to handoff.md, then commit and push the owner's work directory. Use when the user asks to save, wrap up, checkpoint, or hand off the session.
 model: sonnet
 ---
 
@@ -14,18 +14,36 @@ mechanical state.
 If arguments were passed, narrow the save to that focus (e.g. "just the teardown work"); otherwise
 cover everything since the last save.
 
+## 0. Resolve the owner — check, do not assume
+
+Live task directories are per-owner and tracked. Decide by identity:
+
+```bash
+git config user.email
+```
+
+| Email | Directory |
+|---|---|
+| `mdube04@uoguelph.ca` · `michael.dube@ovgu.de` · `35709889+md12ol@users.noreply.github.com` | `.claude/work/mdube/` |
+| `shorinbonsai@gmail.com` | `.claude/work/jsargant/` |
+
+**Anything else: stop and ask.** The same table is in `.claude/hooks/session_brief.sh`,
+`.claude/skills/load/SKILL.md`, `.claude/skills/park/SKILL.md` and `documentation/mdube_edits.md`.
+Below, `<owner>` means whichever this resolved to; never write to the other owner's directory.
+
 ## The files
 
 All live under `.claude/`.
 
-**Task-scoped**, in `.claude/work/current/` — archived by `/done` when the task ends:
+**Task-scoped**, in `.claude/work/<owner>/current/` — archived by `/done` when the task ends,
+or moved to `work/<owner>/parked/<slug>/` by `/park` when it is blocked:
 
 | File | Semantics | Holds |
 |---|---|---|
-| `work/current/plan.md` | **Edit in place** | Current objective + task list with status. Written by `/start`; `save` only updates status and appends newly-agreed work. |
-| `work/current/plan_superseded.md` | **Append-only** | Original wording of tasks now done. Reference only. |
-| `work/current/history.md` | **Append-only** | Session-by-session log for *this task*, newest first. |
-| `work/current/handoff.md` | **Overwritten** | A prompt for the *next* session. Only the newest matters. |
+| `current/plan.md` | **Edit in place** | Current objective + task list with status. Written by `/start`; `save` only updates status and appends newly-agreed work. |
+| `current/plan_superseded.md` | **Append-only** | Original wording of tasks now done. Reference only. |
+| `current/history.md` | **Append-only** | Session-by-session log for *this task*, newest first. |
+| `current/handoff.md` | **Overwritten** | A prompt for the *next* session. Only the newest matters. |
 
 **Persistent**, at `.claude/` — these outlive the task, because they describe the *code*, not the
 work. Never archive them:
@@ -44,7 +62,7 @@ work. Never archive them:
   repo layout, and don't assume the root repo is the only one.
 - Report each repo's current branch (`git branch --show-current`). Read the actual branch, never
   assume.
-- Read `work/current/plan.md`, and the tops of `decisions.md`, `issues.md`, `hotfixes.md`, `traps.md`, so
+- Read `work/<owner>/current/plan.md`, and the tops of `decisions.md`, `issues.md`, `hotfixes.md`, `traps.md`, so
   you match their format and don't duplicate existing entries.
 
 ## 2. Sweep the session for loose threads
@@ -105,7 +123,7 @@ hotfix entry, so the answers land in the files rather than only in the transcrip
 Ask only about genuine forks. Anything you can settle by reading the repo, or that has an obvious
 default, you settle yourself and mention in the closing brief.
 
-## 3. `work/current/plan.md` — update status
+## 3. `work/<owner>/current/plan.md` — update status
 
 - Mark completed items. Use three states, and keep them honest:
   `[ ]` pending · `[x]` done **and verified** · `[~]` done but **NOT verified**.
@@ -115,7 +133,7 @@ default, you settle yourself and mention in the closing brief.
 - **Compress each item as you tick it — to ≤ 3 lines.** What was done, the one piece of evidence
   that verifies it, where the detail lives. The evidence itself goes to `history.md`, the reasoning
   to `decisions.md`. If the original wording is worth keeping, move it to
-  `work/current/plan_superseded.md` under a `## <item id> — superseded <YYYY-MM-DD>` heading. **Never
+  `work/<owner>/current/plan_superseded.md` under a `## <item id> — superseded <YYYY-MM-DD>` heading. **Never
   leave a superseded item in `plan.md` wearing a `[ ]` checkbox** — an item that can never be ticked
   teaches everyone to skim past `[ ]`, and then a real pending item gets lost.
 - Append any work that was agreed *during* this session and isn't yet on the plan — including
@@ -132,9 +150,9 @@ it:
 
 | What | Where it goes | NOT in the plan |
 |---|---|---|
-| What happened, measurements, tables | `work/current/history.md` | ✗ |
+| What happened, measurements, tables | `work/<owner>/current/history.md` | ✗ |
 | Why we chose it, what was rejected | `decisions.md` | ✗ |
-| Original wording of a task now done | `work/current/plan_superseded.md` | ✗ |
+| Original wording of a task now done | `work/<owner>/current/plan_superseded.md` | ✗ |
 | Temporary code | `hotfixes.md` | ✗ |
 | Someone else's work | `issues.md` | ✗ |
 
@@ -145,7 +163,7 @@ it:
 - **An open item is ≤ 20 lines.** What to do, the verify-by, and any constraint that would cause harm
   if forgotten. If it needs more, the reasoning goes in `decisions.md` and the plan links to it.
 - **Never keep "(original text, kept for the reasoning)" blocks in the plan.** Move them to
-  `work/current/plan_superseded.md` the moment the task is done, and **never leave one wearing a `[ ]`** —
+  `work/<owner>/current/plan_superseded.md` the moment the task is done, and **never leave one wearing a `[ ]`** —
   an item that can never be ticked teaches everyone to skim past `[ ]`, and then a real pending item
   gets lost.
 - **Soft cap ~600 lines.** If `plan.md` is over it, compress the biggest completed items *before*
@@ -267,7 +285,7 @@ durable parked there is deleted the moment it stops being top-of-mind.
 reproducer and put it in the entry — in the project this came from, a `grep` trap was carried in
 `handoff.md` for days with the wrong mechanism before anyone re-tested it.
 
-## 8. `work/current/history.md` — append a session entry
+## 8. `work/<owner>/current/history.md` — append a session entry
 
 Insert `## Session <YYYY-MM-DD>: <one-line headline>` at the **top** of the session log —
 after the header/goals block at the top of the file and before the previous most-recent session
@@ -278,7 +296,7 @@ Contents: what changed (with `path:line`), what was validated vs. not, and the *
 exact uncommitted/unpushed state per repo and branch, so nothing is lost. Keep the reasoning short
 here; let `decisions.md` carry it.
 
-## 9. `work/current/handoff.md` — write the next-session prompt
+## 9. `work/<owner>/current/handoff.md` — write the next-session prompt
 
 Overwrite the whole file. This is not a summary — it is an **instruction to the next session**,
 written so that pasting it is enough to resume. Address it to the agent, second person, imperative:
@@ -286,7 +304,9 @@ written so that pasting it is enough to resume. Address it to the agent, second 
 ```markdown
 # Next session — <YYYY-MM-DD>
 
-Read `.claude/work/current/plan.md` and `.claude/work/decisions.md` first, then `.claude/work/hotfixes.md`.
+**Machine:** `<hostname>` · saved <YYYY-MM-DD HH:MM> · <short commit SHA>
+
+Read this task's `plan.md` and `.claude/work/decisions.md` first, then `.claude/work/hotfixes.md`.
 
 **Where things stand:** 2–4 sentences.
 
@@ -296,6 +316,14 @@ Read `.claude/work/current/plan.md` and `.claude/work/decisions.md` first, then 
 
 **⏰ Time-sensitive:** anything dated, with absolute dates.
 ```
+
+**The `Machine:` line is not decoration.** These directories are tracked so a task can be picked up
+on another machine, which creates a failure the old per-person layout could not have: you, against
+yourself, from two laptops. `/load` reads this line and the SHA beside it to decide whether the
+handoff in front of it is the newest one, and stops rather than merging a plan file if they
+disagree. Write the real `hostname` and `git rev-parse --short HEAD` **as they are while you write
+it** — that names the repo state this handoff describes. It is deliberately not the SHA of the save
+commit itself, which does not exist yet and would need an amend to record.
 
 **Keep it to what is true this week.** If you are about to write something permanent here — a tool
 flag that always applies, a rule about how to write issues, a path that a routine command destroys —
@@ -325,9 +353,9 @@ Bare labels are the usual culprit — `- **Body:**`, `- **Added:** <date>`, a tr
 
 - **Absolute dates only** — convert "today" / "tomorrow" / "last session" to real dates.
 - Reference code as `path:line`. Keep it skimmable: headers and bullets, not walls of prose.
-- If tooling or output behavior changed, check the run instructions in `work/current/plan.md` and
-  `work/current/history.md` still match, and fix them if not.
-- Never truncate or rewrite `work/current/history.md` or `decisions.md`.
+- If tooling or output behavior changed, check the run instructions in `work/<owner>/current/plan.md` and
+  `work/<owner>/current/history.md` still match, and fix them if not.
+- Never truncate or rewrite `work/<owner>/current/history.md` or `decisions.md`.
 - **If anyone else uses this `.claude/`:** stamp every new entry in the persistent docs with an
   author, and never silently rewrite someone else's entry — raise it in `collab.md` instead.
   If this session merged, read the tail of the persistent docs before appending: `merge=union`
@@ -338,10 +366,36 @@ Bare labels are the usual culprit — `- **Body:**`, `- **Added:** <date>`, a tr
 **Do not write auto-memory files.** See `.claude/CLAUDE.md`, "Do not use the auto-memory store".
 
 Durable project facts go in the file that owns that lifetime — `hotfixes.md`, `issues.md`,
-`traps.md`, `decisions.md`, `work/current/history.md`, `work/current/plan.md`. A rule about *how to work* that
+`traps.md`, `decisions.md`, `work/<owner>/current/history.md`, `work/<owner>/current/plan.md`. A rule about *how to work* that
 must be known before reading any of them goes in `CLAUDE.md`.
 
-## 10. Close with a brief the user can answer
+## 10. Commit and push `work/<owner>/` — this is part of the save
+
+A handoff that was never pushed is not a handoff. The whole reason these directories are tracked is
+so the next session can be on a different machine, and that only works if the save reaches `origin`.
+
+```bash
+git add .claude/work/<owner>/
+git status --short .claude/work/<owner>/     # read it — nothing outside this path may be staged
+git commit -m "Save <task slug> — <one line>"
+git push origin main                          # or the current branch, if this session is on one
+```
+
+**Scope it to `work/<owner>/` and nothing else.** The persistent docs (`decisions.md`, `traps.md`,
+`issues.md`, `hotfixes.md`, `collab.md`) are a separate concern with their own routing, and code is
+absolutely not part of a save. If this session has uncommitted code, leave it uncommitted and say so
+in the brief — a save must never quietly commit a half-finished source file.
+
+**This is a deliberate, narrow exception to `CLAUDE.md`'s "don't commit or push unless asked."** It
+covers this path, at this step, only. Agreed 2026-08-13: an unpushed handoff fails silently and is
+discovered on the other machine, usually a day late, which is the exact class of failure the working
+docs exist to prevent. Everything else still needs its own explicit instruction, every time.
+
+If the push fails — no network, or `main` has moved — **say so in the brief and stop.** Do not
+rebase, do not force. The files are written; the next session's `/load` will see the divergence and
+report it, which is the designed behaviour rather than a failure.
+
+## 11. Close with a brief the user can answer
 
 End with a short summary — **not** a file-by-file changelog. Its job is to surface what is
 outstanding, so nothing quietly rots between sessions. Keep it under ~20 lines.
@@ -376,7 +430,7 @@ Rules for this brief:
 The user may reply with dispositions ("file that one", "that one can wait"). Act on them and update
 the docs before finishing.
 
-## 11. Offer to clear the context
+## 12. Offer to clear the context
 
 End by asking — **never do it yourself, and never assume the answer:**
 
@@ -385,7 +439,7 @@ End by asking — **never do it yourself, and never assume the answer:**
 
 `/clear` is a CLI command only the user can type; you cannot run it and must not try. The offer
 exists because a save is the one moment when clearing is safe: the session's state lives in the
-files, and `work/current/handoff.md` is written to make the next session resumable from cold.
+files, and `work/<owner>/current/handoff.md` is written to make the next session resumable from cold.
 
 If the user is mid-task and plans to keep working in this session, they'll decline — that's the
 expected answer as often as not. Ask once, take the answer, don't press.
@@ -412,5 +466,8 @@ saving again.
 
 ## Constraints
 
-- **Do NOT commit or push** unless the user explicitly asks.
+- **Commit and push `.claude/work/<owner>/` — and nothing else** (step 10). Every other path,
+  including code, the persistent docs and the spec sheet, still needs the user's explicit
+  instruction, every time.
+- Never write to the other owner's `work/<owner>/` directory.
 - After the brief, report per file what you added, or that it was unchanged.

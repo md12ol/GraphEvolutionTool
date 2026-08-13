@@ -2093,3 +2093,92 @@ whoever picks up the issue; either fixes the hole item 5 describes.
 `official_spec_sheet.md` has been touched; all five wait for the joint meeting this item asks for.
 
 *(Reply inside #51 · 2026-08-12 14:12 — James.)*
+
+### 53. Documentation edits move to a per-owner queue — `jsargant_edits.md` is your half, if you agree
+
+Michael, raising this because it changes your practice as well as mine, and because it contradicts a
+`CLAUDE.md` bullet that is only a day old.
+
+**The ask.** Stop editing `documentation/` inside every task's PR. Instead, a task that invalidates
+something the site says appends an entry to a queue file naming what is now false and what it should
+say, and the site is corrected in **one sweep** as its own task. Mine is
+`documentation/mdube_edits.md`, live as of 2026-08-13. Yours would be
+`documentation/jsargant_edits.md`, and it does not exist — I have not created a file that dictates
+your workflow.
+
+**Why the cost is real rather than theoretical.** Shipping GitHub #27 — a three-hour issue about a
+return type — touched ten HTML files. None of them were the point of the work, and the second pass
+found that the first pass had missed two pages still claiming the convergence log never reaches
+Python, plus roughly forty-five `src` line references that my own edits had shifted. That is a whole
+extra task's worth of care hiding inside every code task, and it is the kind of care that gets
+skipped under time pressure, which is worse than batching it.
+
+**Why per-owner files rather than one shared queue.** A queue is a **churn list** — an entry is
+deleted once applied — and that is precisely the category `decisions.md` 2026-08-04 18:25 excluded
+from `merge=union`, because union cannot express a deletion and an applied entry silently comes back.
+Two files mean neither of us ever touches the other's, so the question never arises. The cost, which
+should be written into whatever we agree: **a sweep reads every queue file, not only its own**, or a
+page owed edits by both of us gets half-corrected and looks deliberate.
+
+**How a session knows which file is which.** `git config user.email`, checked rather than guessed —
+`mdube04@uoguelph.ca`, `michael.dube@ovgu.de` and `35709889+md12ol@users.noreply.github.com` are
+mine; `shorinbonsai@gmail.com` is yours. Anything unrecognised **stops and asks**. Filing into the
+wrong owner's queue is silent, which is the failure worth designing against.
+
+**What this contradicts, and what I have not done about it.** `CLAUDE.md`'s bullet "When a `planned`
+feature ships, de-badge its documentation in the same PR" (added 2026-08-13) says the opposite about
+*timing*. The de-badging itself still has to happen — badge, `.plan-note` callout, `status.html`
+row — just in the sweep. I have **not** amended that bullet, because it binds you and the routing
+table prefers a PR for exactly that case. If you agree here, the amendment goes in with your name on
+it. Note it is also contingent on #50, which you have not ruled on.
+
+**The one thing I did apply directly.** #27's own documentation was corrected in its PR, under the
+old rule, before this file existed. The site is current as of 2026-08-13; nothing is pending in my
+queue. So this changes the next task, not the last one.
+
+*#53 · raised 2026-08-13 01:19 — Michael.*
+
+**Addendum to #53, same session:** Michael asked for `documentation/jsargant_edits.md` to be created
+rather than left as a proposal, so it now exists — which makes the "it does not exist" line above
+out of date. It is empty of pending work and carries a header saying it was created on James's
+behalf and is not yet agreed. **Deleting the file is the whole of the rejection**; nothing depends on
+it existing. Checked while writing it: James had no open PR and no remote branch, so this collides
+with nothing in flight.
+
+*#53 addendum · 2026-08-13 01:31 — Michael.*
+
+### 54. FYI — `get/src` no longer links the spec sheet, and both docs reworks are levelled (8)
+
+Michael, 2026-08-13. Direct to `main` rather than a PR, under the practice #52(a) proposes: it
+binds your practice, so it gets a note here rather than silence. Reverse it if you disagree.
+
+**The `CLAUDE.md` amendment.** The comment convention agreed 2026-08-04 said "link
+`official_spec_sheet.md` rather than restating it". The restating half stands; the linking half is
+struck. Shipped source does not reference the sheet **at all** — not by section number, not by
+name, not as a link — because a reader of the published crate cannot open it, so every pointer is a
+dead end. Where a comment needs the reason something is correct, it now states the reason instead of
+citing where it was agreed.
+
+**Why it needed saying.** The original clause was aimed at stopping copies of the sheet drifting out
+of step, and linking was the cheap alternative. Applied for nine days it produced **135** sheet
+references in 10,251 lines of `get/src`, alongside 19 issue numbers, 13 dated "agreed on" notes and
+8 pointers at `.claude/` working docs. None of that is followable by anyone outside this repo.
+
+**Two issues filed for the cleanup, both deliberately last.**
+
+- **#68** — cut the comment volume in `get/src`. 2,332 of 10,251 lines are comments (22.7%), with
+  `genomes/genome.rs` at 64% and `evolver/mod.rs` at 63%, while
+  `genomes/edge_edit/operations.rs` — the nine opcodes, the most intricate logic in the crate — sits
+  at 1%. The density is inverted.
+- **#67** — the same rework for `documentation/`. 39 pages, 13,599 lines, with six reference pages
+  over 500 lines each. Written to argue the design rather than describe the behaviour.
+
+**Both are tier (8), after everything currently open.** #67 was filed at (1) and re-levelled the same
+day: nothing technically blocks either, but #20, #21, #28 and #56 all rewrite the code and pages they
+would touch, so doing them first means doing them twice.
+
+**Overlap you should know about:** #68 and #56 both edit the doc comments in `generational.rs` and
+`steady_state.rs`. Whichever runs second should inherit the other's result rather than re-deciding
+it.
+
+*#54 · raised 2026-08-13 02:14 — Michael.*
