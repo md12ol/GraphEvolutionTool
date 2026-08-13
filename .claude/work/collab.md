@@ -2398,3 +2398,16 @@ after this, that's the shape of bug to suspect — check for a stray `.vscode/se
 docs worktree before assuming the worktree itself is broken.
 
 *#58 second addendum · 2026-08-13 — Michael.*
+
+**Third addendum to #58, same session:** the script now asks before touching anything outside
+`.claude/work/` and the worktree itself. After the worktree and workspace are set up, it offers —
+with a one-line explanation and a `[y/N]` prompt — to hide `.claude/work/` in your *code* folder's
+Explorer (a cosmetic `files.exclude` tweak, since that copy is stale once the worktree exists). Say
+no and nothing is written. Say yes and it only ever touches the single `"files.exclude"` key in
+your `.vscode/settings.json` — merged with `jq` if it's on your `PATH` and the file already has
+other content, created fresh if it doesn't exist yet, or left alone with the exact line to add by
+hand if `jq` isn't available and the file already exists (a blind text edit without `jq` risks
+corrupting whatever else is in there). Non-interactive runs (no TTY) skip this step entirely rather
+than silently applying or silently guessing.
+
+*#58 third addendum · 2026-08-13 — Michael.*
