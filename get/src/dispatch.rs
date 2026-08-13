@@ -1394,6 +1394,108 @@ mod tests {
         assert_eq!(result.config_toml, config_toml);
     }
 
+    /// An evolver on the small runnable config, for the replicate tests.
+    fn replicate_evolver() -> GraphEvolver {
+        GraphEvolver {
+            config: runnable(GENERATIONAL, EDGE_EDIT),
+            fitness_function: None,
+            config_toml: String::new(),
+        }
+    }
+
+    #[test]
+    fn the_core_cap_changes_the_speed_and_never_the_answer() {
+        // The issue's own verify-by, and the strongest isolation check available
+        // at this level: if replicates shared an objective, its per-run epidemic
+        // counter would be advanced by whichever run got there first, so four
+        // concurrent replicates would not reproduce four sequential ones. Equal
+        // results across the two caps is that cross-talk not happening.
+        let mut evolver = replicate_evolver();
+
+        let sequential = evolver
+            .run(20260813, 4, Some(1))
+            .expect("four replicates, one at a time");
+        let concurrent = evolver
+            .run(20260813, 4, Some(8))
+            .expect("four replicates, up to eight at a time");
+
+        assert_eq!(sequential.len(), 4, "one result per requested run");
+        assert_eq!(concurrent.len(), 4, "one result per requested run");
+        for (index, (serial, parallel)) in sequential.iter().zip(&concurrent).enumerate() {
+            assert_eq!(
+                serial.best_fitness, parallel.best_fitness,
+                "run {index}'s fitness depends on the core cap",
+            );
+            assert_eq!(
+                serial.best_edges, parallel.best_edges,
+                "run {index}'s graph depends on the core cap",
+            );
+            assert_eq!(
+                serial.best_genome_repr, parallel.best_genome_repr,
+                "run {index}'s genome depends on the core cap",
+            );
+            assert_eq!(serial.run_index, index, "results arrive in run order");
+        }
+    }
+
+    #[test]
+    fn extending_a_request_reproduces_the_replicates_already_collected() {
+        // The other half of the issue's verify-by, through the public call
+        // rather than the seed helper: a user who has collected three
+        // replicates and wants five keeps the three they had.
+        let mut evolver = replicate_evolver();
+
+        let three = evolver.run(99, 3, Some(2)).expect("three replicates");
+        let five = evolver.run(99, 5, Some(2)).expect("five replicates");
+
+        assert_eq!(five.len(), 5, "the larger request runs all five");
+        for (index, (small, large)) in three.iter().zip(&five).enumerate() {
+            assert_eq!(
+                small.best_fitness, large.best_fitness,
+                "run {index} moved when more runs were requested",
+            );
+            assert_eq!(
+                small.best_edges, large.best_edges,
+                "run {index}'s graph moved when more runs were requested",
+            );
+        }
+    }
+
+    #[test]
+    fn replicates_are_different_runs_rather_than_the_same_run_repeated() {
+        // Guards the failure every reproducibility test above would wave
+        // through: if each replicate were handed the master seed instead of its
+        // own draw, all n results would be identical and every "same seed, same
+        // answer" assertion would still pass.
+        let mut evolver = replicate_evolver();
+
+        let results = evolver.run(7, 4, Some(2)).expect("four replicates");
+
+        let first = &results[0];
+        let all_identical = results
+            .iter()
+            .all(|r| r.best_edges == first.best_edges && r.best_fitness == first.best_fitness);
+        assert!(
+            !all_identical,
+            "all four replicates produced the same run — each is not getting its own seed",
+        );
+    }
+
+    #[test]
+    fn every_replicate_carries_the_master_seed_and_its_own_index() {
+        // `(seed, run_index)` is the pair that reproduces a replicate, and it is
+        // what `save_logs` stamps on every row so concatenated replicate logs
+        // can be separated again.
+        let mut evolver = replicate_evolver();
+
+        let results = evolver.run(4242, 3, None).expect("three replicates");
+
+        for (index, result) in results.iter().enumerate() {
+            assert_eq!(result.seed, 4242, "the master seed, not the per-run draw");
+            assert_eq!(result.run_index, index, "0-based position in the request");
+        }
+    }
+
     #[test]
     fn two_runs_on_one_evolver_do_not_leak_state() {
         // The reason `run` returns a value instead of caching one: an evolver
