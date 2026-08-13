@@ -1,22 +1,22 @@
 ---
-name: startMeeting
+name: start-meeting
 description: Walk the prepared agenda at .claude/work/meetings/<YYYY-MM-DD>.md one item at a time, asking each item's questions as click-to-answer choices and recording the decision and the doc changes it implies into that item's block. Changes no other file. Use when the joint meeting is starting, or resuming after a break.
 ---
 
 # Start meeting
 
-Take the agenda `/makeAgenda` prepared and turn it into minutes. Walk the items in order, ask each
+Take the agenda `/make-agenda` prepared and turn it into minutes. Walk the items in order, ask each
 one's questions as buttons, and write the answer and its consequences into that item's
 **Decisions & doc changes** block.
 
 **The one rule that matters: nothing outside the meeting file is edited.** Not the spec sheet, not
-`CLAUDE.md`, not `collab.md`, not a line of code. The meeting decides; `/endMeeting` executes. This
+`CLAUDE.md`, not `collab.md`, not a line of code. The meeting decides; `/end-meeting` executes. This
 is deliberate — decisions taken in the first half routinely change what the second half decides, and
 a document edited at item 3 and contradicted at item 14 is worse than one edited once at the end.
 
 ## 0. Set up
 
-Work in the `main` worktree, same as `/makeAgenda`:
+Work in the `main` worktree, same as `/make-agenda`:
 
 ```bash
 MAIN_TREE="$(git rev-parse --show-toplevel)"
@@ -24,14 +24,14 @@ DOCS_WT="$(dirname "$MAIN_TREE")/$(basename "$MAIN_TREE")-docs"
 cd "$DOCS_WT" && git pull
 ```
 
-`/startMeeting [YYYY-MM-DD]`, defaulting to today. Then check the header's `Status:` line:
+`/start-meeting [YYYY-MM-DD]`, defaulting to today. Then check the header's `Status:` line:
 
 | `Status:` | Do this |
 |---|---|
 | `prepared` | Normal start. Stamp it `in progress`, set the cursor to the first item, go to §1 |
 | `in progress` | **Resume.** Report which items are already decided, name the item the cursor is on, and confirm before continuing from there. Never restart from the top |
-| `closed` | **Stop.** That meeting ended. Offer `/makeAgenda` for a new date |
-| file missing | **Stop.** Run `/makeAgenda` first. Do not improvise an agenda from `collab.md` in the room |
+| `closed` | **Stop.** That meeting ended. Offer `/make-agenda` for a new date |
+| file missing | **Stop.** Run `/make-agenda` first. Do not improvise an agenda from `collab.md` in the room |
 
 Stamp the header before asking anything:
 
@@ -91,7 +91,7 @@ from now can act on — never "option (b)".>
 Three things about that block, all load-bearing:
 
 - **Name the target file for every consequence.** A decision with no file attached is a decision
-  `/endMeeting` cannot execute, and it will be silently dropped.
+  `/end-meeting` cannot execute, and it will be silently dropped.
 - **"Option (b)" is not a decision.** The letters are scaffolding for the meeting and meaningless
   once the agenda is archived. Write the substance.
 - **Record knock-ons the moment you notice them.** When an answer settles part of a later item, say
@@ -122,7 +122,7 @@ trace back to an item.
 incompatible ways is exactly what the end of the meeting is for, and both owners are still in the
 room. Ask.
 
-**b. Sort each group into route.** `/endMeeting` needs this and the room is the cheapest place to
+**b. Sort each group into route.** `/end-meeting` needs this and the room is the cheapest place to
 get it:
 
 - **Direct to `main`** — `.claude/work/*.md`, `.claude/CLAUDE.md`, skill bodies.
@@ -139,29 +139,29 @@ This is the last moment both owners see it together.
 ```markdown
 **Status:** closed
 **Ended:** <YYYY-MM-DD HH:MM>
-**Decisions:** <count> · **Actions:** <count> · **Next:** `/endMeeting <YYYY-MM-DD>`
+**Decisions:** <count> · **Actions:** <count> · **Next:** `/end-meeting <YYYY-MM-DD>`
 ```
 
-Then say what `/endMeeting` will do, and that **nothing has been changed yet**. Do not run it. It
+Then say what `/end-meeting` will do, and that **nothing has been changed yet**. Do not run it. It
 is a separate, explicitly-requested step, usually with fresh context, and it is the one that touches
 real files.
 
 ## 5. If the meeting stops early
 
 Leave `Status: in progress` and the cursor where it is. Report which items are decided, which are
-not, and that `/startMeeting` resumes at the cursor. **Do not fill the consolidated checklist from a
+not, and that `/start-meeting` resumes at the cursor. **Do not fill the consolidated checklist from a
 partial meeting** — a half-filled checklist is indistinguishable from a complete one to
-`/endMeeting`, which is how half a meeting's decisions get executed as though they were all of them.
+`/end-meeting`, which is how half a meeting's decisions get executed as though they were all of them.
 
 ## Constraints
 
-- **Edit exactly one file: the meeting file.** Every other document waits for `/endMeeting`.
+- **Edit exactly one file: the meeting file.** Every other document waits for `/end-meeting`.
 - **Never commit or push.** Not the meeting file either. Minutes are committed as part of
-  `/endMeeting`, or on explicit instruction.
+  `/end-meeting`, or on explicit instruction.
 - **Never skip an item because the answer seems obvious.** The Close items exist precisely because
   "obviously settled" has been wrong before, and confirming one costs ten seconds.
 - **Never record a decision the room did not make.** If discussion ran out of time on an item, mark
   the block `**Deferred to next meeting.**` and say so. An inferred decision is worse than an
   undecided one, because it carries the same authority and nobody remembers agreeing to it.
 - **Never edit `collab.md`, even to append an answer inside an item.** That append is real and it is
-  wanted — it is `/endMeeting`'s job, so the file is touched once.
+  wanted — it is `/end-meeting`'s job, so the file is touched once.

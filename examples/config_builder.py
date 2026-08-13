@@ -26,6 +26,12 @@ def the_shipped_example():
 
     An edit script applied to a base graph, evolved generationally, scored on
     how far an epidemic spreads.
+
+    `infection_rate` mirrors the TOML at 0.5, which is above a plausible
+    per-contact figure and chosen deliberately: at 0.05 an outbreak on a
+    100-node sparse graph dies almost immediately whatever the topology, so
+    every individual scores alike and selection has no gradient to follow.
+    Keep the two files equal - they are meant to be the same configuration.
     """
     return get.Config(
         population_size=200,
@@ -36,7 +42,7 @@ def the_shipped_example():
         selection=get.SelectionConfig.Tournament(tournament_size=5),
         genome=get.GenomeConfig.EdgeEdit(gene_length=256),
         fitness=get.FitnessConfig.EpiSpread(
-            sir=get.SirParams(infection_rate=0.05, num_epidemics=30)
+            sir=get.SirParams(infection_rate=0.5, num_epidemics=30)
         ),
     )
 
