@@ -49,12 +49,13 @@ script showing the edge-edit run's starting population expresses the seeded edge
       now). Queued not applied, per that file's rule superseding `CLAUDE.md`'s de-badge *timing*.
       `HANDOFF.md`'s mirror row left to `collab.md` #50/#57. Rides the PR, as `mdube_edits.md` did.
 
-- [ ] Manual stacked-run check: a small script (SDA config → `run()` → `best_edges`; edge-edit
-      config with matching `network_size`/`max_edge_multiplicity` → `set_base_graph(n, edges)` →
-      `run()`) confirming the edge-edit population's expressed graphs include the seeded edges
-      before any mutation. Scratch-only, not committed.
-      **Verify by:** printed edge list from the second run includes edges from the first at
-      generation 0 / a 0-mutation-rate config.
+- [x] Stacked SDA→edge-edit run verified through real Python (`maturin develop --release` into a
+      gitignored `.venv`). Stage 2 ran null-only operation weights with mutation and crossover at
+      0, so expression is a guaranteed no-op and the check is exact equality, not overlap: all
+      **358** seeded edges expressed, none added or lost. Control with no base graph expressed 0
+      edges, so the assertion is not vacuous. All three checks surface as `ValueError` across the
+      FFI, and `save_logs`/`save_results` wrote the CSV and the provenance TOML. Script is
+      scratch-only, not committed.
 
 - [ ] Open PR, request review from Michael. `CLAUDE.md`: I don't merge my own PR.
       **Verify by:** `gh pr view` shows it open against `main`.
