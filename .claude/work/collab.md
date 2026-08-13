@@ -2474,3 +2474,65 @@ packaging clause — James replied with a position 2026-08-12, still "not a sett
 his own closing line). Worth putting all of these on the same agenda as the renumbering itself.
 
 *#59 · raised 2026-08-13 — Michael.*
+
+### 60. Three meeting skills — `/makeAgenda`, `/startMeeting`, `/endMeeting` — folded into PR #70
+
+**ACKNOWLEDGE, please, and one thing to merge before tomorrow.** Raising it under the rule you
+proposed in #44 and I agreed to on 2026-08-11: a skill change that binds the other owner's practice
+gets a `collab.md` item with an explicit ACKNOWLEDGE ask, not silence. This one is frontmatter, so
+it is PR-routed anyway — the item is the notification, not the review.
+
+**What they are.** `collab.md` accumulates the questions a joint meeting exists to answer, but
+turning 2476 lines of it into an agenda has been manual every time, and the answers have been
+landing in a session transcript rather than back inside the items. That is exactly the lapse my
+#52(b) describes and #50 is the live instance of — PR #64 merged without ruling on the question its
+item asks, so that convention now stands unopposed rather than agreed.
+
+- **`/makeAgenda [date]`** derives `.claude/work/meetings/<date>.md` from `collab.md`: every
+  unsettled item classified **Decide · Ratify · Acknowledge · FYI · Park · Close**, ordered
+  blockers-first, with a brief whose length is set by its status and two to four click-to-answer
+  options per question. It does **not** trust the `Open`/`Settled` headings, per your #59, and it
+  never edits `collab.md` at all. Rerunnable: a second call diffs against the SHA in the agenda's
+  own header and folds in new items — re-statusing one that gained an answer since — while never
+  touching a section a human has edited or already decided.
+- **`/startMeeting [date]`** walks the agenda one item at a time, asks the prepared questions as
+  buttons, and records each decision plus the file changes it implies into that item's block. It
+  carries a `**Cursor:**`, so a meeting that breaks for lunch resumes rather than re-asking eleven
+  answered questions. **It edits exactly one file.**
+- **`/endMeeting [date]`** executes the consolidated checklist: `decisions.md` entries with
+  union-safe headings and stamps, answers appended *inside* each item here, both the `uniq -d` and
+  the heading-structure audits run afterwards — then the sheet, `get/src/` and `documentation/` on a
+  branch with a PR. It never pushes code or the sheet to `main`, and never merges.
+
+**The split between deciding and executing is the whole design**, and it is the part to push back
+on if you think it is wrong. A meeting that edits files as it goes leaves half-applied decisions
+when it overruns, and a half-applied meeting is indistinguishable from a finished one to the next
+session. So nothing outside the meeting file moves until `/endMeeting`, which is a separate sitting.
+
+**Why they are in PR #70 rather than their own.** Two reasons, and the first is not convenience:
+all three read and write through the `main` worktree that PR establishes, so landing them first
+would ship skills depending on a convention `CLAUDE.md` does not yet document. The second is that
+you said multiple workflow PRs is a lot, and #70 already carries every skill body and the hook, so
+this costs you one review instead of two. The PR is retitled to say so; commit `f343402`.
+
+**What needs you before tomorrow: merge #70.** Not for your normal work — #69 is already in, so
+your `/save`, `/load`, `/park` and `/done` all work on `main` today, and the only thing you are
+missing is the branch-staleness fix. But the three skills hard-fail without the worktree, and this
+session hit the staleness bug for real: `mdube_run_output`'s copy of `collab.md` was 109 lines
+behind `main` and would have produced an agenda with your #59 missing from it entirely.
+
+**Already built and worth a look before you merge:** `.claude/work/meetings/2026-08-13.md`, a real
+agenda over items **40–59** — 21 items, blockers first, #50 leading because it gates #53 and #57,
+and your #59 second because this meeting will move about ten items to Settled and that *is* the
+reorganisation it asks about. One item was dry-run end to end through the ask-and-record flow before
+the skills were written, so they document what worked rather than a design sketch. Tell me if the
+classification is wrong anywhere — that is the judgement call the whole thing rests on.
+
+**Two things I found while building it, both already on that agenda rather than fixed here.** The
+`CLAUDE.md` row we agreed in #44 — practice-binding skill-body change goes direct *and* gets an
+ACKNOWLEDGE item — was never actually written into the file; the skills-body row still reads
+"Direct push to `main` is fine" with nothing after it. And `.claude/work/meetings/` is deliberately
+**not** union-merged: one file per date means two people cannot append to the same one, which is the
+only condition union merge exists for.
+
+*#60 · raised 2026-08-13 14:29 — Michael, from PR #70's branch.*
