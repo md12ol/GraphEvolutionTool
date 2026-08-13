@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # One-time, per-machine setup: create the dedicated `main` worktree that /save, /park, /load,
-# /done and /start now use for everything under .claude/work/.
+# /done and /start now use for everything under .claude/work/, write a two-folder VS Code
+# workspace file pointing at it, and open that workspace.
 #
 # Background: CLAUDE.md, "`.claude/work/` lives in a dedicated `main` worktree"; collab.md #58.
 #
-# Run from anywhere inside your GraphEvolutionTool checkout:
+# The whole setup, start to finish:
 #
+#   git checkout main && git pull
 #   bash .claude/scripts/setup_docs_worktree.sh
 #
-# Safe to re-run — it's a no-op if the worktree already exists. Does not touch your current
-# branch or working tree changes; it only reads origin/main and creates a new sibling directory.
+# That's it — the script creates the worktree and opens the workspace itself if `code` is on
+# PATH. Safe to re-run any time: it's a no-op on the worktree if one already exists, and it
+# rewrites + reopens the workspace file either way (handy if you just want the window back).
+# Never touches your current branch or working tree changes — it only reads origin/main and
+# creates a new sibling directory.
 
 set -euo pipefail
 
@@ -21,15 +26,58 @@ MAIN_TREE="$(git rev-parse --show-toplevel 2>/dev/null)" \
     || die "not inside a git repository — cd into your GraphEvolutionTool checkout first."
 cd "$MAIN_TREE"
 
-DOCS_WT="$(dirname "$MAIN_TREE")/$(basename "$MAIN_TREE")-docs"
+REPO_NAME="$(basename "$MAIN_TREE")"
+DOCS_WT="$(dirname "$MAIN_TREE")/${REPO_NAME}-docs"
+WORKSPACE_FILE="$MAIN_TREE/${REPO_NAME}.code-workspace"
 
-say "Repo:          $MAIN_TREE"
-say "Docs worktree: $DOCS_WT"
+say "Repo:            $MAIN_TREE"
+say "Docs worktree:   $DOCS_WT"
+say "Workspace file:  $WORKSPACE_FILE"
 say ""
 
+# A multi-root workspace: both folders in one window. Note there is nothing folder-specific
+# excluded here — an earlier version tried to hide everything except .claude/work in the docs
+# root via a folder-local .vscode/settings.json, and VS Code intermittently rendered that root as
+# entirely empty (Explorer showed no children at all, sometimes not even after a reload). The
+# sparse checkout already keeps that folder down to just .claude/work/ on disk, so the exclude
+# rule was redundant as well as the likely cause — removed rather than fought with. If both
+# folders still don't show after opening this, `code "<docs-worktree-path>"` on its own is the
+# fallback (CLAUDE.md has the full story).
+write_workspace_file() {
+    cat > "$WORKSPACE_FILE" <<EOF
+{
+    "folders": [
+        {
+            "name": "$REPO_NAME",
+            "path": "."
+        },
+        {
+            "name": "$REPO_NAME (docs, always main)",
+            "path": "$DOCS_WT"
+        }
+    ]
+}
+EOF
+    say "Wrote $WORKSPACE_FILE"
+}
+
+open_workspace() {
+    if command -v code >/dev/null 2>&1; then
+        say "Opening it now: code \"$WORKSPACE_FILE\""
+        code "$WORKSPACE_FILE" >/dev/null 2>&1 &
+        disown
+    else
+        say "'code' isn't on PATH — open it yourself:"
+        say "  code \"$WORKSPACE_FILE\""
+    fi
+}
+
 if [[ -d "$DOCS_WT" ]]; then
-    say "Already set up — $DOCS_WT exists. Nothing to do."
+    say "Already set up — $DOCS_WT exists."
     say "If it looks wrong: git worktree remove \"$DOCS_WT\"   (then re-run this script)"
+    say ""
+    write_workspace_file
+    open_workspace
     exit 0
 fi
 
@@ -93,5 +141,7 @@ say "checked out — that's the whole fix. You don't do anything differently; th
 say "automatically from here on. The hook (session_brief.sh) still runs from your primary tree as"
 say "usual — it reads main's content via 'git show', not from this worktree."
 say ""
-say "Verify it end to end:"
-say "  ls \"$DOCS_WT/.claude/work\""
+
+step "Setting up the editor workspace"
+write_workspace_file
+open_workspace
