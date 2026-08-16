@@ -319,21 +319,48 @@ impl GraphEvolver {
         Ok(())
     }
 
-    /// Evolve a population and return everything the run produced.
+    /// Evolve a population `n_runs` times and return what every run produced.
     ///
-    /// The returned [`PyRunResult`] carries the best fitness in the objective's
+    /// **Always a list, one [`PyRunResult`] per replicate, in run order** — even
+    /// at the default `n_runs = 1`, so the return type does not change shape
+    /// with an argument. Each result carries the best fitness in the objective's
     /// own units, the best individual's edge list as `(u, v, multiplicity)`, its
-    /// genome's printed form, and the convergence log:
+    /// genome's printed form, the convergence log, and the `(seed, run_index)`
+    /// pair that identifies it — `seed` being the master you passed, so the two
+    /// together are what reproduces that replicate:
     ///
     /// ```python
-    /// result = evolver.run(seed=1)
-    /// print(result.best_fitness, len(result.best_edges))
-    /// for row in result.history:
+    /// results = evolver.run(seed=1, n_runs=30, max_cores=8)
+    /// best = max(results, key=lambda r: r.best_fitness)
+    /// print(best.best_fitness, best.run_index)
+    ///
+    /// single, = evolver.run(seed=1)          # one run still returns a list
+    /// for row in single.history:
     ///     print(row.iteration, row.best_fitness, row.std_dev)
     /// ```
     ///
+    /// **One master seed, not `n` of them.** `seed` seeds a generator whose
+    /// output stream *is* the per-run seed list, so run `i` takes draw `i` and a
+    /// run's seed does not depend on how many runs were requested. Asking for 50
+    /// reproduces the first 30 of a 30-run request exactly, so extending an
+    /// experiment never invalidates the replicates already collected.
+    ///
+    /// **Whether replicates run concurrently is the engine's call, not yours.**
+    /// A native Rust objective runs them in parallel; `fitness = "python"` runs
+    /// them one at a time, because `n` concurrent runs would be `n` threads
+    /// contending for a single GIL — slower than sequential *and* contended.
+    /// `max_cores` caps the concurrency: unset means all available, `1` is fully
+    /// sequential, and there is no point exceeding `n_runs`.
+    ///
     /// Nothing is cached on the evolver, so a second `run` cannot be confused
     /// with the first and the same evolver drives repeated runs safely.
+    ///
+    /// # Errors
+    ///
+    /// `ValueError` if `n_runs` is zero, if `max_cores` is given as zero, if the
+    /// config selected Python and no callable was registered, or from the first
+    /// replicate that fails — the remaining runs are abandoned rather than
+    /// returned half-complete.
     ///
     /// # Memory: the three sizes multiply, they do not add
     ///
@@ -364,18 +391,48 @@ impl GraphEvolver {
     /// setting. A user cannot work this out from the Rust internals, and this
     /// package is the only surface they see.
     ///
-    /// Required by spec §8.1 and agreed at the joint meeting of 2026-08-04; the
-    /// `max_cores` and replicate-count parameters it refers to arrive with
-    /// GitHub #20, which is what makes the last column reachable.
-    fn run(&mut self, seed: u64) -> PyResult<PyRunResult> {
+    /// The last column is reachable from here: `min(max_cores, n_runs)` is the
+    /// multiplier, so raising either raises peak memory by the same factor.
+    #[pyo3(signature = (seed, n_runs = 1, max_cores = None))]
+    fn run(
+        &mut self,
+        seed: u64,
+        n_runs: usize,
+        max_cores: Option<usize>,
+    ) -> PyResult<Vec<PyRunResult>> {
+        if n_runs == 0 {
+            return Err(PyValueError::new_err(
+                "n_runs must be at least 1; asking for zero runs returns nothing and is \
+                 more likely a mistake than an intent",
+            ));
+        }
+
+        if max_cores == Some(0) {
+            return Err(PyValueError::new_err(
+                "max_cores must be at least 1 if given; leave it unset for all available \
+                 cores, or pass 1 to run replicates one at a time",
+            ));
+        }
+
+        // One master seed in, one seed per run out, in run order — so a run's
+        // seed does not depend on how many were asked for.
+        let seeds = dispatch::replicate_seeds(seed, n_runs);
+
         // Step 1 of two (§8): erase the objective before any strategy or genome
-        // is chosen. Built here rather than inside the dispatch match so it
-        // happens exactly once per run, per §8.1's per-run-instance rule.
+        // is chosen. **One instance per run, never one shared** — every SIR
+        // objective owns an epidemic counter, and sharing it across concurrent
+        // replicates would let thread scheduling decide which run saw which
+        // epidemic seed, losing reproducibility exactly where it is hardest to
+        // debug.
         //
-        // Deliberately fallible-first: a config selecting Python with no
-        // callable registered is reported before any population is built, which
-        // is cheaper than discovering it at the first scoring call.
-        let fitness = self.objective(seed)?;
+        // Built here, before the GIL is released, because the python arm reads
+        // the registered callable — that must not happen on a rayon worker.
+        // Deliberately fallible-first too: a config selecting Python with no
+        // callable registered is reported before any population is built.
+        let mut objectives = Vec::with_capacity(n_runs);
+        for &run_seed in &seeds {
+            objectives.push(self.objective(run_seed)?);
+        }
 
         // The GIL is held on entry to any `#[pymethods]` function, and holding it
         // across the run buys nothing: everything between scoring calls is pure
@@ -384,22 +441,38 @@ impl GraphEvolver {
         // rayon against any Python caller — a run that works and is inexplicably
         // slow, or a host application that freezes, neither pointing back here.
         // `.claude/reference/pyo3-maturin.md` §2 has the measured deadlock.
-        let outcome = Python::attach(|py| {
-            py.detach(|| dispatch::evolve(&self.config, &fitness, self.base_graph.as_ref(), seed))
+        let outcomes = Python::attach(|py| {
+            py.detach(|| {
+                dispatch::run_replicates(
+                    &self.config,
+                    &objectives,
+                    self.base_graph.as_ref(),
+                    &seeds,
+                    max_cores,
+                )
+            })
         })?;
 
         // Nothing is stored. `dispatch::erase` has already converted every
-        // number out of engine orientation, so this only re-homes the erased
-        // outcome onto the Python-visible type.
+        // number out of engine orientation, so this only re-homes each erased
+        // outcome onto the Python-visible type, keeping run order.
         //
-        // `run_index` is a hard `0`: this call only ever produces one run.
-        // GitHub #20 is what makes it vary.
-        Ok(PyRunResult::from_erased(
-            outcome,
-            seed,
-            0,
-            self.config_toml.clone(),
-        ))
+        // **`seed` is the master, not the per-run draw.** The pair that
+        // reproduces a replicate is `(master, run_index)` — call `run` with the
+        // same master and take that index. The derived per-run seed cannot do
+        // that: handing it back as `seed` would make the stream draw from *it*,
+        // producing a different run, so recording it would look like provenance
+        // while being unusable as provenance.
+        let mut results = Vec::with_capacity(outcomes.len());
+        for (run_index, outcome) in outcomes.into_iter().enumerate() {
+            results.push(PyRunResult::from_erased(
+                outcome,
+                seed,
+                run_index,
+                self.config_toml.clone(),
+            ));
+        }
+        Ok(results)
     }
 }
 
