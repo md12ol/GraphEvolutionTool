@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "get"
+name = "graph-evolution-tool"
 version = "0.1.0"
 description = "Graph Evolution Tool — a genetic algorithm over graph representations"
 readme = "README.md"
@@ -29,6 +29,16 @@ Issues = "https://github.com/md12ol/GraphEvolutionTool/issues"
 [tool.maturin]
 # The crate is a workspace member, so the manifest is not beside this file.
 manifest-path = "get/Cargo.toml"
+
+# The installed name and the imported name are deliberately different.
+# `pip install graph-evolution-tool` gives you `import get`.
+#
+# PyPI refuses `get` as a project name outright — the form rejects it as "not
+# allowed" — so the distribution has to be called something else. The module
+# does not: it is named by `#[pymodule] fn get` in the crate, and this line is
+# what stops maturin renaming it to match the project. Without it the import
+# becomes `graph_evolution_tool` and every existing example breaks.
+module-name = "get"
 
 # Re-enables what `get/Cargo.toml` deliberately leaves off.
 #
