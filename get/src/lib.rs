@@ -446,7 +446,9 @@ impl GraphEvolver {
         // would block every other Python thread for the whole run and serialize
         // rayon against any Python caller — a run that works and is inexplicably
         // slow, or a host application that freezes, neither pointing back here.
-        // `.claude/reference/pyo3-maturin.md` §2 has the measured deadlock.
+        // The failure is a hard deadlock, not just slowness: a rayon worker that
+        // calls back into Python needs the GIL, and it cannot get it while this
+        // thread holds it and waits on that worker to finish.
         let outcomes = Python::attach(|py| {
             py.detach(|| {
                 dispatch::run_replicates(
