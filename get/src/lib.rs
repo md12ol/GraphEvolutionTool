@@ -12,6 +12,7 @@ pub mod py_result;
 pub mod sir;
 
 use crate::config::{Config, ConfigError, FitnessConfig, GenomeConfig};
+use crate::evolver::GenerationStats;
 use crate::fitness::{Direction, PyFitness};
 use crate::graph::Graph;
 use crate::py_config::{
@@ -474,6 +475,121 @@ impl GraphEvolver {
         }
         Ok(results)
     }
+}
+
+/// What a Rust-native run hands back — the [`PyRunResult`] fields, without the
+/// pyo3 wrapper. See [`run_from_toml`].
+pub struct RunSummary {
+    /// Best fitness found, in the objective's own units and sign — see
+    /// [`PyRunResult::best_fitness`].
+    pub best_fitness: f64,
+    /// The best individual's expressed network, as `(u, v, multiplicity)`.
+    pub best_edges: Vec<(usize, usize, u32)>,
+    /// The best individual's genome, via `Genome::print`.
+    pub best_genome_repr: String,
+    /// The convergence log, one row per logged iteration.
+    pub history: Vec<GenerationStats>,
+    /// The seed the run was made with.
+    pub seed: u64,
+    /// Which replicate this is, `0`-based. A hard `0` until GitHub #20.
+    pub run_index: usize,
+    /// The TOML document this run's config was parsed from.
+    pub config_toml: String,
+}
+
+impl RunSummary {
+    /// Write the convergence log to `filename` as CSV.
+    ///
+    /// Same five columns, plus `seed` and `run_index`, as
+    /// [`PyRunResult::save_logs`] — a log from this binary and one from
+    /// Python are byte-for-byte the same shape.
+    pub fn save_logs(&self, filename: &str) -> std::io::Result<()> {
+        use std::io::Write;
+
+        let mut file = std::fs::File::create(filename)?;
+        writeln!(
+            file,
+            "iteration,best_fitness,mean_fitness,std_dev,ci_95,seed,run_index"
+        )?;
+        for row in &self.history {
+            writeln!(
+                file,
+                "{},{},{},{},{},{},{}",
+                row.iteration,
+                row.best_fitness,
+                row.mean_fitness,
+                row.std_dev,
+                row.ci_95,
+                self.seed,
+                self.run_index,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Write the best individual to `filename`, and the run's config TOML
+    /// alongside it at `{filename}.toml` — mirrors
+    /// [`PyRunResult::save_results`].
+    pub fn save_results(&self, filename: &str) -> std::io::Result<()> {
+        use std::io::Write;
+
+        let mut file = std::fs::File::create(filename)?;
+        writeln!(file, "best_fitness = {}", self.best_fitness)?;
+        writeln!(file, "genome = {}", self.best_genome_repr)?;
+        writeln!(file, "\nedges (u,v,multiplicity):")?;
+        for &(u, v, weight) in &self.best_edges {
+            writeln!(file, "{u},{v},{weight}")?;
+        }
+
+        std::fs::write(format!("{filename}.toml"), &self.config_toml)?;
+        Ok(())
+    }
+}
+
+/// Rust-native entry point: run a `config.toml` file with no Python
+/// interpreter (spec §5.3's "Rust route", used by the `get-run` binary,
+/// `src/bin/run.rs`).
+///
+/// Follows exactly the same steps [`GraphEvolver::new`] and
+/// [`GraphEvolver::run`] do for a Python caller — parse, validate, erase the
+/// objective, dispatch — so a run driven from here and one driven from
+/// Python differ only in front end. `[fitness] type = "python"` is rejected,
+/// the same way an un-registered Python run is: there is no callable for it
+/// to call.
+///
+/// # Errors
+///
+/// The config's own parse/validate error, or `[fitness] type = "python"`
+/// with nothing to call it.
+pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String> {
+    let text = std::fs::read_to_string(config_path)
+        .map_err(|err| format!("failed to load config: {}", ConfigError::Io(err)))?;
+    let config =
+        Config::from_toml_str(&text).map_err(|err| format!("failed to load config: {err}"))?;
+    config
+        .validate()
+        .map_err(|err| format!("failed to load config: {err}"))?;
+
+    let evolver = GraphEvolver {
+        config,
+        fitness_function: None,
+        base_graph: None,
+        config_toml: text.clone(),
+    };
+
+    let fitness = evolver.objective(seed).map_err(|err| err.to_string())?;
+    let outcome = dispatch::evolve(&evolver.config, &fitness, evolver.base_graph.as_ref(), seed)
+        .map_err(|err| err.to_string())?;
+
+    Ok(RunSummary {
+        best_fitness: outcome.best_fitness,
+        best_edges: outcome.best_edges,
+        best_genome_repr: outcome.best_genome_repr,
+        history: outcome.history,
+        seed,
+        run_index: 0,
+        config_toml: text,
+    })
 }
 
 #[pymodule]
