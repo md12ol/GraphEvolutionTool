@@ -8,6 +8,19 @@ edition = "2024"
 # link the crate for the unit tests.
 crate-type = ["cdylib", "rlib"]
 
+[[bin]]
+# The Rust-native runner (spec §5.3's "Rust route", for run testing): reads a
+# config.toml and drives a run exactly like a Python caller would, with no
+# interpreter and no `get.so` build required. Gated behind `cli` because it
+# needs `pyo3/auto-initialize`, which conflicts with the `extension-module`
+# feature the built Python module uses — see the dev-dependency comment below.
+name = "get-run"
+path = "src/bin/run.rs"
+required-features = ["cli"]
+
+[features]
+cli = ["pyo3/auto-initialize"]
+
 [dependencies]
 # `extension-module` is deliberately NOT enabled here — see [dev-dependencies].
 pyo3 = { version = "0.27.2", features = ["abi3-py38"] }
