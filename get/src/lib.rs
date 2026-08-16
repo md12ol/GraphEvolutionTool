@@ -30,7 +30,7 @@ use pyo3::prelude::*;
 /// objective, then returns everything that run produced.
 ///
 /// **It holds no results.** A run's state lives in the
-/// [`PyRunResult`](crate::py_result::PyRunResult) `run` returns, never on the
+/// [`PyRunResult`] `run` returns, never on the
 /// evolver — so one evolver is reusable across repeated runs with nothing stale
 /// from the previous one hanging off it.
 #[pyclass]
