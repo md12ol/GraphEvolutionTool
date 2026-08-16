@@ -412,6 +412,8 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         // Directly on the config object.
         "population_size" => Some("config.population_size"),
         "max_edge_multiplicity" => Some("config.max_edge_multiplicity"),
+        "crossover_rate" => Some("config.crossover_rate"),
+        "mutation_rate" => Some("config.mutation_rate"),
         "max_mutations" => Some("config.max_mutations"),
         // On the strategy and selection objects.
         "elite_count" => Some("config.evolution.elite_count"),
@@ -421,6 +423,7 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         "init_state" => Some("config.genome.init_state"),
         // On the SIR block, which every epidemic objective reaches the same
         // way even though it flattens into `[fitness]` in the document.
+        "infection_rate" => Some("config.fitness.sir.infection_rate"),
         "num_epidemics" => Some("config.fitness.sir.num_epidemics"),
         "min_epidemic_length" => Some("config.fitness.sir.min_epidemic_length"),
         "max_epidemic_retries" => Some("config.fitness.sir.max_epidemic_retries"),

@@ -395,6 +395,14 @@ impl Config {
                 "must be at least 1, since a mutating child takes 1..=max_mutations mutations",
             ));
         }
+
+        if !(0.0..=1.0).contains(&self.crossover_rate) {
+            return Err(invalid("crossover_rate", "must be between 0.0 and 1.0"));
+        }
+
+        if !(0.0..=1.0).contains(&self.mutation_rate) {
+            return Err(invalid("mutation_rate", "must be between 0.0 and 1.0"));
+        }
         Ok(())
     }
 
@@ -480,6 +488,10 @@ impl Config {
             FitnessConfig::EpiProfMatch { sir, .. } => sir,
             FitnessConfig::Python => return Ok(()),
         };
+
+        if !(0.0..=1.0).contains(&sir.infection_rate) {
+            return Err(invalid("infection_rate", "must be between 0.0 and 1.0"));
+        }
 
         if sir.num_epidemics == 0 {
             return Err(invalid(
@@ -981,6 +993,60 @@ num_epidemics  = 30
         config.max_mutations = 0;
 
         assert_eq!(validation_field(&config), "max_mutations");
+    }
+
+    #[test]
+    fn a_negative_crossover_rate_is_rejected() {
+        let mut config = valid_config();
+        config.crossover_rate = -0.1;
+
+        assert_eq!(validation_field(&config), "crossover_rate");
+    }
+
+    #[test]
+    fn a_crossover_rate_above_one_is_rejected() {
+        let mut config = valid_config();
+        config.crossover_rate = 1.1;
+
+        assert_eq!(validation_field(&config), "crossover_rate");
+    }
+
+    #[test]
+    fn a_negative_mutation_rate_is_rejected() {
+        let mut config = valid_config();
+        config.mutation_rate = -0.1;
+
+        assert_eq!(validation_field(&config), "mutation_rate");
+    }
+
+    #[test]
+    fn a_mutation_rate_above_one_is_rejected() {
+        let mut config = valid_config();
+        config.mutation_rate = 1.1;
+
+        assert_eq!(validation_field(&config), "mutation_rate");
+    }
+
+    #[test]
+    fn a_negative_infection_rate_is_rejected() {
+        let mut config = valid_config();
+        let FitnessConfig::EpiSpread { sir } = &mut config.fitness else {
+            panic!("the fixture's fitness type should be epi_spread");
+        };
+        sir.infection_rate = -0.1;
+
+        assert_eq!(validation_field(&config), "infection_rate");
+    }
+
+    #[test]
+    fn an_infection_rate_above_one_is_rejected() {
+        let mut config = valid_config();
+        let FitnessConfig::EpiSpread { sir } = &mut config.fitness else {
+            panic!("the fixture's fitness type should be epi_spread");
+        };
+        sir.infection_rate = 1.1;
+
+        assert_eq!(validation_field(&config), "infection_rate");
     }
 
     #[test]
