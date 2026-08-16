@@ -6,11 +6,25 @@ build-backend = "maturin"
 name = "get"
 version = "0.1.0"
 description = "Graph Evolution Tool — a genetic algorithm over graph representations"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.8"
+authors = [
+    { name = "Michael Dubé", email = "michael.dube.778@gmail.com" },
+    { name = "James Sargant", email = "shorinbonsai@gmail.com" },
+]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+
+[project.urls]
+Homepage = "https://github.com/md12ol/GraphEvolutionTool"
+Repository = "https://github.com/md12ol/GraphEvolutionTool"
+Issues = "https://github.com/md12ol/GraphEvolutionTool/issues"
 
 [tool.maturin]
 # The crate is a workspace member, so the manifest is not beside this file.
