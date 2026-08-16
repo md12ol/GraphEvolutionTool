@@ -31,7 +31,10 @@ jobs:
         include:
           - { os: linux,   runner: ubuntu-22.04,  target: x86_64 }
           - { os: linux,   runner: ubuntu-22.04,  target: aarch64 }
-          - { os: macos,   runner: macos-13,      target: x86_64 }
+          # macos-13 was retired, and a job asking for it queues forever rather
+          # than failing — four runs sat unstarted for hours. macos-15-intel is
+          # the Intel replacement.
+          - { os: macos,   runner: macos-15-intel, target: x86_64 }
           - { os: macos,   runner: macos-14,      target: aarch64 }
           - { os: windows, runner: windows-latest, target: x64 }
 
