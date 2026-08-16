@@ -4,7 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "graph-evolution-tool"
-version = "0.1.0"
+# The tag does not set the published version — this line does. Keep them equal.
+version = "0.1.0a1"
 description = "Graph Evolution Tool — a genetic algorithm over graph representations"
 readme = "README.md"
 license = { file = "LICENSE" }
