@@ -13,7 +13,7 @@
 //! module is what that erased result becomes on the way out.
 //!
 //! **Everything here is in the objective's own units.** Nothing in this module
-//! converts anything; [`crate::dispatch`]'s `erase` is the one place that
+//! converts anything; the dispatch layer's `erase` is the one place that
 //! happens.
 
 use std::fs::File;

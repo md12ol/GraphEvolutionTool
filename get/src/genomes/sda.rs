@@ -20,9 +20,9 @@ pub struct SdaGenome {
 }
 
 /// Largest alphabet size representable by [`SdaGenome`]'s `u8`-valued responses.
-const MAX_NUM_CHARS: usize = u8::MAX as usize + 1;
+pub const MAX_NUM_CHARS: usize = u8::MAX as usize + 1;
 /// Largest state count representable by [`SdaGenome`]'s `u16`-valued transitions.
-const MAX_NUM_STATES: usize = u16::MAX as usize + 1;
+pub const MAX_NUM_STATES: usize = u16::MAX as usize + 1;
 /// Chance per [`Genome::mutate`] call of mutating the initial character
 /// instead of a transition or response.
 const INIT_CHAR_MUTATION_RATE: f64 = 0.04;
@@ -224,7 +224,7 @@ impl Genome for SdaGenome {
     }
 
     /// Apply one mutation: redraw the initial character with probability
-    /// [`INIT_CHAR_MUTATION_RATE`], otherwise an even chance of redrawing
+    /// `INIT_CHAR_MUTATION_RATE`, otherwise an even chance of redrawing
     /// one transition's target state or one transition's response. Callers
     /// that want more disruption per generation call this multiple times.
     fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R) {

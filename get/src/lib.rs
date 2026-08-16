@@ -64,7 +64,7 @@ pub struct GraphEvolver {
 impl GraphEvolver {
     /// Load configuration from a `config.toml` file.
     #[new]
-    fn new(config_path: String) -> PyResult<Self> {
+    pub fn new(config_path: String) -> PyResult<Self> {
         // Read separately from `Config::from_toml_str`, rather than through
         // `Config::from_path`, because the raw text is the provenance record
         // and `from_path` does not hand it back.
@@ -395,7 +395,7 @@ impl GraphEvolver {
     /// The last column is reachable from here: `min(max_cores, n_runs)` is the
     /// multiplier, so raising either raises peak memory by the same factor.
     #[pyo3(signature = (seed, n_runs = 1, max_cores = None))]
-    fn run(
+    pub fn run(
         &mut self,
         seed: u64,
         n_runs: usize,
