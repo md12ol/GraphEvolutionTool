@@ -407,6 +407,33 @@ mod tests {
     }
 
     #[test]
+    fn swap_rejects_when_the_two_neighbors_are_already_adjacent() {
+        // Same quartet as the conflict case above — 0 and 2 swap their
+        // neighbors 1 and 3 — except the edge that already exists is (1, 3),
+        // the pair the swap never touches. Both would-be edges (0, 3) and
+        // (2, 1) are absent, so only the anti-clustering guard can reject it.
+        let mut clustered = graph_with_edges(
+            6,
+            &[
+                (0, 1, 1),
+                (0, 4, 1),
+                (0, 5, 1),
+                (2, 3, 1),
+                (2, 4, 1),
+                (2, 5, 1),
+                (1, 3, 1),
+            ],
+        );
+        assert_eq!(clustered.weight(0, 3), 0);
+        assert_eq!(clustered.weight(2, 1), 0);
+
+        let before = clustered.clone();
+        GraphOperation::Swap.apply(&mut clustered, 0, 2, 0, 0);
+
+        assert_eq!(clustered, before);
+    }
+
+    #[test]
     fn null_and_unknown_opcodes_are_noops() {
         let mut graph = graph_with_edges(2, &[(0, 1, 1)]);
         let before = graph.clone();
