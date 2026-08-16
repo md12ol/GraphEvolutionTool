@@ -371,8 +371,8 @@ impl PyConfig {
     ///
     /// # Errors
     ///
-    /// `ValueError` if a field is too large for a TOML integer — see
-    /// [`integer`].
+    /// `ValueError` if a field is too large for a TOML integer, whose maximum
+    /// is `i64::MAX`.
     pub fn to_toml(&self) -> PyResult<String> {
         let document = Value::Table(self.to_toml_table()?);
         toml::to_string(&document).map_err(|err| {

@@ -1,3 +1,8 @@
+// Doc links are load-bearing: a public doc that links a private item renders a
+// dead link, and nothing failed when that count grew from 2 to 10 unnoticed.
+// Denying it here rather than in CI means it fails on the machine that wrote it.
+#![deny(rustdoc::private_intra_doc_links, rustdoc::redundant_explicit_links)]
+
 pub mod config;
 // Crate-internal: the config → concrete-type layer `run` dispatches through.
 // Not `pub`, because it is machinery rather than API — the Rust route uses the
@@ -30,7 +35,7 @@ use pyo3::prelude::*;
 /// objective, then returns everything that run produced.
 ///
 /// **It holds no results.** A run's state lives in the
-/// [`PyRunResult`](crate::py_result::PyRunResult) `run` returns, never on the
+/// [`PyRunResult`] `run` returns, never on the
 /// evolver — so one evolver is reusable across repeated runs with nothing stale
 /// from the previous one hanging off it.
 #[pyclass]
@@ -64,7 +69,7 @@ pub struct GraphEvolver {
 impl GraphEvolver {
     /// Load configuration from a `config.toml` file.
     #[new]
-    fn new(config_path: String) -> PyResult<Self> {
+    pub fn new(config_path: String) -> PyResult<Self> {
         // Read separately from `Config::from_toml_str`, rather than through
         // `Config::from_path`, because the raw text is the provenance record
         // and `from_path` does not hand it back.
@@ -395,7 +400,7 @@ impl GraphEvolver {
     /// The last column is reachable from here: `min(max_cores, n_runs)` is the
     /// multiplier, so raising either raises peak memory by the same factor.
     #[pyo3(signature = (seed, n_runs = 1, max_cores = None))]
-    fn run(
+    pub fn run(
         &mut self,
         seed: u64,
         n_runs: usize,
