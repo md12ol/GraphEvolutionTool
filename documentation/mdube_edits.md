@@ -160,3 +160,26 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   #50 making `status.html` the sole index.
 
 *#handoff-planned-table-de-duplicated · filed 2026-08-13 20:56 — Michael, from the joint meeting.*
+
+## 2026-08-16 17:40 — Michael — the install name is graph-evolution-tool, the import stays get
+
+- **Trigger:** GitHub #75, `mdube_pypi_packaging` branch, commit `a3981ad`. PyPI rejects `get` as a
+  project name outright — its form answers "This project name isn't allowed", which the JSON API
+  hides by returning 404 as though the name were free. crates.io has had `get` since 2024-03-14 and
+  TestPyPI carries an unrelated 0.0.39, so the name was never obtainable on any registry. The
+  distribution is `graph-evolution-tool`; the module is still `get`, held there by
+  `[tool.maturin] module-name`.
+- **Files:** `guide/getting-started.html` (the install block, ~L28-32); `guide/troubleshooting.html`
+  (~L224); `reference/lib.html` (~L503).
+- **Now false:** nothing yet. Every page says `pip install .`, which remains correct for a source
+  checkout, and no page names a PyPI distribution. Filed now so the fact is not re-derived later.
+- **Should say:** once #87 publishes, `getting-started.html` gains the registry install —
+  `pip install graph-evolution-tool`, followed by `import get` — with one line making the
+  difference explicit, because a reader who types `import graph_evolution_tool` gets an ImportError
+  and no clue why. `pip install .` stays for contributors building from source.
+- **Do not apply the install line before #87 lands.** Pages describe present behaviour, and until
+  something is on PyPI that command fails. If it is worth flagging earlier it belongs in
+  `status.html`, nowhere else.
+- **Badges:** none.
+
+*#pypi-install-name-differs-from-import · filed 2026-08-16 17:40 — Michael.*
