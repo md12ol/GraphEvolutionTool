@@ -1,49 +1,27 @@
-# Union merge applies to the APPEND-ONLY docs only. Two people write to the tail of the same file
-# from separate machines, which is the most conflict-prone shape in git, so `decisions.md` and
-# `collab.md` use git's built-in `union` driver: both sides' lines are kept, no conflict markers.
+# MOVED 2026-08-16 — Michael. The union-merge rules that lived here from 2026-07-31 are gone, and
+# nothing replaced them in this repository, because there is nothing here for them to apply to.
 #
-# NARROWED 2026-08-04. This previously covered all five persistent docs, `.claude/work/*.md`.
-# Three of them — issues.md, hotfixes.md, traps.md — are CHURN lists, where deleting an entry is a
-# normal operation ("an entry leaves the moment it is filed"; "remove entries whose hotfix is gone
-# from the tree"). Union merge cannot express a deletion. A one-sided delete survives, but a delete
-# that races with any edit to the same region is silently DISCARDED and the entry comes back —
-# measured 2026-08-04. The worst case is hotfixes.md: you remove an entry because you reverted the
-# code, the other owner adds a `Last checked:` line to it, and the merge resurrects an entry
-# claiming a hotfix is in the tree that is not. Those three now take git's normal 3-way merge, so a
-# concurrent append CONFLICTS and is resolved by hand. That is the trade: loud and occasional,
-# rather than silent and wrong.
+# They named `.claude/work/decisions.md`, `.claude/work/collab.md` and
+# `.claude/work/collab_settled.md`. On 2026-08-16 `.claude/` became its own repository
+# (`md12ol/GET-claude`, GitHub #74) and this repository's `.gitignore` stopped tracking it. Git
+# reads `.gitattributes` only from the repository that CONTAINS the file being merged, so from that
+# moment these three lines could never fire again: the merges happen inside GET-claude, which had
+# no `.gitattributes` at all.
 #
-# The cost of union, on the two files that keep it: it NEVER conflicts. Measured 2026-07-31, two
-# entries with distinct text merge correctly (only the blank line between them is eaten, being
-# common to both sides), but lines that are byte-IDENTICAL on both sides are deduplicated and the
-# two entries interleave into one block that reads as coherent and is not. Measured again
-# 2026-08-04, the inverse: two people editing the SAME existing line makes union keep BOTH
-# versions, reported as one insertion, no conflict. So every entry carries a `— <author>` stamp and
-# a time, entries are appended rather than edited, and an in-place amendment is announced in
-# collab.md first. See .claude/CLAUDE.md, "Formatting for union merge", and .claude/work/traps.md.
+# The effect was silent and lasted until it was measured — two `decisions.md` entries appended from
+# separate machines produced a real conflict, on files documented as never conflicting. The rules
+# now live at GET-claude's own root with the prefix stripped (`work/decisions.md merge=union`),
+# carrying the full reasoning: which three files keep union, why `traps.md`, `hotfixes.md` and
+# `issues.md` were narrowed out of it on 2026-08-04, and why `deferred.md` was never added.
 #
-# Deliberately NOT covered: work/current/ (gitignored, per-person) and work/archive/ (write-once
-# per task directory, so it cannot collide). Note gitattributes globs do not cross `/`, so
-# `.claude/work/*.md` reaches only files directly in work/ — confirm with `git check-attr merge -- <path>`.
-#
-# Also deliberately absent, added 2026-08-11: `deferred.md`. Stated here because "not listed" and
-# "nobody considered it" look identical in this file. It is a churn list by the same test as the
-# three narrowed above — an entry is DELETED when it graduates to a GitHub issue — so it takes the
-# normal 3-way merge and a concurrent append conflicts. Do not add a union line for it.
-.claude/work/decisions.md merge=union
-.claude/work/collab.md merge=union
+# Do not restore them here. A path this repository does not track cannot be given an attribute.
 
 # Shell scripts are checked out with LF regardless of core.autocrlf. Added 2026-08-13 — Michael,
 # after `sudo ./serve.sh` in WSL failed with `/usr/bin/env: 'bash\r': No such file or directory`.
 # Both owners' Windows clones have core.autocrlf=true, which rewrites every .sh to CRLF on
-# checkout; the shebang then names an interpreter called `bash\r`, which does not exist. The
-# hooks in .claude/hooks/ dodged this only because the harness invokes them as `bash <script>`,
-# where the shebang is never read — they were CRLF too. Without this line the fix is not durable:
-# the next checkout, merge or stash puts the CRs straight back.
+# checkout; the shebang then names an interpreter called `bash\r`, which does not exist. Without
+# this line the fix is not durable: the next checkout, merge or stash puts the CRs straight back.
+#
+# This still applies here — `documentation/serve.sh` is the case that found it. The hooks that used
+# to be covered by it moved to GET-claude, which now carries its own copy of this rule.
 *.sh text eol=lf
-
-# Added 2026-08-13 at the joint meeting (collab #59): collab.md split into a live file and an
-# archive, so the archive needs the same union driver for the same reason — both owners append to
-# the tail of it from separate machines. Everything in the note above about union's two silent
-# failures applies to it unchanged.
-.claude/work/collab_settled.md merge=union

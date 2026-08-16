@@ -183,3 +183,25 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
 - **Badges:** none.
 
 *#pypi-install-name-differs-from-import · filed 2026-08-16 17:40 — Michael.*
+
+### `HANDOFF.md` describes a working-docs layout that changed twice since it was written
+
+- **Trigger:** the repository split of 2026-08-16 (GitHub #74), found by an audit of everything the
+  split left stale. This page was written when `.claude/` was tracked inside GET and the live plan
+  was a single shared directory.
+- **Files:** `documentation/HANDOFF.md:180-181`.
+- **Now false, on both halves of one sentence:** it says the working docs are in
+  `.claude/work/current/`, and that they are *gitignored, so it exists only on the machine it was
+  written on*. The path has been per-owner — `.claude/work/<owner>/current/` — since 2026-08-13,
+  and they stopped being gitignored on the same date. Since 2026-08-16 they are not in this
+  repository at all: `.claude/` is a separate private repository, `md12ol/GET-claude`, cloned into
+  place, and GET's `.gitignore` excludes it.
+- **Should say:** that the task's working docs live in `.claude/work/<owner>/current/`, that
+  `plan.md` holds the task list, and that they are tracked in the separate GET-claude repository so
+  a task survives across machines — the opposite of the current claim, which is what makes this
+  worth correcting rather than trimming.
+- **Not marked as history.** Everything else superseded in these docs is struck through and dated;
+  this reads as a present-tense statement of fact, so a reader has no signal to distrust it.
+- **Badges:** none.
+
+*#handoff-md-describes-the-pre-split-working-docs · filed 2026-08-16 23:55 — Michael.*
