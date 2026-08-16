@@ -30,3 +30,8 @@ handoff_edge_multiplicity_cap_simplification.md
 # `work/<owner>/current/plan.md`. That is why handoff.md carries a `Machine:` stamp and /load stops
 # and reports on divergence instead of merging a plan file. See .claude/CLAUDE.md.
 .claude/settings.local.json
+
+# .claude/ is its own repository now - md12ol/GET-claude, cloned as this directory.
+# Agreed at the joint meeting of 2026-08-13 (GitHub #74). Keeping it out of GET is what
+# keeps it out of every clone, every release branch and the built wheel.
+.claude/
