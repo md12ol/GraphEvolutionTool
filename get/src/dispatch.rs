@@ -204,13 +204,17 @@ impl GraphEvolver {
 /// `WeightedIndex` sampler, and doing that per individual would rebuild the
 /// same table `population_size` times.
 ///
-/// The base graph is empty here. `set_base_graph` (GitHub #28) is what will
-/// let a previous run's output seed it; until then every edge-edit run starts
-/// from nothing, which matters because **five of the nine opcodes are inert
-/// on an empty graph** — `Swap`, `Hop` and the three `Local*` all need
-/// existing structure to walk, so early generations do nothing until
-/// `Add`/`Toggle` have built something. Self-correcting, and stated here so
-/// it is not read as a defect.
+/// `base_graph` is what the edit script is applied to: `Some` seeds the run
+/// from a caller-supplied graph — raw data, or a previous run's best edges —
+/// and `None` starts from an empty one. It is cloned rather than borrowed
+/// because the context owns its graph for the whole run, while the caller
+/// keeps theirs for any further runs.
+///
+/// An empty base is the case worth knowing about, because **five of the nine
+/// opcodes are inert on an empty graph** — `Swap`, `Hop` and the three
+/// `Local*` all need existing structure to walk, so early generations do
+/// nothing until `Add`/`Toggle` have built something. Self-correcting, and
+/// stated here so it is not read as a defect.
 ///
 /// # Errors
 ///
@@ -221,6 +225,7 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
     config: &Config,
     gene_length: usize,
     weights: EdgeEditOperationWeights,
+    base_graph: Option<&Graph>,
     rng: &mut R,
 ) -> PyResult<(EdgeEditContext, Vec<EdgeEditGenome>)> {
     let operators = EdgeEditOperators::new(weights).map_err(PyValueError::new_err)?;
@@ -234,8 +239,14 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
         ));
     }
 
+    // Unset means empty, which is the default an unseeded run gets.
+    let starting_graph = match base_graph {
+        Some(graph) => graph.clone(),
+        None => Graph::new(config.network_size, config.max_edge_multiplicity),
+    };
+
     let context = EdgeEditContext {
-        base_graph: Graph::new(config.network_size, config.max_edge_multiplicity),
+        base_graph: starting_graph,
     };
     Ok((context, population))
 }
@@ -330,6 +341,11 @@ pub(crate) fn replicate_seeds(master: u64, n_runs: usize) -> Vec<u64> {
 /// which the evolver would use to re-seed its own ChaCha8 and thereby replay the
 /// exact draws that just built the population.
 ///
+/// `base_graph` reaches only the edge-edit arm. The SDA genome generates its
+/// graph rather than editing one, so there is nothing for a base to seed —
+/// which is why `set_base_graph` refuses an SDA-configured evolver outright
+/// instead of accepting a value that dies here.
+///
 /// # Errors
 ///
 /// `ValueError` for any dimension the genome constructors reject. `Config::validate`
@@ -338,6 +354,7 @@ pub(crate) fn replicate_seeds(master: u64, n_runs: usize) -> Vec<u64> {
 pub(crate) fn evolve<F: Fitness>(
     config: &Config,
     fitness: &F,
+    base_graph: Option<&Graph>,
     seed: u64,
 ) -> PyResult<ErasedOutcome> {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
@@ -350,8 +367,13 @@ pub(crate) fn evolve<F: Fitness>(
             gene_length,
             operation_weights,
         } => {
-            let (genome_context, population) =
-                edge_edit_start(config, *gene_length, *operation_weights, &mut rng)?;
+            let (genome_context, population) = edge_edit_start(
+                config,
+                *gene_length,
+                *operation_weights,
+                base_graph,
+                &mut rng,
+            )?;
             Ok(run_strategy(
                 config,
                 genome_context,
@@ -425,6 +447,7 @@ fn effective_concurrency(max_cores: Option<usize>, n_runs: usize) -> usize {
 pub(crate) fn run_replicates(
     config: &Config,
     objectives: &[Box<dyn Fitness>],
+    base_graph: Option<&Graph>,
     seeds: &[u64],
     max_cores: Option<usize>,
 ) -> PyResult<Vec<ErasedOutcome>> {
@@ -439,7 +462,7 @@ pub(crate) fn run_replicates(
     if matches!(config.fitness, FitnessConfig::Python) {
         let mut outcomes = Vec::with_capacity(seeds.len());
         for (objective, &seed) in objectives.iter().zip(seeds) {
-            outcomes.push(evolve(config, objective, seed)?);
+            outcomes.push(evolve(config, objective, base_graph, seed)?);
         }
         return Ok(outcomes);
     }
@@ -457,7 +480,7 @@ pub(crate) fn run_replicates(
         seeds
             .par_iter()
             .zip(objectives.par_iter())
-            .map(|(&seed, objective)| evolve(config, objective, seed))
+            .map(|(&seed, objective)| evolve(config, objective, base_graph, seed))
             .collect::<PyResult<Vec<ErasedOutcome>>>()
     })
 }
@@ -629,6 +652,7 @@ mod tests {
         GraphEvolver {
             config: config_with(fitness_block),
             fitness_function: None,
+            base_graph: None,
             config_toml: String::new(),
         }
     }
@@ -726,12 +750,15 @@ mod tests {
         assert_eq!(first.evaluate(&graph), second.evaluate(&graph));
     }
 
-    /// A config whose `[genome]` block is `genome_block`, everything else fixed.
-    fn config_with_genome(genome_block: &str) -> Config {
+    /// A config whose `[genome]` block is `genome_block` and whose edge cap is
+    /// `cap`, everything else fixed. The cap is a parameter because the
+    /// cap-narrowing check only bites when a base graph was built under a wider
+    /// one than the run it is fed into.
+    fn config_with_genome_and_cap(genome_block: &str, cap: u32) -> Config {
         let text = format!(
             "population_size = 4\n\
              network_size = 8\n\
-             max_edge_multiplicity = 3\n\
+             max_edge_multiplicity = {cap}\n\
              crossover_rate = 0.8\n\
              mutation_rate = 0.2\n\
              \n\
@@ -750,9 +777,14 @@ mod tests {
     }
 
     fn evolver_with_genome(genome_block: &str) -> GraphEvolver {
+        evolver_with_genome_and_cap(genome_block, 3)
+    }
+
+    fn evolver_with_genome_and_cap(genome_block: &str, cap: u32) -> GraphEvolver {
         GraphEvolver {
-            config: config_with_genome(genome_block),
+            config: config_with_genome_and_cap(genome_block, cap),
             fitness_function: None,
+            base_graph: None,
             config_toml: String::new(),
         }
     }
@@ -766,22 +798,158 @@ mod tests {
         let evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
         let weights = EdgeEditOperationWeights::default();
 
-        let (context, population) = edge_edit_start(&evolver.config, 16, weights, &mut test_rng())
-            .expect("default weights are usable");
+        let (context, population) =
+            edge_edit_start(&evolver.config, 16, weights, None, &mut test_rng())
+                .expect("default weights are usable");
 
         assert_eq!(population.len(), 4, "one individual per population_size");
         for genome in &population {
             assert_eq!(genome.genes.len(), 16, "each genome gets gene_length genes");
         }
 
-        // The base graph comes from config, and is empty until `set_base_graph`
-        // (GitHub #28) exists to seed it.
+        // No base graph passed, so the context gets an empty one sized from
+        // config — the default an unseeded run starts from.
         assert_eq!(context.base_graph.num_nodes, 8);
         assert_eq!(
             context.base_graph.get_edge_list().len(),
             0,
             "no edges to start",
         );
+    }
+
+    #[test]
+    fn a_set_base_graph_is_what_the_edge_edit_population_expresses_against() {
+        let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+        let seeded = vec![(0, 1, 2), (3, 4, 1)];
+        evolver
+            .set_base_graph(8, seeded.clone())
+            .expect("a graph matching the config is accepted");
+
+        let (context, _) = edge_edit_start(
+            &evolver.config,
+            16,
+            EdgeEditOperationWeights::default(),
+            evolver.base_graph.as_ref(),
+            &mut test_rng(),
+        )
+        .expect("default weights are usable");
+
+        assert_eq!(
+            context.base_graph.get_edge_list(),
+            seeded,
+            "the population expresses against what was set, not an empty graph",
+        );
+    }
+
+    #[test]
+    fn a_base_graph_whose_node_count_disagrees_with_the_config_is_rejected() {
+        let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+
+        let err = evolver
+            .set_base_graph(9, vec![(0, 1, 1)])
+            .expect_err("9 nodes against a network_size of 8 must be rejected");
+
+        let message = err.to_string();
+        assert!(message.contains('9'), "names the graph's size: {message}");
+        assert!(message.contains('8'), "names network_size: {message}");
+        assert!(evolver.base_graph.is_none(), "nothing stored on rejection");
+    }
+
+    #[test]
+    fn a_base_graph_edge_above_the_configs_cap_is_rejected_rather_than_clamped() {
+        // `Graph::set_edge` clamps an over-cap weight instead of refusing it, so
+        // a graph built under a wider cap would otherwise be narrowed silently
+        // and evolved against — the caller never seeing a different graph from
+        // the one they handed in.
+        let mut evolver =
+            evolver_with_genome_and_cap("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n", 1);
+
+        let err = evolver
+            .set_base_graph(8, vec![(0, 1, 1), (2, 3, 3)])
+            .expect_err("multiplicity 3 against a cap of 1 must be rejected");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("(2, 3)"),
+            "names the offending edge: {message}",
+        );
+        assert!(
+            message.contains("multiplicity 3"),
+            "names the offending value, not just the edge: {message}",
+        );
+        assert!(
+            message.contains('1'),
+            "names the cap it exceeded: {message}"
+        );
+        assert!(evolver.base_graph.is_none(), "nothing stored on rejection");
+    }
+
+    #[test]
+    fn a_base_graph_edge_naming_a_node_outside_the_network_is_rejected() {
+        // The node-count check compares one number against another and never
+        // looks at the edges, so a caller taking `num_nodes` from their config
+        // rather than their data passes it while every out-of-range edge is
+        // dropped by `Graph::set_edge` without a word.
+        let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+
+        let err = evolver
+            .set_base_graph(8, vec![(0, 1, 1), (2, 9, 1)])
+            .expect_err("node 9 in an 8-node network must be rejected");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("(2, 9)"),
+            "names the offending edge: {message}",
+        );
+        assert!(
+            message.contains('8'),
+            "names the range it fell outside: {message}",
+        );
+        assert!(evolver.base_graph.is_none(), "nothing stored on rejection");
+    }
+
+    #[test]
+    fn a_base_graph_self_loop_is_rejected_rather_than_dropped() {
+        // This graph has no representation for a self-loop, and one in caller
+        // data almost always means the indices are wrong — 1-indexed edge lists
+        // being the common case, which also lands every survivor on the wrong
+        // vertex. Reported rather than absorbed.
+        let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+
+        let err = evolver
+            .set_base_graph(8, vec![(0, 1, 1), (3, 3, 1)])
+            .expect_err("a self-loop must be rejected");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("(3, 3)"),
+            "names the offending edge: {message}",
+        );
+        assert!(
+            message.contains("self-loop"),
+            "says what is wrong with it: {message}",
+        );
+        assert!(evolver.base_graph.is_none(), "nothing stored on rejection");
+    }
+
+    #[test]
+    fn a_base_graph_is_rejected_on_an_sda_configured_evolver() {
+        // The SDA genome generates its graph rather than editing one, so a
+        // stored base would never be read. Accepting it looks, from Python,
+        // exactly like having seeded the run.
+        let mut evolver =
+            evolver_with_genome("[genome]\ntype = \"sda\"\nnum_states = 5\nmax_resp_len = 3\n");
+
+        let err = evolver
+            .set_base_graph(8, vec![(0, 1, 1)])
+            .expect_err("an SDA run has no base graph to seed");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("edge_edit"),
+            "points at what would work: {message}",
+        );
+        assert!(evolver.base_graph.is_none(), "nothing stored on rejection");
     }
 
     #[test]
@@ -896,6 +1064,7 @@ mod tests {
             &evolver.config,
             12,
             weights,
+            None,
             &mut ChaCha8Rng::seed_from_u64(5),
         )
         .expect("first build");
@@ -903,6 +1072,7 @@ mod tests {
             &evolver.config,
             12,
             weights,
+            None,
             &mut ChaCha8Rng::seed_from_u64(5),
         )
         .expect("second build");
@@ -910,6 +1080,7 @@ mod tests {
             &evolver.config,
             12,
             weights,
+            None,
             &mut ChaCha8Rng::seed_from_u64(6),
         )
         .expect("third build");
@@ -937,6 +1108,7 @@ mod tests {
             &evolver.config,
             8,
             EdgeEditOperationWeights::default(),
+            None,
             &mut rng,
         )
         .expect("build");
@@ -1037,7 +1209,7 @@ mod tests {
             let objective: Box<dyn Fitness> =
                 Box::new(EpiSpread::new(sir_sample_params(sir_of(&config)), 1));
 
-            let outcome = evolve(&config, &objective, 1)
+            let outcome = evolve(&config, &objective, None, 1)
                 .unwrap_or_else(|err| panic!("{name} should complete: {err}"));
 
             // `epi_spread` counts ever-infected and patient zero always counts,
@@ -1093,10 +1265,22 @@ mod tests {
         let config = runnable(GENERATIONAL, EDGE_EDIT);
         let seeds = replicate_seeds(20260813, 6);
 
-        let concurrent = run_replicates(&config, &objectives_for(&config, &seeds), &seeds, Some(4))
-            .expect("concurrent replicates complete");
-        let serial = run_replicates(&config, &objectives_for(&config, &seeds), &seeds, Some(1))
-            .expect("sequential replicates complete");
+        let concurrent = run_replicates(
+            &config,
+            &objectives_for(&config, &seeds),
+            None,
+            &seeds,
+            Some(4),
+        )
+        .expect("concurrent replicates complete");
+        let serial = run_replicates(
+            &config,
+            &objectives_for(&config, &seeds),
+            None,
+            &seeds,
+            Some(1),
+        )
+        .expect("sequential replicates complete");
 
         assert_eq!(concurrent.len(), 6, "one outcome per seed");
         for (index, (parallel, sequential)) in concurrent.iter().zip(&serial).enumerate() {
@@ -1122,6 +1306,7 @@ mod tests {
             let mut evolver = GraphEvolver {
                 config: runnable_with_fitness(GENERATIONAL, EDGE_EDIT, PYTHON_FITNESS),
                 fitness_function: None,
+                base_graph: None,
                 config_toml: String::new(),
             };
             let callable = py
@@ -1149,7 +1334,7 @@ mod tests {
             // `max_cores` is deliberately generous: under the python arm it is
             // moot, and passing it proves the cap does not drag the config onto
             // the parallel path.
-            let outcomes = run_replicates(&evolver.config, &objectives, &seeds, Some(8))
+            let outcomes = run_replicates(&evolver.config, &objectives, None, &seeds, Some(8))
                 .expect("python replicates complete sequentially");
 
             assert_eq!(outcomes.len(), 3, "one outcome per seed");
@@ -1169,8 +1354,14 @@ mod tests {
         let config = runnable(GENERATIONAL, EDGE_EDIT);
         let seeds = replicate_seeds(11, 3);
 
-        let outcomes = run_replicates(&config, &objectives_for(&config, &seeds), &seeds, None)
-            .expect("replicates complete with max_cores unset");
+        let outcomes = run_replicates(
+            &config,
+            &objectives_for(&config, &seeds),
+            None,
+            &seeds,
+            None,
+        )
+        .expect("replicates complete with max_cores unset");
 
         assert_eq!(outcomes.len(), 3, "one outcome per seed, cap unset");
     }
@@ -1184,8 +1375,8 @@ mod tests {
         // is not observable from here and this test does not claim it.
         let config = runnable(GENERATIONAL, EDGE_EDIT);
 
-        let outcomes =
-            run_replicates(&config, &[], &[], Some(8)).expect("an empty request is not an error");
+        let outcomes = run_replicates(&config, &[], None, &[], Some(8))
+            .expect("an empty request is not an error");
 
         assert!(outcomes.is_empty(), "no seeds means no outcomes");
     }
@@ -1219,7 +1410,7 @@ mod tests {
         let objective: Box<dyn Fitness> =
             Box::new(EpiSpread::new(sir_sample_params(sir_of(&config)), 6));
 
-        let outcome = evolve(&config, &objective, 6).expect("run completes");
+        let outcome = evolve(&config, &objective, None, 6).expect("run completes");
 
         // Row 0 is the starting population, then one per generation.
         assert_eq!(outcome.history.len(), 4, "num_generations + 1 rows");
@@ -1291,7 +1482,7 @@ mod tests {
         let run = |seed: u64| {
             let objective: Box<dyn Fitness> =
                 Box::new(EpiSpread::new(sir_sample_params(sir_of(&config)), seed));
-            evolve(&config, &objective, seed).expect("run completes")
+            evolve(&config, &objective, None, seed).expect("run completes")
         };
 
         let first = run(4);
@@ -1324,8 +1515,8 @@ mod tests {
         let second: Box<dyn Fitness> =
             Box::new(EpiSpread::new(sir_sample_params(sir_of(&steady)), 2));
 
-        let a = evolve(&generational, &first, 2).expect("generational runs");
-        let b = evolve(&steady, &second, 2).expect("steady-state runs");
+        let a = evolve(&generational, &first, None, 2).expect("generational runs");
+        let b = evolve(&steady, &second, None, 2).expect("steady-state runs");
 
         assert_ne!(
             a.best_edges, b.best_edges,
@@ -1362,6 +1553,7 @@ mod tests {
         let mut evolver = GraphEvolver {
             config: Config::from_toml_str(&config_toml).expect("the fixture parses"),
             fitness_function: None,
+            base_graph: None,
             config_toml: config_toml.clone(),
         };
 
@@ -1399,6 +1591,7 @@ mod tests {
         GraphEvolver {
             config: runnable(GENERATIONAL, EDGE_EDIT),
             fitness_function: None,
+            base_graph: None,
             config_toml: String::new(),
         }
     }
@@ -1504,6 +1697,7 @@ mod tests {
         let mut evolver = GraphEvolver {
             config: runnable(GENERATIONAL, EDGE_EDIT),
             fitness_function: None,
+            base_graph: None,
             config_toml: String::new(),
         };
 
@@ -1540,6 +1734,7 @@ mod tests {
             let mut evolver = GraphEvolver {
                 config: runnable(evolution, EDGE_EDIT),
                 fitness_function: None,
+                base_graph: None,
                 config_toml: String::new(),
             };
             let [result] = <[_; 1]>::try_from(
@@ -1611,6 +1806,7 @@ mod tests {
         let mut evolver = GraphEvolver {
             config: Config::from_toml_str(&config_toml).expect("the fixture parses"),
             fitness_function: None,
+            base_graph: None,
             config_toml: config_toml.clone(),
         };
         let [result] = <[_; 1]>::try_from(
@@ -1683,7 +1879,9 @@ mod tests {
             config.validate().expect("validates");
             let objective: Box<dyn Fitness> =
                 Box::new(EpiSpread::new(sir_sample_params(sir_of(&config)), 3));
-            evolve(&config, &objective, 3).expect("runs").best_fitness
+            evolve(&config, &objective, None, 3)
+                .expect("runs")
+                .best_fitness
         };
 
         let start = spread_after(unevolved);

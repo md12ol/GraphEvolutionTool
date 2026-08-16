@@ -20,7 +20,7 @@ fitness direction, steady-state replacement, and mutation. Started 2026-07-31.
 | `sir_sim` | built |
 | the three SIR objectives | built — GitHub #17, with #18's epidemic seeding (§8.1) |
 | `Config` parsing | built, and `Config::validate` covers both front ends — GitHub #23 |
-| Python interface | built **except dispatch** — the module, the config builders (§8) and `set_fitness_function` are in; `GraphEvolver::run`'s body is still `todo!()`, which is GitHub #26 |
+| Python interface | **built** — the module, the config builders (§8), `set_fitness_function` and `GraphEvolver::run` are all in. `run` is complete at `lib.rs:218-243`, and all four strategy × genome arms are wired and tested (`dispatch.rs:823`). GitHub #26 is closed |
 
 *Status table corrected 2026-08-09 at the joint meeting: four rows still read "designed, not built"
 for components that had since landed. It is the only place in this document that carries status, so
@@ -122,7 +122,7 @@ The nine operations, all no-ops when their preconditions fail:
 | `Toggle` | absent → add; at cap → remove; otherwise `v3`'s parity decides |
 | `LocalAdd` / `LocalDelete` / `LocalToggle` | the same three, but the far endpoint is reached by a **two-hop walk** from `v1` (neighbour `v2`, then its neighbour `v3`), rejecting a walk that returns to the start or passes a degree-1 node |
 | `Hop` | move an edge: connect `v1` to its two-hop endpoint, then drop the edge to the intermediate neighbour. Only if the new edge actually took |
-| `Swap` | 2-opt rewire. Given two non-adjacent vertices of degree > 2 and one neighbour each, cut both edges and cross-connect — but only if all four vertices are distinct and none of the three would-be edges already exists. Requires ≥ 4 nodes |
+| `Swap` | 2-opt rewire. Given two non-adjacent vertices of degree > 2 and one neighbour each, cut both edges and cross-connect — but only if all four vertices are distinct and neither of the two would-be edges already exists. A third check, `has_edge(first_neighbor, second_neighbor)`, guards a pair the swap never creates: it is an anti-clustering guard, not a would-be edge. Requires ≥ 4 nodes |
 | `Null` | deliberate no-op; weight it to 0 to make every gene do something |
 
 Five of the nine (`Swap`, `Hop`, the three `Local*`) are **inert on an empty base graph** — they
@@ -348,7 +348,6 @@ both ways, and the entire design is about calling it in exactly two places.
                          −1470.0  ──→  1470.0
                                    │
   ══════════════════════ Python boundary ═══════════════════════════════
-     best_fitness()  ·  save_logs()  ·  save_results()
      ORIENT BACK — the one and only flip outward
                                    │
                                    ▼
@@ -781,6 +780,8 @@ Everything belongs there, not scattered through dispatch:
 - `max_mutations >= 1`
 - operation weights finite, non-negative, at least one positive
 - `patient_zero < network_size` when pinned — a node index that isn't in the network
+- `0.0 <= crossover_rate <= 1.0`, `0.0 <= mutation_rate <= 1.0`, `0.0 <= infection_rate <= 1.0` —
+  they are probabilities, and a negative one or one above 1 currently parses and runs
 - `num_epidemics >= 1`
 - `min_epidemic_length >= 1` and `max_epidemic_retries >= 1` — both default to the C++ constants
   (3 and 5); `min_epidemic_length = 1` disables the re-roll rather than being an error (§5.2)
@@ -812,6 +813,24 @@ registered (§8).
 
 A pyo3 extension module (`abi3-py38`). The user fills typed configuration objects in Python and
 passes them to an evolver. A hand-written TOML file is the other way in.
+
+**How the user obtains it: `pip install`, from PyPI.** Added 2026-08-13 at the joint meeting. This
+sheet specified the whole class surface without ever saying how the module reaches a user, so the
+one step between "GET exists" and "someone else runs GET" belonged to nobody. Four points, all
+binding:
+
+- **Pip installability is first-release scope**, not a later convenience.
+- **Wheels are built for the three platforms**, not source-only. Requiring a Rust toolchain to
+  install contradicts the promise this section opens with.
+- **Built with maturin**, as an `abi3-py38` wheel — the ABI tag this section already names, so one
+  wheel per platform serves every supported Python.
+- **The demo layer stays in `examples/`.** matplotlib and networkx are documented extras of the
+  demo, never dependencies of the wheel.
+
+Distribution is PyPI rather than a GitHub-release URL, so `pip install` is the literal command
+rather than an approximation of it. What ships in the wheel is a decided list, not whatever happens
+to sit in the tree: the working documents under `.claude/`, this sheet and `documentation/` are all
+excluded.
 
 **The Python objects serialize to TOML, and that TOML is what Rust parses.** Python is a *builder*
 for the config format, not a second parser of it:
@@ -1013,12 +1032,27 @@ Two structural rules keep the parallelism real: expression happens in parallel *
 is called — never call Python from inside a rayon closure — and the long Rust portion releases the
 GIL, with the Python adapter re-acquiring it per batch.
 
-**Three checks the base-graph setter owes**, all of which fail quietly if skipped: the node count
-must match the configured network size, or out-of-range edges are silently dropped; **cap
-narrowing must be rejected or warned**, because `set_edge` clamps and piping a cap-5 result into a
-cap-1 run silently collapses every weight (this is the main stacking trap); and with no base graph
-supplied, the run starts from an empty graph, which leaves five of the nine opcodes inert until
-`Add`/`Toggle` build some structure (§3.1).
+**Four checks the base-graph setter owes**, all of which fail quietly if skipped:
+
+1. **The node count argument must match the configured network size.** This catches a caller who
+   derives the count from their data and hands over a graph of the wrong size.
+2. **Every edge's endpoints must be `< num_nodes`, and no edge may be a self-loop.** This is a
+   separate question from check 1 — check 1 asks whether the *argument* agrees with the config,
+   this asks whether the *data* agrees with the argument, and only this one prevents edges being
+   silently dropped. A caller who reads the node count off their config rather than their data
+   passes check 1 while `set_edge` discards every out-of-range edge: on a 200-node graph handed to
+   a 100-node run, about three quarters of them. 1-indexed edge-list data is worse still — the top
+   node's edges vanish and every survivor lands on the wrong vertex.
+3. **Cap narrowing must be rejected**, because `set_edge` clamps and piping a cap-5 result into a
+   cap-1 run silently collapses every weight (this is the main stacking trap).
+4. **With no base graph supplied the run starts from an empty graph**, which leaves five of the nine
+   opcodes inert until `Add`/`Toggle` build some structure (§3.1).
+
+Checks 1–3 **reject**, raising an error that names the offending value. They do not clamp and do not
+drop. `Graph::set_edge` stays permissive by contrast, and deliberately: the nine opcodes decode
+vertex indices out of a random payload and must be no-ops when their preconditions fail, so making
+`set_edge` fallible would turn that into an error path in all nine. Permissiveness that is right for
+engine-generated indices is wrong for caller-supplied data at the boundary.
 
 ---
 
@@ -1027,10 +1061,11 @@ supplied, the run starts from an empty graph, which leaves five of the nine opco
 **None.** Every design question raised while writing this sheet is settled. What remains is
 implementation, and the sequencing for that lives in a separate document.
 
-Two things are decided here but not yet true of the code, and will read as discrepancies until
-built: the one-mutation contract with `max_mutations` (§4), and the SDA alphabet derived from the
-edge cap (§3.2). Where this sheet and the code disagree, **this sheet is the intent** — that is
-the one place the usual "the repo wins" rule is inverted, because the code has not caught up yet.
+~~Two things are decided here but not yet true of the code: the one-mutation contract with
+`max_mutations` (§4), and the SDA alphabet derived from the edge cap (§3.2).~~ **Both are now true
+of the code** — corrected 2026-08-13 at the joint meeting. Where this sheet and the code disagree,
+**this sheet is the intent** — that is the one place the usual "the repo wins" rule is inverted,
+because the code may not have caught up yet.
 
 ---
 

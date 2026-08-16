@@ -11,8 +11,9 @@ pub mod py_config;
 pub mod py_result;
 pub mod sir;
 
-use crate::config::{Config, ConfigError, FitnessConfig};
+use crate::config::{Config, ConfigError, FitnessConfig, GenomeConfig};
 use crate::fitness::{Direction, PyFitness};
+use crate::graph::Graph;
 use crate::py_config::{
     PyConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig, PyOperationWeights,
     PySelectionConfig, PySirParams, config_error_to_py,
@@ -41,6 +42,18 @@ pub struct GraphEvolver {
     /// a setter instead (§8): the config *selects* Python, this *is* the
     /// callable.
     fitness_function: Option<PyFitness>,
+    /// The graph an edge-edit script is applied to, set by
+    /// [`GraphEvolver::set_base_graph`].
+    ///
+    /// A setter rather than a config field for the same reason as the objective
+    /// above: this is either data the caller brought or the output of a previous
+    /// run, and neither belongs in a `config.toml`. `None` means every run starts
+    /// from an empty graph, which is the default.
+    ///
+    /// Unused by SDA, which generates its graph from scratch rather than editing
+    /// one — the setter rejects a call on an SDA-configured evolver instead of
+    /// storing something nothing will read.
+    base_graph: Option<Graph>,
     /// The TOML document `config` was parsed from — the run's provenance
     /// record, written alongside its results.
     config_toml: String,
@@ -68,6 +81,7 @@ impl GraphEvolver {
         Ok(Self {
             config,
             fitness_function: None,
+            base_graph: None,
             config_toml: text,
         })
     }
@@ -91,7 +105,7 @@ impl GraphEvolver {
     ///     selection=get.SelectionConfig.Tournament(tournament_size=5),
     ///     genome=get.GenomeConfig.EdgeEdit(gene_length=256),
     ///     fitness=get.FitnessConfig.EpiSpread(
-    ///         sir=get.SirParams(infection_rate=0.05, num_epidemics=30)
+    ///         sir=get.SirParams(infection_rate=0.5, num_epidemics=30)
     ///     ),
     /// )
     /// evolver = get.GraphEvolver.from_config(config)
@@ -129,6 +143,7 @@ impl GraphEvolver {
         Ok(Self {
             config: parsed,
             fitness_function: None,
+            base_graph: None,
             config_toml: text,
         })
     }
@@ -195,6 +210,112 @@ impl GraphEvolver {
         };
 
         self.fitness_function = Some(PyFitness::new(callable.clone().unbind(), direction));
+        Ok(())
+    }
+
+    /// Seed an edge-edit run from a graph the caller already has.
+    ///
+    /// `edges` is `(u, v, multiplicity)` — the same shape `run` hands back as
+    /// `best_edges`, so one run's output feeds the next without reshaping:
+    ///
+    /// ```python
+    /// first = sda_evolver.run(seed=1)
+    /// edge_evolver.set_base_graph(64, first.best_edges)
+    /// second = edge_evolver.run(seed=2)
+    /// ```
+    ///
+    /// **Left unset, every run starts from an empty graph** — that is the
+    /// default, and it is worth stating rather than leaving to be discovered:
+    /// five of the nine edit opcodes are inert on an empty graph. `Swap`, `Hop`
+    /// and the three `Local*` all need existing structure to walk, so early
+    /// generations do nothing until `Add`/`Toggle` have built something. That
+    /// is self-correcting and not a defect.
+    ///
+    /// # Errors
+    ///
+    /// `ValueError` if `num_nodes` disagrees with the config's `network_size`,
+    /// if the config selected the SDA genome, or if any edge names a node
+    /// outside `0..num_nodes`, is a self-loop, or carries a multiplicity above
+    /// the config's `max_edge_multiplicity`.
+    ///
+    /// The SDA case is a rejection rather than a no-op because an SDA run
+    /// generates its graph from scratch instead of editing one: storing a base
+    /// graph nothing would ever read is indistinguishable, from Python, from
+    /// having seeded the run successfully.
+    ///
+    /// **The three per-edge checks all reject what [`Graph::set_edge`] would
+    /// absorb**, and that asymmetry is deliberate. `set_edge` returns early on
+    /// a bad endpoint or a self-loop and clamps an over-cap weight, which is
+    /// right for the engine — the edit opcodes decode vertex indices out of a
+    /// random payload and are all no-ops when their preconditions fail, so a
+    /// fallible `set_edge` would turn that into an error path in every one of
+    /// them. Permissiveness that suits engine-generated indices is wrong for
+    /// data a caller handed over.
+    ///
+    /// Each failure is one a caller cannot otherwise see. A node count equal to
+    /// `network_size` does not make the *edges* in range: a caller who takes
+    /// `num_nodes` from their config rather than their data passes the first
+    /// check while every edge above the network size vanishes. A self-loop
+    /// almost always means the indices are wrong — 1-indexed data is the common
+    /// case, and it also lands every surviving edge on the wrong vertex. And a
+    /// graph built under a wider cap would be narrowed silently, evolving
+    /// against a different graph from the one passed in. Nothing downstream
+    /// reads a warning, so all three raise.
+    fn set_base_graph(
+        &mut self,
+        num_nodes: usize,
+        edges: Vec<(usize, usize, u32)>,
+    ) -> PyResult<()> {
+        if num_nodes != self.config.network_size {
+            return Err(PyValueError::new_err(format!(
+                "base graph has {} nodes but [evolution] network_size is {}; \
+                 the graph an edit script is applied to must be the size the run evolves",
+                num_nodes, self.config.network_size,
+            )));
+        }
+
+        if !matches!(self.config.genome, GenomeConfig::EdgeEdit { .. }) {
+            return Err(PyValueError::new_err(
+                "[genome] type is \"sda\", which generates its graph rather than editing one, \
+                 so a base graph would never be read; set type = \"edge_edit\" to seed a run",
+            ));
+        }
+
+        // Every check runs before anything is built, because `Graph::set_edge`
+        // absorbs all three failures rather than reporting them: it returns
+        // early on a bad endpoint or a self-loop and clamps an over-cap weight.
+        // A graph constructed first and validated after would already have lost
+        // the offending edge, leaving nothing to report.
+        for &(u, v, multiplicity) in &edges {
+            if u >= num_nodes || v >= num_nodes {
+                return Err(PyValueError::new_err(format!(
+                    "edge ({u}, {v}) names a node outside 0..{num_nodes}; the node count \
+                     matching network_size does not make the edges in range, and an \
+                     out-of-range edge would be dropped without a word",
+                )));
+            }
+
+            if u == v {
+                return Err(PyValueError::new_err(format!(
+                    "edge ({u}, {v}) is a self-loop, which this graph has no representation \
+                     for; a self-loop in caller data usually means the indices are wrong, so \
+                     it is reported rather than dropped",
+                )));
+            }
+
+            if multiplicity > self.config.max_edge_multiplicity {
+                return Err(PyValueError::new_err(format!(
+                    "edge ({u}, {v}) has multiplicity {multiplicity}, above this config's \
+                     max_edge_multiplicity of {}; lower it and resubmit rather than having \
+                     it silently clamped",
+                    self.config.max_edge_multiplicity,
+                )));
+            }
+        }
+
+        let mut graph = Graph::new(self.config.network_size, self.config.max_edge_multiplicity);
+        graph.set_edges(&edges);
+        self.base_graph = Some(graph);
         Ok(())
     }
 
@@ -321,7 +442,15 @@ impl GraphEvolver {
         // slow, or a host application that freezes, neither pointing back here.
         // `.claude/reference/pyo3-maturin.md` §2 has the measured deadlock.
         let outcomes = Python::attach(|py| {
-            py.detach(|| dispatch::run_replicates(&self.config, &objectives, &seeds, max_cores))
+            py.detach(|| {
+                dispatch::run_replicates(
+                    &self.config,
+                    &objectives,
+                    self.base_graph.as_ref(),
+                    &seeds,
+                    max_cores,
+                )
+            })
         })?;
 
         // Nothing is stored. `dispatch::erase` has already converted every
@@ -411,6 +540,7 @@ mod tests {
         GraphEvolver {
             config: config_with(fitness_block),
             fitness_function: None,
+            base_graph: None,
             config_toml: String::new(),
         }
     }
@@ -636,7 +766,7 @@ mod tests {
                 operation_weights: None,
             },
             PyFitnessConfig::EpiSpread {
-                sir: PySirParams::new(0.05, 30, None, 3, 5),
+                sir: PySirParams::new(0.5, 30, None, 3, 5),
             },
             1,
             1,
