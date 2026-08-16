@@ -171,7 +171,29 @@ impl Genome for SdaGenome {
     /// value becomes that edge's weight. [`Graph::set_edge`] clamps the value
     /// to the cap selected by `SdaContext`, so the same representation can
     /// express unweighted or bounded-multiplicity graphs.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this genome's alphabet (`num_chars`, the width of a
+    /// transition/response row) disagrees with `context.max_edge_multiplicity`
+    /// plus one — the derived-alphabet invariant of §3.2. A genome built
+    /// through [`SdaGenome::random_with_edge_multiplicity_cap`] against this
+    /// same cap always satisfies it; one built by hand (`SdaGenome::random`,
+    /// the Rust-library route) is not checked until expressed, so a mismatch
+    /// there would otherwise silently bias the expressed graph toward the cap
+    /// (alphabet too large) or leave the upper edge weights unreachable
+    /// (alphabet too small).
     fn express(&self, context: &Self::Context) -> Graph {
+        let num_chars = self.transitions.first().map_or(0, |row| row.len());
+        let expected_num_chars = context.max_edge_multiplicity as usize + 1;
+        assert_eq!(
+            num_chars, expected_num_chars,
+            "SdaGenome has {num_chars} characters but context.max_edge_multiplicity of {} \
+             requires {expected_num_chars}; build the genome with \
+             random_with_edge_multiplicity_cap against the same cap",
+            context.max_edge_multiplicity,
+        );
+
         let mut graph = Graph::new(context.num_nodes, context.max_edge_multiplicity);
         if context.num_nodes < 2 {
             return graph;
@@ -320,10 +342,11 @@ mod tests {
     #[test]
     fn express_folds_the_run_into_the_upper_triangle_in_row_major_order() {
         let genome = small_genome();
+        // small_genome has a 2-char alphabet, so the matching cap is 1 (§3.2).
         let context = SdaContext {
             num_nodes: 3,
             init_state: 0,
-            max_edge_multiplicity: 5,
+            max_edge_multiplicity: 1,
         };
 
         let graph = genome.express(&context);
@@ -338,21 +361,25 @@ mod tests {
     fn express_of_zero_or_one_node_contexts_is_an_untouched_empty_graph() {
         let genome = small_genome();
 
+        // small_genome has a 2-char alphabet, so the matching cap is 1 (§3.2).
         for num_nodes in [0, 1] {
             let context = SdaContext {
                 num_nodes,
                 init_state: 0,
-                max_edge_multiplicity: 5,
+                max_edge_multiplicity: 1,
             };
-            assert_eq!(genome.express(&context), Graph::new(num_nodes, 5));
+            assert_eq!(genome.express(&context), Graph::new(num_nodes, 1));
         }
     }
 
+    /// §3.2's derived-alphabet invariant, oversized case: a genome with more
+    /// characters than `context.max_edge_multiplicity + 1` allows is refused
+    /// at `express` rather than silently letting `Graph::set_edge` clamp the
+    /// surplus characters onto the cap. `Graph::set_edge`'s own clamping
+    /// behaviour is covered directly in `graph.rs`'s tests.
     #[test]
-    fn express_relies_on_set_edge_to_clamp_large_output_values() {
-        // 1 state, 9-char alphabet, init_char = 8. With only one output slot
-        // requested (num_nodes = 2), the automaton never actually transitions,
-        // so the edge weight is exactly init_char before clamping.
+    #[should_panic(expected = "SdaGenome has 9 characters but context.max_edge_multiplicity of 5")]
+    fn express_refuses_an_alphabet_larger_than_the_cap_allows() {
         let genome = SdaGenome {
             init_char: 8,
             transitions: vec![vec![0; 9]],
@@ -365,29 +392,41 @@ mod tests {
             max_edge_multiplicity: 5,
         };
 
-        let graph = genome.express(&context);
-
-        assert_eq!(graph.weight(0, 1), 5);
+        genome.express(&context);
     }
 
+    /// §3.2's derived-alphabet invariant, undersized case: a genome with
+    /// fewer characters than the cap allows would silently leave the upper
+    /// edge weights unreachable rather than exploring the space the context
+    /// configured. Refused the same way as the oversized case.
     #[test]
-    fn unweighted_context_clamps_every_present_edge_to_one() {
-        let genome = SdaGenome {
-            init_char: 8,
-            transitions: vec![vec![0; 9]],
-            responses: vec![vec![vec![8]; 9]],
-            max_resp_len: 1,
-        };
+    #[should_panic(expected = "SdaGenome has 2 characters but context.max_edge_multiplicity of 5")]
+    fn express_refuses_an_alphabet_smaller_than_the_cap_allows() {
+        let genome = small_genome();
         let context = SdaContext {
             num_nodes: 3,
             init_state: 0,
-            max_edge_multiplicity: 1,
+            max_edge_multiplicity: 5,
         };
 
-        let graph = genome.express(&context);
+        genome.express(&context);
+    }
 
-        assert_eq!(graph.max_edge_multiplicity, 1);
-        assert_eq!(graph.get_edge_list(), vec![(0, 1, 1), (0, 2, 1), (1, 2, 1)]);
+    #[test]
+    fn express_accepts_a_genome_built_with_the_matching_cap_constructor() {
+        let mut rng = StdRng::seed_from_u64(0);
+        let cap = 3;
+        let genome = SdaGenome::random_with_edge_multiplicity_cap(4, cap, 2, &mut rng).unwrap();
+        let context = SdaContext {
+            num_nodes: 3,
+            init_state: 0,
+            max_edge_multiplicity: cap,
+        };
+
+        // Doesn't panic: random_with_edge_multiplicity_cap derives num_chars
+        // from the same cap the context carries, satisfying §3.2 by
+        // construction.
+        genome.express(&context);
     }
 
     #[test]
