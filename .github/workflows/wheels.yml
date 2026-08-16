@@ -1,0 +1,109 @@
+# Builds the Python extension module as a wheel for Linux, macOS and Windows,
+# and publishes to TestPyPI.
+#
+# The filename matters: PyPI's Trusted Publisher config names this workflow
+# explicitly, so renaming this file breaks publishing until the config on
+# pypi.org is edited to match.
+#
+# Publishing to the real PyPI is deliberately NOT here. A version number, once
+# uploaded, can never be reused, so that step is its own reviewed change.
+
+name: wheels
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }} ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # One failing platform should not hide the others.
+      fail-fast: false
+      matrix:
+        include:
+          - { os: linux,   runner: ubuntu-22.04,  target: x86_64 }
+          - { os: linux,   runner: ubuntu-22.04,  target: aarch64 }
+          - { os: macos,   runner: macos-13,      target: x86_64 }
+          - { os: macos,   runner: macos-14,      target: aarch64 }
+          - { os: windows, runner: windows-latest, target: x64 }
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.8'
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          # Build Linux wheels inside the manylinux2014 container rather than
+          # against the runner's own glibc. A wheel built on the runner comes
+          # out tagged manylinux_2_34, which pip refuses to install on RHEL 8,
+          # Debian 11 or Ubuntu 20.04.
+          manylinux: '2014'
+          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Check the wheel carries nothing it should not
+        # The working docs, the spec sheet and the site are not part of the
+        # package. Fail loudly rather than shipping them.
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for whl in dist/*.whl; do
+            if unzip -l "$whl" | grep -Ei '\.claude|official_spec_sheet|documentation/'; then
+              echo "::error::$whl contains files that must not ship"
+              exit 1
+            fi
+          done
+          echo "include list clean"
+
+      - name: Import the built module
+        # Native builds only. The cross-compiled wheels cannot run here.
+        if: matrix.target == 'x86_64' || matrix.target == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install --no-index --find-links dist get
+          python -c "import get; print('imported get', get.__file__)"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: wheels-${{ matrix.os }}-${{ matrix.target }}
+          path: dist
+
+  publish-testpypi:
+    name: publish to TestPyPI
+    needs: build
+    # Only on a tag, and never from a fork's pull request.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      # Required for Trusted Publishing. There is no API token in this repo.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          # TestPyPI keeps its own copy of every version, and a version there
+          # cannot be reused either. Re-running a tag should not fail the job.
+          skip-existing: true
