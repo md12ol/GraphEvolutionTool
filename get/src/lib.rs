@@ -1,3 +1,8 @@
+// Doc links are load-bearing: a public doc that links a private item renders a
+// dead link, and nothing failed when that count grew from 2 to 10 unnoticed.
+// Denying it here rather than in CI means it fails on the machine that wrote it.
+#![deny(rustdoc::private_intra_doc_links, rustdoc::redundant_explicit_links)]
+
 pub mod config;
 // Crate-internal: the config → concrete-type layer `run` dispatches through.
 // Not `pub`, because it is machinery rather than API — the Rust route uses the
