@@ -194,6 +194,9 @@ impl Default for PyOperationWeights {
 #[pyclass(name = "EvolutionConfig")]
 #[derive(Debug, Clone)]
 pub enum PyEvolutionConfig {
+    /// `elite_count`'s default of 1 carries the same value as `config`'s
+    /// `default_elite_count`; there's no shared constant, so a change to one
+    /// side needs the other updated by hand.
     #[pyo3(constructor = (num_generations, elite_count = 1))]
     Generational {
         num_generations: usize,
@@ -222,6 +225,10 @@ pub enum PySelectionConfig {
 #[pyclass(name = "GenomeConfig")]
 #[derive(Debug, Clone)]
 pub enum PyGenomeConfig {
+    /// `operation_weights` is `Option`-wrapped because it's a whole nested
+    /// type with its own defaults, not a scalar a `#[pyo3(constructor)]`
+    /// default can hand back directly — contrast `Sda::init_state` below,
+    /// where the default *is* a plain `usize` and needs no `Option`.
     #[pyo3(constructor = (gene_length, operation_weights = None))]
     EdgeEdit {
         gene_length: usize,
@@ -234,8 +241,11 @@ pub enum PyGenomeConfig {
     Sda {
         num_states: usize,
         max_resp_len: usize,
-        /// Must be `< num_states`; checked by `Config::validate`, since an
-        /// out-of-range value panics during expression.
+        /// Defaults to 0, matching `config`'s `#[serde(default)]` (a bare
+        /// `usize` defaults to 0, so there's no named default fn to track
+        /// here the way `elite_count` has one). Must be `< num_states`;
+        /// checked by `Config::validate`, since an out-of-range value panics
+        /// during expression.
         init_state: usize,
     },
 }
