@@ -7,22 +7,22 @@ use crate::graph::Graph;
 /// characters that get folded into a graph's adjacency triangle.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SdaGenome {
-    pub init_char: u8,
+    init_char: u8,
     /// `[state][char] -> next state`
-    pub transitions: Vec<Vec<u16>>,
+    transitions: Vec<Vec<u16>>,
     /// `[state][char] -> chars appended to the output buffer`
-    pub responses: Vec<Vec<Vec<u8>>>,
+    responses: Vec<Vec<Vec<u8>>>,
     /// Maximum length of a freshly generated response, used by
     /// [`SdaGenome::randomize`] and [`Genome::mutate`] when a response is
     /// regenerated. Unlike `num_states`/`num_chars`, this isn't observable
     /// from the current data, so it has to be stored rather than derived.
-    pub max_resp_len: usize,
+    max_resp_len: usize,
 }
 
 /// Largest alphabet size representable by [`SdaGenome`]'s `u8`-valued responses.
-pub const MAX_NUM_CHARS: usize = u8::MAX as usize + 1;
+const MAX_NUM_CHARS: usize = u8::MAX as usize + 1;
 /// Largest state count representable by [`SdaGenome`]'s `u16`-valued transitions.
-pub const MAX_NUM_STATES: usize = u16::MAX as usize + 1;
+const MAX_NUM_STATES: usize = u16::MAX as usize + 1;
 /// Chance per [`Genome::mutate`] call of mutating the initial character
 /// instead of a transition or response.
 const INIT_CHAR_MUTATION_RATE: f64 = 0.04;
@@ -53,7 +53,8 @@ impl SdaGenome {
     /// length between 1 and `max_resp_len` characters, inclusive.
     ///
     /// Returns an error if the dimensions are zero or too large to fit the
-    /// genome's storage types (see [`MAX_NUM_STATES`], [`MAX_NUM_CHARS`]).
+    /// genome's storage types (`num_states` up to 65536, `num_chars` up to
+    /// 256).
     pub fn random<R: Rng + ?Sized>(
         num_states: usize,
         num_chars: usize,
