@@ -15,8 +15,6 @@
 //! about one variant of [`FitnessConfig`]. See that module's header for the
 //! mechanism.
 
-use std::path::Path;
-
 use serde::Deserialize;
 
 use crate::genomes::EdgeEditOperationWeights;
@@ -391,18 +389,6 @@ impl Config {
     pub fn from_toml_str(text: &str) -> Result<Self, ConfigError> {
         reject_stray_fitness_keys(text)?;
         toml::from_str(text).map_err(ConfigError::Toml)
-    }
-
-    /// Read, parse **and validate** a [`Config`] from a TOML file on disk.
-    ///
-    /// This is the TOML front end, so it calls [`Config::validate`] itself.
-    /// Spec §7 requires both front ends to validate through that one function;
-    /// the Python one calls it at its own boundary, having never touched serde.
-    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
-        let text = std::fs::read_to_string(path).map_err(ConfigError::Io)?;
-        let config = Self::from_toml_str(&text)?;
-        config.validate()?;
-        Ok(config)
     }
 
     /// Check every constraint in spec §7.
@@ -1331,10 +1317,21 @@ num_epidemics  = 30
 
     // ---- `Config::from_path` ----------------------------------------------
 
+    /// The sequence both front ends run: read the file, parse it, validate it.
+    /// Spelled out here rather than behind a `Config::from_path` helper —
+    /// there was one, and nothing could use it, because every real caller also
+    /// needs the raw text as the run's provenance record and the helper
+    /// discarded it.
+    fn load_and_validate(path: &str) -> Result<Config, ConfigError> {
+        let text = std::fs::read_to_string(path).map_err(ConfigError::Io)?;
+        let config = Config::from_toml_str(&text)?;
+        config.validate()?;
+        Ok(config)
+    }
+
     #[test]
     fn the_example_config_loads_and_validates_from_disk() {
-        // The whole TOML front end, end to end: read, parse, validate.
-        Config::from_path(concat!(
+        load_and_validate(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../config.example.toml"
         ))
@@ -1343,7 +1340,7 @@ num_epidemics  = 30
 
     #[test]
     fn a_missing_config_file_is_an_io_error_rather_than_a_panic() {
-        match Config::from_path("no/such/directory/config.toml") {
+        match load_and_validate("no/such/directory/config.toml") {
             Err(ConfigError::Io(_)) => {}
             other => panic!("expected an Io error, got {other:?}"),
         }
@@ -1351,14 +1348,14 @@ num_epidemics  = 30
 
     #[test]
     fn a_config_file_that_breaks_a_constraint_fails_to_load() {
-        // `from_path` validates, so an invalid file must not yield a `Config`.
         let dir = std::env::temp_dir().join("get_config_validate_test");
         std::fs::create_dir_all(&dir).expect("the temp dir should be creatable");
         let path = dir.join("bad_config.toml");
         std::fs::write(&path, format!("max_mutations = 0\n{}", config_text("")))
             .expect("the temp config should be writable");
 
-        let error = Config::from_path(&path).expect_err("an invalid config should not load");
+        let error = load_and_validate(path.to_str().unwrap())
+            .expect_err("an invalid config should not load");
         std::fs::remove_file(&path).ok();
 
         match error {
@@ -1376,5 +1373,59 @@ num_epidemics  = 30
         .expect("config.example.toml should be readable");
 
         Config::from_toml_str(&text).expect("the shipped example config should parse");
+    }
+
+    /// The example's alternative `[genome]` blocks are commented out, so
+    /// `the_example_config_parses` never reads them and a typo in one ships
+    /// silently — a wrong key name, or explanatory prose left inside the region
+    /// a user uncomments. This uncomments the sda block and parses it.
+    #[test]
+    fn the_examples_commented_sda_genome_block_parses() {
+        let text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../config.example.toml"
+        ))
+        .expect("config.example.toml should be readable");
+
+        // The block is the run of comment lines starting at `# [genome]`; the
+        // header itself is dropped so what is left is a bare `type = "sda"`
+        // table that deserializes straight into `GenomeConfig`.
+        let mut block = String::new();
+        let mut inside = false;
+        for line in text.lines() {
+            let stripped = line.strip_prefix('#').map(|rest| rest.trim_start());
+            match stripped {
+                Some("[genome]") => inside = true,
+                Some(content) if inside => {
+                    block.push_str(content);
+                    block.push('\n');
+                }
+                // Any non-comment line ends the block, including the blank one
+                // that follows it.
+                _ if inside => break,
+                _ => {}
+            }
+        }
+        assert!(
+            block.contains("type"),
+            "no commented [genome] block found in the example"
+        );
+
+        let genome: GenomeConfig =
+            toml::from_str(&block).expect("the commented sda block should parse");
+        match genome {
+            GenomeConfig::Sda(sda) => {
+                assert_eq!(sda.num_states, 12);
+                assert_eq!(
+                    sda.init_char_mutation_rate,
+                    crate::genomes::sda::DEFAULT_INIT_CHAR_MUTATION_RATE
+                );
+                assert_eq!(
+                    sda.transition_vs_response_rate,
+                    crate::genomes::sda::DEFAULT_TRANSITION_VS_RESPONSE_RATE
+                );
+            }
+            other => panic!("expected the sda genome, got {other:?}"),
+        }
     }
 }

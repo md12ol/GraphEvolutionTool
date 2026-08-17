@@ -53,18 +53,29 @@ impl SdaGenome {
         Ok(())
     }
 
-    /// Build a genome with `num_states` states over an alphabet of
-    /// `num_chars` characters, where each transition's response is a random
-    /// length between 1 and `max_resp_len` characters, inclusive.
+    /// Build a genome sized for graphs expressed under `edge_multiplicity_cap`:
+    /// the alphabet is fixed at `edge_multiplicity_cap + 1` characters
+    /// (`0..=cap`), so every character value doubles as a legal edge weight and
+    /// nothing is clamped by [`Graph::set_edge`] when the same cap is used to
+    /// build the [`SdaContext`] this genome is later expressed against.
+    ///
+    /// Each transition's response is a random length between 1 and
+    /// `max_resp_len` characters, inclusive.
+    ///
+    /// **The only constructor, and the alphabet is why.** There is deliberately
+    /// no variant taking `num_chars` directly: it is never a free choice, and a
+    /// caller picking its own value builds a genome that disagrees with the
+    /// context it is expressed against — which `express` panics on.
     ///
     /// Returns an error if the dimensions are zero or too large to fit the
     /// genome's storage types (see [`MAX_NUM_STATES`], [`MAX_NUM_CHARS`]).
-    pub fn random<R: Rng + ?Sized>(
+    pub fn random_with_edge_multiplicity_cap<R: Rng + ?Sized>(
         num_states: usize,
-        num_chars: usize,
+        edge_multiplicity_cap: u32,
         max_resp_len: usize,
         rng: &mut R,
     ) -> Result<Self, &'static str> {
+        let num_chars = edge_multiplicity_cap as usize + 1;
         Self::validate_dimensions(num_states, num_chars, max_resp_len)?;
 
         let init_char = rng.random_range(0..num_chars) as u8;
@@ -98,35 +109,6 @@ impl SdaGenome {
             responses,
             max_resp_len,
         })
-    }
-
-    /// Build a genome sized for graphs expressed under `edge_multiplicity_cap`:
-    /// the alphabet is fixed at `edge_multiplicity_cap + 1` characters (`0..=cap`),
-    /// so every character value doubles as a legal edge weight and nothing is
-    /// clamped by [`Graph::set_edge`] when the same cap is used to build the
-    /// [`SdaContext`] this genome is later expressed against.
-    pub fn random_with_edge_multiplicity_cap<R: Rng + ?Sized>(
-        num_states: usize,
-        edge_multiplicity_cap: u32,
-        max_resp_len: usize,
-        rng: &mut R,
-    ) -> Result<Self, &'static str> {
-        Self::random(
-            num_states,
-            edge_multiplicity_cap as usize + 1,
-            max_resp_len,
-            rng,
-        )
-    }
-
-    /// Re-roll the initial character and every transition/response in place,
-    /// keeping the current number of states, characters, and `max_resp_len`.
-    pub fn randomize<R: Rng + ?Sized>(&mut self, rng: &mut R) -> Result<(), &'static str> {
-        let num_states = self.transitions.len();
-        // map_or: 0 if there are no states yet (transitions is empty), else the row width
-        let num_chars = self.transitions.first().map_or(0, |row| row.len());
-        *self = Self::random(num_states, num_chars, self.max_resp_len, rng)?;
-        Ok(())
     }
 
     /// Run the automaton from `init_state`, producing exactly `output_len`
@@ -470,7 +452,7 @@ mod tests {
     #[test]
     fn random_builds_shapes_matching_the_requested_dimensions() {
         let mut rng = StdRng::seed_from_u64(5);
-        let genome = SdaGenome::random(10, 3, 4, &mut rng).unwrap();
+        let genome = SdaGenome::random_with_edge_multiplicity_cap(10, 2, 4, &mut rng).unwrap();
 
         assert!((genome.init_char as usize) < 3);
         assert_eq!(genome.transitions.len(), 10);
@@ -495,23 +477,25 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(5);
 
         assert_eq!(
-            SdaGenome::random(0, 3, 4, &mut rng).unwrap_err(),
+            SdaGenome::random_with_edge_multiplicity_cap(0, 2, 4, &mut rng).unwrap_err(),
             "num_states must be between 1 and 65536"
         );
         assert_eq!(
-            SdaGenome::random(MAX_NUM_STATES + 1, 3, 4, &mut rng).unwrap_err(),
+            SdaGenome::random_with_edge_multiplicity_cap(MAX_NUM_STATES + 1, 2, 4, &mut rng)
+                .unwrap_err(),
             "num_states must be between 1 and 65536"
         );
+        // A cap of MAX_NUM_CHARS asks for MAX_NUM_CHARS + 1 characters. There
+        // is no too-small case to check: the alphabet is `cap + 1`, so it can
+        // never come out at zero. `randomize` is the only route to that error,
+        // and has its own test.
         assert_eq!(
-            SdaGenome::random(10, 0, 4, &mut rng).unwrap_err(),
+            SdaGenome::random_with_edge_multiplicity_cap(10, MAX_NUM_CHARS as u32, 4, &mut rng)
+                .unwrap_err(),
             "num_chars must be between 1 and 256"
         );
         assert_eq!(
-            SdaGenome::random(10, MAX_NUM_CHARS + 1, 4, &mut rng).unwrap_err(),
-            "num_chars must be between 1 and 256"
-        );
-        assert_eq!(
-            SdaGenome::random(10, 3, 0, &mut rng).unwrap_err(),
+            SdaGenome::random_with_edge_multiplicity_cap(10, 2, 0, &mut rng).unwrap_err(),
             "max_resp_len must be at least 1"
         );
     }
@@ -527,88 +511,122 @@ mod tests {
         assert_eq!(genome.responses[0].len(), num_chars);
     }
 
-    #[test]
-    fn randomize_keeps_dimensions_but_changes_contents() {
-        let mut rng = StdRng::seed_from_u64(9);
-        let mut genome = SdaGenome::random(10, 3, 2, &mut rng).unwrap();
-        let before = genome.clone();
+    /// How many init_chars, transition targets and response characters differ
+    /// between two versions of one genome.
+    fn count_changes(before: &SdaGenome, after: &SdaGenome) -> (usize, usize, usize) {
+        let init_char_changed = (after.init_char != before.init_char) as usize;
 
-        genome.randomize(&mut rng).unwrap();
-
-        assert_eq!(genome.transitions.len(), before.transitions.len());
-        assert_eq!(genome.responses.len(), before.responses.len());
-        assert_eq!(genome.max_resp_len, before.max_resp_len);
-        for state_transitions in &genome.transitions {
-            assert_eq!(state_transitions.len(), 3);
-            assert!(
-                state_transitions
-                    .iter()
-                    .all(|&target| (target as usize) < 10)
-            );
-        }
-        for state_responses in &genome.responses {
-            assert_eq!(state_responses.len(), 3);
-            for response in state_responses {
-                assert!(!response.is_empty() && response.len() <= 2);
+        let mut changed_transitions = 0;
+        for (before_row, after_row) in before.transitions.iter().zip(&after.transitions) {
+            for (before_val, after_val) in before_row.iter().zip(after_row) {
+                if before_val != after_val {
+                    changed_transitions += 1;
+                }
             }
         }
-        assert!(
-            genome.transitions != before.transitions || genome.responses != before.responses,
-            "randomize should change at least one transition or response"
-        );
+
+        let mut changed_responses = 0;
+        for (before_row, after_row) in before.responses.iter().zip(&after.responses) {
+            for (before_val, after_val) in before_row.iter().zip(after_row) {
+                if before_val != after_val {
+                    changed_responses += 1;
+                }
+            }
+        }
+
+        (init_char_changed, changed_transitions, changed_responses)
     }
 
-    #[test]
-    fn randomize_of_an_empty_genome_propagates_the_dimension_error() {
-        let mut rng = StdRng::seed_from_u64(9);
-        let mut genome = SdaGenome::random(1, 1, 1, &mut rng).unwrap();
-        genome.transitions.clear();
-        genome.responses.clear();
+    /// A context carrying the two mutation rates a test wants to pin. The
+    /// expression fields are irrelevant to `mutate` and take fixed values.
+    fn mutation_context(
+        init_char_mutation_rate: f64,
+        transition_vs_response_rate: f64,
+    ) -> SdaContext {
+        SdaContext {
+            num_nodes: 3,
+            init_state: 0,
+            max_edge_multiplicity: 1,
+            init_char_mutation_rate,
+            transition_vs_response_rate,
+        }
+    }
 
-        assert_eq!(
-            genome.randomize(&mut rng).unwrap_err(),
-            "num_states must be between 1 and 65536"
-        );
+    /// Mutate a fresh genome `calls` times under `context`, returning the
+    /// running totals of what changed.
+    fn totals_after_mutating(context: &SdaContext, calls: usize) -> (usize, usize, usize) {
+        let mut rng = StdRng::seed_from_u64(3);
+        let mut genome = SdaGenome::random_with_edge_multiplicity_cap(10, 2, 2, &mut rng).unwrap();
+
+        let (mut init_chars, mut transitions, mut responses) = (0, 0, 0);
+        for _ in 0..calls {
+            let before = genome.clone();
+            genome.mutate(context, &mut rng);
+            let (i, t, r) = count_changes(&before, &genome);
+            init_chars += i;
+            transitions += t;
+            responses += r;
+        }
+
+        (init_chars, transitions, responses)
     }
 
     #[test]
     fn mutate_changes_exactly_one_thing_per_call() {
         let mut rng = StdRng::seed_from_u64(3);
-        let mut genome = SdaGenome::random(10, 3, 2, &mut rng).unwrap();
+        let mut genome = SdaGenome::random_with_edge_multiplicity_cap(10, 2, 2, &mut rng).unwrap();
 
         for _ in 0..50 {
             let before = genome.clone();
             genome.mutate(&express_context(3, 1), &mut rng);
 
-            let init_char_changed = (genome.init_char != before.init_char) as usize;
-
-            let mut changed_transitions = 0;
-            for (before_row, after_row) in before.transitions.iter().zip(&genome.transitions) {
-                for (before_val, after_val) in before_row.iter().zip(after_row) {
-                    if before_val != after_val {
-                        changed_transitions += 1;
-                    }
-                }
-            }
-
-            let mut changed_responses = 0;
-            for (before_row, after_row) in before.responses.iter().zip(&genome.responses) {
-                for (before_val, after_val) in before_row.iter().zip(after_row) {
-                    if before_val != after_val {
-                        changed_responses += 1;
-                    }
-                }
-            }
-
+            let (init_char_changed, changed_transitions, changed_responses) =
+                count_changes(&before, &genome);
             let changes = init_char_changed + changed_transitions + changed_responses;
             assert!(changes <= 1, "expected at most one change, got {changes}");
         }
     }
 
+    /// The rates are not just parsed and carried — they decide what a mutation
+    /// is allowed to touch. Each case pins one rate to an extreme and checks
+    /// the halves it excludes never move across 200 calls.
+    #[test]
+    fn the_init_char_rate_decides_whether_the_initial_character_can_move() {
+        let (init_chars, transitions, responses) =
+            totals_after_mutating(&mutation_context(1.0, 0.5), 200);
+        assert!(init_chars > 0, "init_char should be redrawn at rate 1.0");
+        assert_eq!(
+            (transitions, responses),
+            (0, 0),
+            "at rate 1.0 every mutation returns after init_char, touching nothing else"
+        );
+
+        let (init_chars, transitions, responses) =
+            totals_after_mutating(&mutation_context(0.0, 0.5), 200);
+        assert_eq!(init_chars, 0, "init_char must never move at rate 0.0");
+        assert!(
+            transitions > 0 && responses > 0,
+            "the transition table takes every mutation instead, got {transitions} and {responses}"
+        );
+    }
+
+    #[test]
+    fn the_transition_vs_response_rate_decides_which_half_of_the_table_moves() {
+        // init_char is switched off in both cases, so the only choice left is
+        // the one under test.
+        let (_, transitions, responses) = totals_after_mutating(&mutation_context(0.0, 1.0), 200);
+        assert!(transitions > 0, "targets should be redrawn at rate 1.0");
+        assert_eq!(responses, 0, "no response may move at rate 1.0");
+
+        let (_, transitions, responses) = totals_after_mutating(&mutation_context(0.0, 0.0), 200);
+        assert_eq!(transitions, 0, "no target may move at rate 0.0");
+        assert!(responses > 0, "responses should be redrawn at rate 0.0");
+    }
+
     #[test]
     fn mutate_of_an_empty_genome_is_a_noop() {
         let mut rng = StdRng::seed_from_u64(3);
-        let mut genome = SdaGenome::random(1, 1, 1, &mut rng).unwrap();
+        let mut genome = SdaGenome::random_with_edge_multiplicity_cap(1, 0, 1, &mut rng).unwrap();
         genome.transitions.clear();
         genome.responses.clear();
         let before = genome.clone();
@@ -647,8 +665,12 @@ mod tests {
         let mut setup_rng = StdRng::seed_from_u64(1);
 
         for trial_seed in 0..200 {
-            let mut left = SdaGenome::random(num_states, 2, 2, &mut setup_rng).unwrap();
-            let mut right = SdaGenome::random(num_states, 2, 2, &mut setup_rng).unwrap();
+            let mut left =
+                SdaGenome::random_with_edge_multiplicity_cap(num_states, 1, 2, &mut setup_rng)
+                    .unwrap();
+            let mut right =
+                SdaGenome::random_with_edge_multiplicity_cap(num_states, 1, 2, &mut setup_rng)
+                    .unwrap();
             tag_states(&mut left, 111, 100);
             tag_states(&mut right, 222, 200);
 
@@ -699,8 +721,8 @@ mod tests {
     #[test]
     fn crossover_of_empty_genomes_is_a_noop() {
         let mut rng = StdRng::seed_from_u64(1);
-        let mut left = SdaGenome::random(1, 1, 1, &mut rng).unwrap();
-        let mut right = SdaGenome::random(1, 1, 1, &mut rng).unwrap();
+        let mut left = SdaGenome::random_with_edge_multiplicity_cap(1, 0, 1, &mut rng).unwrap();
+        let mut right = SdaGenome::random_with_edge_multiplicity_cap(1, 0, 1, &mut rng).unwrap();
         left.transitions.clear();
         left.responses.clear();
         right.transitions.clear();
