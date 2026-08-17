@@ -134,8 +134,9 @@ shared `Arc<EdgeEditOperators>` holding a prebuilt sampler. The whole population
 pointer rather than a copy of the weights, and a weight error surfaces from config rather than
 mid-run. At least one weight must be positive; `0.0` disables an operation outright.
 
-**Crossover:** two-point, over genes. Draw a segment within the shorter genome's length and swap
-it. A genome shorter than two genes is left alone.
+**Crossover:** two-point, over genes. Draw two distinct cut points uniformly over the shared prefix
+and swap the segment between them — see the crossover contract below, shared with SDA (§3.2). A
+shared length under two genes has no interior segment and is left alone.
 
 ### 3.2 `SdaGenome` — a self-driving automaton generating a graph from scratch
 
@@ -175,6 +176,15 @@ bug hides at small sizes.
 responses together. Swapping state 0 also swaps `init_char`, since together they determine the
 automaton's first transition.
 
+**Crossover contract, shared by both genomes.** Added 2026-08-17 at the joint meeting,
+`collab.md` #79. Both genomes draw two distinct cut points uniformly over the shared prefix
+(`min(self.len(), other.len())`) and swap the segment between them element-wise — the sampling is
+identical, not merely similar. **The one place they still diverge is deliberate, not a bug:** at a
+shared length of 1, SDA always crosses — swapping state 0, and `init_char` with it — while edge-edit
+never crosses at all. SDA's state 0 carries `init_char`, which edge-edit's gene-level representation
+has no equivalent of, so SDA's crossover has one more thing it is allowed to disturb at the boundary.
+A future genome's crossover must state which of these two shapes it follows, or name a third.
+
 ---
 
 ## 4. Variation
@@ -203,9 +213,16 @@ mean nothing for that representation, and nothing would report it.
 
 What "one mutation" *is* belongs to the representation:
 
-- **edge-edit** — reroll one gene, opcode drawn from the operation mix.
-- **SDA** — redraw either `init_char` (4% of calls), one transition target, or one response
-  (even odds between the latter two).
+- **edge-edit** — reroll one gene, opcode drawn from the operation mix (§3.1's operation weights).
+- **SDA** — redraw either `init_char`, one transition target, or one response. Both choices are now
+  user-configurable (§7): `init_char_mutation_rate` (default `0.04`, matching previous work) picks
+  `init_char` versus the rest, and `transition_vs_response_rate` (default `0.5`) then splits the
+  remainder between a transition target and a response. Carried on `SdaContext`, not on the genome —
+  the same reasoning that keeps `init_state` off the genome (§3.2).
+
+> **Amended 2026-08-17 at the joint meeting** — `collab.md` #78. Both rates were previously private
+> constants; the general policy adopted the same meeting is that an internal probability shaping a
+> run defaults to user-editable, and a private constant needs justifying rather than the reverse.
 
 Both rolls happen in one shared helper, so the two evolution strategies cannot drift apart on
 mutation semantics the way they did on selection sampling (§6.1).
@@ -526,31 +543,57 @@ generational when the objective is stochastic and the comparison needs to be fai
 **Guidance:** keep hot objectives native in Rust. The Python adapter (§8) is for prototyping,
 where developer speed matters more than run time.
 
-### 5.3 Two extension routes, and a user objective never enters the config
+### 5.3 Four ways in, and a user objective never enters the config
 
-**Added 2026-08-09 at the joint meeting** — `collab.md` #21. Both routes are supported and neither
-is a fallback for the other. Most users will write Python; advanced users will write Rust.
+**Added 2026-08-09 at the joint meeting** — `collab.md` #21. **Widened to four routes 2026-08-17 at
+the joint meeting** — `collab.md` #66. All four are supported and none is a fallback for another.
 
 | | Route | For |
 |---|---|---|
-| **Python** | register a callable with `set_fitness_function(callable, direction)` (§8) | most users, and any prototype. No Rust, no compilation, config-driven |
-| **Rust** | depend on `get` as a crate, `impl Fitness` for your own type, and drive an evolver directly | a hot native objective, without forking GET |
+| **Python, objects** | fill typed config objects, register a callable with `set_fitness_function(callable, direction)` if needed (§8) | most users, and any prototype. No Rust, no compilation |
+| **Python, hand-written TOML** | not a separate parser — Python objects *serialize to* TOML, and that TOML is what Rust parses (§8) | the same door as above, without the builder |
+| **Rust, as a library** | depend on the crate, `impl Fitness` for your own type, and drive an evolver directly | a hot native objective, or a frozen fork, without going through a config file at all |
+| **Rust, driven by a config file** | `get-run config.toml` — no Python interpreter, no `.so` build | reproducing a run with only a pinned crate version and a TOML file; a config-driven route for someone who cannot or will not install Python |
 
-**The Rust route needs no dispatch arm, because it does not go through dispatch.** `Evolver::run`
-is generic over the objective — `fn run<F: Fitness>(&mut self, fitness: &F, seed: u64)` — so a
-caller who already holds a concrete `F` instantiates the evolver with it and never touches the
-`match` in §8. That `match` exists to turn *a config document* into concrete types; a Rust user is
+**Who the Rust route is for: the embedder *and* the researcher, both correctly.** An embedder —
+someone shipping GET inside their own package — cannot fork; every upstream fix would then have to
+be carried by hand forever, and §5.3's library shape (`impl Fitness`, drive an evolver directly)
+serves them exactly. A researcher writing one objective for one paper is different: forking GET is
+not a failure mode for them, it is *better* than depending on it as a library — a frozen fork is a
+reproducible artifact, the exact code behind a paper's published numbers, where depending on GET as
+a library makes results depend on whichever version happened to be installed. Both users are
+designed for; the sheet previously implied only the first.
+
+**Distribution.** Alongside PyPI (§8), the crate publishes to crates.io as `graph-evolution-tool` —
+`get` is unavailable on both registries (taken on crates.io since 2024-03-14, blocked outright on
+PyPI), so both registries share one name; the crate keeps `[lib] name = "get"` so `use get::` is
+unaffected. **Staged alongside the PyPI release**, after route-4 functionality, its tests and its
+documentation land — not published ahead of them.
+
+**Route 4 needs its own construction path, because it cannot reuse route 3's.** `mod dispatch` is
+private, so an external crate can turn neither a TOML nor anything else into a run — route 4 is
+therefore built *inside* the crate (`GraphEvolver::run_from_toml`, and the `get-run` binary that
+calls it), reusing the same `dispatch` match route 1/2 already go through. It is not a subset of
+route 3: assembling a run from a config file needs the dispatch layer, which route 3 explicitly
+does not have access to.
+
+**The Rust-library route needs no dispatch arm, because it does not go through dispatch.**
+`Evolver::run` is generic over the objective — `fn run<F: Fitness>(&mut self, fitness: &F, seed: u64)`
+— so a caller who already holds a concrete `F` instantiates the evolver with it and never touches the
+`match` in §8. That `match` exists to turn *a config document* into concrete types; a route-3 user is
 a library consumer rather than a config consumer, and the two front doors are independent.
 
 **Therefore a user-supplied objective never gets a `FitnessConfig` variant, and this is
 deliberate.** The alternative — a string-keyed registry that config could name — would move
 validation out of serde, which is the exact failure §7's "serde *is* the validation" exists to
 prevent. Keeping user objectives out of the config schema means nothing user-supplied is ever
-deserialized, so there is nothing new to validate.
+deserialized, so there is nothing new to validate. This is why route 4 cannot reach a user-supplied
+objective at all — only the objectives §5.2/§5.4 already name and whatever route 1's Python callable
+supplies.
 
 **What this obliges the dispatch layer to preserve.** Dispatch must not become the *only* way to
 construct a run. These stay public and usable from outside the crate, and narrowing any of them
-would kill the Rust route silently, with no compile error inside `get`:
+would kill the Rust-library route silently, with no compile error inside `get`:
 
 - the `Fitness` trait, and `Direction`
 - the `Genome` implementations and their `Context` types
@@ -558,8 +601,45 @@ would kill the Rust route silently, with no compile error inside `get`:
 - `Evolver::run` and `EvolutionOutcome`
 
 **Not in scope here:** the ergonomics of assembling a population and contexts by hand. That is a
-real cost of the Rust route and may deserve a builder later; it is not a reason to route user
-objectives through the config enum instead.
+real cost of the Rust-library route and may deserve a builder later; it is not a reason to route
+user objectives through the config enum instead.
+
+### 5.4 A second native objective: structural distance to a reference set
+
+**Added 2026-08-17 at the joint meeting** — `collab.md` #75. Every objective in §5.2 reads one SIR
+simulation, so §5's architecture and §5.2's epidemiology have never been distinguishable on a first
+read. This objective shares none of the epidemic vocabulary: no `evaluate_batch` override, no batch
+counter, no common-random-numbers concern, no stale-fitness caveat — it is deterministic, so a
+second call on the same graph gives the same score.
+
+**What it computes.** Three structural statistics of a graph — degree histogram, clustering-
+coefficient histogram, Laplacian spectrum — each compared by an RBF kernel against the same
+statistics computed from a **reference set** of graphs, weighted and summed. **Minimize.**
+Scoring one graph against a distribution this way is an exact positive affine transform of the full
+two-sample MMD² (`MMD² = 2D + (C_Y − 1)`, where `C_Y` is constant across the graphs being scored) —
+rank-based selection is therefore invariant to the missing terms, and this is not an incomplete MMD,
+it is the part of it that varies.
+
+**Refuses a multigraph rather than coercing one.** These statistics are defined on simple graphs;
+the two plausible repairs (collapsing parallel edges, or reading only presence/absence) each
+silently compute a different quantity than the reference statistics were computed under. This
+objective is the first place in the sheet where an objective constrains the graph configuration
+rather than accepting whatever `Graph` produces.
+
+**The reference set arrives through a Python setter, `set_fitness_targets(...)`, not the config.**
+Same pattern as `set_base_graph` (§8): the config names the objective, the setter carries the bulk
+graph data. A reference set is hundreds of graphs and tens of thousands of numbers — inline TOML was
+considered and rejected, since `target_profile` (§7) is already close to the readable limit at ten
+numbers, four orders of magnitude short of this; a file-path config field was also rejected, since
+it would move validation out of serde at `run` time instead of parse time, precisely what §7 exists
+to prevent. Nothing user-supplied is deserialized either way, so §7's "serde *is* the validation"
+still holds.
+
+**Reference graphs, and any base graph supplied for edge-edit seeding, may use a caller's own node
+indexing.** A `min_node_index` parameter, shared by both the base-graph loader and the reference-set
+loader within one run, shifts every supplied index to 0 once on the way in; only the run's *evolved*
+output graph is shifted back on the way out (§6, §8) — the reference set is input-only and is never
+remapped, the same "once in, once out" shape `Direction`'s erase/orient step already uses.
 
 ---
 
@@ -578,6 +658,16 @@ fallible, so a generic evolver cannot mint a `G`. The dispatch layer builds the 
 population, where genome-specific knowledge already lives, and hands it in. This keeps `run`'s
 signature clean, surfaces bad dimensions at startup rather than mid-run, and makes evolvers
 directly testable from a hand-built population.
+
+**The starting population.** Added 2026-08-17 at the joint meeting — `collab.md` #76; previously
+undocumented. Generation 0 is `population_size` genomes drawn at random, for both representations —
+**except** that when edge-edit has a base graph set (§8's `set_base_graph`), one slot is filled with
+the identity genome instead: every gene `Null`, which expresses to exactly the supplied base graph.
+Unconditional, no config flag. Without it, a seeded run's generation 0 contains nothing near the
+graph the user supplied, and a run can return something worse than its own input if nothing beats
+it by chance. The guarantee this buys is a **soft floor under a stochastic objective** — §6.2 rescores
+elites every generation, so a bad draw can still evict the identity individual — and a genuine
+monotone guarantee only under a deterministic objective, such as §5.4's.
 
 **Every value has one source of truth.** `SharedEvolutionContext` carries only the genome
 context, the rates, `max_mutations` and the selection strategy. Population size is
@@ -745,8 +835,10 @@ tournament_size = 5
 type        = "edge_edit"
 gene_length = 256
 # [genome.operation_weights]  relative, all default 1.0, 0.0 disables
+# init_char_mutation_rate = 0.04       sda only; picks init_char vs. the rest
+# transition_vs_response_rate = 0.5    sda only; splits the remainder
 
-[fitness]                     # epi_spread | epi_length | epi_prof_match | python
+[fitness]                     # epi_spread | epi_length | epi_prof_match | structural_distance | python
 type           = "epi_spread"
 infection_rate = 0.05
 num_epidemics  = 30           # epidemics averaged per evaluation
@@ -787,6 +879,11 @@ Everything belongs there, not scattered through dispatch:
   (3 and 5); `min_epidemic_length = 1` disables the re-roll rather than being an error (§5.2)
 - `elite_count < population_size` — equal means no breeding happens and the run is a fixed point
 - base graph node count and cap narrowing (§8)
+- `0.0 <= init_char_mutation_rate <= 1.0` and `0.0 <= transition_vs_response_rate <= 1.0` — SDA
+  only (§4), probabilities like the others above
+- base-graph and reference-set file loaders (§5.4, §8): self-loops, out-of-range or malformed
+  edges, and a weight above `max_edge_multiplicity` are rejected before anything is built, the same
+  eager-and-named-field shape as everything else in this list
 
 **It runs in Rust, before anything is done** — before a population is minted, a graph allocated,
 or a generation run. Everything downstream may then assume a valid config.
@@ -1027,6 +1124,9 @@ through setters before `run`:
   of a previous run. Since `run` already returns `(u, v, multiplicity)` triples, the two
   representations **stack with no new data format** — evolve a topology with SDA, then refine it
   with edge-edit.
+- **The reference set for §5.4's structural-distance objective**, `set_fitness_targets(...)`. Same
+  reasoning as the base graph: bulk graph data, not a config value. Added 2026-08-17 at the joint
+  meeting.
 
 Two structural rules keep the parallelism real: expression happens in parallel *before* any Python
 is called — never call Python from inside a rayon closure — and the long Rust portion releases the
@@ -1046,13 +1146,27 @@ GIL, with the Python adapter re-acquiring it per batch.
 3. **Cap narrowing must be rejected**, because `set_edge` clamps and piping a cap-5 result into a
    cap-1 run silently collapses every weight (this is the main stacking trap).
 4. **With no base graph supplied the run starts from an empty graph**, which leaves five of the nine
-   opcodes inert until `Add`/`Toggle` build some structure (§3.1).
+   opcodes inert until `Add`/`Toggle` build some structure (§3.1); with one supplied, generation 0
+   also seeds the identity genome (§6).
 
 Checks 1–3 **reject**, raising an error that names the offending value. They do not clamp and do not
 drop. `Graph::set_edge` stays permissive by contrast, and deliberately: the nine opcodes decode
 vertex indices out of a random payload and must be no-ops when their preconditions fail, so making
 `set_edge` fallible would turn that into an error path in all nine. Permissiveness that is right for
 engine-generated indices is wrong for caller-supplied data at the boundary.
+
+**A base graph or a reference set (§5.4) may also arrive from a file, not just a setter call.**
+Added 2026-08-17 at the joint meeting — `collab.md` #75. One edge per line, `start,end,weight`,
+comma-delimited, any line ending; a **bulk reference set is one such file per graph in a folder**,
+read in a fixed and reported order. Both loaders take a shared `min_node_index`, so a caller whose
+own data is not 0-indexed does not have to renumber it by hand — every index shifts to 0 once on the
+way in, and only the run's evolved output graph shifts back on the way out (§5.4, §6). Validated
+eagerly, whole-file, before anything is built — the same shape as checks 1–3 above: a self-loop
+(`start == end`) or a malformed row is rejected outright, an out-of-range or over-cap edge is
+rejected outright and names the offending line, a repeated edge (canonicalized as
+`(min(u,v), max(u,v))`, so order never hides a duplicate) overwrites with a warning, a zero-weight
+edge warns, a negative weight is rejected, a missing file is a loud error, and an empty file is a
+warning with an empty graph. Floating-point weights are out of scope for now.
 
 ---
 
