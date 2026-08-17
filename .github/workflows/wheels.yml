@@ -83,6 +83,10 @@ jobs:
           # are different on purpose — see [tool.maturin] module-name.
           python -m pip install --no-index --find-links dist graph-evolution-tool
           python -c "import get; print('imported get', get.__file__)"
+          # The Python builder is the one copy of the shipped example that only
+          # an installed wheel can check, so it is checked here rather than in
+          # cargo test.
+          python tests/python/check_shipped_example.py
 
       - uses: actions/upload-artifact@v6
         with:
