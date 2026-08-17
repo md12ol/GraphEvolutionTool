@@ -228,10 +228,7 @@ impl Genome for EdgeEditGenome {
             return;
         }
 
-        let start = rng.random_range(0..shared_length);
-        // end is inclusive (`..=`) so the swapped segment can reach
-        // shared_length - 1, the last shared index.
-        let end = rng.random_range((start + 1)..=shared_length);
+        let (start, end) = super::two_distinct_cut_points(shared_length, rng);
         for index in start..end {
             std::mem::swap(&mut self.genes[index], &mut other.genes[index]);
         }

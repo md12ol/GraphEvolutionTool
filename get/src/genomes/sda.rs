@@ -219,15 +219,7 @@ impl Genome for SdaGenome {
             return;
         }
 
-        // Rejection sampling for two distinct cut points. `loop` is itself an
-        // expression here — `break`'s argument becomes the value of (start, end).
-        let (start, end) = loop {
-            let a = rng.random_range(0..=shared_length);
-            let b = rng.random_range(0..=shared_length);
-            if a != b {
-                break (a.min(b), a.max(b));
-            }
-        };
+        let (start, end) = super::two_distinct_cut_points(shared_length, rng);
 
         if start == 0 {
             std::mem::swap(&mut self.init_char, &mut other.init_char);
