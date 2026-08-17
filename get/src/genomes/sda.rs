@@ -220,22 +220,22 @@ impl Genome for SdaGenome {
     }
 
     /// Two-point crossover over states: draw two distinct cut points in
-    /// `0..=states` and swap the half-open interior segment `[start, end)`
-    /// between the parents, leaving states outside that window untouched on
-    /// both sides. Swapping state 0 also swaps `init_char`, since together
-    /// they determine the automaton's first transition.
+    /// `0..=shared_length` and swap the half-open interior segment
+    /// `[start, end)` between the parents, leaving states outside that window
+    /// untouched on both sides. Swapping state 0 also swaps `init_char`,
+    /// since together they determine the automaton's first transition.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) {
         // States past the shorter automaton's length have no counterpart to swap.
-        let states = self.transitions.len().min(other.transitions.len());
-        if states == 0 {
+        let shared_length = self.transitions.len().min(other.transitions.len());
+        if shared_length == 0 {
             return;
         }
 
         // Rejection sampling for two distinct cut points. `loop` is itself an
         // expression here — `break`'s argument becomes the value of (start, end).
         let (start, end) = loop {
-            let a = rng.random_range(0..=states);
-            let b = rng.random_range(0..=states);
+            let a = rng.random_range(0..=shared_length);
+            let b = rng.random_range(0..=shared_length);
             if a != b {
                 break (a.min(b), a.max(b));
             }
