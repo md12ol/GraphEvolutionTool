@@ -64,6 +64,11 @@ use toml::map::Map;
 /// Unrelated to [`crate::fitness::PyFitness`], despite both starting `Py`: that
 /// one adapts a registered Python *callable* to the `Fitness` trait, this one
 /// is configuration.
+///
+/// None of these five fields is validated here — `PySirParams` carries no
+/// range checks of its own. All of them are checked later by
+/// `Config::validate_fitness`, once this has round-tripped through TOML,
+/// the same deferral `PyGenomeConfig::Sda::init_state` uses.
 #[pyclass(name = "SirParams")]
 #[derive(Debug, Clone)]
 pub struct PySirParams {
