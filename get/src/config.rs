@@ -9,6 +9,11 @@
 //! Plain data types that carry no such baggage are deserialized directly rather
 //! than mirrored — [`EdgeEditOperationWeights`] is nine `f64`s with a `Default`,
 //! and duplicating it here would buy nothing but a conversion to maintain.
+//!
+//! [`crate::py_config`] mirrors these types field-for-field for the Python
+//! front end, and cannot be collapsed into them — pyo3 and serde disagree
+//! about one variant of [`FitnessConfig`]. See that module's header for the
+//! mechanism.
 
 use std::path::Path;
 
@@ -17,6 +22,12 @@ use serde::Deserialize;
 use crate::genomes::EdgeEditOperationWeights;
 
 /// Everything the genetic algorithm needs for a run.
+///
+/// `Deserialize` only, deliberately: this type never serializes back to
+/// TOML. [`crate::py_config::PyConfig`] is the one direction that does —
+/// `to_toml`/`to_toml_table` — since only the Python front end ever builds a
+/// config in memory and needs to render it out again; the TOML front end
+/// reads a file and stops.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// Which evolution strategy to run, and its strategy-specific settings.
@@ -204,6 +215,12 @@ fn default_max_epidemic_retries() -> usize {
 }
 
 /// Failure while loading a [`Config`].
+///
+/// The one type in the config/py_config pair with no mirrored counterpart —
+/// there is no `PyConfigError`. [`crate::py_config`]'s `config_error_to_py`
+/// translates a value of this type into a `PyErr` instead, remapping
+/// `Validation`'s `field` through a lookup table (`python_attribute_path`)
+/// rather than exposing this enum to Python directly.
 #[derive(Debug)]
 pub enum ConfigError {
     /// The config file could not be read.
