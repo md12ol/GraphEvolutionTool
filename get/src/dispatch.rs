@@ -38,9 +38,9 @@ use crate::evolver::{
     SharedEvolutionContext, SteadyStateContext, SteadyStateEvolver,
 };
 use crate::fitness::{EpiLength, EpiProfMatch, EpiSpread, Fitness};
-use crate::genomes::edge_edit::EdgeEditOperators;
 use crate::genomes::{
-    EdgeEditContext, EdgeEditGenome, EdgeEditOperationWeights, Genome, SdaContext, SdaGenome,
+    EdgeEditContext, EdgeEditGenome, EdgeEditOperationWeights, EdgeEditOperators, Genome,
+    SdaContext, SdaGenome,
 };
 use crate::graph::Graph;
 use crate::sir::{self, SirSampleParams};
