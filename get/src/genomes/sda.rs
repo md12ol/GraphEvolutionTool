@@ -23,9 +23,14 @@ pub struct SdaGenome {
 pub const MAX_NUM_CHARS: usize = u8::MAX as usize + 1;
 /// Largest state count representable by [`SdaGenome`]'s `u16`-valued transitions.
 pub const MAX_NUM_STATES: usize = u16::MAX as usize + 1;
-/// Chance per [`Genome::mutate`] call of mutating the initial character
-/// instead of a transition or response.
-const INIT_CHAR_MUTATION_RATE: f64 = 0.04;
+/// Default for [`SdaContext::init_char_mutation_rate`]: the chance per
+/// [`Genome::mutate`] call of mutating the initial character instead of a
+/// transition or response. The value a run uses is configurable; this is what
+/// it falls back to.
+pub const DEFAULT_INIT_CHAR_MUTATION_RATE: f64 = 0.04;
+/// Default for [`SdaContext::transition_mutation_rate`]: an even split between
+/// redrawing a transition's target state and redrawing its response.
+pub const DEFAULT_TRANSITION_MUTATION_RATE: f64 = 0.5;
 
 impl SdaGenome {
     /// Check that `num_states`, `num_chars`, and `max_resp_len` are usable
@@ -246,10 +251,16 @@ impl Genome for SdaGenome {
     }
 
     /// Apply one mutation: redraw the initial character with probability
-    /// `INIT_CHAR_MUTATION_RATE`, otherwise an even chance of redrawing
-    /// one transition's target state or one transition's response. Callers
-    /// that want more disruption per generation call this multiple times.
-    fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R) {
+    /// `context.init_char_mutation_rate`, otherwise redraw one transition's
+    /// target state with probability `context.transition_mutation_rate` and
+    /// its response with the remainder. Callers that want more disruption per
+    /// generation call this multiple times.
+    ///
+    /// The second draw was a plain coin flip before the rates were
+    /// configurable. `random_bool(0.5)` and `random::<bool>()` do not consume
+    /// the same RNG state, so a seeded run does not reproduce output from
+    /// before this change even at the default rates.
+    fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R) {
         let num_states = self.transitions.len();
         // map_or: 0 if there are no states yet (transitions is empty), else the row width
         let num_chars = self.transitions.first().map_or(0, |row| row.len());
@@ -257,7 +268,7 @@ impl Genome for SdaGenome {
             return;
         }
 
-        if rng.random_bool(INIT_CHAR_MUTATION_RATE) {
+        if rng.random_bool(context.init_char_mutation_rate) {
             self.init_char = rng.random_range(0..num_chars) as u8;
             return;
         }
@@ -265,8 +276,7 @@ impl Genome for SdaGenome {
         let state = rng.random_range(0..num_states);
         let trans = rng.random_range(0..num_chars);
 
-        // coin flip: turbofish spells out the type `random` can't infer from an argument
-        if rng.random::<bool>() {
+        if rng.random_bool(context.transition_mutation_rate) {
             self.transitions[state][trans] = rng.random_range(0..num_states) as u16;
         } else {
             let resp_len = rng.random_range(1..=self.max_resp_len);
@@ -312,6 +322,19 @@ mod tests {
 
     use super::*;
 
+    /// A context for the expression tests, which are indifferent to the two
+    /// mutation rates. Mutation tests build their context directly, since the
+    /// rates are the thing under test.
+    fn express_context(num_nodes: usize, max_edge_multiplicity: u32) -> SdaContext {
+        SdaContext {
+            num_nodes,
+            init_state: 0,
+            max_edge_multiplicity,
+            init_char_mutation_rate: DEFAULT_INIT_CHAR_MUTATION_RATE,
+            transition_mutation_rate: DEFAULT_TRANSITION_MUTATION_RATE,
+        }
+    }
+
     /// A hand-built 2-state, 2-char genome used to hand-verify `run`/`express`
     /// without relying on RNG output:
     /// - state 0: char 0 -> state 1, emits [0]; char 1 -> state 0, emits [1]
@@ -343,11 +366,7 @@ mod tests {
     fn express_folds_the_run_into_the_upper_triangle_in_row_major_order() {
         let genome = small_genome();
         // small_genome has a 2-char alphabet, so the matching cap is 1 (§3.2).
-        let context = SdaContext {
-            num_nodes: 3,
-            init_state: 0,
-            max_edge_multiplicity: 1,
-        };
+        let context = express_context(3, 1);
 
         let graph = genome.express(&context);
 
@@ -363,11 +382,7 @@ mod tests {
 
         // small_genome has a 2-char alphabet, so the matching cap is 1 (§3.2).
         for num_nodes in [0, 1] {
-            let context = SdaContext {
-                num_nodes,
-                init_state: 0,
-                max_edge_multiplicity: 1,
-            };
+            let context = express_context(num_nodes, 1);
             assert_eq!(genome.express(&context), Graph::new(num_nodes, 1));
         }
     }
@@ -386,11 +401,7 @@ mod tests {
             responses: vec![vec![vec![0]; 9]],
             max_resp_len: 1,
         };
-        let context = SdaContext {
-            num_nodes: 2,
-            init_state: 0,
-            max_edge_multiplicity: 5,
-        };
+        let context = express_context(2, 5);
 
         genome.express(&context);
     }
@@ -403,11 +414,7 @@ mod tests {
     #[should_panic(expected = "SdaGenome has 2 characters but context.max_edge_multiplicity of 5")]
     fn express_refuses_an_alphabet_smaller_than_the_cap_allows() {
         let genome = small_genome();
-        let context = SdaContext {
-            num_nodes: 3,
-            init_state: 0,
-            max_edge_multiplicity: 5,
-        };
+        let context = express_context(3, 5);
 
         genome.express(&context);
     }
@@ -417,11 +424,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(0);
         let cap = 3;
         let genome = SdaGenome::random_with_edge_multiplicity_cap(4, cap, 2, &mut rng).unwrap();
-        let context = SdaContext {
-            num_nodes: 3,
-            init_state: 0,
-            max_edge_multiplicity: cap,
-        };
+        let context = express_context(3, cap);
 
         // Doesn't panic: random_with_edge_multiplicity_cap derives num_chars
         // from the same cap the context carries, satisfying §3.2 by
@@ -575,7 +578,7 @@ mod tests {
 
         for _ in 0..50 {
             let before = genome.clone();
-            genome.mutate(&mut rng);
+            genome.mutate(&express_context(3, 1), &mut rng);
 
             let init_char_changed = (genome.init_char != before.init_char) as usize;
 
@@ -610,7 +613,7 @@ mod tests {
         genome.responses.clear();
         let before = genome.clone();
 
-        genome.mutate(&mut rng);
+        genome.mutate(&express_context(3, 1), &mut rng);
 
         assert_eq!(genome.init_char, before.init_char);
         assert!(genome.transitions.is_empty());

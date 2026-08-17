@@ -39,6 +39,7 @@ use crate::evolver::{
 };
 use crate::fitness::{EpiLength, EpiProfMatch, EpiSpread, Fitness};
 use crate::genomes::edge_edit::EdgeEditOperators;
+use crate::genomes::sda::{DEFAULT_INIT_CHAR_MUTATION_RATE, DEFAULT_TRANSITION_MUTATION_RATE};
 use crate::genomes::{
     EdgeEditContext, EdgeEditGenome, EdgeEditOperationWeights, Genome, SdaContext, SdaGenome,
 };
@@ -300,6 +301,8 @@ pub(crate) fn sda_start<R: Rng + ?Sized>(
         num_nodes: config.network_size,
         init_state,
         max_edge_multiplicity: cap,
+        init_char_mutation_rate: DEFAULT_INIT_CHAR_MUTATION_RATE,
+        transition_mutation_rate: DEFAULT_TRANSITION_MUTATION_RATE,
     };
     Ok((context, population))
 }

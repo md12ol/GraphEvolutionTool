@@ -240,7 +240,7 @@ impl Genome for EdgeEditGenome {
     /// Exactly one, per the [`Genome::mutate`] contract. This previously rolled
     /// `1..=4` against a hardcoded `MAX_MUTATIONS`, which made the engine's
     /// `max_mutations` mean nothing here; the count is the engine's to decide.
-    fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R) {
+    fn mutate<R: Rng + ?Sized>(&mut self, _context: &Self::Context, rng: &mut R) {
         if self.genes.is_empty() {
             return;
         }
@@ -260,6 +260,14 @@ mod tests {
     use rand::rngs::StdRng;
 
     use super::*;
+
+    /// `mutate` ignores its context — edge-edit keeps its operation mix on the
+    /// genome — so the mutation tests just need something of the right type.
+    fn mutation_context() -> EdgeEditContext {
+        EdgeEditContext {
+            base_graph: Graph::new(1, 1),
+        }
+    }
 
     fn encode_gene(opcode: u8, vertices: [usize; 4], num_nodes: usize) -> u64 {
         let radix = num_nodes as u64;
@@ -486,7 +494,7 @@ mod tests {
             );
             let mut rng = StdRng::seed_from_u64(seed);
 
-            genome.mutate(&mut rng);
+            genome.mutate(&mutation_context(), &mut rng);
 
             let changed: Vec<_> = genome.genes.iter().filter(|gene| **gene != 8).collect();
             assert_eq!(
@@ -503,7 +511,7 @@ mod tests {
         let mut genome = EdgeEditGenome::new(Vec::new());
         let mut rng = StdRng::seed_from_u64(23);
 
-        genome.mutate(&mut rng);
+        genome.mutate(&mutation_context(), &mut rng);
 
         assert!(genome.genes.is_empty());
     }
@@ -554,7 +562,7 @@ mod tests {
         assert!(genome.genes.iter().all(|gene| gene & OPCODE_MASK == 3));
 
         for _ in 0..200 {
-            genome.mutate(&mut rng);
+            genome.mutate(&mutation_context(), &mut rng);
         }
         assert!(genome.genes.iter().all(|gene| gene & OPCODE_MASK == 3));
     }

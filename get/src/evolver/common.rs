@@ -183,8 +183,13 @@ impl Selection {
 /// If `max_mutations` is zero: `1..=0` is an empty range with no meaningful
 /// draw. A backstop only — the config layer rejects it first, but the evolvers
 /// are constructible directly, so this checks rather than trusting its caller.
-pub fn mutate_child<G, R>(child: &mut G, mutation_rate: f64, max_mutations: usize, rng: &mut R)
-where
+pub fn mutate_child<G, R>(
+    child: &mut G,
+    context: &G::Context,
+    mutation_rate: f64,
+    max_mutations: usize,
+    rng: &mut R,
+) where
     G: Genome,
     R: Rng + ?Sized,
 {
@@ -200,7 +205,7 @@ where
 
     let count = rng.random_range(1..=max_mutations);
     for _ in 0..count {
-        child.mutate(rng);
+        child.mutate(context, rng);
     }
 }
 
@@ -396,7 +401,7 @@ mod tests {
 
         // One mutation is one increment of the counter, which is what makes the
         // count observable — see the type's doc comment.
-        fn mutate<R: Rng + ?Sized>(&mut self, _rng: &mut R) {
+        fn mutate<R: Rng + ?Sized>(&mut self, _context: &Self::Context, _rng: &mut R) {
             self.mutations += 1;
         }
 
@@ -796,7 +801,7 @@ mod tests {
         // Over enough trials that a rate misread as a per-mutation probability,
         // or an unconditional count roll, would show up.
         for _ in 0..1_000 {
-            mutate_child(&mut child, 0.0, 4, &mut rng);
+            mutate_child(&mut child, &(), 0.0, 4, &mut rng);
         }
 
         assert_eq!(child.mutations, 0, "rate 0.0 must not mutate at all");
@@ -808,7 +813,7 @@ mod tests {
 
         for _ in 0..100 {
             let mut child = IndexGenome::new(0);
-            mutate_child(&mut child, 1.0, 1, &mut rng);
+            mutate_child(&mut child, &(), 1.0, 1, &mut rng);
 
             // The contract this task exists to enforce: one call, one mutation.
             assert_eq!(child.mutations, 1, "max_mutations 1 must apply exactly one");
@@ -822,7 +827,7 @@ mod tests {
 
         for _ in 0..500 {
             let mut child = IndexGenome::new(0);
-            mutate_child(&mut child, 1.0, 4, &mut rng);
+            mutate_child(&mut child, &(), 1.0, 4, &mut rng);
 
             assert!(
                 (1..=4).contains(&child.mutations),
@@ -844,6 +849,6 @@ mod tests {
     #[should_panic(expected = "max_mutations must be at least 1")]
     fn a_zero_max_mutations_is_rejected() {
         let mut rng = StdRng::seed_from_u64(4);
-        mutate_child(&mut IndexGenome::new(0), 1.0, 0, &mut rng);
+        mutate_child(&mut IndexGenome::new(0), &(), 1.0, 0, &mut rng);
     }
 }
