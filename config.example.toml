@@ -2,6 +2,15 @@
 #
 # Copy to `config.toml` and adjust. Fields map onto `get::config::Config`.
 # Commented blocks show the alternative choices for each tagged section.
+#
+# There are two ways to reach a configuration, and this file is one of them.
+# `the_shipped_example()` in `examples/config_builder.py` builds this same one
+# as typed Python objects, so the two can be read side by side to see what a
+# TOML key looks like from the other route.
+#
+# They match today, and nothing checks that they still do. That is deliberate:
+# they exist to show the two routes, not to be locked together, and a test that
+# failed whenever this file was edited alone would cost more than a drift does.
 
 # --- Shared evolution settings ------------------------------------------------
 
@@ -67,11 +76,19 @@ gene_length = 256            # number of edit operations per genome
 # SDA alternative: a self-driving automaton that generates a graph from scratch.
 # There is no `num_chars`: the alphabet is derived as max_edge_multiplicity + 1,
 # so every character is a legal edge weight and none is ever clamped away.
+#
+# One mutation redraws either the initial character, one transition's target
+# state, or one transition's response. The last two lines choose which: the
+# first is the chance of taking init_char, and the second splits what is left
+# between a target state and a response. Omit either to keep the value shown,
+# which is what SDA used before these were configurable.
 # [genome]
-# type         = "sda"
-# num_states   = 12
-# max_resp_len = 4
-# init_state   = 0           # starting state; must be < num_states (default 0)
+# type                        = "sda"
+# num_states                  = 12
+# max_resp_len                = 4
+# init_state                  = 0     # starting state; must be < num_states
+# init_char_mutation_rate     = 0.04
+# transition_vs_response_rate = 0.5
 
 # --- Fitness objective --------------------------------------------------------
 # Three objectives read the same SIR simulation over the expressed graph, and

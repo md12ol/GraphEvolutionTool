@@ -64,6 +64,11 @@ use toml::map::Map;
 /// Unrelated to [`crate::fitness::PyFitness`], despite both starting `Py`: that
 /// one adapts a registered Python *callable* to the `Fitness` trait, this one
 /// is configuration.
+///
+/// None of these five fields is validated here — `PySirParams` carries no
+/// range checks of its own. All of them are checked later by
+/// `Config::validate_fitness`, once this has round-tripped through TOML,
+/// the same deferral `PyGenomeConfig::Sda::init_state` uses.
 #[pyclass(name = "SirParams")]
 #[derive(Debug, Clone)]
 pub struct PySirParams {
@@ -194,6 +199,9 @@ impl Default for PyOperationWeights {
 #[pyclass(name = "EvolutionConfig")]
 #[derive(Debug, Clone)]
 pub enum PyEvolutionConfig {
+    /// `elite_count`'s default of 1 carries the same value as `config`'s
+    /// `default_elite_count`; there's no shared constant, so a change to one
+    /// side needs the other updated by hand.
     #[pyo3(constructor = (num_generations, elite_count = 1))]
     Generational {
         num_generations: usize,
@@ -222,6 +230,10 @@ pub enum PySelectionConfig {
 #[pyclass(name = "GenomeConfig")]
 #[derive(Debug, Clone)]
 pub enum PyGenomeConfig {
+    /// `operation_weights` is `Option`-wrapped because it's a whole nested
+    /// type with its own defaults, not a scalar a `#[pyo3(constructor)]`
+    /// default can hand back directly — contrast `Sda::init_state` below,
+    /// where the default *is* a plain `usize` and needs no `Option`.
     #[pyo3(constructor = (gene_length, operation_weights = None))]
     EdgeEdit {
         gene_length: usize,
@@ -230,13 +242,32 @@ pub enum PyGenomeConfig {
     },
     /// No `num_chars`: the alphabet is derived as `max_edge_multiplicity + 1`,
     /// so every character is a legal edge weight (spec §3.2, GitHub #6).
-    #[pyo3(constructor = (num_states, max_resp_len, init_state = 0))]
+    #[pyo3(constructor = (
+        num_states,
+        max_resp_len,
+        init_state = 0,
+        init_char_mutation_rate = None,
+        transition_vs_response_rate = None,
+    ))]
     Sda {
         num_states: usize,
         max_resp_len: usize,
-        /// Must be `< num_states`; checked by `Config::validate`, since an
-        /// out-of-range value panics during expression.
+        /// Defaults to 0, matching `config`'s `#[serde(default)]` (a bare
+        /// `usize` defaults to 0, so there's no named default fn to track
+        /// here the way `elite_count` has one). Must be `< num_states`;
+        /// checked by `Config::validate`, since an out-of-range value panics
+        /// during expression.
         init_state: usize,
+        /// Chance a mutation redraws the initial character instead of
+        /// touching the transition table. `Option`-wrapped so an unset value
+        /// is left out of the TOML entirely and `config`'s own default
+        /// supplies it — writing a number here would mean the default lived
+        /// in two places.
+        init_char_mutation_rate: Option<f64>,
+        /// Chance of redrawing a transition's target rather than its
+        /// response, once the initial character was not chosen.
+        /// `Option`-wrapped for the same reason.
+        transition_vs_response_rate: Option<f64>,
     },
 }
 
@@ -591,6 +622,8 @@ impl PyGenomeConfig {
                 num_states,
                 max_resp_len,
                 init_state,
+                init_char_mutation_rate,
+                transition_vs_response_rate,
             } => {
                 table.insert("type".to_string(), Value::String("sda".to_string()));
                 table.insert(
@@ -605,6 +638,17 @@ impl PyGenomeConfig {
                     "init_state".to_string(),
                     integer("init_state", *init_state)?,
                 );
+                // Left out when unset, so `config`'s serde default supplies
+                // the rate rather than this writing a second copy of it.
+                if let Some(rate) = init_char_mutation_rate {
+                    table.insert("init_char_mutation_rate".to_string(), Value::Float(*rate));
+                }
+                if let Some(rate) = transition_vs_response_rate {
+                    table.insert(
+                        "transition_vs_response_rate".to_string(),
+                        Value::Float(*rate),
+                    );
+                }
             }
         }
         Ok(Value::Table(table))
@@ -689,7 +733,8 @@ mod tests {
     use super::*;
 
     use crate::config::{
-        Config, EvolutionConfig, FitnessConfig, GenomeConfig, SelectionConfig, SirParams,
+        Config, EvolutionConfig, FitnessConfig, GenomeConfig, SdaGenomeConfig, SelectionConfig,
+        SirParams,
     };
     use crate::genomes::EdgeEditOperationWeights;
 
@@ -823,6 +868,8 @@ mod tests {
             num_states: 12,
             max_resp_len: 4,
             init_state: 3,
+            init_char_mutation_rate: Some(0.1),
+            transition_vs_response_rate: Some(0.25),
         };
         config.max_edge_multiplicity = 5;
 
@@ -836,14 +883,21 @@ mod tests {
             other => panic!("expected steady_state, got {other:?}"),
         }
         match parsed.genome {
-            GenomeConfig::Sda {
+            // Destructured exhaustively, no `..`: a field added to
+            // `SdaGenomeConfig` and forgotten here fails to compile, which is
+            // the drift guard `traps.md` describes for the config mirror.
+            GenomeConfig::Sda(SdaGenomeConfig {
                 num_states,
                 max_resp_len,
                 init_state,
-            } => {
+                init_char_mutation_rate,
+                transition_vs_response_rate,
+            }) => {
                 assert_eq!(num_states, 12);
                 assert_eq!(max_resp_len, 4);
                 assert_eq!(init_state, 3);
+                assert_eq!(init_char_mutation_rate, 0.1);
+                assert_eq!(transition_vs_response_rate, 0.25);
             }
             other => panic!("expected sda, got {other:?}"),
         }

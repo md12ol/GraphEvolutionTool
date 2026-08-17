@@ -3,6 +3,8 @@
 **If you are reading this and `.claude/` does not exist, that is the problem — fix it first.**
 
 ```bash
+git clone https://github.com/md12ol/GET-claude.git .claude
+# or, if your account is set up for SSH:
 git clone git@github.com:md12ol/GET-claude.git .claude
 ```
 

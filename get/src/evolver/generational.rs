@@ -75,12 +75,14 @@ impl<G: Genome> GenerationalEvolver<G> {
             }
             mutate_child(
                 &mut first,
+                &self.shared.genome_context,
                 self.shared.mutation_rate,
                 self.shared.max_mutations,
                 rng,
             );
             mutate_child(
                 &mut second,
+                &self.shared.genome_context,
                 self.shared.mutation_rate,
                 self.shared.max_mutations,
                 rng,
@@ -237,7 +239,7 @@ mod tests {
 
         /// A large, unmistakable jump: one mutation adds 100, so a child's value
         /// carries both its parent (modulo 100) and its mutation count.
-        fn mutate<R: Rng + ?Sized>(&mut self, _rng: &mut R) {
+        fn mutate<R: Rng + ?Sized>(&mut self, _context: &Self::Context, _rng: &mut R) {
             self.0 += 100;
         }
 
@@ -262,7 +264,7 @@ mod tests {
             std::mem::swap(&mut self.0, &mut other.0);
         }
 
-        fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R) {
+        fn mutate<R: Rng + ?Sized>(&mut self, _context: &Self::Context, rng: &mut R) {
             if rng.random_bool(0.5) {
                 self.0 = self.0.saturating_sub(1);
             } else {
