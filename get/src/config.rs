@@ -215,6 +215,12 @@ fn default_max_epidemic_retries() -> usize {
 }
 
 /// Failure while loading a [`Config`].
+///
+/// The one type in the config/py_config pair with no mirrored counterpart —
+/// there is no `PyConfigError`. [`crate::py_config`]'s `config_error_to_py`
+/// translates a value of this type into a `PyErr` instead, remapping
+/// `Validation`'s `field` through a lookup table (`python_attribute_path`)
+/// rather than exposing this enum to Python directly.
 #[derive(Debug)]
 pub enum ConfigError {
     /// The config file could not be read.
