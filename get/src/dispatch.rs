@@ -1393,6 +1393,36 @@ mod tests {
     }
 
     #[test]
+    fn an_unseeded_replicate_run_expresses_zero_edges_control() {
+        // Control for the two tests above: without a base graph, the same
+        // no-op config expresses nothing. If this failed, the exact-equality
+        // assertions above would be vacuous — passing because the no-op
+        // config never grows any edges at all, seeded or not.
+        let config = no_op_runnable(GENERATIONAL);
+        let seeds = replicate_seeds(20260816, 4);
+
+        for max_cores in [Some(4), Some(1)] {
+            let outcomes = run_replicates(
+                &config,
+                &objectives_for(&config, &seeds),
+                None,
+                &seeds,
+                max_cores,
+            )
+            .expect("unseeded replicates complete");
+
+            for (index, outcome) in outcomes.iter().enumerate() {
+                assert!(
+                    outcome.best_edges.is_empty(),
+                    "replicate {index} should express no edges without a base \
+                     graph, under max_cores={max_cores:?}, got {:?}",
+                    outcome.best_edges,
+                );
+            }
+        }
+    }
+
+    #[test]
     fn a_python_objective_runs_its_replicates_through_the_sequential_arm() {
         // The python arm end to end, with a real registered callable — not a
         // native config standing in for one. A timing assertion would prove
