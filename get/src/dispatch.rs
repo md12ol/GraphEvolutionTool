@@ -1340,6 +1340,58 @@ mod tests {
         }
     }
 
+    /// Every replicate must carry the seeded base graph forward exactly,
+    /// unedited, under a given `max_cores`. Shared by the rayon-arm and
+    /// sequential-arm tests below so the two only differ in the cap.
+    fn assert_seeded_base_graph_reaches_every_replicate(max_cores: Option<usize>) {
+        let config = no_op_runnable(GENERATIONAL);
+        let seeded = vec![(0, 1, 2), (3, 4, 1)];
+        let base_graph = {
+            let mut graph = Graph::new(8, 2);
+            graph.set_edges(&seeded);
+            graph
+        };
+        let seeds = replicate_seeds(20260816, 4);
+
+        let outcomes = run_replicates(
+            &config,
+            &objectives_for(&config, &seeds),
+            Some(&base_graph),
+            &seeds,
+            max_cores,
+        )
+        .expect("seeded replicates complete");
+
+        assert_eq!(outcomes.len(), 4, "one outcome per seed");
+        for (index, outcome) in outcomes.iter().enumerate() {
+            assert_eq!(
+                outcome.best_edges, seeded,
+                "replicate {index} does not carry the seeded base graph forward \
+                 exactly, under max_cores={max_cores:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn a_seeded_base_graph_reaches_every_replicate_on_the_rayon_arm() {
+        // #84: #72 (`set_base_graph`) and #83 (replicate runs) were each
+        // tested against the other's absence. This is their intersection —
+        // a seeded run through `n_runs > 1` on the concurrent arm, which
+        // `evolve` reaches once per `seeds.par_iter()` entry.
+        assert_seeded_base_graph_reaches_every_replicate(Some(4));
+    }
+
+    #[test]
+    fn a_seeded_base_graph_reaches_every_replicate_on_the_sequential_arm() {
+        // The other half of #84: the same seeded config, forced onto the
+        // sequential loop at the top of `run_replicates` by pinning
+        // `max_cores` to 1 rather than by a python fitness type, so this
+        // exercises the same `for` loop
+        // `a_python_objective_runs_its_replicates_through_the_sequential_arm`
+        // reaches, but with a native objective and a base graph to check.
+        assert_seeded_base_graph_reaches_every_replicate(Some(1));
+    }
+
     #[test]
     fn a_python_objective_runs_its_replicates_through_the_sequential_arm() {
         // The python arm end to end, with a real registered callable — not a
