@@ -1187,6 +1187,51 @@ mod tests {
         config
     }
 
+    /// A runnable `edge_edit` config whose expression step is a guaranteed
+    /// no-op: `mutation_rate` and `crossover_rate` both zero, and
+    /// `operation_weights` gives `null` the only non-zero weight. A population
+    /// expressed against this never edits the base graph it started from, so
+    /// a seeded run's output can be checked by exact equality rather than
+    /// overlap — the same recipe as
+    /// `a_set_base_graph_is_what_the_edge_edit_population_expresses_against`,
+    /// lifted to the `run_replicates` level.
+    fn no_op_runnable(evolution_block: &str) -> Config {
+        let fitness_block = "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.3\n\
+             num_epidemics = 2\n";
+        let text = format!(
+            "population_size = 6\n\
+             network_size = 8\n\
+             max_edge_multiplicity = 2\n\
+             crossover_rate = 0.0\n\
+             mutation_rate = 0.0\n\
+             \n\
+             {evolution_block}\n\
+             [selection]\n\
+             type = \"tournament\"\n\
+             tournament_size = 4\n\
+             \n\
+             [genome]\n\
+             type = \"edge_edit\"\n\
+             gene_length = 12\n\
+             \n\
+             [genome.operation_weights]\n\
+             null = 1.0\n\
+             toggle = 0.0\n\
+             hop = 0.0\n\
+             add = 0.0\n\
+             delete = 0.0\n\
+             swap = 0.0\n\
+             local_toggle = 0.0\n\
+             local_add = 0.0\n\
+             local_delete = 0.0\n\
+             \n\
+             {fitness_block}"
+        );
+        let config = Config::from_toml_str(&text).expect("the no-op config parses");
+        config.validate().expect("the no-op config validates");
+        config
+    }
+
     const GENERATIONAL: &str = "[evolution]\ntype = \"generational\"\nnum_generations = 3\n";
     const STEADY_STATE: &str = "[evolution]\ntype = \"steady_state\"\nnum_mating_events = 12\n";
     const EDGE_EDIT: &str = "[genome]\ntype = \"edge_edit\"\ngene_length = 12\n";
@@ -1292,6 +1337,88 @@ mod tests {
                 parallel.best_edges, sequential.best_edges,
                 "run {index}'s graph differs between max_cores=4 and max_cores=1",
             );
+        }
+    }
+
+    /// Every replicate must carry the seeded base graph forward exactly,
+    /// unedited, under a given `max_cores`. Shared by the rayon-arm and
+    /// sequential-arm tests below so the two only differ in the cap.
+    fn assert_seeded_base_graph_reaches_every_replicate(max_cores: Option<usize>) {
+        let config = no_op_runnable(GENERATIONAL);
+        let seeded = vec![(0, 1, 2), (3, 4, 1)];
+        let base_graph = {
+            let mut graph = Graph::new(8, 2);
+            graph.set_edges(&seeded);
+            graph
+        };
+        let seeds = replicate_seeds(20260816, 4);
+
+        let outcomes = run_replicates(
+            &config,
+            &objectives_for(&config, &seeds),
+            Some(&base_graph),
+            &seeds,
+            max_cores,
+        )
+        .expect("seeded replicates complete");
+
+        assert_eq!(outcomes.len(), 4, "one outcome per seed");
+        for (index, outcome) in outcomes.iter().enumerate() {
+            assert_eq!(
+                outcome.best_edges, seeded,
+                "replicate {index} does not carry the seeded base graph forward \
+                 exactly, under max_cores={max_cores:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn a_seeded_base_graph_reaches_every_replicate_on_the_rayon_arm() {
+        // #84: #72 (`set_base_graph`) and #83 (replicate runs) were each
+        // tested against the other's absence. This is their intersection —
+        // a seeded run through `n_runs > 1` on the concurrent arm, which
+        // `evolve` reaches once per `seeds.par_iter()` entry.
+        assert_seeded_base_graph_reaches_every_replicate(Some(4));
+    }
+
+    #[test]
+    fn a_seeded_base_graph_reaches_every_replicate_on_the_sequential_arm() {
+        // The other half of #84: the same seeded config, forced onto the
+        // sequential loop at the top of `run_replicates` by pinning
+        // `max_cores` to 1 rather than by a python fitness type, so this
+        // exercises the same `for` loop
+        // `a_python_objective_runs_its_replicates_through_the_sequential_arm`
+        // reaches, but with a native objective and a base graph to check.
+        assert_seeded_base_graph_reaches_every_replicate(Some(1));
+    }
+
+    #[test]
+    fn an_unseeded_replicate_run_expresses_zero_edges_control() {
+        // Control for the two tests above: without a base graph, the same
+        // no-op config expresses nothing. If this failed, the exact-equality
+        // assertions above would be vacuous — passing because the no-op
+        // config never grows any edges at all, seeded or not.
+        let config = no_op_runnable(GENERATIONAL);
+        let seeds = replicate_seeds(20260816, 4);
+
+        for max_cores in [Some(4), Some(1)] {
+            let outcomes = run_replicates(
+                &config,
+                &objectives_for(&config, &seeds),
+                None,
+                &seeds,
+                max_cores,
+            )
+            .expect("unseeded replicates complete");
+
+            for (index, outcome) in outcomes.iter().enumerate() {
+                assert!(
+                    outcome.best_edges.is_empty(),
+                    "replicate {index} should express no edges without a base \
+                     graph, under max_cores={max_cores:?}, got {:?}",
+                    outcome.best_edges,
+                );
+            }
         }
     }
 
