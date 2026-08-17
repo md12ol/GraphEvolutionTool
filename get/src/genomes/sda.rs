@@ -275,9 +275,11 @@ impl Genome for SdaGenome {
             self.transitions[state][trans] = rng.random_range(0..num_states) as u16;
         } else {
             let resp_len = rng.random_range(1..=self.max_resp_len);
-            self.responses[state][trans] = (0..resp_len)
-                .map(|_| rng.random_range(0..num_chars) as u8)
-                .collect();
+            let mut response = Vec::with_capacity(resp_len);
+            for _ in 0..resp_len {
+                response.push(rng.random_range(0..num_chars) as u8);
+            }
+            self.responses[state][trans] = response;
         }
     }
 
