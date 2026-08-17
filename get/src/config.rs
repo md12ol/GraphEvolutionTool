@@ -22,6 +22,12 @@ use serde::Deserialize;
 use crate::genomes::EdgeEditOperationWeights;
 
 /// Everything the genetic algorithm needs for a run.
+///
+/// `Deserialize` only, deliberately: this type never serializes back to
+/// TOML. [`crate::py_config::PyConfig`] is the one direction that does —
+/// `to_toml`/`to_toml_table` — since only the Python front end ever builds a
+/// config in memory and needs to render it out again; the TOML front end
+/// reads a file and stops.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// Which evolution strategy to run, and its strategy-specific settings.
