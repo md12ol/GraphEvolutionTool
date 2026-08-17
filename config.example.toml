@@ -2,6 +2,15 @@
 #
 # Copy to `config.toml` and adjust. Fields map onto `get::config::Config`.
 # Commented blocks show the alternative choices for each tagged section.
+#
+# There are two ways to reach a configuration, and this file is one of them.
+# `the_shipped_example()` in `examples/config_builder.py` builds this same one
+# as typed Python objects, so the two can be read side by side to see what a
+# TOML key looks like from the other route.
+#
+# They match today, and nothing checks that they still do. That is deliberate:
+# they exist to show the two routes, not to be locked together, and a test that
+# failed whenever this file was edited alone would cost more than a drift does.
 
 # --- Shared evolution settings ------------------------------------------------
 

@@ -622,7 +622,6 @@ fn get(m: &Bound<'_, PyModule>) -> PyResult<()> {
 mod tests {
     use super::*;
 
-    use crate::config::{EvolutionConfig, GenomeConfig, SelectionConfig};
     use crate::fitness::Fitness;
     use crate::graph::Graph;
 
@@ -867,13 +866,13 @@ mod tests {
         });
     }
 
-    /// The Python builder equivalent of `config.example.toml`.
+    /// An ordinary valid config, for tests that need one and do not care which.
     ///
-    /// Kept in step with that file by
-    /// `the_python_builder_and_config_example_toml_agree` below — the point of
-    /// spec §8's single-parser design is that these two cannot diverge, so a
-    /// change to one that is not made to the other should fail here.
-    fn example_mirror() -> PyConfig {
+    /// Built through the real constructors, so the argument order Python sees is
+    /// exercised too. Nothing depends on these particular values — `to_toml()`
+    /// and its round trip are covered in `py_config`, against a fixture that
+    /// leaves nothing to a default.
+    fn a_valid_config() -> PyConfig {
         PyConfig::new(
             PyEvolutionConfig::Generational {
                 num_generations: 500,
@@ -897,104 +896,9 @@ mod tests {
     }
 
     #[test]
-    fn the_python_builder_and_config_example_toml_agree() {
-        // The shipped example, read at compile time so the test cannot pass by
-        // finding a stale copy on disk.
-        let from_file = Config::from_toml_str(include_str!("../../config.example.toml"))
-            .expect("the shipped example parses");
-        let from_python =
-            Config::from_toml_str(&example_mirror().to_toml().expect("the mirror renders"))
-                .expect("the rendered mirror parses");
-
-        // Destructured with no `..` for the same reason as `py_config`'s tests:
-        // a field added to `Config` must break this, not slip past it.
-        let Config {
-            evolution,
-            population_size,
-            network_size,
-            max_edge_multiplicity,
-            crossover_rate,
-            mutation_rate,
-            max_mutations,
-            selection,
-            genome,
-            fitness,
-        } = from_file;
-
-        assert_eq!(population_size, from_python.population_size);
-        assert_eq!(network_size, from_python.network_size);
-        assert_eq!(max_edge_multiplicity, from_python.max_edge_multiplicity);
-        assert_eq!(crossover_rate, from_python.crossover_rate);
-        assert_eq!(mutation_rate, from_python.mutation_rate);
-        assert_eq!(max_mutations, from_python.max_mutations);
-
-        match (evolution, from_python.evolution) {
-            (
-                EvolutionConfig::Generational {
-                    num_generations: file_generations,
-                    elite_count: file_elites,
-                },
-                EvolutionConfig::Generational {
-                    num_generations: python_generations,
-                    elite_count: python_elites,
-                },
-            ) => {
-                assert_eq!(file_generations, python_generations);
-                assert_eq!(file_elites, python_elites);
-            }
-            (file, python) => panic!("evolution differs: {file:?} vs {python:?}"),
-        }
-
-        match (selection, from_python.selection) {
-            (
-                SelectionConfig::Tournament {
-                    tournament_size: file_size,
-                },
-                SelectionConfig::Tournament {
-                    tournament_size: python_size,
-                },
-            ) => assert_eq!(file_size, python_size),
-        }
-
-        match (genome, from_python.genome) {
-            (
-                GenomeConfig::EdgeEdit {
-                    gene_length: file_length,
-                    operation_weights: file_weights,
-                },
-                GenomeConfig::EdgeEdit {
-                    gene_length: python_length,
-                    operation_weights: python_weights,
-                },
-            ) => {
-                assert_eq!(file_length, python_length);
-                assert_eq!(file_weights, python_weights);
-            }
-            (file, python) => panic!("genome differs: {file:?} vs {python:?}"),
-        }
-
-        match (fitness, from_python.fitness) {
-            (
-                FitnessConfig::EpiSpread { sir: file_sir },
-                FitnessConfig::EpiSpread { sir: python_sir },
-            ) => {
-                assert_eq!(file_sir.infection_rate, python_sir.infection_rate);
-                assert_eq!(file_sir.patient_zero, python_sir.patient_zero);
-                assert_eq!(file_sir.num_epidemics, python_sir.num_epidemics);
-                assert_eq!(file_sir.min_epidemic_length, python_sir.min_epidemic_length);
-                assert_eq!(
-                    file_sir.max_epidemic_retries,
-                    python_sir.max_epidemic_retries
-                );
-            }
-            (file, python) => panic!("fitness differs: {file:?} vs {python:?}"),
-        }
-    }
-
-    #[test]
     fn from_config_builds_an_evolver_and_keeps_the_parsed_config() {
-        let evolver = GraphEvolver::from_config(&example_mirror())
-            .expect("a config equivalent to the shipped example should build");
+        let evolver = GraphEvolver::from_config(&a_valid_config())
+            .expect("an ordinary valid config should build");
 
         assert_eq!(evolver.config.population_size, 200);
         assert!(evolver.fitness_function.is_none());
@@ -1005,7 +909,7 @@ mod tests {
         // Zero clamps every edge weight to nothing under any genome, so the run
         // would look like a broken fitness function rather than a bad config
         // (spec §7, GitHub #6). The TOML path rejects it; so must this one.
-        let mut config = example_mirror();
+        let mut config = a_valid_config();
         config.max_edge_multiplicity = 0;
 
         let message = match GraphEvolver::from_config(&config) {
@@ -1025,7 +929,7 @@ mod tests {
         // The two halves of the Python front end meeting: a config built in
         // Python selecting a callable registered from Python.
         Python::attach(|py| {
-            let mut config = example_mirror();
+            let mut config = a_valid_config();
             config.fitness = PyFitnessConfig::Python();
 
             let mut evolver =

@@ -27,11 +27,17 @@ def the_shipped_example():
     An edit script applied to a base graph, evolved generationally, scored on
     how far an epidemic spreads.
 
+    This is the object-building route to the same configuration
+    `config.example.toml` writes in TOML. The two are worth reading side by
+    side: every key in that file appears here as a constructor argument.
+
+    They match today, and nothing checks that they still do. That is
+    deliberate: they exist to show the two routes, not to be locked together.
+
     `infection_rate` mirrors the TOML at 0.5, which is above a plausible
     per-contact figure and chosen deliberately: at 0.05 an outbreak on a
     100-node sparse graph dies almost immediately whatever the topology, so
     every individual scores alike and selection has no gradient to follow.
-    Keep the two files equal - they are meant to be the same configuration.
     """
     return get.Config(
         population_size=200,
