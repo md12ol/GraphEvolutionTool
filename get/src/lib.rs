@@ -869,10 +869,16 @@ mod tests {
 
     /// The Python builder equivalent of `config.example.toml`.
     ///
-    /// Kept in step with that file by
-    /// `the_python_builder_and_config_example_toml_agree` below — the point of
-    /// spec §8's single-parser design is that these two cannot diverge, so a
-    /// change to one that is not made to the other should fail here.
+    /// This configuration is written out twice more, and all three must agree:
+    /// `config.example.toml` itself, and `the_shipped_example()` in
+    /// `examples/config_builder.py`. Change one, change all three.
+    ///
+    /// This replica is kept in step with the file by
+    /// `the_python_builder_and_config_example_toml_agree` below — one parser and
+    /// one validator serve both front ends, so a change to one that is not made
+    /// to the other should fail here. The third copy needs a Python interpreter
+    /// and a built wheel, so it is checked by
+    /// `tests/python/check_shipped_example.py` in CI instead.
     fn example_mirror() -> PyConfig {
         PyConfig::new(
             PyEvolutionConfig::Generational {

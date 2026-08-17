@@ -27,6 +27,11 @@ def the_shipped_example():
     An edit script applied to a base graph, evolved generationally, scored on
     how far an epidemic spreads.
 
+    This configuration is written out twice more, and all three must agree:
+    `config.example.toml` itself, and `example_mirror()` in `get/src/lib.rs`.
+    Change one, change all three. `tests/python/check_shipped_example.py`
+    holds this copy against the TOML and runs in CI against a built wheel.
+
     `infection_rate` mirrors the TOML at 0.5, which is above a plausible
     per-contact figure and chosen deliberately: at 0.05 an outbreak on a
     100-node sparse graph dies almost immediately whatever the topology, so

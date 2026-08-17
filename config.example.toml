@@ -2,6 +2,13 @@
 #
 # Copy to `config.toml` and adjust. Fields map onto `get::config::Config`.
 # Commented blocks show the alternative choices for each tagged section.
+#
+# This configuration is written out twice more, and all three must agree: as
+# typed objects in `the_shipped_example()` in `examples/config_builder.py`, and
+# as `example_mirror()` in `get/src/lib.rs`. Change one, change all three. The
+# Rust replica is held by a unit test in that file; the Python builder by
+# `tests/python/check_shipped_example.py`, which also pins the default values
+# quoted in the commented lines below.
 
 # --- Shared evolution settings ------------------------------------------------
 
