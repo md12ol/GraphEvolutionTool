@@ -118,10 +118,15 @@ impl SdaGenome {
     /// keeping the current number of states, characters, and `max_resp_len`.
     pub fn randomize<R: Rng + ?Sized>(&mut self, rng: &mut R) -> Result<(), &'static str> {
         let num_states = self.transitions.len();
-        // map_or: 0 if there are no states yet (transitions is empty), else the row width
-        let num_chars = self.transitions.first().map_or(0, |row| row.len());
+        let num_chars = self.num_chars();
         *self = Self::random(num_states, num_chars, self.max_resp_len, rng)?;
         Ok(())
+    }
+
+    /// The alphabet size implied by the current transition table's row width.
+    /// 0 if there are no states yet (`transitions` is empty).
+    fn num_chars(&self) -> usize {
+        self.transitions.first().map_or(0, |row| row.len())
     }
 
     /// Run the automaton from `init_state`, producing exactly `output_len`
@@ -184,7 +189,7 @@ impl Genome for SdaGenome {
     /// (alphabet too large) or leave the upper edge weights unreachable
     /// (alphabet too small).
     fn express(&self, context: &Self::Context) -> Graph {
-        let num_chars = self.transitions.first().map_or(0, |row| row.len());
+        let num_chars = self.num_chars();
         let expected_num_chars = context.max_edge_multiplicity as usize + 1;
         assert_eq!(
             num_chars, expected_num_chars,
@@ -251,8 +256,7 @@ impl Genome for SdaGenome {
     /// that want more disruption per generation call this multiple times.
     fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R) {
         let num_states = self.transitions.len();
-        // map_or: 0 if there are no states yet (transitions is empty), else the row width
-        let num_chars = self.transitions.first().map_or(0, |row| row.len());
+        let num_chars = self.num_chars();
         if num_states == 0 || num_chars == 0 {
             return;
         }
