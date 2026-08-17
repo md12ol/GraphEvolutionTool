@@ -48,7 +48,13 @@ pub trait Genome: Clone + Send + Sync {
     ///
     /// A genome with nothing to mutate (an empty gene list, a zero-state
     /// automaton) leaves itself unchanged rather than panicking.
-    fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R);
+    ///
+    /// `context` is the same run-level configuration `express` reads, passed
+    /// so a representation can take its mutation probabilities from the run
+    /// rather than from a private constant. A representation that keeps its
+    /// mix elsewhere — edge-edit carries a prebuilt sampler on the genome —
+    /// ignores the parameter.
+    fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R);
 
     /// Return a human-readable description of the genome.
     fn print(&self) -> String;
@@ -60,8 +66,12 @@ pub struct EdgeEditContext {
     pub base_graph: Graph,
 }
 
-/// Configuration used when an SDA genome generates a graph from scratch.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Configuration used when an SDA genome generates a graph from scratch, and
+/// the probabilities that shape how one mutates.
+///
+/// `Eq` is deliberately not derived: the two mutation rates are `f64`, which
+/// only implements `PartialEq`.
+#[derive(Clone, Debug, PartialEq)]
 pub struct SdaContext {
     pub num_nodes: usize,
     /// The state the automaton starts in before consuming `init_char`'s
@@ -72,4 +82,11 @@ pub struct SdaContext {
     pub init_state: usize,
     /// Pass `1` for unweighted graphs.
     pub max_edge_multiplicity: u32,
+    /// Chance that a mutation redraws the initial character rather than
+    /// touching the transition table at all.
+    pub init_char_mutation_rate: f64,
+    /// Given that the initial character was *not* chosen, the chance of
+    /// redrawing a transition's target state; the remainder redraws that
+    /// transition's response instead. `0.5` mutates the two equally often.
+    pub transition_vs_response_rate: f64,
 }

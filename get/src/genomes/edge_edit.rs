@@ -1,4 +1,6 @@
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
+#[cfg(test)]
+use std::sync::OnceLock;
 
 use rand::Rng;
 use rand::distr::Distribution;
@@ -115,10 +117,15 @@ impl EdgeEditOperators {
 
     /// The mix that draws every operation with equal probability.
     ///
+    /// Test-only: a run's mix always comes from `[genome.operation_weights]`
+    /// via [`EdgeEditOperators::new`]. Tests that do not care which operations
+    /// come out use this instead of spelling nine equal weights each time.
+    ///
     /// Cached, so the weight-agnostic constructors ([`EdgeEditGenome::new`] and
     /// [`EdgeEditGenome::random`]) share one instance rather than handing every
     /// individual its own — which would reintroduce exactly the per-genome copy
     /// this type exists to eliminate.
+    #[cfg(test)]
     pub fn uniform() -> Arc<Self> {
         // A function-local `static` initialized once, on first call, and
         // shared by every caller thereafter — Rust's version of a lazily-built
@@ -142,19 +149,14 @@ pub struct EdgeEditGenome {
 }
 
 impl EdgeEditGenome {
-    /// Construct a genome from encoded genes using equal operation weights.
-    pub fn new(genes: Vec<u64>) -> Self {
-        Self::new_with_operators(genes, EdgeEditOperators::uniform())
-    }
-
     /// Construct a genome from encoded genes and a shared operation mix.
+    ///
+    /// Test-only. A run never builds a genome from chosen genes — `dispatch`
+    /// mints the population with [`EdgeEditGenome::random_with_operators`] —
+    /// so this exists for tests that need a known gene sequence to express.
+    #[cfg(test)]
     pub fn new_with_operators(genes: Vec<u64>, operators: Arc<EdgeEditOperators>) -> Self {
         Self { genes, operators }
-    }
-
-    /// Generate a random genome using equal operation weights.
-    pub fn random<R: Rng + ?Sized>(length: usize, rng: &mut R) -> Self {
-        Self::random_with_operators(length, EdgeEditOperators::uniform(), rng)
     }
 
     /// Generate a random genome drawing opcodes from a shared operation mix.
@@ -240,7 +242,7 @@ impl Genome for EdgeEditGenome {
     /// Exactly one, per the [`Genome::mutate`] contract. This previously rolled
     /// `1..=4` against a hardcoded `MAX_MUTATIONS`, which made the engine's
     /// `max_mutations` mean nothing here; the count is the engine's to decide.
-    fn mutate<R: Rng + ?Sized>(&mut self, rng: &mut R) {
+    fn mutate<R: Rng + ?Sized>(&mut self, _context: &Self::Context, rng: &mut R) {
         if self.genes.is_empty() {
             return;
         }
@@ -260,6 +262,14 @@ mod tests {
     use rand::rngs::StdRng;
 
     use super::*;
+
+    /// `mutate` ignores its context — edge-edit keeps its operation mix on the
+    /// genome — so the mutation tests just need something of the right type.
+    fn mutation_context() -> EdgeEditContext {
+        EdgeEditContext {
+            base_graph: Graph::new(1, 1),
+        }
+    }
 
     fn encode_gene(opcode: u8, vertices: [usize; 4], num_nodes: usize) -> u64 {
         let radix = num_nodes as u64;
@@ -368,12 +378,15 @@ mod tests {
         base_graph.set_edge(0, 1, 2);
         let original = base_graph.clone();
         let context = EdgeEditContext { base_graph };
-        let genome = EdgeEditGenome::new(vec![
-            encode_gene(3, [0, 1, 0, 0], 4),
-            encode_gene(2, [1, 2, 0, 0], 4),
-            encode_gene(0, [0, 2, 0, 0], 4),
-            encode_gene(8, [0, 0, 0, 0], 4),
-        ]);
+        let genome = EdgeEditGenome::new_with_operators(
+            vec![
+                encode_gene(3, [0, 1, 0, 0], 4),
+                encode_gene(2, [1, 2, 0, 0], 4),
+                encode_gene(0, [0, 2, 0, 0], 4),
+                encode_gene(8, [0, 0, 0, 0], 4),
+            ],
+            EdgeEditOperators::uniform(),
+        );
 
         let expressed = genome.express(&context);
 
@@ -387,10 +400,13 @@ mod tests {
     fn express_preserves_an_unweighted_base_graph_cap() {
         let base_graph = Graph::new(3, 1);
         let context = EdgeEditContext { base_graph };
-        let genome = EdgeEditGenome::new(vec![
-            encode_gene(2, [0, 1, 0, 0], 3),
-            encode_gene(2, [0, 1, 0, 0], 3),
-        ]);
+        let genome = EdgeEditGenome::new_with_operators(
+            vec![
+                encode_gene(2, [0, 1, 0, 0], 3),
+                encode_gene(2, [0, 1, 0, 0], 3),
+            ],
+            EdgeEditOperators::uniform(),
+        );
 
         let expressed = genome.express(&context);
 
@@ -422,13 +438,16 @@ mod tests {
         let empty_context = EdgeEditContext {
             base_graph: Graph::new(0, 5),
         };
-        let invalid = EdgeEditGenome::new(vec![15]);
+        let invalid = EdgeEditGenome::new_with_operators(vec![15], EdgeEditOperators::uniform());
         assert_eq!(invalid.express(&empty_context), Graph::new(0, 5));
 
         let one_node_context = EdgeEditContext {
             base_graph: Graph::new(1, 5),
         };
-        let add_self = EdgeEditGenome::new(vec![encode_gene(2, [0, 0, 0, 0], 1)]);
+        let add_self = EdgeEditGenome::new_with_operators(
+            vec![encode_gene(2, [0, 0, 0, 0], 1)],
+            EdgeEditOperators::uniform(),
+        );
         assert_eq!(add_self.express(&one_node_context), Graph::new(1, 5));
 
         let mut base_graph = Graph::new(2, 5);
@@ -436,13 +455,17 @@ mod tests {
         let context = EdgeEditContext {
             base_graph: base_graph.clone(),
         };
-        let invalid = EdgeEditGenome::new(vec![encode_gene(15, [0, 1, 0, 0], 2)]);
+        let invalid = EdgeEditGenome::new_with_operators(
+            vec![encode_gene(15, [0, 1, 0, 0], 2)],
+            EdgeEditOperators::uniform(),
+        );
         assert_eq!(invalid.express(&context), base_graph);
     }
 
     #[test]
     fn crossover_swaps_only_a_nonempty_shared_segment() {
-        let mut left = EdgeEditGenome::new(vec![0, 1, 2, 3, 4]);
+        let mut left =
+            EdgeEditGenome::new_with_operators(vec![0, 1, 2, 3, 4], EdgeEditOperators::uniform());
         let mut right = EdgeEditGenome::new_with_operators(
             vec![10, 11, 12],
             EdgeEditOperators::new(weights_for_add()).unwrap(),
@@ -486,7 +509,7 @@ mod tests {
             );
             let mut rng = StdRng::seed_from_u64(seed);
 
-            genome.mutate(&mut rng);
+            genome.mutate(&mutation_context(), &mut rng);
 
             let changed: Vec<_> = genome.genes.iter().filter(|gene| **gene != 8).collect();
             assert_eq!(
@@ -500,10 +523,11 @@ mod tests {
 
     #[test]
     fn mutation_of_an_empty_genome_is_a_noop() {
-        let mut genome = EdgeEditGenome::new(Vec::new());
+        let mut genome =
+            EdgeEditGenome::new_with_operators(Vec::new(), EdgeEditOperators::uniform());
         let mut rng = StdRng::seed_from_u64(23);
 
-        genome.mutate(&mut rng);
+        genome.mutate(&mutation_context(), &mut rng);
 
         assert!(genome.genes.is_empty());
     }
@@ -539,8 +563,10 @@ mod tests {
         ));
 
         let mut rng = StdRng::seed_from_u64(31);
-        let first = EdgeEditGenome::random(4, &mut rng);
-        let second = EdgeEditGenome::random(4, &mut rng);
+        let first =
+            EdgeEditGenome::random_with_operators(4, EdgeEditOperators::uniform(), &mut rng);
+        let second =
+            EdgeEditGenome::random_with_operators(4, EdgeEditOperators::uniform(), &mut rng);
         assert!(Arc::ptr_eq(&first.operators, &second.operators));
     }
 
@@ -554,7 +580,7 @@ mod tests {
         assert!(genome.genes.iter().all(|gene| gene & OPCODE_MASK == 3));
 
         for _ in 0..200 {
-            genome.mutate(&mut rng);
+            genome.mutate(&mutation_context(), &mut rng);
         }
         assert!(genome.genes.iter().all(|gene| gene & OPCODE_MASK == 3));
     }
@@ -569,7 +595,8 @@ mod tests {
 
     #[test]
     fn print_includes_the_complete_genome() {
-        let genome = EdgeEditGenome::new(vec![1, 2, 3]);
+        let genome =
+            EdgeEditGenome::new_with_operators(vec![1, 2, 3], EdgeEditOperators::uniform());
         assert_eq!(genome.print(), "EdgeEditGenome(3 ops): [1, 2, 3]");
     }
 }
