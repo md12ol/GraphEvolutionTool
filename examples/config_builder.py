@@ -38,7 +38,6 @@ def the_shipped_example():
     per-contact figure and chosen deliberately: at 0.05 an outbreak on a
     100-node sparse graph dies almost immediately whatever the topology, so
     every individual scores alike and selection has no gradient to follow.
-    The TOML file carries the same 0.5, for the same reason.
     """
     return get.Config(
         population_size=200,

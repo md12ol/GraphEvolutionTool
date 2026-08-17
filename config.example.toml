@@ -10,7 +10,7 @@
 #
 # They match today, and nothing checks that they still do. That is deliberate:
 # they exist to show the two routes, not to be locked together, and a test that
-# failed every time someone edited this file would cost more than a drift does.
+# failed whenever this file was edited alone would cost more than a drift does.
 
 # --- Shared evolution settings ------------------------------------------------
 
