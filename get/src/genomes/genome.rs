@@ -88,5 +88,5 @@ pub struct SdaContext {
     /// Given that the initial character was *not* chosen, the chance of
     /// redrawing a transition's target state; the remainder redraws that
     /// transition's response instead. `0.5` mutates the two equally often.
-    pub transition_mutation_rate: f64,
+    pub transition_vs_response_rate: f64,
 }

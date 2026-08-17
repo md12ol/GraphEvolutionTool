@@ -91,22 +91,44 @@ pub enum GenomeConfig {
         #[serde(default)]
         operation_weights: EdgeEditOperationWeights,
     },
-    Sda {
-        num_states: usize,
-        /// No `num_chars` here: the alphabet is derived as
-        /// `max_edge_multiplicity + 1` so every character is a legal edge
-        /// weight (spec §3.2). Whatever maps this onto `SdaContext` derives it.
-        max_resp_len: usize,
-        /// State the automaton starts in, before consuming `init_char`'s first
-        /// transition; defaults to 0.
-        ///
-        /// Must be `< num_states`. This is a precondition, not just a default:
-        /// `SdaGenome::run` indexes its response table with this value, so an
-        /// out-of-range `init_state` panics during expression. Whatever maps
-        /// this onto `SdaContext` is responsible for rejecting it at startup.
-        #[serde(default)]
-        init_state: usize,
-    },
+    Sda(SdaGenomeConfig),
+}
+
+/// Everything the sda genome takes from `[genome]`.
+///
+/// A named struct rather than fields inlined on the enum variant, because a
+/// struct variant is not a type: anything wanting to pass "the sda settings"
+/// around had to re-list every field positionally, so adding one meant editing
+/// the list in several places that gained nothing from knowing it. Only
+/// `py_config`'s mirror re-lists them now, and the round-trip tests fail to
+/// compile if it falls behind.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SdaGenomeConfig {
+    pub num_states: usize,
+    /// No `num_chars` here: the alphabet is derived as
+    /// `max_edge_multiplicity + 1` so every character is a legal edge weight.
+    /// Whatever maps this onto `SdaContext` derives it.
+    pub max_resp_len: usize,
+    /// State the automaton starts in, before consuming `init_char`'s first
+    /// transition; defaults to 0.
+    ///
+    /// Must be `< num_states`. This is a precondition, not just a default:
+    /// `SdaGenome::run` indexes its response table with this value, so an
+    /// out-of-range `init_state` panics during expression. Whatever maps
+    /// this onto `SdaContext` is responsible for rejecting it at startup.
+    #[serde(default)]
+    pub init_state: usize,
+    /// Chance a mutation redraws the initial character rather than touching
+    /// the transition table. Omitted, it keeps the value sda used when this
+    /// was a private constant.
+    #[serde(default = "default_init_char_mutation_rate")]
+    pub init_char_mutation_rate: f64,
+    /// Given the initial character was not chosen, the chance of redrawing a
+    /// transition's target state rather than its response. Omitted, the two
+    /// are equally likely, as they were before this was configurable.
+    #[serde(default = "default_transition_vs_response_rate")]
+    pub transition_vs_response_rate: f64,
 }
 
 /// Fitness objective and its parameters.
@@ -191,6 +213,17 @@ pub struct SirParams {
 
 fn default_max_edge_multiplicity() -> u32 {
     1
+}
+
+// sda owns both values; these read them back rather than restating the
+// numbers, so the default is written in exactly one place.
+
+fn default_init_char_mutation_rate() -> f64 {
+    crate::genomes::sda::DEFAULT_INIT_CHAR_MUTATION_RATE
+}
+
+fn default_transition_vs_response_rate() -> f64 {
+    crate::genomes::sda::DEFAULT_TRANSITION_VS_RESPONSE_RATE
 }
 
 fn default_elite_count() -> usize {
@@ -476,19 +509,31 @@ impl Config {
                     return Err(invalid("operation_weights", constraint));
                 }
             }
-            GenomeConfig::Sda {
-                num_states,
-                init_state,
-                ..
-            } => {
-                if init_state >= num_states {
+            GenomeConfig::Sda(sda) => {
+                if sda.init_state >= sda.num_states {
                     return Err(invalid(
                         "init_state",
                         format!(
-                            "must be less than num_states ({num_states}); SdaGenome::run \
-                             indexes its response table with it"
+                            "must be less than num_states ({}); SdaGenome::run \
+                             indexes its response table with it",
+                            sda.num_states
                         ),
                     ));
+                }
+
+                // Both are probabilities handed straight to `random_bool`,
+                // which panics outside 0..=1 — so they are checked here, at
+                // load, rather than mid-run.
+                for (field, rate) in [
+                    ("init_char_mutation_rate", sda.init_char_mutation_rate),
+                    (
+                        "transition_vs_response_rate",
+                        sda.transition_vs_response_rate,
+                    ),
+                ] {
+                    if !(0.0..=1.0).contains(&rate) {
+                        return Err(invalid(field, "must be between 0.0 and 1.0"));
+                    }
                 }
             }
         }
@@ -702,7 +747,7 @@ num_epidemics  = 30
             .expect("sda config should parse")
             .genome
         {
-            GenomeConfig::Sda { init_state, .. } => assert_eq!(init_state, 0),
+            GenomeConfig::Sda(sda) => assert_eq!(sda.init_state, 0),
             other => panic!("expected an sda genome, got {other:?}"),
         }
     }
@@ -713,13 +758,9 @@ num_epidemics  = 30
             .expect("sda config should parse")
             .genome
         {
-            GenomeConfig::Sda {
-                init_state,
-                num_states,
-                ..
-            } => {
-                assert_eq!(init_state, 7);
-                assert_eq!(num_states, 12);
+            GenomeConfig::Sda(sda) => {
+                assert_eq!(sda.init_state, 7);
+                assert_eq!(sda.num_states, 12);
             }
             other => panic!("expected an sda genome, got {other:?}"),
         }
@@ -1106,13 +1147,64 @@ num_epidemics  = 30
     #[test]
     fn an_init_state_outside_the_state_count_is_rejected() {
         let mut config = valid_config();
-        config.genome = GenomeConfig::Sda {
-            num_states: 12,
-            max_resp_len: 4,
-            init_state: 12, // one past the last state
-        };
+        config.genome = sda_genome(12, 12);
 
         assert_eq!(validation_field(&config), "init_state");
+    }
+
+    /// An sda genome block with valid mutation rates, so a test about some
+    /// other field does not have to spell them out.
+    fn sda_genome(num_states: usize, init_state: usize) -> GenomeConfig {
+        GenomeConfig::Sda(SdaGenomeConfig {
+            num_states,
+            max_resp_len: 4,
+            init_state,
+            init_char_mutation_rate: default_init_char_mutation_rate(),
+            transition_vs_response_rate: default_transition_vs_response_rate(),
+        })
+    }
+
+    #[test]
+    fn a_mutation_rate_outside_zero_to_one_is_rejected() {
+        for field in ["init_char_mutation_rate", "transition_vs_response_rate"] {
+            for value in ["-0.1", "1.5", "nan"] {
+                let mut config = valid_config();
+                config.genome = sda_genome(12, 0);
+                if let GenomeConfig::Sda(sda) = &mut config.genome {
+                    let parsed: f64 = value.parse().expect("test literal parses");
+                    if field == "init_char_mutation_rate" {
+                        sda.init_char_mutation_rate = parsed;
+                    } else {
+                        sda.transition_vs_response_rate = parsed;
+                    }
+                }
+
+                assert_eq!(
+                    validation_field(&config),
+                    field,
+                    "{field} = {value} should be rejected"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn omitted_mutation_rates_fall_back_to_sda_s_own_defaults() {
+        let config = Config::from_toml_str(&sda_config_text("")).expect("sda config parses");
+
+        match config.genome {
+            GenomeConfig::Sda(sda) => {
+                assert_eq!(
+                    sda.init_char_mutation_rate,
+                    crate::genomes::sda::DEFAULT_INIT_CHAR_MUTATION_RATE
+                );
+                assert_eq!(
+                    sda.transition_vs_response_rate,
+                    crate::genomes::sda::DEFAULT_TRANSITION_VS_RESPONSE_RATE
+                );
+            }
+            other => panic!("expected sda, got {other:?}"),
+        }
     }
 
     #[test]

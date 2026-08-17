@@ -31,7 +31,9 @@ use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
 
 use crate::GraphEvolver;
-use crate::config::{self, Config, EvolutionConfig, FitnessConfig, GenomeConfig, SelectionConfig};
+use crate::config::{
+    self, Config, EvolutionConfig, FitnessConfig, GenomeConfig, SdaGenomeConfig, SelectionConfig,
+};
 use crate::evolver::common::Selection;
 use crate::evolver::{
     EvolutionOutcome, Evolver, GenerationStats, GenerationalContext, GenerationalEvolver,
@@ -39,7 +41,6 @@ use crate::evolver::{
 };
 use crate::fitness::{EpiLength, EpiProfMatch, EpiSpread, Fitness};
 use crate::genomes::edge_edit::EdgeEditOperators;
-use crate::genomes::sda::{DEFAULT_INIT_CHAR_MUTATION_RATE, DEFAULT_TRANSITION_MUTATION_RATE};
 use crate::genomes::{
     EdgeEditContext, EdgeEditGenome, EdgeEditOperationWeights, Genome, SdaContext, SdaGenome,
 };
@@ -276,33 +277,36 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
 /// asserting for anything that can reach a release build.
 pub(crate) fn sda_start<R: Rng + ?Sized>(
     config: &Config,
-    num_states: usize,
-    max_resp_len: usize,
-    init_state: usize,
+    sda: &SdaGenomeConfig,
     rng: &mut R,
 ) -> PyResult<(SdaContext, Vec<SdaGenome>)> {
-    if init_state >= num_states {
+    if sda.init_state >= sda.num_states {
         return Err(PyValueError::new_err(format!(
-            "init_state ({init_state}) must be less than num_states ({num_states}); \
+            "init_state ({}) must be less than num_states ({}); \
              SdaGenome::run indexes its response table with it",
+            sda.init_state, sda.num_states,
         )));
     }
 
     let cap = config.max_edge_multiplicity;
     let mut population = Vec::with_capacity(config.population_size);
     for _ in 0..config.population_size {
-        let genome =
-            SdaGenome::random_with_edge_multiplicity_cap(num_states, cap, max_resp_len, rng)
-                .map_err(PyValueError::new_err)?;
+        let genome = SdaGenome::random_with_edge_multiplicity_cap(
+            sda.num_states,
+            cap,
+            sda.max_resp_len,
+            rng,
+        )
+        .map_err(PyValueError::new_err)?;
         population.push(genome);
     }
 
     let context = SdaContext {
         num_nodes: config.network_size,
-        init_state,
+        init_state: sda.init_state,
         max_edge_multiplicity: cap,
-        init_char_mutation_rate: DEFAULT_INIT_CHAR_MUTATION_RATE,
-        transition_mutation_rate: DEFAULT_TRANSITION_MUTATION_RATE,
+        init_char_mutation_rate: sda.init_char_mutation_rate,
+        transition_vs_response_rate: sda.transition_vs_response_rate,
     };
     Ok((context, population))
 }
@@ -386,13 +390,8 @@ pub(crate) fn evolve<F: Fitness>(
                 rng.random::<u64>(),
             ))
         }
-        GenomeConfig::Sda {
-            num_states,
-            max_resp_len,
-            init_state,
-        } => {
-            let (genome_context, population) =
-                sda_start(config, *num_states, *max_resp_len, *init_state, &mut rng)?;
+        GenomeConfig::Sda(sda) => {
+            let (genome_context, population) = sda_start(config, sda, &mut rng)?;
             Ok(run_strategy(
                 config,
                 genome_context,
@@ -965,8 +964,12 @@ mod tests {
             "[genome]\ntype = \"sda\"\nnum_states = 6\nmax_resp_len = 3\ninit_state = 2\n",
         );
 
+        let GenomeConfig::Sda(sda) = &evolver.config.genome else {
+            panic!("the fixture above configures an sda genome");
+        };
+
         let (context, population) =
-            sda_start(&evolver.config, 6, 3, 2, &mut test_rng()).expect("valid SDA dimensions");
+            sda_start(&evolver.config, sda, &mut test_rng()).expect("valid SDA dimensions");
 
         assert_eq!(population.len(), 4);
         assert_eq!(context.num_nodes, 8);

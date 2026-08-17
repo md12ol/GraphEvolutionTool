@@ -28,9 +28,9 @@ pub const MAX_NUM_STATES: usize = u16::MAX as usize + 1;
 /// transition or response. The value a run uses is configurable; this is what
 /// it falls back to.
 pub const DEFAULT_INIT_CHAR_MUTATION_RATE: f64 = 0.04;
-/// Default for [`SdaContext::transition_mutation_rate`]: an even split between
+/// Default for [`SdaContext::transition_vs_response_rate`]: an even split between
 /// redrawing a transition's target state and redrawing its response.
-pub const DEFAULT_TRANSITION_MUTATION_RATE: f64 = 0.5;
+pub const DEFAULT_TRANSITION_VS_RESPONSE_RATE: f64 = 0.5;
 
 impl SdaGenome {
     /// Check that `num_states`, `num_chars`, and `max_resp_len` are usable
@@ -252,7 +252,7 @@ impl Genome for SdaGenome {
 
     /// Apply one mutation: redraw the initial character with probability
     /// `context.init_char_mutation_rate`, otherwise redraw one transition's
-    /// target state with probability `context.transition_mutation_rate` and
+    /// target state with probability `context.transition_vs_response_rate` and
     /// its response with the remainder. Callers that want more disruption per
     /// generation call this multiple times.
     ///
@@ -276,7 +276,7 @@ impl Genome for SdaGenome {
         let state = rng.random_range(0..num_states);
         let trans = rng.random_range(0..num_chars);
 
-        if rng.random_bool(context.transition_mutation_rate) {
+        if rng.random_bool(context.transition_vs_response_rate) {
             self.transitions[state][trans] = rng.random_range(0..num_states) as u16;
         } else {
             let resp_len = rng.random_range(1..=self.max_resp_len);
@@ -331,7 +331,7 @@ mod tests {
             init_state: 0,
             max_edge_multiplicity,
             init_char_mutation_rate: DEFAULT_INIT_CHAR_MUTATION_RATE,
-            transition_mutation_rate: DEFAULT_TRANSITION_MUTATION_RATE,
+            transition_vs_response_rate: DEFAULT_TRANSITION_VS_RESPONSE_RATE,
         }
     }
 
