@@ -212,6 +212,13 @@ impl Genome for SdaGenome {
     /// `[start, end)` between the parents, leaving states outside that window
     /// untouched on both sides. Swapping state 0 also swaps `init_char`,
     /// since together they determine the automaton's first transition.
+    ///
+    /// Crosses even when only one state is shared, where the single possible
+    /// pair of cut points forces the segment to state 0 alone. That is still
+    /// worth doing here because `init_char` moves with it, so two automata
+    /// genuinely exchange their starting behaviour.
+    /// `EdgeEditGenome::crossover` declines at the same length, its genes
+    /// having no equivalent passenger to carry.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) {
         // States past the shorter automaton's length have no counterpart to swap.
         let shared_length = self.transitions.len().min(other.transitions.len());

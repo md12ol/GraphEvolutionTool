@@ -222,6 +222,17 @@ impl Genome for EdgeEditGenome {
         graph
     }
 
+    /// Two-point crossover over genes: draw two distinct cut points in
+    /// `0..=shared_length` and swap the half-open segment `[start, end)`,
+    /// leaving genes outside that window untouched on both sides.
+    ///
+    /// Declines to cross at all below two shared genes. With one there is
+    /// only a single possible pair of cut points, so the segment is forced to
+    /// gene 0 and nothing is actually being chosen; a gene carries nothing
+    /// but its own value, which makes that a one-gene exchange rather than a
+    /// crossover. `SdaGenome::crossover` does cross at that length, because
+    /// its state 0 takes `init_char` with it and so has something further to
+    /// exchange.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) {
         let shared_length = self.genes.len().min(other.genes.len());
         if shared_length < 2 {
