@@ -9,6 +9,11 @@
 //! Plain data types that carry no such baggage are deserialized directly rather
 //! than mirrored — [`EdgeEditOperationWeights`] is nine `f64`s with a `Default`,
 //! and duplicating it here would buy nothing but a conversion to maintain.
+//!
+//! [`crate::py_config`] mirrors these types field-for-field for the Python
+//! front end, and cannot be collapsed into them — pyo3 and serde disagree
+//! about one variant of [`FitnessConfig`]. See that module's header for the
+//! mechanism.
 
 use std::path::Path;
 
