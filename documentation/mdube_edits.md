@@ -205,3 +205,45 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
 - **Badges:** none.
 
 *#handoff-md-describes-the-pre-split-working-docs · filed 2026-08-16 23:55 — Michael.*
+
+### The reference pages describe an API that #108 and #115 changed under them
+
+- **Trigger:** GitHub #115's dead-code and API-surface audit, 2026-08-18, on branch
+  `mdube_dead-code-pass`. Found while checking callers, not while reading the site — every entry
+  below is a page the audit had to consult to decide a disposition, and could not trust.
+- **Files:** `documentation/reference/graph.html`, `guide/graph.html`, `reference/sda.html`,
+  `reference/edge-edit.html`, `reference/genome-trait.html`, `reference/config.html`,
+  `guide/output.html`, `examples/index.html`, `guide/python-api.html`,
+  `reference/evolver-common.html`.
+- **Now false — deleted items still documented:**
+  - `Graph::clear_edge` and `Graph::total_edge_multiplicity` were **deleted** in #115
+    (`guide/graph.html:166,172` · `reference/graph.html:209,262,317,320,366,422`). The spec sheet's
+    §2 table was amended in the same change; see `collab.md` #87 for why that happened outside a
+    meeting.
+  - `Config::from_path` was deleted in #108 (`reference/config.html:417,423,607`), and is still
+    described there as the TOML front end.
+  - `EdgeEditGenome::new(genes)` and `::random(length, rng)` were deleted in #108
+    (`reference/edge-edit.html:259,263`; described again at `:233,309`).
+  - `SdaGenome::random` and `::randomize` were deleted in #108 (`reference/sda.html:163,297`).
+- **Now false — visibility changed in #115:** `reference/evolver-common.html:390,423` print
+  `Selection::select` and `::tournament_indices` as `pub fn`; both are `pub(super)` now, and
+  `generation_stats` with them. `reference/sda.html:73` shows `SdaGenome`'s four fields as `pub`;
+  they are private.
+- **Now false — the opposite direction:** `reference/genome-trait.html:281-287` says
+  `EdgeEditOperators` "is not in the `genomes::` re-export list". It is re-exported at
+  `genomes/mod.rs:7`. The same passage's advice to call `EdgeEditGenome::new_with_operators` was
+  **correct** and the code has been changed to match it, so that half needs no edit — worth saying
+  because it is the one place the docs were right and the source was wrong.
+- **Now false — methods that moved:** `guide/output.html:150-151` and `examples/index.html:344`
+  call `save_logs`/`save_results` on the evolver. They live on the result object.
+- **Incomplete rather than wrong:** `guide/python-api.html`'s `GenomeConfig.Sda` signature omits
+  `init_char_mutation_rate` and `transition_vs_response_rate`, both user-configurable and both now
+  reachable by name in validation errors. Its `repr()` note covers `Config` only, though
+  `RunResult` and `GenerationStats` have one too. `reference/evolver-common.html`'s plan-note calls
+  `ci_95` planned; it shipped.
+- **Should say:** for each deleted item, nothing — remove the entry rather than marking it removed,
+  since these are reference pages for a current API. For the visibility changes, the new visibility.
+- **Badges:** the `ci_95` plan-note is a `.plan-note` callout and should go, per the 2026-08-13
+  decision that only `status.html` names unbuilt work.
+
+*#reference-pages-describe-the-pre-108-api · filed 2026-08-18 15:05 — Michael.*
