@@ -42,7 +42,7 @@ use crate::evolver::{
 use crate::fitness::{EpiLength, EpiProfMatch, EpiSpread, Fitness};
 use crate::genomes::{
     EdgeEditContext, EdgeEditGenome, EdgeEditOperationWeights, EdgeEditOperators, Genome,
-    SdaContext, SdaGenome,
+    SdaContext, SdaDimensions, SdaGenome,
 };
 use crate::graph::Graph;
 use crate::sir::{self, SirSampleParams};
@@ -289,16 +289,16 @@ pub(crate) fn sda_start<R: Rng + ?Sized>(
     }
 
     let cap = config.max_edge_multiplicity;
+    // Validate once, here, rather than on every individual: the three
+    // dimensions are the same for the whole population, so a failure can only
+    // be a startup failure.
+    let dimensions =
+        SdaDimensions::from_edge_multiplicity_cap(sda.num_states, cap, sda.max_resp_len)
+            .map_err(PyValueError::new_err)?;
+
     let mut population = Vec::with_capacity(config.population_size);
     for _ in 0..config.population_size {
-        let genome = SdaGenome::random_with_edge_multiplicity_cap(
-            sda.num_states,
-            cap,
-            sda.max_resp_len,
-            rng,
-        )
-        .map_err(PyValueError::new_err)?;
-        population.push(genome);
+        population.push(SdaGenome::random_with_dimensions(&dimensions, rng));
     }
 
     let context = SdaContext {
