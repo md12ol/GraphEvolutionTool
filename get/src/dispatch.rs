@@ -40,7 +40,7 @@ use crate::evolver::{
     SharedEvolutionContext, SteadyStateContext, SteadyStateEvolver,
 };
 use crate::fitness::{EpiLength, EpiProfMatch, EpiSpread, Fitness};
-use crate::genomes::edge_edit::EdgeEditOperators;
+use crate::genomes::edge_edit::{EdgeEditOperators, IDENTITY_GENE};
 use crate::genomes::{
     EdgeEditContext, EdgeEditGenome, EdgeEditOperationWeights, Genome, SdaContext, SdaGenome,
 };
@@ -239,6 +239,23 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
             Arc::clone(&operators),
             rng,
         ));
+    }
+
+    // A seeded run keeps one individual that edits nothing, so generation 0
+    // contains the graph the caller supplied and not only random departures
+    // from it. Every gene is opcode 8, `Null`, which expression skips — so this
+    // genome expresses to exactly the base graph.
+    //
+    // Unconditional, with no config flag: without it a seeded run can return
+    // something worse than its own input, if nothing in a random generation 0
+    // happens to beat it. What that buys is a soft floor rather than a hard one
+    // — elites are rescored every generation, so a stochastic objective can
+    // still evict this individual on a bad draw.
+    if base_graph.is_some() && !population.is_empty() {
+        population[0] = EdgeEditGenome::new_with_operators(
+            vec![IDENTITY_GENE; gene_length],
+            Arc::clone(&operators),
+        );
     }
 
     // Unset means empty, which is the default an unseeded run gets.
@@ -842,6 +859,57 @@ mod tests {
             seeded,
             "the population expresses against what was set, not an empty graph",
         );
+    }
+
+    #[test]
+    fn a_seeded_population_keeps_one_individual_that_expresses_the_base_graph() {
+        // Without this, generation 0 holds nothing near the graph the caller
+        // supplied, and a run can return something worse than its own input.
+        let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+        let seeded = vec![(0, 1, 1), (3, 4, 1)];
+        Python::attach(|py| evolver.set_base_graph(py, 8, seeded.clone()))
+            .expect("a graph matching the config is accepted");
+
+        let (context, population) = edge_edit_start(
+            &evolver.config,
+            16,
+            EdgeEditOperationWeights::default(),
+            evolver.base_graph.as_ref(),
+            &mut test_rng(),
+        )
+        .expect("default weights are usable");
+
+        // Expressed, not just inspected: the guarantee is about the graph this
+        // individual produces, not about the bytes in its genes.
+        let expressed = population[0].express(&context);
+        assert_eq!(expressed.get_edge_list(), seeded);
+        assert_eq!(
+            population.len(),
+            evolver.config.population_size,
+            "the identity replaces a slot rather than adding one",
+        );
+    }
+
+    #[test]
+    fn an_unseeded_population_gets_no_identity_individual() {
+        // The identity is only a floor when there is something to hold up: with
+        // no base graph it would just be an empty graph taking a slot.
+        let evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+
+        let (_, population) = edge_edit_start(
+            &evolver.config,
+            16,
+            EdgeEditOperationWeights::default(),
+            None,
+            &mut test_rng(),
+        )
+        .expect("default weights are usable");
+
+        let all_null = population[0]
+            .genes
+            .iter()
+            .all(|gene| *gene == IDENTITY_GENE);
+        assert!(!all_null, "an unseeded run has no identity individual");
     }
 
     #[test]

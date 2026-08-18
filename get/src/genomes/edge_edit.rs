@@ -17,6 +17,10 @@ use operations::GraphOperation;
 const OPERATION_COUNT: usize = 9;
 const OPCODE_MASK: u64 = 0xF;
 
+/// A whole gene that edits nothing: opcode 8 is `Null`, and the payload above
+/// it is unread, so a genome of these expresses to its base graph unchanged.
+pub const IDENTITY_GENE: u64 = 8;
+
 /// Relative probabilities for generating each edge-edit operation.
 ///
 /// The default gives all nine operations equal probability. Set via
@@ -151,10 +155,11 @@ pub struct EdgeEditGenome {
 impl EdgeEditGenome {
     /// Construct a genome from encoded genes and a shared operation mix.
     ///
-    /// Test-only. A run never builds a genome from chosen genes — `dispatch`
-    /// mints the population with [`EdgeEditGenome::random_with_operators`] —
-    /// so this exists for tests that need a known gene sequence to express.
-    #[cfg(test)]
+    /// Almost every individual is minted at random by
+    /// [`EdgeEditGenome::random_with_operators`] instead. The exception is the
+    /// identity individual a seeded run starts with — [`IDENTITY_GENE`] repeated
+    /// — which is a chosen gene sequence by definition. Tests that need a known
+    /// genome to express also come through here.
     pub fn new_with_operators(genes: Vec<u64>, operators: Arc<EdgeEditOperators>) -> Self {
         Self { genes, operators }
     }
