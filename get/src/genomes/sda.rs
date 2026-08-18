@@ -5,7 +5,7 @@ use crate::graph::Graph;
 
 /// Self-driving-automaton genome: a finite-state machine whose run emits the
 /// characters that get folded into a graph's adjacency triangle.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SdaGenome {
     init_char: u8,
     /// `[state][char] -> next state`
