@@ -530,6 +530,22 @@ mod tests {
     }
 
     #[test]
+    fn crossover_of_empty_genomes_is_a_noop() {
+        // `shared_length` is 0, below the two distinct cut points a swap needs,
+        // so this returns before drawing anything rather than panicking on an
+        // empty range.
+        let mut left = EdgeEditGenome::new_with_operators(Vec::new(), EdgeEditOperators::uniform());
+        let mut right =
+            EdgeEditGenome::new_with_operators(Vec::new(), EdgeEditOperators::uniform());
+        let mut rng = StdRng::seed_from_u64(1);
+
+        left.crossover(&mut right, &mut rng);
+
+        assert!(left.genes.is_empty());
+        assert!(right.genes.is_empty());
+    }
+
+    #[test]
     fn mutation_of_an_empty_genome_is_a_noop() {
         let mut genome =
             EdgeEditGenome::new_with_operators(Vec::new(), EdgeEditOperators::uniform());
