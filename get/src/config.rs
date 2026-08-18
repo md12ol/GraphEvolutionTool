@@ -26,7 +26,7 @@ use crate::genomes::EdgeEditOperationWeights;
 /// `to_toml`/`to_toml_table` — since only the Python front end ever builds a
 /// config in memory and needs to render it out again; the TOML front end
 /// reads a file and stops.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
     /// Which evolution strategy to run, and its strategy-specific settings.
     pub evolution: EvolutionConfig,
@@ -57,7 +57,7 @@ pub struct Config {
 }
 
 /// Evolution strategy and its strategy-specific settings.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvolutionConfig {
     Generational {
@@ -72,14 +72,14 @@ pub enum EvolutionConfig {
 }
 
 /// Parent-selection strategy. Maps onto [`crate::evolver::common::Selection`].
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionConfig {
     Tournament { tournament_size: usize },
 }
 
 /// Genome representation and the dimensions used to build random individuals.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GenomeConfig {
     EdgeEdit {
@@ -100,7 +100,7 @@ pub enum GenomeConfig {
 /// the list in several places that gained nothing from knowing it. Only
 /// `py_config`'s mirror re-lists them now, and the round-trip tests fail to
 /// compile if it falls behind.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SdaGenomeConfig {
     pub num_states: usize,
@@ -134,7 +134,7 @@ pub struct SdaGenomeConfig {
 /// The three epidemic objectives read the same simulation differently (spec
 /// §5.2), so they share one parameter block rather than triplicating it — see
 /// [`SirParams`]. `epi_prof_match` is the only one that adds anything.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FitnessConfig {
     /// Total ever-infected. Maximized.
@@ -191,7 +191,7 @@ impl FitnessConfig {
 ///
 /// **No seed appears here.** One master seed is supplied to the Python `run`
 /// call and everything derives from it (spec §7).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct SirParams {
     /// Per-edge transmission probability per timestep.
     pub infection_rate: f64,
