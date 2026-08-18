@@ -823,8 +823,7 @@ mod tests {
     fn a_set_base_graph_is_what_the_edge_edit_population_expresses_against() {
         let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
         let seeded = vec![(0, 1, 2), (3, 4, 1)];
-        evolver
-            .set_base_graph(8, seeded.clone())
+        Python::attach(|py| evolver.set_base_graph(py, 8, seeded.clone()))
             .expect("a graph matching the config is accepted");
 
         let (context, _) = edge_edit_start(
@@ -847,8 +846,7 @@ mod tests {
     fn a_base_graph_whose_node_count_disagrees_with_the_config_is_rejected() {
         let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
 
-        let err = evolver
-            .set_base_graph(9, vec![(0, 1, 1)])
+        let err = Python::attach(|py| evolver.set_base_graph(py, 9, vec![(0, 1, 1)]))
             .expect_err("9 nodes against a network_size of 8 must be rejected");
 
         let message = err.to_string();
@@ -866,8 +864,7 @@ mod tests {
         let mut evolver =
             evolver_with_genome_and_cap("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n", 1);
 
-        let err = evolver
-            .set_base_graph(8, vec![(0, 1, 1), (2, 3, 3)])
+        let err = Python::attach(|py| evolver.set_base_graph(py, 8, vec![(0, 1, 1), (2, 3, 3)]))
             .expect_err("multiplicity 3 against a cap of 1 must be rejected");
 
         let message = err.to_string();
@@ -894,8 +891,7 @@ mod tests {
         // dropped by `Graph::set_edge` without a word.
         let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
 
-        let err = evolver
-            .set_base_graph(8, vec![(0, 1, 1), (2, 9, 1)])
+        let err = Python::attach(|py| evolver.set_base_graph(py, 8, vec![(0, 1, 1), (2, 9, 1)]))
             .expect_err("node 9 in an 8-node network must be rejected");
 
         let message = err.to_string();
@@ -918,8 +914,7 @@ mod tests {
         // vertex. Reported rather than absorbed.
         let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
 
-        let err = evolver
-            .set_base_graph(8, vec![(0, 1, 1), (3, 3, 1)])
+        let err = Python::attach(|py| evolver.set_base_graph(py, 8, vec![(0, 1, 1), (3, 3, 1)]))
             .expect_err("a self-loop must be rejected");
 
         let message = err.to_string();
@@ -942,8 +937,7 @@ mod tests {
         let mut evolver =
             evolver_with_genome("[genome]\ntype = \"sda\"\nnum_states = 5\nmax_resp_len = 3\n");
 
-        let err = evolver
-            .set_base_graph(8, vec![(0, 1, 1)])
+        let err = Python::attach(|py| evolver.set_base_graph(py, 8, vec![(0, 1, 1)]))
             .expect_err("an SDA run has no base graph to seed");
 
         let message = err.to_string();

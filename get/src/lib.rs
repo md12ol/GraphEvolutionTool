@@ -21,13 +21,44 @@ use crate::config::{Config, ConfigError, FitnessConfig, GenomeConfig};
 use crate::evolver::GenerationStats;
 use crate::fitness::{Direction, PyFitness};
 use crate::graph::Graph;
+use crate::graph_io::{LoadWarning, SourcedEdge, canonicalize};
 use crate::py_config::{
     PyConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig, PyOperationWeights,
     PySelectionConfig, PySirParams, config_error_to_py,
 };
 use crate::py_result::{PyGenerationStats, PyRunResult};
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyUserWarning, PyValueError};
 use pyo3::prelude::*;
+use std::ffi::CString;
+
+/// Raise every warning a load produced through Python's `warnings` machinery.
+///
+/// `source` names what produced them — a file path, or `base graph` for a
+/// setter call — since a folder of reference graphs can warn about several files
+/// in one call and the user needs to know which.
+///
+/// Warnings go here rather than to stdout so a caller can silence, capture or
+/// promote them to errors with `warnings.simplefilter`, which is where a Python
+/// user already looks. `stacklevel` is 2, so the message points at the line that
+/// called the setter rather than at this function.
+fn emit_load_warnings(py: Python<'_>, source: &str, warnings: &[LoadWarning]) -> PyResult<()> {
+    let category = py.get_type::<PyUserWarning>();
+
+    for warning in warnings {
+        let text = format!("{source}: {warning}");
+        // Python's C API takes a NUL-terminated string, and text we formatted
+        // ourselves cannot contain an interior NUL — but the conversion is
+        // fallible, and dropping a warning silently is the failure this whole
+        // path exists to avoid, so it is reported rather than skipped.
+        let message = CString::new(text).map_err(|_| {
+            PyValueError::new_err("a load warning could not be converted for Python")
+        })?;
+
+        PyErr::warn(py, &category, &message, 2)?;
+    }
+
+    Ok(())
+}
 
 /// Python-facing entry point to the graph-evolution engine.
 ///
@@ -268,8 +299,19 @@ impl GraphEvolver {
     /// graph built under a wider cap would be narrowed silently, evolving
     /// against a different graph from the one passed in. Nothing downstream
     /// reads a warning, so all three raise.
+    ///
+    /// # Warnings
+    ///
+    /// A pair given more than once raises a `UserWarning` and the **last**
+    /// occurrence wins. Comparison is canonical — `(2, 5)` and `(5, 2)` are the
+    /// same undirected edge — so writing one both ways round is a repeat, not
+    /// two edges. This is a warning rather than an error because the list still
+    /// describes a graph and the caller may well have meant to overwrite; what
+    /// it must not do is happen in silence, which is what applying the list in
+    /// order used to do.
     fn set_base_graph(
         &mut self,
+        py: Python<'_>,
         num_nodes: usize,
         edges: Vec<(usize, usize, u32)>,
     ) -> PyResult<()> {
@@ -320,8 +362,25 @@ impl GraphEvolver {
             }
         }
 
+        // Collapse repeats before building. `Graph::set_edge` writes each edge
+        // in turn, so a list holding a pair twice silently kept whichever came
+        // last — a real disagreement in the caller's data, reported by nothing.
+        let mut sourced = Vec::with_capacity(edges.len());
+        for &(u, v, multiplicity) in &edges {
+            sourced.push(SourcedEdge {
+                u,
+                v,
+                weight: multiplicity,
+                // No file behind these, so no line to point at.
+                line: None,
+            });
+        }
+
+        let (deduplicated, warnings) = canonicalize(&sourced, 0);
+        emit_load_warnings(py, "base graph", &warnings)?;
+
         let mut graph = Graph::new(self.config.network_size, self.config.max_edge_multiplicity);
-        graph.set_edges(&edges);
+        graph.set_edges(&deduplicated);
         self.base_graph = Some(graph);
         Ok(())
     }
@@ -668,6 +727,15 @@ mod tests {
         }
     }
 
+    /// `evolver_with`, with a wider edge cap so a test can tell two
+    /// multiplicities apart. The cap is set after parsing rather than in the
+    /// document because every other test wants the simple-graph default.
+    fn evolver_with_cap(fitness_block: &str, max_edge_multiplicity: u32) -> GraphEvolver {
+        let mut evolver = evolver_with(fitness_block);
+        evolver.config.max_edge_multiplicity = max_edge_multiplicity;
+        evolver
+    }
+
     const PYTHON_FITNESS: &str = "[fitness]\ntype = \"python\"\n";
     const SIR_FITNESS: &str =
         "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.05\nnum_epidemics = 30\n";
@@ -679,6 +747,86 @@ mod tests {
             None,
         )
         .expect("the lambda compiles")
+    }
+
+    /// Run `body` with Python's warnings collected, and hand back their text.
+    ///
+    /// `catch_warnings(record=True)` is entered and exited by hand because the
+    /// call under test is Rust, not Python, so it cannot sit inside a `with`
+    /// block. `simplefilter("always")` defeats the once-per-location de-duping
+    /// that would otherwise hide a warning a previous test already raised.
+    fn warnings_from(py: Python<'_>, body: impl FnOnce()) -> Vec<String> {
+        let scope = pyo3::types::PyDict::new(py);
+
+        py.run(
+            c"import warnings\n\
+              recorder = warnings.catch_warnings(record=True)\n\
+              caught = recorder.__enter__()\n\
+              warnings.simplefilter('always')",
+            None,
+            Some(&scope),
+        )
+        .expect("the recorder starts");
+
+        body();
+
+        py.run(
+            c"recorder.__exit__(None, None, None)\n\
+              messages = [str(entry.message) for entry in caught]",
+            None,
+            Some(&scope),
+        )
+        .expect("the recorder stops");
+
+        scope
+            .get_item("messages")
+            .expect("reading the collected messages")
+            .expect("the recorder left messages behind")
+            .extract()
+            .expect("they are strings")
+    }
+
+    #[test]
+    fn a_repeated_base_graph_edge_warns_and_the_last_one_wins() {
+        // The bug this covers: the edge list used to be applied in order, so a
+        // pair given twice kept whichever came last with nothing said about it.
+        Python::attach(|py| {
+            let mut evolver = evolver_with_cap(PYTHON_FITNESS, 3);
+
+            let messages = warnings_from(py, || {
+                evolver
+                    .set_base_graph(py, 8, vec![(2, 5, 1), (0, 1, 2), (5, 2, 3)])
+                    .expect("a valid base graph");
+            });
+
+            assert!(
+                messages
+                    .iter()
+                    .any(|message| message.contains("appears more than once")),
+                "{messages:?}"
+            );
+
+            let graph = evolver.base_graph.expect("the graph was stored");
+            // Canonical comparison: (5, 2) is the same edge as (2, 5), so the
+            // later weight replaces the earlier one rather than adding a second.
+            assert_eq!(graph.weight(2, 5), 3);
+            assert_eq!(graph.get_edge_list().len(), 2);
+        });
+    }
+
+    #[test]
+    fn a_base_graph_with_no_repeats_says_nothing() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with_cap(PYTHON_FITNESS, 3);
+
+            let messages = warnings_from(py, || {
+                evolver
+                    .set_base_graph(py, 8, vec![(0, 1, 1), (2, 3, 2)])
+                    .expect("a valid base graph");
+            });
+
+            assert!(messages.is_empty(), "{messages:?}");
+        });
     }
 
     #[test]
