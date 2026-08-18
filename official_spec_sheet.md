@@ -584,9 +584,13 @@ Two obligations follow, and the first is the one that has already been violated 
   feature, so an ordinary `cargo build`, `cargo test` and the wheel job all skip it — which is how
   it silently went stale while the Python path was changed around it. A route is not supported if
   the build that proves it works is one nobody runs.
-- **Source-only is not second-class.** Route 4 carries the same compatibility promise as the other
-  three: a config file that route 1 or 2 accepts is a config file `get-run` accepts, because both
-  converge on the same parser and the same `dispatch` match before anything is constructed.
+- **Source-only is not second-class.** Route 4 carries the same *configuration* compatibility as the
+  other three: a config file that route 1 or 2 accepts is a config file `get-run` accepts, because
+  all of them converge on the same parser and the same `dispatch` match before anything is
+  constructed. **The binary's own surface is not covered by that promise** — argument order, the
+  names of the three files it writes, and that it writes them into the working directory may all
+  change. The promise is scoped this way because the parser is the only thing the four routes
+  actually share; a route-4 user pins a commit of the source, which is the point of the route.
 
 **Route 4 needs its own construction path, because it cannot reuse route 3's.** `mod dispatch` is
 private, so an external crate can turn neither a TOML nor anything else into a run — route 4 is
