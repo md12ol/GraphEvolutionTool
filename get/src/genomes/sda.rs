@@ -7,22 +7,23 @@ use crate::graph::Graph;
 /// characters that get folded into a graph's adjacency triangle.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SdaGenome {
-    pub init_char: u8,
+    init_char: u8,
     /// `[state][char] -> next state`
-    pub transitions: Vec<Vec<u16>>,
+    transitions: Vec<Vec<u16>>,
     /// `[state][char] -> chars appended to the output buffer`
-    pub responses: Vec<Vec<Vec<u8>>>,
+    responses: Vec<Vec<Vec<u8>>>,
     /// Maximum length of a freshly generated response, used by
-    /// [`SdaGenome::randomize`] and [`Genome::mutate`] when a response is
-    /// regenerated. Unlike `num_states`/`num_chars`, this isn't observable
-    /// from the current data, so it has to be stored rather than derived.
-    pub max_resp_len: usize,
+    /// [`SdaGenome::random_with_edge_multiplicity_cap`] and [`Genome::mutate`]
+    /// when a response is generated. Unlike `num_states`/`num_chars`, this
+    /// isn't observable from the current data, so it has to be stored rather
+    /// than derived.
+    max_resp_len: usize,
 }
 
 /// Largest alphabet size representable by [`SdaGenome`]'s `u8`-valued responses.
-pub const MAX_NUM_CHARS: usize = u8::MAX as usize + 1;
+const MAX_NUM_CHARS: usize = u8::MAX as usize + 1;
 /// Largest state count representable by [`SdaGenome`]'s `u16`-valued transitions.
-pub const MAX_NUM_STATES: usize = u16::MAX as usize + 1;
+const MAX_NUM_STATES: usize = u16::MAX as usize + 1;
 /// Default for [`SdaContext::init_char_mutation_rate`]: the chance per
 /// [`Genome::mutate`] call of mutating the initial character instead of a
 /// transition or response. The value a run uses is configurable; this is what
@@ -68,7 +69,8 @@ impl SdaGenome {
     /// context it is expressed against — which `express` panics on.
     ///
     /// Returns an error if the dimensions are zero or too large to fit the
-    /// genome's storage types (see [`MAX_NUM_STATES`], [`MAX_NUM_CHARS`]).
+    /// genome's storage types (`num_states` up to 65536, `num_chars` up to
+    /// 256).
     pub fn random_with_edge_multiplicity_cap<R: Rng + ?Sized>(
         num_states: usize,
         edge_multiplicity_cap: u32,
@@ -109,6 +111,12 @@ impl SdaGenome {
             responses,
             max_resp_len,
         })
+    }
+
+    /// The alphabet size implied by the current transition table's row width.
+    /// 0 if there are no states yet (`transitions` is empty).
+    fn num_chars(&self) -> usize {
+        self.transitions.first().map_or(0, |row| row.len())
     }
 
     /// Run the automaton from `init_state`, producing exactly `output_len`
@@ -165,13 +173,12 @@ impl Genome for SdaGenome {
     /// transition/response row) disagrees with `context.max_edge_multiplicity`
     /// plus one — the derived-alphabet invariant of §3.2. A genome built
     /// through [`SdaGenome::random_with_edge_multiplicity_cap`] against this
-    /// same cap always satisfies it; one built by hand (`SdaGenome::random`,
-    /// the Rust-library route) is not checked until expressed, so a mismatch
-    /// there would otherwise silently bias the expressed graph toward the cap
-    /// (alphabet too large) or leave the upper edge weights unreachable
-    /// (alphabet too small).
+    /// same cap always satisfies it; one assembled field-by-field in-module is
+    /// not checked until expressed, so a mismatch there would otherwise
+    /// silently bias the expressed graph toward the cap (alphabet too large)
+    /// or leave the upper edge weights unreachable (alphabet too small).
     fn express(&self, context: &Self::Context) -> Graph {
-        let num_chars = self.transitions.first().map_or(0, |row| row.len());
+        let num_chars = self.num_chars();
         let expected_num_chars = context.max_edge_multiplicity as usize + 1;
         assert_eq!(
             num_chars, expected_num_chars,
@@ -201,26 +208,25 @@ impl Genome for SdaGenome {
     }
 
     /// Two-point crossover over states: draw two distinct cut points in
-    /// `0..=states` and swap the half-open interior segment `[start, end)`
-    /// between the parents, leaving states outside that window untouched on
-    /// both sides. Swapping state 0 also swaps `init_char`, since together
-    /// they determine the automaton's first transition.
+    /// `0..=shared_length` and swap the half-open interior segment
+    /// `[start, end)` between the parents, leaving states outside that window
+    /// untouched on both sides. Swapping state 0 also swaps `init_char`,
+    /// since together they determine the automaton's first transition.
+    ///
+    /// Crosses even when only one state is shared, where the single possible
+    /// pair of cut points forces the segment to state 0 alone. That is still
+    /// worth doing here because `init_char` moves with it, so two automata
+    /// genuinely exchange their starting behaviour.
+    /// `EdgeEditGenome::crossover` declines at the same length, its genes
+    /// having no equivalent passenger to carry.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) {
         // States past the shorter automaton's length have no counterpart to swap.
-        let states = self.transitions.len().min(other.transitions.len());
-        if states == 0 {
+        let shared_length = self.transitions.len().min(other.transitions.len());
+        if shared_length == 0 {
             return;
         }
 
-        // Rejection sampling for two distinct cut points. `loop` is itself an
-        // expression here — `break`'s argument becomes the value of (start, end).
-        let (start, end) = loop {
-            let a = rng.random_range(0..=states);
-            let b = rng.random_range(0..=states);
-            if a != b {
-                break (a.min(b), a.max(b));
-            }
-        };
+        let (start, end) = super::two_distinct_cut_points(shared_length, rng);
 
         if start == 0 {
             std::mem::swap(&mut self.init_char, &mut other.init_char);
@@ -244,8 +250,7 @@ impl Genome for SdaGenome {
     /// before this change even at the default rates.
     fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R) {
         let num_states = self.transitions.len();
-        // map_or: 0 if there are no states yet (transitions is empty), else the row width
-        let num_chars = self.transitions.first().map_or(0, |row| row.len());
+        let num_chars = self.num_chars();
         if num_states == 0 || num_chars == 0 {
             return;
         }
@@ -262,9 +267,11 @@ impl Genome for SdaGenome {
             self.transitions[state][trans] = rng.random_range(0..num_states) as u16;
         } else {
             let resp_len = rng.random_range(1..=self.max_resp_len);
-            self.responses[state][trans] = (0..resp_len)
-                .map(|_| rng.random_range(0..num_chars) as u8)
-                .collect();
+            let mut response = Vec::with_capacity(resp_len);
+            for _ in 0..resp_len {
+                response.push(rng.random_range(0..num_chars) as u8);
+            }
+            self.responses[state][trans] = response;
         }
     }
 
