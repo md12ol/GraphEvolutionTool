@@ -127,23 +127,14 @@ impl PySirParams {
 #[pyclass(name = "OperationWeights")]
 #[derive(Debug, Clone)]
 pub struct PyOperationWeights {
-    #[pyo3(get, set)]
     pub toggle: f64,
-    #[pyo3(get, set)]
     pub hop: f64,
-    #[pyo3(get, set)]
     pub add: f64,
-    #[pyo3(get, set)]
     pub delete: f64,
-    #[pyo3(get, set)]
     pub swap: f64,
-    #[pyo3(get, set)]
     pub local_toggle: f64,
-    #[pyo3(get, set)]
     pub local_add: f64,
-    #[pyo3(get, set)]
     pub local_delete: f64,
-    #[pyo3(get, set)]
     pub null: f64,
 }
 
