@@ -5,7 +5,7 @@ use crate::graph::Graph;
 
 /// Self-driving-automaton genome: a finite-state machine whose run emits the
 /// characters that get folded into a graph's adjacency triangle.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SdaGenome {
     init_char: u8,
     /// `[state][char] -> next state`
@@ -494,8 +494,7 @@ mod tests {
         );
         // A cap of MAX_NUM_CHARS asks for MAX_NUM_CHARS + 1 characters. There
         // is no too-small case to check: the alphabet is `cap + 1`, so it can
-        // never come out at zero. `randomize` is the only route to that error,
-        // and has its own test.
+        // never come out at zero.
         assert_eq!(
             SdaGenome::random_with_edge_multiplicity_cap(10, MAX_NUM_CHARS as u32, 4, &mut rng)
                 .unwrap_err(),
