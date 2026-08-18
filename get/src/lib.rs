@@ -3,7 +3,10 @@
 // Denying it here rather than in CI means it fails on the machine that wrote it.
 #![deny(rustdoc::private_intra_doc_links, rustdoc::redundant_explicit_links)]
 
-pub mod config;
+// Crate-internal: nothing outside can use a parsed `Config`, because the only
+// thing that consumes one is `dispatch`, which is private. A caller who wants
+// to run from a TOML file goes through `GraphEvolver` or `run_from_toml`.
+mod config;
 // Crate-internal: the config → concrete-type layer `run` dispatches through.
 // Not `pub`, because it is machinery rather than API — the Rust route uses the
 // engine types directly (spec §5.3).
@@ -12,7 +15,9 @@ pub mod evolver;
 pub mod fitness;
 pub mod genomes;
 pub mod graph;
-pub mod py_config;
+// Crate-internal: the Python config builder. pyo3 needs these types nameable
+// from the crate root to register them, not publicly reachable from Rust.
+mod py_config;
 pub mod py_result;
 pub mod sir;
 
