@@ -655,6 +655,7 @@ mod tests {
             config: config_with(fitness_block),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: String::new(),
         }
     }
@@ -787,6 +788,7 @@ mod tests {
             config: config_with_genome_and_cap(genome_block, cap),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: String::new(),
         }
     }
@@ -1434,6 +1436,7 @@ mod tests {
                 config: runnable_with_fitness(GENERATIONAL, EDGE_EDIT, PYTHON_FITNESS),
                 fitness_function: None,
                 base_graph: None,
+                min_node_index: None,
                 config_toml: String::new(),
             };
             let callable = py
@@ -1681,6 +1684,7 @@ mod tests {
             config: Config::from_toml_str(&config_toml).expect("the fixture parses"),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: config_toml.clone(),
         };
 
@@ -1719,6 +1723,7 @@ mod tests {
             config: runnable(GENERATIONAL, EDGE_EDIT),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: String::new(),
         }
     }
@@ -1825,6 +1830,7 @@ mod tests {
             config: runnable(GENERATIONAL, EDGE_EDIT),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: String::new(),
         };
 
@@ -1862,6 +1868,7 @@ mod tests {
                 config: runnable(evolution, EDGE_EDIT),
                 fitness_function: None,
                 base_graph: None,
+                min_node_index: None,
                 config_toml: String::new(),
             };
             let [result] = <[_; 1]>::try_from(
@@ -1934,6 +1941,7 @@ mod tests {
             config: Config::from_toml_str(&config_toml).expect("the fixture parses"),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: config_toml.clone(),
         };
         let [result] = <[_; 1]>::try_from(

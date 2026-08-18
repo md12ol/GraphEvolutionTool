@@ -92,6 +92,15 @@ pub struct GraphEvolver {
     /// one — the setter rejects a call on an SDA-configured evolver instead of
     /// storing something nothing will read.
     base_graph: Option<Graph>,
+    /// The index the caller's own data starts at, set by whichever file loader
+    /// was called first and `None` until one is.
+    ///
+    /// One value per run, shared by every loader: node 4 means the same node
+    /// whichever file it was read from, and two files disagreeing about where
+    /// counting starts would silently mix two graphs. Everything is shifted to
+    /// 0 on the way in, so nothing inside the engine ever sees another
+    /// indexing; only the evolved graph `run` hands back is shifted here.
+    min_node_index: Option<i64>,
     /// The TOML document `config` was parsed from — the run's provenance
     /// record, written alongside its results.
     config_toml: String,
@@ -120,6 +129,7 @@ impl GraphEvolver {
             config,
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: text,
         })
     }
@@ -182,6 +192,7 @@ impl GraphEvolver {
             config: parsed,
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: text,
         })
     }
@@ -385,6 +396,78 @@ impl GraphEvolver {
         Ok(())
     }
 
+    /// Seed an edge-edit run from an edge-list file, rather than from a list
+    /// built in Python.
+    ///
+    /// One edge per line, `start,end,weight`, comma-delimited, any line ending.
+    /// `min_node_index` is where the caller's own node numbering starts — pass
+    /// `1` for 1-indexed data, which is the common case in graph files. Every
+    /// index is shifted to 0 here, and the evolved graph [`GraphEvolver::run`]
+    /// hands back is shifted the same distance the other way, so a caller reads
+    /// their results in the numbering they wrote.
+    ///
+    /// ```python
+    /// evolver.set_base_graph_from_file("network.csv", min_node_index=1)
+    /// best = evolver.run(seed=1)[0].best_edges   # also 1-indexed
+    /// ```
+    ///
+    /// **There is no node-count argument, unlike
+    /// [`set_base_graph`](GraphEvolver::set_base_graph)** — the file is checked
+    /// against `network_size` directly, so the mistake that check existed to
+    /// catch (a caller deriving the count from their config rather than their
+    /// data) cannot be made here.
+    ///
+    /// # Errors
+    ///
+    /// `ValueError` if the config selected the SDA genome, if the file cannot be
+    /// read, or if any row fails validation — a self-loop, a malformed or
+    /// non-numeric row, a negative weight, a node outside
+    /// `min_node_index ..= min_node_index + network_size - 1`, or a multiplicity
+    /// above `max_edge_multiplicity`. Every message names the line it came from,
+    /// and nothing is stored unless the whole file survives.
+    ///
+    /// Also `ValueError` if a previous loader on this evolver was given a
+    /// different `min_node_index`. One run has one numbering: two files
+    /// disagreeing about where counting starts would mix two graphs together
+    /// with nothing to show for it.
+    ///
+    /// # Warnings
+    ///
+    /// A `UserWarning` for each repeated edge (canonical, so `2,5` and `5,2` are
+    /// one edge, and the last occurrence wins), each zero-weight edge (kept as
+    /// given, which is no edge at all), and for a file holding no edges.
+    #[pyo3(signature = (path, min_node_index = 0))]
+    fn set_base_graph_from_file(
+        &mut self,
+        py: Python<'_>,
+        path: String,
+        min_node_index: i64,
+    ) -> PyResult<()> {
+        if !matches!(self.config.genome, GenomeConfig::EdgeEdit { .. }) {
+            return Err(PyValueError::new_err(
+                "[genome] type is \"sda\", which generates its graph rather than editing one, \
+                 so a base graph would never be read; set type = \"edge_edit\" to seed a run",
+            ));
+        }
+
+        self.adopt_min_node_index(min_node_index)?;
+
+        let loaded = graph_io::load_edge_file(
+            std::path::Path::new(&path),
+            self.config.network_size,
+            self.config.max_edge_multiplicity,
+            min_node_index,
+        )
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+
+        emit_load_warnings(py, &loaded.source, &loaded.warnings)?;
+
+        let mut graph = Graph::new(self.config.network_size, self.config.max_edge_multiplicity);
+        graph.set_edges(&loaded.edges);
+        self.base_graph = Some(graph);
+        Ok(())
+    }
+
     /// Evolve a population `n_runs` times and return what every run produced.
     ///
     /// **Always a list, one [`PyRunResult`] per replicate, in run order** — even
@@ -532,7 +615,13 @@ impl GraphEvolver {
         // producing a different run, so recording it would look like provenance
         // while being unusable as provenance.
         let mut results = Vec::with_capacity(outcomes.len());
-        for (run_index, outcome) in outcomes.into_iter().enumerate() {
+        for (run_index, mut outcome) in outcomes.into_iter().enumerate() {
+            // The one place a node index goes back to the caller's numbering.
+            // Only the evolved graph is shifted: everything else a loader read
+            // is input, and shifting a reference graph nobody hands back would
+            // be a second conversion with no reader.
+            shift_out(&mut outcome.best_edges, self.min_node_index);
+
             results.push(PyRunResult::from_erased(
                 outcome,
                 seed,
@@ -541,6 +630,45 @@ impl GraphEvolver {
             ));
         }
         Ok(results)
+    }
+}
+
+impl GraphEvolver {
+    /// Record the numbering a loader was given, or reject one that disagrees
+    /// with a numbering already in force.
+    ///
+    /// Not a `#[pymethods]` function: it is internal bookkeeping, and everything
+    /// in that block is exposed to Python.
+    fn adopt_min_node_index(&mut self, min_node_index: i64) -> PyResult<()> {
+        match self.min_node_index {
+            Some(existing) if existing != min_node_index => Err(PyValueError::new_err(format!(
+                "this evolver already reads node indices as starting at {existing}, and this \
+                 call says {min_node_index}; one run has one numbering, so two files that \
+                 disagree about where counting starts would be mixed together silently"
+            ))),
+            _ => {
+                self.min_node_index = Some(min_node_index);
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Put an evolved edge list back into the caller's own numbering.
+///
+/// A no-op when no loader set one, which is every run whose data arrived
+/// 0-indexed through a setter.
+fn shift_out(edges: &mut [(usize, usize, u32)], min_node_index: Option<i64>) {
+    let shift = match min_node_index {
+        Some(0) | None => return,
+        Some(shift) => shift,
+    };
+
+    for edge in edges.iter_mut() {
+        // Every index here was produced by the engine, so it is within
+        // `0..network_size` and shifting it back lands where it came from.
+        edge.0 = (edge.0 as i64 + shift) as usize;
+        edge.1 = (edge.1 as i64 + shift) as usize;
     }
 }
 
@@ -641,6 +769,7 @@ pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String>
         config,
         fitness_function: None,
         base_graph: None,
+        min_node_index: None,
         config_toml: text.clone(),
     };
 
@@ -723,6 +852,7 @@ mod tests {
             config: config_with(fitness_block),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: String::new(),
         }
     }
@@ -827,6 +957,151 @@ mod tests {
 
             assert!(messages.is_empty(), "{messages:?}");
         });
+    }
+
+    /// An SDA genome block, parsed rather than built, so its defaulted fields
+    /// come from the same place a user's config would get them.
+    fn sda_genome() -> GenomeConfig {
+        let text = "[genome]\ntype = \"sda\"\nnum_states = 5\nmax_resp_len = 3\n";
+        let parsed: toml::Value = toml::from_str(text).expect("the genome block parses");
+        parsed["genome"]
+            .clone()
+            .try_into()
+            .expect("it is a genome config")
+    }
+
+    /// Write `text` to a uniquely named file under the temp directory.
+    fn file_holding(name: &str, text: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("get_lib_{name}.csv"));
+        std::fs::write(&path, text).expect("the fixture is written");
+        path
+    }
+
+    #[test]
+    fn a_base_graph_file_is_shifted_to_zero_on_the_way_in() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            let path = file_holding("shift_in", "1,2,1\n2,3,1\n");
+
+            evolver
+                .set_base_graph_from_file(py, path.display().to_string(), 1)
+                .expect("a 1-indexed file the config's size accepts");
+
+            // The engine only ever sees 0-based indices, whatever the file said.
+            let graph = evolver.base_graph.expect("the graph was stored");
+            assert_eq!(graph.get_edge_list(), vec![(0, 1, 1), (1, 2, 1)]);
+
+            std::fs::remove_file(&path).expect("cleanup");
+        });
+    }
+
+    #[test]
+    fn a_run_hands_results_back_in_the_callers_numbering() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            let path = file_holding("round_trip", "1,2,1\n2,3,1\n");
+
+            evolver
+                .set_base_graph_from_file(py, path.display().to_string(), 1)
+                .expect("a 1-indexed file");
+
+            // Maximizing edge count, so the best individual has edges to look at.
+            let objective = py
+                .eval(
+                    c"lambda batch: [float(len(edges)) for (n, edges) in batch]",
+                    None,
+                    None,
+                )
+                .expect("the lambda compiles");
+            evolver
+                .set_fitness_function(&objective, "maximize")
+                .expect("registering a callable on a python config");
+
+            let results = evolver.run(1, 1, Some(1)).expect("the run completes");
+            let edges = &results[0].best_edges;
+
+            assert!(!edges.is_empty(), "an edge-maximizing run found no edges");
+            for &(u, v, _) in edges {
+                // 1-indexed in, 1-indexed out: node 0 does not exist for this
+                // caller, and node 8 — the top of an 8-node network — does.
+                assert!((1..=8).contains(&u) && (1..=8).contains(&v), "({u}, {v})");
+            }
+
+            std::fs::remove_file(&path).expect("cleanup");
+        });
+    }
+
+    #[test]
+    fn two_loaders_disagreeing_about_where_counting_starts_are_rejected() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            let path = file_holding("disagree", "1,2,1\n");
+
+            evolver
+                .set_base_graph_from_file(py, path.display().to_string(), 1)
+                .expect("the first load sets the numbering");
+
+            let err = evolver
+                .set_base_graph_from_file(py, path.display().to_string(), 0)
+                .expect_err("a second numbering must be rejected");
+
+            assert!(
+                err.to_string().contains("one run has one numbering"),
+                "{err}"
+            );
+
+            std::fs::remove_file(&path).expect("cleanup");
+        });
+    }
+
+    #[test]
+    fn a_rejected_row_names_its_file_and_line_through_the_setter() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            let path = file_holding("bad_row", "0,1,1\n3,3,1\n");
+
+            let err = evolver
+                .set_base_graph_from_file(py, path.display().to_string(), 0)
+                .expect_err("a self-loop must be rejected");
+
+            let message = err.to_string();
+            assert!(message.contains("line 2"), "{message}");
+            assert!(message.contains("self-loop"), "{message}");
+            // Nothing is stored when the file is rejected.
+            assert!(evolver.base_graph.is_none());
+
+            std::fs::remove_file(&path).expect("cleanup");
+        });
+    }
+
+    #[test]
+    fn an_sda_config_rejects_a_base_graph_file_as_it_does_a_base_graph() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            evolver.config.genome = sda_genome();
+
+            let err = evolver
+                .set_base_graph_from_file(py, "unread.csv".to_string(), 0)
+                .expect_err("an SDA run has no base graph to seed");
+
+            // Rejected before the file is opened: a missing file must not be
+            // what this reports, or the real problem is hidden.
+            assert!(err.to_string().contains("generates its graph"), "{err}");
+        });
+    }
+
+    #[test]
+    fn shift_out_is_a_no_op_without_a_loader() {
+        let mut edges = vec![(0, 1, 1), (2, 3, 2)];
+
+        shift_out(&mut edges, None);
+        assert_eq!(edges, vec![(0, 1, 1), (2, 3, 2)]);
+
+        shift_out(&mut edges, Some(0));
+        assert_eq!(edges, vec![(0, 1, 1), (2, 3, 2)]);
+
+        shift_out(&mut edges, Some(1));
+        assert_eq!(edges, vec![(1, 2, 1), (3, 4, 2)]);
     }
 
     #[test]
