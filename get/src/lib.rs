@@ -31,6 +31,10 @@ use pyo3::exceptions::{PyUserWarning, PyValueError};
 use pyo3::prelude::*;
 use std::ffi::CString;
 
+/// One graph as a folder load hands it back: the file it was read from, and its
+/// edges as `(u, v, multiplicity)`.
+type NamedGraph = (String, Vec<(usize, usize, u32)>);
+
 /// Raise every warning a load produced through Python's `warnings` machinery.
 ///
 /// `source` names what produced them — a file path, or `base graph` for a
@@ -466,6 +470,73 @@ impl GraphEvolver {
         graph.set_edges(&loaded.edges);
         self.base_graph = Some(graph);
         Ok(())
+    }
+
+    /// Read a folder of graphs, one file per graph, and hand them back.
+    ///
+    /// The bulk counterpart to
+    /// [`set_base_graph_from_file`](GraphEvolver::set_base_graph_from_file), for
+    /// reference data an objective matches against. Each file is one edge per
+    /// line, `start,end,weight`, and every file in the folder shares this run's
+    /// node numbering — `min_node_index` here means what it means there.
+    ///
+    /// **It returns the graphs rather than storing them**, and that is the whole
+    /// point of the shape: nothing in the engine reads a reference set yet, and
+    /// a setter that stored one would be keeping data no objective would ever
+    /// look at. The reader is the caller until an objective needs one.
+    ///
+    /// ```python
+    /// graphs = evolver.load_reference_graphs("references/", min_node_index=1)
+    /// name, edges = graphs[0]
+    /// ```
+    ///
+    /// **Each graph comes back paired with the file it was read from, in sorted
+    /// file-name order.** Directory order is not reproducible across machines
+    /// and a reference set is consumed positionally, so leaving the order to the
+    /// filesystem would let a run's numbers depend on how its data happened to
+    /// be written to disk. Sub-directories are skipped; every other file is
+    /// read, since an extension convention would silently drop data the caller
+    /// meant to include.
+    ///
+    /// **Reference graphs are input-only and are never shifted back.** Unlike
+    /// the evolved graph, nothing hands one to the caller in their own
+    /// numbering, because these are the numbers they supplied in the first
+    /// place.
+    ///
+    /// # Errors
+    ///
+    /// `ValueError` if the folder cannot be read, if any file in it fails
+    /// validation — the message names the file and the line — or if a previous
+    /// loader on this evolver was given a different `min_node_index`.
+    ///
+    /// # Warnings
+    ///
+    /// The same `UserWarning`s as the base-graph loader, each naming the file it
+    /// came from: a repeated edge, a zero-weight edge, and a file with no edges.
+    #[pyo3(signature = (folder, min_node_index = 0))]
+    fn load_reference_graphs(
+        &mut self,
+        py: Python<'_>,
+        folder: String,
+        min_node_index: i64,
+    ) -> PyResult<Vec<NamedGraph>> {
+        self.adopt_min_node_index(min_node_index)?;
+
+        let loaded = graph_io::load_edge_folder(
+            std::path::Path::new(&folder),
+            self.config.network_size,
+            self.config.max_edge_multiplicity,
+            min_node_index,
+        )
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+
+        let mut graphs = Vec::with_capacity(loaded.len());
+        for file in loaded {
+            emit_load_warnings(py, &file.source, &file.warnings)?;
+            graphs.push((file.source, file.edges));
+        }
+
+        Ok(graphs)
     }
 
     /// Evolve a population `n_runs` times and return what every run produced.
@@ -1087,6 +1158,62 @@ mod tests {
             // Rejected before the file is opened: a missing file must not be
             // what this reports, or the real problem is hidden.
             assert!(err.to_string().contains("generates its graph"), "{err}");
+        });
+    }
+
+    #[test]
+    fn reference_graphs_come_back_named_and_in_sorted_order() {
+        Python::attach(|py| {
+            let folder = std::env::temp_dir().join("get_lib_references");
+            let _ = std::fs::remove_dir_all(&folder);
+            std::fs::create_dir_all(&folder).expect("temp folder");
+            for (name, text) in [("b.csv", "2,3,1\n"), ("a.csv", "1,2,1\n")] {
+                std::fs::write(folder.join(name), text).expect("the fixture is written");
+            }
+
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            let graphs = evolver
+                .load_reference_graphs(py, folder.display().to_string(), 1)
+                .expect("a folder of 1-indexed files");
+
+            assert!(graphs[0].0.ends_with("a.csv"), "{}", graphs[0].0);
+            assert!(graphs[1].0.ends_with("b.csv"), "{}", graphs[1].0);
+            // Shifted on the way in like any other loaded graph, and nothing
+            // shifts them back — a reference set is input only.
+            assert_eq!(graphs[0].1, vec![(0, 1, 1)]);
+            assert_eq!(graphs[1].1, vec![(1, 2, 1)]);
+            // Nothing is stored: the caller is the reader until an objective is.
+            assert!(evolver.base_graph.is_none());
+
+            std::fs::remove_dir_all(&folder).expect("cleanup");
+        });
+    }
+
+    #[test]
+    fn a_reference_folder_shares_the_base_graphs_numbering() {
+        Python::attach(|py| {
+            let folder = std::env::temp_dir().join("get_lib_ref_disagree");
+            let _ = std::fs::remove_dir_all(&folder);
+            std::fs::create_dir_all(&folder).expect("temp folder");
+            std::fs::write(folder.join("a.csv"), "1,2,1\n").expect("the fixture is written");
+
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            let path = file_holding("ref_base", "1,2,1\n");
+            evolver
+                .set_base_graph_from_file(py, path.display().to_string(), 1)
+                .expect("the base graph sets the numbering");
+
+            let err = evolver
+                .load_reference_graphs(py, folder.display().to_string(), 0)
+                .expect_err("a second numbering must be rejected");
+
+            assert!(
+                err.to_string().contains("one run has one numbering"),
+                "{err}"
+            );
+
+            std::fs::remove_file(&path).expect("cleanup");
+            std::fs::remove_dir_all(&folder).expect("cleanup");
         });
     }
 
