@@ -33,15 +33,30 @@ pub const DEFAULT_INIT_CHAR_MUTATION_RATE: f64 = 0.04;
 /// redrawing a transition's target state and redrawing its response.
 pub const DEFAULT_TRANSITION_VS_RESPONSE_RATE: f64 = 0.5;
 
-impl SdaGenome {
+/// Genome dimensions that have already been checked, so a caller building a
+/// whole population validates once rather than once per individual.
+///
+/// The only way to obtain one is [`SdaDimensions::new`], which is where the
+/// checks live — so holding a value of this type *is* the proof that the three
+/// numbers are usable, and [`SdaGenome::random_with_dimensions`] can be
+/// infallible rather than returning a `Result` no caller past the first
+/// iteration can ever see fail.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SdaDimensions {
+    num_states: usize,
+    num_chars: usize,
+    max_resp_len: usize,
+}
+
+impl SdaDimensions {
     /// Check that `num_states`, `num_chars`, and `max_resp_len` are usable
     /// dimensions for a genome: nonzero, and small enough to fit the storage
     /// types backing `transitions`/`responses`.
-    fn validate_dimensions(
+    pub fn new(
         num_states: usize,
         num_chars: usize,
         max_resp_len: usize,
-    ) -> Result<(), &'static str> {
+    ) -> Result<Self, &'static str> {
         if num_states == 0 || num_states > MAX_NUM_STATES {
             return Err("num_states must be between 1 and 65536");
         }
@@ -51,9 +66,34 @@ impl SdaGenome {
         if max_resp_len == 0 {
             return Err("max_resp_len must be at least 1");
         }
-        Ok(())
+        Ok(Self {
+            num_states,
+            num_chars,
+            max_resp_len,
+        })
     }
 
+    /// Dimensions for graphs expressed under `edge_multiplicity_cap`: the
+    /// alphabet is fixed at `edge_multiplicity_cap + 1` characters (`0..=cap`),
+    /// so every character value doubles as a legal edge weight and nothing is
+    /// clamped by [`Graph::set_edge`] when the same cap builds the
+    /// [`SdaContext`] the genome is expressed against.
+    ///
+    /// **`num_chars` is derived, never chosen.** A caller picking its own value
+    /// builds a genome that disagrees with its context, which `express` panics
+    /// on — so this is the constructor a run uses, and the direct
+    /// [`SdaDimensions::new`] exists for the checks themselves.
+    pub fn from_edge_multiplicity_cap(
+        num_states: usize,
+        edge_multiplicity_cap: u32,
+        max_resp_len: usize,
+    ) -> Result<Self, &'static str> {
+        let num_chars = edge_multiplicity_cap as usize + 1;
+        Self::new(num_states, num_chars, max_resp_len)
+    }
+}
+
+impl SdaGenome {
     /// Build a genome sized for graphs expressed under `edge_multiplicity_cap`:
     /// the alphabet is fixed at `edge_multiplicity_cap + 1` characters
     /// (`0..=cap`), so every character value doubles as a legal edge weight and
@@ -63,10 +103,13 @@ impl SdaGenome {
     /// Each transition's response is a random length between 1 and
     /// `max_resp_len` characters, inclusive.
     ///
-    /// **The only constructor, and the alphabet is why.** There is deliberately
-    /// no variant taking `num_chars` directly: it is never a free choice, and a
-    /// caller picking its own value builds a genome that disagrees with the
-    /// context it is expressed against — which `express` panics on.
+    /// **The constructor to reach for, and the alphabet is why.** The cap
+    /// decides `num_chars`, so it is never a free choice here: a caller picking
+    /// its own value builds a genome that disagrees with the context it is
+    /// expressed against, which `express` panics on. Building one individual at
+    /// a time, this is the route; for a whole population, validate once into an
+    /// [`SdaDimensions`] and loop through
+    /// [`SdaGenome::random_with_dimensions`] instead.
     ///
     /// Returns an error if the dimensions are zero or too large to fit the
     /// genome's storage types (`num_states` up to 65536, `num_chars` up to
@@ -77,8 +120,29 @@ impl SdaGenome {
         max_resp_len: usize,
         rng: &mut R,
     ) -> Result<Self, &'static str> {
-        let num_chars = edge_multiplicity_cap as usize + 1;
-        Self::validate_dimensions(num_states, num_chars, max_resp_len)?;
+        let dimensions = SdaDimensions::from_edge_multiplicity_cap(
+            num_states,
+            edge_multiplicity_cap,
+            max_resp_len,
+        )?;
+        Ok(Self::random_with_dimensions(&dimensions, rng))
+    }
+
+    /// Build a random genome to already-checked dimensions.
+    ///
+    /// Infallible by construction: every value that could be rejected was
+    /// rejected when the [`SdaDimensions`] was built, so a population loop
+    /// validates once at the top instead of re-checking three constants on
+    /// every individual.
+    pub fn random_with_dimensions<R: Rng + ?Sized>(
+        dimensions: &SdaDimensions,
+        rng: &mut R,
+    ) -> Self {
+        let SdaDimensions {
+            num_states,
+            num_chars,
+            max_resp_len,
+        } = *dimensions;
 
         let init_char = rng.random_range(0..num_chars) as u8;
 
@@ -105,12 +169,12 @@ impl SdaGenome {
             responses.push(state_responses);
         }
 
-        Ok(Self {
+        Self {
             init_char,
             transitions,
             responses,
             max_resp_len,
-        })
+        }
     }
 
     /// The alphabet size implied by the current transition table's row width.
@@ -492,10 +556,11 @@ mod tests {
                 .unwrap_err(),
             "num_states must be between 1 and 65536"
         );
-        // A cap of MAX_NUM_CHARS asks for MAX_NUM_CHARS + 1 characters. There
-        // is no too-small case to check: the alphabet is `cap + 1`, so it can
-        // never come out at zero. `randomize` is the only route to that error,
-        // and has its own test.
+        // A cap of MAX_NUM_CHARS asks for MAX_NUM_CHARS + 1 characters. The
+        // too-small case cannot arise on this route: the alphabet is `cap + 1`,
+        // so it never comes out at zero. `SdaDimensions::new` takes `num_chars`
+        // directly and is the only way to reach that error — see
+        // `dimensions_reject_an_empty_alphabet`.
         assert_eq!(
             SdaGenome::random_with_edge_multiplicity_cap(10, MAX_NUM_CHARS as u32, 4, &mut rng)
                 .unwrap_err(),
@@ -516,6 +581,62 @@ mod tests {
         let num_chars = cap as usize + 1;
         assert_eq!(genome.transitions[0].len(), num_chars);
         assert_eq!(genome.responses[0].len(), num_chars);
+    }
+
+    #[test]
+    fn dimensions_reject_an_empty_alphabet() {
+        // Unreachable through the cap constructor, where the alphabet is
+        // `cap + 1`, so this is the check that keeps the branch honest.
+        assert_eq!(
+            SdaDimensions::new(10, 0, 4).unwrap_err(),
+            "num_chars must be between 1 and 256"
+        );
+    }
+
+    #[test]
+    fn random_with_dimensions_builds_shapes_matching_the_token() {
+        let mut rng = StdRng::seed_from_u64(5);
+        let dimensions = SdaDimensions::new(7, 4, 3).unwrap();
+
+        let genome = SdaGenome::random_with_dimensions(&dimensions, &mut rng);
+
+        assert_eq!(genome.transitions.len(), 7);
+        assert_eq!(genome.responses.len(), 7);
+        assert_eq!(genome.max_resp_len, 3);
+        for state in 0..7 {
+            assert_eq!(genome.transitions[state].len(), 4);
+            assert_eq!(genome.responses[state].len(), 4);
+            for target in &genome.transitions[state] {
+                assert!((*target as usize) < 7, "transition target is a valid state");
+            }
+            for response in &genome.responses[state] {
+                assert!(
+                    !response.is_empty() && response.len() <= 3,
+                    "response length is between 1 and max_resp_len",
+                );
+                for character in response {
+                    assert!((*character as usize) < 4, "response stays in the alphabet");
+                }
+            }
+        }
+        assert!((genome.init_char as usize) < 4);
+    }
+
+    #[test]
+    fn the_cap_constructor_delegates_to_the_dimension_constructor() {
+        // The generation logic lives in exactly one place, so the same seed
+        // through either route has to produce the identical genome.
+        let cap = 3;
+        let dimensions = SdaDimensions::from_edge_multiplicity_cap(10, cap, 4).unwrap();
+
+        let mut wrapper_rng = StdRng::seed_from_u64(11);
+        let wrapped =
+            SdaGenome::random_with_edge_multiplicity_cap(10, cap, 4, &mut wrapper_rng).unwrap();
+
+        let mut direct_rng = StdRng::seed_from_u64(11);
+        let direct = SdaGenome::random_with_dimensions(&dimensions, &mut direct_rng);
+
+        assert_eq!(wrapped, direct);
     }
 
     /// How many init_chars, transition targets and response characters differ
@@ -723,6 +844,14 @@ mod tests {
             assert_eq!(left.init_char == 222, state_zero_swapped);
             assert_eq!(right.init_char == 111, state_zero_swapped);
         }
+    }
+
+    #[test]
+    fn the_genome_stays_shareable_across_evaluation_threads() {
+        // `Genome: Clone + Send + Sync` is what lets rayon score a population;
+        // nothing on this genome may quietly break it.
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<SdaGenome>();
     }
 
     #[test]
