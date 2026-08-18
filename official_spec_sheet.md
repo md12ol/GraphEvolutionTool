@@ -74,12 +74,21 @@ its own `max_edge_multiplicity`; `1` makes it a simple unweighted graph.
 |---|---|
 | `set_edge` **clamps** to the cap rather than rejecting | Feeding a cap-5 result into a cap-1 run silently collapses every weight to 1 (§8, base graph) |
 | Self-loops and out-of-range vertices are **silently ignored** by `set_edge` and `weight` | Genome expression relies on this: a decoded vertex pair is never validated before use |
-| `degree` counts **distinct neighbours**; `total_edge_multiplicity` counts **edge copies** | They differ on any multigraph, and the edit operations depend on which they use |
+| `degree` counts **distinct neighbours**, not edge copies | On a multigraph the two differ, and the edit operations pick neighbours rather than copies |
 | `get_neighbor_at_index` wraps modulo the degree | Lets an arbitrary 32-bit payload always name a real neighbour. `None` only for an isolated or invalid node |
 | `get_edge_list` returns each edge once, `u < v`, row-major | The same order SDA expression writes in, and the shape the Python `run` returns |
 
 `add_edge` adds one parallel edge, saturating at the cap, and reports whether the multiplicity
-actually changed. `remove_edge` removes one copy; `clear_edge` removes all.
+actually changed. `remove_edge` removes one copy.
+
+**Amended 2026-08-18 — Michael.** ~~`clear_edge` removes all.~~ ~~`total_edge_multiplicity`
+counts **edge copies** ... the edit operations depend on which they use.~~ Both methods were
+deleted, and this table's claim that the edit operations depended on the distinction was never
+true: the operations use `degree` only, and defined their own local edge-copy helper rather
+than calling the method. Neither had a production caller at any point in the repo's history —
+they were built as a complete accessor set on 2026-07-14, before any consumer existed, and this
+sheet transcribed them 17 days later. GitHub #115; raised as an FYI in `collab.md` because it
+amends the sheet outside a joint meeting.
 
 ---
 
