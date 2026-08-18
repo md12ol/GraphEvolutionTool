@@ -1,0 +1,88 @@
+# Builds and runs `get-run`, the config-driven Rust route (route 4).
+#
+# This job exists because nothing else builds this binary. It is gated behind
+# the `cli` feature, so `cargo build`, `cargo test` and the wheel job all skip
+# it — which is how it silently went stale while the Python path was changed
+# around it. A route is not supported if the build proving it works is one
+# nobody runs.
+#
+# It runs the shipped `config.example.toml` unmodified rather than a shrunk
+# copy: that verifies the example as well as the binary, and a full run costs
+# about four seconds in release.
+
+name: get-run
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-run:
+    name: build and run the config-driven route
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Cuts a cold ~90s dependency build to a few seconds on a cache hit.
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      # `cli` pulls in `pyo3/auto-initialize`, which embeds an interpreter, so
+      # the binary needs libpython at link and run time. A setup-python
+      # interpreter is not on the default loader path — derive LIBDIR rather
+      # than hardcoding a version, which is what breaks when the runner moves.
+      - name: Put libpython on the loader path
+        shell: bash
+        run: |
+          set -euo pipefail
+          libdir="$(python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
+          echo "LD_LIBRARY_PATH=${libdir}:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+          echo "libpython dir: ${libdir}"
+
+      - name: Build get-run
+        run: cargo build --release -p get --features cli --bin get-run
+
+      # The run writes its three output files into the current directory, so it
+      # runs in a scratch directory and is checked there in the same step —
+      # splitting the two would mean rediscovering where the files landed.
+      - name: Run the shipped example end to end, and check what it wrote
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          cp "$GITHUB_WORKSPACE/config.example.toml" .
+          # Fixed seed so a failure is reproducible from the log.
+          "$GITHUB_WORKSPACE/target/release/get-run" config.example.toml 7
+
+          for f in run_log.csv best_individual.txt best_individual.txt.toml; do
+            test -s "$f" || { echo "::error::$f missing or empty"; exit 1; }
+          done
+          # A run of N generations logs iterations 0..N, plus the CSV header.
+          # Derived from the config rather than hardcoded, so editing the
+          # example's generation count does not fail this job with a stale
+          # number and no clue why.
+          gens="$(grep -oE '^num_generations[[:space:]]*=[[:space:]]*[0-9]+' config.example.toml | grep -oE '[0-9]+$')"
+          test -n "$gens" || { echo "::error::could not read num_generations from the example"; exit 1; }
+          expected=$(( gens + 2 ))
+          rows="$(wc -l < run_log.csv)"
+          test "$rows" -eq "$expected" \
+            || { echo "::error::run_log.csv has $rows lines, expected $expected for $gens generations"; exit 1; }
+          head -1 run_log.csv | grep -q '^iteration,best_fitness,' \
+            || { echo "::error::run_log.csv header is not what the writer emits"; exit 1; }
+          echo "run wrote 3 files; run_log.csv has $rows lines"
+
+          # The fitness climb (about 11 -> 89 on this config) is deliberately
+          # NOT asserted. It is stochastic, and float and rayon ordering differ
+          # across platforms, so a threshold here would flake and then be
+          # switched off — taking the checks above with it.
