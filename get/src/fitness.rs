@@ -5,7 +5,7 @@
 //!
 //! 1. Implement [`Fitness`] — [`Fitness::evaluate`] is the only required
 //!    method; add [`Fitness::direction`] if bigger is better.
-//! 2. Add a variant to `FitnessConfig` in [`crate::config`].
+//! 2. Add a variant to `FitnessConfig` in `crate::config`.
 //! 3. Add the matching arm in `GraphEvolver::run`.
 //!
 //! If it is epidemic-based, build it on [`EpidemicScorer`] rather than calling
