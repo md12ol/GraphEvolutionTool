@@ -84,11 +84,13 @@ actually changed. `remove_edge` removes one copy.
 **Amended 2026-08-18 — Michael.** ~~`clear_edge` removes all.~~ ~~`total_edge_multiplicity`
 counts **edge copies** ... the edit operations depend on which they use.~~ Both methods were
 deleted, and this table's claim that the edit operations depended on the distinction was never
-true: the operations use `degree` only, and defined their own local edge-copy helper rather
-than calling the method. Neither had a production caller at any point in the repo's history —
-they were built as a complete accessor set on 2026-07-14, before any consumer existed, and this
-sheet transcribed them 17 days later. GitHub #115; raised as an FYI in `collab.md` because it
-amends the sheet outside a joint meeting.
+true: the operations use `degree` only, and it was their *tests* that defined a local edge-copy
+helper rather than calling the method. Neither had a production caller at any point in the
+repo's history — they were built as a complete accessor set on 2026-07-14, before any consumer
+existed, and this sheet transcribed them 17 days later. GitHub #115; raised as an FYI in
+`collab.md` because it amends the sheet outside a joint meeting. **Corrected 2026-08-19 —
+James, on PR #122:** the sentence above had attributed the edge-copy helper to the operations
+themselves rather than to their tests.
 
 ---
 
