@@ -3,7 +3,10 @@
 // Denying it here rather than in CI means it fails on the machine that wrote it.
 #![deny(rustdoc::private_intra_doc_links, rustdoc::redundant_explicit_links)]
 
-pub mod config;
+// Crate-internal: nothing outside can use a parsed `Config`, because the only
+// thing that consumes one is `dispatch`, which is private. A caller who wants
+// to run from a TOML file goes through `GraphEvolver` or `run_from_toml`.
+mod config;
 // Crate-internal: the config → concrete-type layer `run` dispatches through.
 // Not `pub`, because it is machinery rather than API — the Rust route uses the
 // engine types directly (spec §5.3).
@@ -12,7 +15,9 @@ pub mod evolver;
 pub mod fitness;
 pub mod genomes;
 pub mod graph;
-pub mod py_config;
+// Crate-internal: the Python config builder. pyo3 needs these types nameable
+// from the crate root to register them, not publicly reachable from Rust.
+mod py_config;
 pub mod py_result;
 pub mod sir;
 
@@ -496,12 +501,16 @@ pub struct RunSummary {
     pub best_genome_repr: String,
     /// The convergence log, one row per logged iteration.
     pub history: Vec<GenerationStats>,
-    /// The seed the run was made with.
-    pub seed: u64,
-    /// Which replicate this is, `0`-based. A hard `0` until GitHub #20.
-    pub run_index: usize,
-    /// The TOML document this run's config was parsed from.
-    pub config_toml: String,
+    /// The seed the run was made with. Private: `save_logs` stamps it onto
+    /// every row, which is the only way it is meant to be read.
+    seed: u64,
+    /// Which replicate this is, `0`-based. Private, and a hard `0` until GitHub
+    /// #20 — a reader would take a constant for something that varies. The
+    /// field stays so #20 does not change the CSV's column set under anyone.
+    run_index: usize,
+    /// The TOML document this run's config was parsed from. Private:
+    /// `save_results` writes it to `{filename}.toml`.
+    config_toml: String,
 }
 
 impl RunSummary {

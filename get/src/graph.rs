@@ -68,17 +68,12 @@ impl Graph {
         }
     }
 
-    /// Remove all parallel edges between `u` and `v`.
-    pub fn clear_edge(&mut self, u: usize, v: usize) {
-        self.set_edge(u, v, 0);
-    }
-
     /// Set every weighted edge in `edges`.
     pub fn set_edges(&mut self, edges: &[(usize, usize, u32)]) {
         // &(u, v, weight): destructures a reference to the tuple, pulling out
         // owned copies of its fields directly rather than binding one
         // reference to the whole tuple. The same &x / |&y| pattern recurs
-        // below in degree() and total_edge_multiplicity().
+        // below in degree().
         for &(u, v, weight) in edges {
             self.set_edge(u, v, weight);
         }
@@ -100,7 +95,7 @@ impl Graph {
 
     /// Return the distinct neighbor at `index`, wrapping modulo the number of
     /// distinct neighbors.
-    pub fn get_neighbor_at_index(&self, node: usize, index: usize) -> Option<usize> {
+    pub(crate) fn get_neighbor_at_index(&self, node: usize, index: usize) -> Option<usize> {
         if node >= self.num_nodes {
             return None;
         }
@@ -132,18 +127,6 @@ impl Graph {
             .iter()
             .filter(|&&weight| weight > 0) // && here is double deref, not logical-AND
             .count()
-    }
-
-    /// Return the total number of incident edge copies, counting parallel
-    /// edges separately.
-    pub fn total_edge_multiplicity(&self, node: usize) -> usize {
-        if node >= self.num_nodes {
-            return 0;
-        }
-        self.adjacency[node]
-            .iter()
-            .map(|&weight| weight as usize)
-            .sum()
     }
 }
 
@@ -217,7 +200,9 @@ mod tests {
         graph.set_edge(0, 3, 1);
 
         assert_eq!(graph.degree(0), 2);
-        assert_eq!(graph.total_edge_multiplicity(0), 3);
+        // Two neighbours, but three edge copies between them — the distinction
+        // degree() exists to make.
+        assert_eq!(graph.weight(0, 1) + graph.weight(0, 3), 3);
         assert_eq!(graph.get_neighbor_at_index(0, 0), Some(1));
         assert_eq!(graph.get_neighbor_at_index(0, 1), Some(3));
         assert_eq!(graph.get_neighbor_at_index(0, 2), Some(1));
