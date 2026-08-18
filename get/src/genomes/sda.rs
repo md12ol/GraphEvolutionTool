@@ -36,11 +36,16 @@ pub const DEFAULT_TRANSITION_VS_RESPONSE_RATE: f64 = 0.5;
 /// Genome dimensions that have already been checked, so a caller building a
 /// whole population validates once rather than once per individual.
 ///
-/// The only way to obtain one is [`SdaDimensions::new`], which is where the
-/// checks live — so holding a value of this type *is* the proof that the three
-/// numbers are usable, and [`SdaGenome::random_with_dimensions`] can be
-/// infallible rather than returning a `Result` no caller past the first
-/// iteration can ever see fail.
+/// Every constructor is a check, so holding a value of this type *is* the proof
+/// that the three numbers are usable, and
+/// [`SdaGenome::random_with_dimensions`] can be infallible rather than
+/// returning a `Result` no caller past the first iteration can ever see fail.
+///
+/// From outside the crate the only route is
+/// [`SdaDimensions::from_edge_multiplicity_cap`], which derives `num_chars`
+/// from the cap. `new` takes it directly and is crate-internal: a caller
+/// choosing its own alphabet builds a genome that disagrees with the context it
+/// is expressed against, and `express` panics on that.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SdaDimensions {
     num_states: usize,
@@ -52,7 +57,7 @@ impl SdaDimensions {
     /// Check that `num_states`, `num_chars`, and `max_resp_len` are usable
     /// dimensions for a genome: nonzero, and small enough to fit the storage
     /// types backing `transitions`/`responses`.
-    pub fn new(
+    pub(crate) fn new(
         num_states: usize,
         num_chars: usize,
         max_resp_len: usize,
@@ -81,8 +86,10 @@ impl SdaDimensions {
     ///
     /// **`num_chars` is derived, never chosen.** A caller picking its own value
     /// builds a genome that disagrees with its context, which `express` panics
-    /// on — so this is the constructor a run uses, and the direct
-    /// [`SdaDimensions::new`] exists for the checks themselves.
+    /// on — so this is the constructor a run uses, and the only one outside the
+    /// crate. The direct `new` exists for the checks themselves, which need a
+    /// route that does not go through a cap: `cap + 1` is never zero, so the
+    /// empty-alphabet branch would otherwise be unreachable and untested.
     pub fn from_edge_multiplicity_cap(
         num_states: usize,
         edge_multiplicity_cap: u32,
