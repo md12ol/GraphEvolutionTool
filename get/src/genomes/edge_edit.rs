@@ -121,12 +121,11 @@ impl EdgeEditOperators {
     /// via [`EdgeEditOperators::new`]. Tests that do not care which operations
     /// come out use this instead of spelling nine equal weights each time.
     ///
-    /// Cached, so the weight-agnostic constructors ([`EdgeEditGenome::new`] and
-    /// [`EdgeEditGenome::random`]) share one instance rather than handing every
-    /// individual its own — which would reintroduce exactly the per-genome copy
-    /// this type exists to eliminate.
+    /// Cached, so every caller shares one instance rather than each building
+    /// its own — which would reintroduce exactly the per-genome copy this type
+    /// exists to eliminate.
     #[cfg(test)]
-    pub fn uniform() -> Arc<Self> {
+    fn uniform() -> Arc<Self> {
         // A function-local `static` initialized once, on first call, and
         // shared by every caller thereafter — Rust's version of a lazily-built
         // singleton.
@@ -151,10 +150,12 @@ pub struct EdgeEditGenome {
 impl EdgeEditGenome {
     /// Construct a genome from encoded genes and a shared operation mix.
     ///
-    /// Test-only. A run never builds a genome from chosen genes — `dispatch`
-    /// mints the population with [`EdgeEditGenome::random_with_operators`] —
-    /// so this exists for tests that need a known gene sequence to express.
-    #[cfg(test)]
+    /// A run never builds a genome this way — `dispatch` mints the population
+    /// with [`EdgeEditGenome::random_with_operators`]. It is here for the
+    /// caller driving an evolver directly, who needs a known starting
+    /// population: the genes read off a previous run's best individual, a
+    /// recorded edit script, or a deterministic fixture. Without it `genes`
+    /// would be readable with no supported way to feed them back.
     pub fn new_with_operators(genes: Vec<u64>, operators: Arc<EdgeEditOperators>) -> Self {
         Self { genes, operators }
     }
