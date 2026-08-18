@@ -184,3 +184,45 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   and whoever sweeps this page will be looking straight at it.
 
 *#replicate-runs-ship · filed 2026-08-13 16:43 — James.*
+
+## Base-graph file loaders, `min_node_index`, and the identity individual — GitHub #107
+
+- **Pages:** `guide/python-api.html` (the "Supplying a base graph" section, ~L316-345, its
+  `badge-planned` at L316 and the `.plan-note` immediately after the `api-item`); `status.html`
+  (the "Supplying a base graph" row ~L114-124 and the "Base-graph validation" row ~L125-131);
+  `guide/genomes.html` (~L36, ~L51, the edge-edit section from ~L80); `guide/evolvers.html` (~L176,
+  "Generation 0 is the initial population"); `guide/configuration.html` (wherever it says what is
+  and is not a config value).
+- **Now false, and two of these were already false before this change:** `python-api.html`'s
+  `.plan-note` says "there is no base-graph setter, so every edge-edit run starts from an empty
+  graph", and `status.html`'s row says "There is no setter" — `set_base_graph` has existed and been
+  tested for some time, so both were stale independently of #107. The "Base-graph validation" row
+  says validation is "Deferred explicitly in the code, since there is nothing to validate yet";
+  every check it lists now runs. `python-api.html` also lists only *three* checks and describes cap
+  narrowing as "rejected or warned" — it is rejected, flatly, and there are four checks.
+- **Should say:** the setter exists, and a second one beside it reads the graph from a file —
+  `set_base_graph_from_file(path, min_node_index=0)`, one edge per line as `start,end,weight`.
+  Worth its own paragraph: `min_node_index` is where the caller's own numbering starts, every index
+  shifts to 0 on the way in, and **only the evolved output graph shifts back**, so `best_edges`
+  comes back in the numbering the user wrote. One numbering per run — a second loader given a
+  different value is rejected. The file setter takes no node count, because a file has no such
+  argument to get wrong.
+- **The warning behaviour is new to the site entirely.** A repeated edge (canonical, so `2,5` and
+  `5,2` are one edge) overwrites with a `UserWarning` and the last occurrence wins; a zero-weight
+  edge and an empty file warn too. Nothing in `get/src` warned about anything before this, so no
+  page mentions `warnings` at all — and `set_base_graph` itself now warns, which is the one part of
+  its *existing* documented behaviour that changed.
+- **`guide/evolvers.html` L176 needs a clause:** generation 0 is the initial population, *except*
+  that a seeded edge-edit run fills one slot with the identity individual — every gene `Null`, so
+  it expresses to exactly the supplied base graph. Unconditional, no config flag. Say what it buys
+  and what it does not: a soft floor under a stochastic objective, since elites are rescored every
+  generation and a bad draw can still evict it, and a genuine monotone guarantee only under a
+  deterministic one.
+- **Cross-check when sweeping:** `config.example.toml` gained a block under `[genome]` explaining
+  why there is no base-graph key and pointing at `examples/config_builder.py`'s
+  `seeding_from_a_file`. If `guide/configuration.html` walks that file key by key, it should pick
+  the block up rather than skipping it as a comment.
+- **Stale `src` references are likely:** `lib.rs` gained a field and a method ahead of `run`, so any
+  `lib.rs:NNN` on `reference/lib.html` past the base-graph setter has shifted.
+
+*#base-graph-file-loaders · filed 2026-08-17 23:58 — James.*
