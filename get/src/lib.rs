@@ -12,6 +12,7 @@ pub mod evolver;
 pub mod fitness;
 pub mod genomes;
 pub mod graph;
+pub mod graph_io;
 pub mod py_config;
 pub mod py_result;
 pub mod sir;
