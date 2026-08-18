@@ -95,7 +95,7 @@ impl Graph {
 
     /// Return the distinct neighbor at `index`, wrapping modulo the number of
     /// distinct neighbors.
-    pub fn get_neighbor_at_index(&self, node: usize, index: usize) -> Option<usize> {
+    pub(crate) fn get_neighbor_at_index(&self, node: usize, index: usize) -> Option<usize> {
         if node >= self.num_nodes {
             return None;
         }

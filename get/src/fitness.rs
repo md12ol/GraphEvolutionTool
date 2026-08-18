@@ -154,9 +154,9 @@ pub trait Fitness: Send + Sync {
 /// - **`evaluate_batch`** — without it the box inherits the trait's
 ///   default, which fans out over rayon and calls `evaluate` per graph. For a
 ///   Python objective that means one GIL acquisition per individual from inside
-///   a rayon closure, which is what [`PyFitness`]'s batching exists to prevent —
+///   a rayon closure, which is what `PyFitness`'s batching exists to prevent —
 ///   and which **deadlocks** rather than merely running slowly (measured
-///   2026-08-07; see [`PyFitness`]). For an epidemic objective it also re-seeds
+///   2026-08-07; see `PyFitness`). For an epidemic objective it also re-seeds
 ///   per graph, so scores stop being comparable within a batch.
 /// - **`direction`** — without it the box reports [`Direction::Minimize`]
 ///   whatever it holds, so every maximizing objective runs the search backwards
@@ -257,7 +257,7 @@ impl EpidemicScorer {
     /// thread before rayon fans out, batches are scored one after another, and
     /// each replicate owns its own scorer (§8.1). `Relaxed` is enough because
     /// no other data rides along with the count.
-    pub fn next_batch_seed(&self) -> u64 {
+    pub(crate) fn next_batch_seed(&self) -> u64 {
         let counter = self.batches_scored.fetch_add(1, Ordering::Relaxed);
         mix_seed(self.run_seed, counter)
     }
@@ -497,14 +497,14 @@ impl Fitness for EpiProfMatch {
 /// wrong number of scores, or returns `NaN` panics, each naming what was
 /// expected and which item was at fault. That is the same posture
 /// [`Direction::orient`] already takes on `NaN`.
-pub struct PyFitness {
+pub(crate) struct PyFitness {
     callable: Py<PyAny>,
     direction: Direction,
 }
 
 impl PyFitness {
     /// Wrap a registered callable and the direction declared alongside it.
-    pub fn new(callable: Py<PyAny>, direction: Direction) -> Self {
+    pub(crate) fn new(callable: Py<PyAny>, direction: Direction) -> Self {
         Self {
             callable,
             direction,
@@ -518,7 +518,7 @@ impl PyFitness {
     /// than copied — `clone_ref` bumps its refcount — which is correct: the
     /// user's function is stateless as far as the engine is concerned, and it
     /// is the *scorer* state that must not be shared, of which this has none.
-    pub fn clone_ref(&self) -> Self {
+    pub(crate) fn clone_ref(&self) -> Self {
         Python::attach(|py| Self {
             callable: self.callable.clone_ref(py),
             direction: self.direction,

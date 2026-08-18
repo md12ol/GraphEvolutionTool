@@ -80,7 +80,7 @@ pub struct SirSampleParams {
 /// Drawing sequentially instead would break both: a graph that retries consumes
 /// extra draws, shifting every later epidemic out of step with graphs that did
 /// not retry.
-pub fn epidemic_seeds(
+pub(crate) fn epidemic_seeds(
     batch_seed: u64,
     num_epidemics: usize,
     max_epidemic_retries: usize,

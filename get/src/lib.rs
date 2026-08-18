@@ -501,12 +501,16 @@ pub struct RunSummary {
     pub best_genome_repr: String,
     /// The convergence log, one row per logged iteration.
     pub history: Vec<GenerationStats>,
-    /// The seed the run was made with.
-    pub seed: u64,
-    /// Which replicate this is, `0`-based. A hard `0` until GitHub #20.
-    pub run_index: usize,
-    /// The TOML document this run's config was parsed from.
-    pub config_toml: String,
+    /// The seed the run was made with. Private: `save_logs` stamps it onto
+    /// every row, which is the only way it is meant to be read.
+    seed: u64,
+    /// Which replicate this is, `0`-based. Private, and a hard `0` until GitHub
+    /// #20 — a reader would take a constant for something that varies. The
+    /// field stays so #20 does not change the CSV's column set under anyone.
+    run_index: usize,
+    /// The TOML document this run's config was parsed from. Private:
+    /// `save_results` writes it to `{filename}.toml`.
+    config_toml: String,
 }
 
 impl RunSummary {
