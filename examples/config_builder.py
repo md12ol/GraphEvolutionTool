@@ -18,6 +18,8 @@ validating and printing configurations, so that running it costs nothing. The
 `evolve_with_a_custom_objective` example marks the one line that would evolve.
 """
 
+import os
+
 import get
 
 
@@ -142,6 +144,40 @@ def evolve_with_a_custom_objective():
     return evolver
 
 
+def seeding_from_a_file():
+    """Starting an edit script from a graph you already have on disk.
+
+    The base graph is not a config value — `config.example.toml` has no key for
+    it — so it arrives through the evolver. `set_base_graph_from_file` reads one
+    edge per line, `start,end,weight`, and `min_node_index` says where your own
+    node numbering starts: `base_graph.csv` beside this script is 1-indexed, as
+    graph files usually are.
+
+    You never renumber anything by hand. Every index shifts to 0 on the way in,
+    and the evolved graph comes back shifted the other way, so `best_edges` is
+    in the numbering you wrote.
+
+    `network_size` is 10 here rather than the shipped example's 100, because a
+    base graph has to be the size the run evolves — the file names nodes 1 to
+    10, so the network is 10 nodes.
+
+    Two things follow from seeding that an empty run does not get. Generation 0
+    keeps one individual that edits nothing, so the supplied graph is in the
+    population from the start; and all nine edit operations are useful
+    immediately, where an unseeded run leaves five of them inert until `add` or
+    `toggle` have built some structure.
+    """
+    config = the_shipped_example()
+    config.network_size = 10
+    evolver = get.GraphEvolver.from_config(config)
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    evolver.set_base_graph_from_file(os.path.join(here, "base_graph.csv"), min_node_index=1)
+
+    # result = evolver.run(seed=1)[0]   -> result.best_edges is 1-indexed too
+    return evolver
+
+
 def a_config_that_gets_rejected():
     """Validation reports the offending field, whichever front end you used.
 
@@ -171,6 +207,9 @@ def main():
 
     evolve_with_a_custom_objective()
     print("=== custom Python objective: registered ===\n")
+
+    seeding_from_a_file()
+    print("=== base graph seeded from examples/base_graph.csv ===\n")
 
     print("=== an invalid config ===")
     print(a_config_that_gets_rejected(), "\n")
