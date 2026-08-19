@@ -283,3 +283,41 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   objective; they simply disagree about order and count.
 
 *#fitness-chain-documented-in-crate · filed 2026-08-18 21:22 — James.*
+
+## 2026-08-19 11:05 — James — `[genome]` rejects unknown keys now, so "the one table that refuses typos" is false in six places
+
+- **Why:** GitHub #114 / PR #128 (merged `eaf7ace`) put `deny_unknown_fields` on the new
+  `EdgeEditGenomeConfig`. `SdaGenomeConfig` already had it from #108, so as of now **the whole
+  `[genome]` table rejects unrecognized keys, under either `type`**. The site still tells the reader
+  that exactly one table in the document does that, and names a different one.
+- **Files:** `reference/config.html` (`:254`, `:610-611`, and the `pub enum GenomeConfig` signature
+  at `:476`), `guide/configuration.html` (`:195-197`, and the whole "Unknown keys, and the two GET
+  checks for" section from `:307`), `guide/troubleshooting.html` (`:51-53`).
+- **Now false — the uniqueness claim, stated six times:**
+  - `reference/config.html:254` — "This is the one table in the whole document that refuses typos."
+  - `reference/config.html:610-611` — "Unknown keys are ignored nearly everywhere. The single
+    exception is `[genome.operation_weights]`."
+  - `guide/configuration.html:195-197` — "the one sub-table that **rejects unknown keys** …
+    Everywhere else in the config, a stray key is ignored."
+  - `guide/configuration.html:307` — the section is titled "Unknown keys, and the two GET checks
+    for". There is now a third, and it is not the same *kind* of check: `[fitness] seed` and
+    `target_profile` are rejected **by name**, whereas `[genome]` rejects **anything unrecognized**.
+  - `guide/troubleshooting.html:51-53` — "Two exceptions: `[genome.operation_weights]` rejects
+    unknown keys, and two migration hazards are checked by name."
+- **Now false — the Rust signature:** `reference/config.html:476` prints
+  `pub enum GenomeConfig { EdgeEdit { gene_length, operation_weights }, Sda { … } }`. Both variants
+  are newtypes over named structs now — `EdgeEdit(EdgeEditGenomeConfig)` and `Sda(SdaGenomeConfig)`.
+  The `Sda` half has been wrong since #108.
+- **Should say:** `[genome]` and `[genome.operation_weights]` both reject unknown keys, at either
+  `type`. `[fitness]` does not, and the reason is worth keeping — it uses `#[serde(flatten)]` for
+  the shared SIR block, and flatten consumes unrecognized keys into the flattened field's content
+  map, so `deny_unknown_fields` cannot fire there. That is the distinction the pages should draw:
+  **flattened tables cannot reject typos; the rest now do.** The `[genome]` key table at
+  `reference/config.html:192-232` has no "any unrecognised key" row at all and should gain one.
+- **Half of this predates #128.** `SdaGenomeConfig` got the attribute in #108 and no entry was
+  filed, so the claim has been wrong for `type = "sda"` for some time and is only now wrong for
+  both. Not a new lapse — but it means the sweep should not assume the pre-#128 text was correct.
+- **Related:** `#reference-pages-describe-the-pre-108-api` in `mdube_edits.md` also names
+  `reference/config.html`, for `Config::from_path`. One page, two queues — apply both together.
+
+*#genome-table-now-rejects-unknown-keys · filed 2026-08-19 11:05 — James, reviewing PR #128.*
