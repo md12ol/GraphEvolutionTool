@@ -81,6 +81,21 @@ pub enum SelectionConfig {
 }
 
 /// Genome representation and the dimensions used to build random individuals.
+///
+/// Each variant carries only what a *random* individual is built from, plus
+/// whatever the representation's own mutation needs — not run-level settings
+/// like `network_size` or `max_edge_multiplicity`, which are top-level and
+/// reach the genome through its context.
+///
+/// # Part of the chain that adds a representation
+///
+/// This is step 4 of seven: the variant here is what a user selects under
+/// `[genome]`, and [`Config::validate_genome`] is where its dimensions are
+/// checked. Validate anything that would panic during expression — an
+/// out-of-range `init_state` is the live example — because the alternative is
+/// a panic mid-run inside a generic. `dispatch`'s start builder (step 5) then
+/// turns the variant into a population and a context;
+/// [`crate::genomes::genome`]'s module doc has all seven steps.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GenomeConfig {

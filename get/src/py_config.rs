@@ -223,6 +223,16 @@ pub enum PySelectionConfig {
 /// Genome representation and the dimensions used to build random individuals.
 ///
 /// Mirrors [`crate::config::GenomeConfig`].
+///
+/// # Part of the chain that adds a representation
+///
+/// This is step 7, and it is optional: it is what lets a Python caller name
+/// the representation. Leaving it out costs nothing elsewhere — the
+/// representation still runs from a TOML config and from Rust. One thing does
+/// have to follow step 4 even so: a field its validation raises by name needs
+/// an attribute path in `python_attribute_path` below, or a Python caller gets
+/// an error naming a TOML field they never wrote.
+/// [`crate::genomes::genome`]'s module doc has all seven steps.
 #[pyclass(name = "GenomeConfig")]
 #[derive(Debug, Clone)]
 pub enum PyGenomeConfig {

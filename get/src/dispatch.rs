@@ -351,6 +351,16 @@ impl GraphEvolver {
 
 /// The edge-edit starting population and the context it expresses against.
 ///
+/// # Part of the chain that adds a representation
+///
+/// This is step 5 of seven, and the one with real obligations rather than
+/// wiring: a start builder owes the engine a population of exactly
+/// `population_size`, a context `express` can use, and rejection rather than
+/// clamping for caller data that disagrees with the config.
+/// [`crate::genomes::genome`]'s module doc states all three and has the other
+/// six steps; a new representation adds a function beside this one and
+/// [`sda_start`].
+///
 /// **Why the dispatch layer builds the population at all.** `Evolver::new`
 /// takes a ready-made `Vec<G>` because `Genome` has no uniform random
 /// constructor: this one needs a gene length and an operation mix, the SDA
@@ -429,6 +439,9 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
 }
 
 /// The SDA starting population and the context it expresses against.
+///
+/// The second start builder — step 5 of the chain that adds a representation,
+/// alongside [`edge_edit_start`], where that step's obligations are stated.
 ///
 /// **`num_chars` is derived, never configured** (§3.2): the alphabet is
 /// `max_edge_multiplicity + 1`, so every character the automaton can emit is
@@ -511,6 +524,14 @@ pub(crate) fn replicate_seeds(master: u64, n_runs: usize) -> Vec<u64> {
 }
 
 /// Run one evolution and hand back its result with the genome type erased.
+///
+/// # Part of the chain that adds a representation
+///
+/// The match below is step 6 of seven: one arm, selecting the representation
+/// and calling its step-5 start builder. Steps 4, 5 and 6 are one change split
+/// across two files — a `GenomeConfig` variant nothing constructs is dead code,
+/// and an arm for a variant that does not exist will not compile.
+/// [`crate::genomes::genome`]'s module doc has all seven.
 ///
 /// **Step 2 of the dispatch** (§1, §8). The objective has already been erased to
 /// `Box<dyn Fitness>`, so only strategy × genome is left — and this is arranged
