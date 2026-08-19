@@ -22,6 +22,12 @@ jobs:
   check:
     name: test, clippy and rustfmt
     runs-on: ubuntu-latest
+    # The whole job takes about 30 seconds, so this cap only ever fires on a
+    # hang. That is not hypothetical here: calling Python from inside a rayon
+    # closure deadlocks rather than failing, and was measured hanging until
+    # killed. A hang carries no failing assertion to report, so without a cap
+    # it would sit on a runner for the six-hour default instead.
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v6
