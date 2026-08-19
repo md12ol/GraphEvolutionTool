@@ -251,3 +251,35 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   was already stale, and it is the one claim on these pages a reader would act on.
 
 *#set-base-graph-takes-min-node-index · filed 2026-08-18 20:05 — James.*
+
+## 2026-08-18 21:22 — James — the crate now documents the objective chain, and `new-fitness.html` is the second copy of it
+
+- **Why:** GitHub #97 put the whole "adding an objective" chain into `get/src/fitness.rs`'s module
+  doc, because a route-4 reader inside the crate had no way to find the other five files. That
+  makes `guide/new-fitness.html`'s "Route 2" section a **second maintained copy of the same list**,
+  which is the failure mode the one-sweep convention exists for. This entry is about reconciling
+  them, not about a page that says something false.
+- **Files:** `guide/new-fitness.html` — the "Route 2 — a native objective inside the crate" section
+  and its "Checklist, whichever route"; `reference/fitness.html`, which should pick up the module
+  doc's new sections.
+- **The site was right and the crate was wrong, not the other way round.** `new-fitness.html`
+  listed `type_name` and the Python attribute-path mapping; the issue's own table of six did not,
+  and the crate doc was written from that table. Checked against `main` and the page is correct on
+  both, so the crate doc was corrected to match rather than the page. Worth recording because it
+  inverts the usual direction of these entries — do not "fix" the page toward the issue text.
+- **Now false, or at least off:** the section says "Six small edits" and then lists **seven** items
+  (the seventh is `config.example.toml`, introduced with "Then document it in"). It also omits the
+  dispatch test that asserts a new variant erases to a box carrying its own `Direction`, which the
+  crate doc now names as the last step. And it orders `impl Fitness` fourth, where the crate walks
+  it first — a reader moving between the two meets the same chain in two orders.
+- **Should say:** one ordering, matching the crate's — implement the trait, then `config.rs` (the
+  variant, the `type_name` arm, validation), then the dispatch arm, then the Python mirror and its
+  attribute path, then `config.example.toml`, then the test. Fix the count so the number matches
+  the list, or drop the number. Add the test step. Consider making the page point at the crate doc
+  for the canonical list and keeping the page for the things it does better — the three routes, the
+  worked examples, and the trap about calling `evaluate_batch` from inside `evaluate`, none of
+  which are in the crate doc.
+- **Not urgent and nothing on the page misleads a user today.** Both lists now produce a working
+  objective; they simply disagree about order and count.
+
+*#fitness-chain-documented-in-crate · filed 2026-08-18 21:22 — James.*
