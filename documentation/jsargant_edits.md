@@ -324,6 +324,8 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
 
 ## 2026-08-19 11:51 — James — crossover has a shared helper now (`breed_pair`), and the page says twice that it does not
 
+**`edited — please verify`** — applied 2026-08-19 in the first sweep, branch `jsargant_docs-sweep`, commit `d2e0d00`. Every page this entry names is done. James deletes this entry once he has read the page.
+
 - **Why:** GitHub #56 / PR #129 (merged `1d2dc3e`) extracted the crossover-and-mutate sequence out
   of `generational.rs`'s `advance_generation` and `steady_state.rs`'s `mating_event` into
   `common::breed_pair`. The page was written when each strategy really did spell the sequence out

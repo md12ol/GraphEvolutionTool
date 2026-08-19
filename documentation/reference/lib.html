@@ -288,7 +288,7 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 <div class="api-item">
   <div class="api-sig">RunResult</div>
   <div class="api-body">
-    <span class="src">py_result.rs:68</span>
+    <span class="src">py_result.rs:77</span>
     <p>
       Frozen and read-only. <code>best_fitness</code> is <b>in the objective's own units and
       sign</b> — the engine's internal lower-is-better orientation never leaks out here. For
@@ -303,26 +303,31 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
       <code>history</code> builds a fresh list of <code>GenerationStats</code> on each access, so
       bind it once rather than re-reading it in a loop.
     </p>
+    <p>
+      It also carries <code>seed</code> and <code>run_index</code> — the master seed this run was
+      drawn from and its position in the batch, hard <code>0</code> for a single run — and
+      <code>config_toml</code>, the TOML document the run's config was parsed from.
+    </p>
   </div>
 </div>
 
 <div class="api-item">
   <div class="api-sig">GenerationStats</div>
   <div class="api-body">
-    <span class="src">py_result.rs:34</span>
+    <span class="src">py_result.rs:36</span>
     <p>
       One log row: <code>iteration</code>, <code>best_fitness</code>, <code>mean_fitness</code>,
-      <code>std_dev</code>. The two fitness columns are converted into the objective's units;
-      <code>std_dev</code> is not, because a spread is identical under negation.
+      <code>std_dev</code>, <code>ci_95</code>. The two fitness columns are converted into the
+      objective's units; the two spread columns are not, because a spread is identical under
+      negation.
     </p>
   </div>
 </div>
 
 <div class="api-item">
-  <div class="api-sig">evolver.save_logs(filename: str) -&gt; None</div>
+  <div class="api-sig">result.save_logs(filename: str) -&gt; None</div>
   <div class="api-body">
-    <span class="src">lib.rs:266</span>
-    <p><span class="badge badge-planned">planned</span></p>
+    <span class="src">py_result.rs:142</span>
     <p>
       Writes the per-iteration evolution log to <code>filename</code> as CSV — one row per logged
       iteration, which is every generation for generational and every
@@ -363,10 +368,9 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 </div>
 
 <div class="api-item">
-  <div class="api-sig">evolver.save_results(filename: str) -&gt; None</div>
+  <div class="api-sig">result.save_results(filename: str) -&gt; None</div>
   <div class="api-body">
-    <span class="src">lib.rs:272</span>
-    <p><span class="badge badge-planned">planned</span></p>
+    <span class="src">py_result.rs:177</span>
     <p>
       Writes the best individual to <code>filename</code>: the winning genome in its own textual
       form, the network it expressed as a weighted edge list, and its fitness in your units.
@@ -379,18 +383,14 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
   </div>
 </div>
 
-<div class="plan-note">
-  <b>What exists today.</b> Both methods are declared and registered on the class, so
-  <code>evolver.save_logs("x.csv")</code> resolves — but the body of each is a
-  <code>todo!()</code> placeholder (<code>lib.rs:266-269</code> and <code>:272-275</code>), so
-  calling either <b>panics</b> rather than writing a file. They also still take <code>&amp;self</code>,
-  and the evolver holds nothing to write now that a run's state lives in the returned result —
-  re-homing them onto <code>RunResult</code> is part of GitHub #21, along with the
-  <code>ci_95</code> field <code>GenerationStats</code> does not yet carry. Until that lands, take
-  <a href="#run"><code>run</code></a>'s returned <code>history</code> and write the CSV yourself.
+<div class="note">
+  <b>Both live on the result, not the evolver.</b> They were once declared on
+  <code>GraphEvolver</code>, which is why older code and older examples call
+  <code>evolver.save_logs(...)</code>. The evolver holds nothing to write: a run's state lives in
+  the result it returned, so that is where the writers belong.
 </div>
 
-<h3 id="replicates">Replicate runs <span class="badge badge-planned">planned</span></h3>
+<h3 id="replicates">Replicate runs</h3>
 
 <p>
   Research use is <code>n</code> runs at identical parameters, so the run count is a parameter of
@@ -402,9 +402,12 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
 <div class="api-item">
   <div class="api-sig">evolver.run(seed: int, n_runs: int = 1, max_cores: int | None = None)</div>
   <div class="api-body">
-    <span class="src">lib.rs:235</span>
-    <p><span class="badge badge-planned">planned</span> — the <code>seed</code> parameter exists
-       today; the other two are designed.</p>
+    <span class="src">lib.rs:665</span>
+    <p>
+      Returns a <b>list</b> of <code>RunResult</code> unconditionally — <code>run(seed=1)</code>
+      gives a one-element list rather than a bare result, so the return type does not change shape
+      with the run count.
+    </p>
     <p>
       <b>One master seed, not <code>n</code> of them.</b> The master seed seeds a generator whose
       output stream <i>is</i> the per-run seed list, and run <code>i</code> takes draw
@@ -449,17 +452,12 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
   per batch is serialised.
 </p>
 
-<div class="plan-note">
-  <b>What exists today.</b> <code>run</code> takes a seed and nothing else, performs exactly
-  <b>one</b> run, and returns <b>one</b> result — the signature at <code>lib.rs:235</code> is
-  <code>run(&amp;mut self, seed: u64) -&gt; PyResult&lt;PyRunResult&gt;</code>.
-  There is no <code>n_runs</code>, no <code>max_cores</code>, and no local thread pool anywhere in
-  the crate. The <i>per-run</i> machinery the replicate layer depends on is already in place and
-  correct: the objective is rebuilt per call so each run gets its own epidemic counter
-  (<code>dispatch.rs:117</code>), and a Python callable is shared by reference count rather than
-  duplicated (<a href="fitness.html#pyfitness"><code>PyFitness::clone_ref</code></a>). To run
-  replicates today, call <code>run</code> in a Python loop with your own seeds and collect the
-  results yourself.
+<div class="note">
+  <b>The per-run machinery each replicate depends on.</b> The objective is rebuilt per call so each
+  run gets its own epidemic counter, and a Python callable is shared by reference count rather than
+  duplicated (<a href="fitness.html#pyfitness"><code>PyFitness::clone_ref</code></a>) — which is
+  what lets a Python-fitness batch run sequentially without re-entering the interpreter from several
+  threads at once.
 </div>
 
 <h2>Module registration</h2>
