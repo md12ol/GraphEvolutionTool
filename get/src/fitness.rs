@@ -3,18 +3,20 @@
 //!
 //! # Adding your own objective
 //!
-//! An objective touches up to six files — a few more edits than six, because
-//! two of the files want more than one. How many are yours depends on which
-//! way you are using GET, so start by working out which reader you are:
+//! An objective touches up to five files, in six steps — two of the files want
+//! more than one edit, and `dispatch.rs` appears twice, once for the code and
+//! once for the test. How many are yours depends on which way you are using
+//! GET, so start by working out which reader you are:
 //!
 //! - **You depend on this crate from your own program.** Step 1 is the only
 //!   one available to you, and it is enough on its own: write your type,
-//!   implement [`Fitness`] for it, and pass it to `Evolver::run`. Steps 2–5
-//!   are unreachable rather than skipped — `config` and `dispatch` are private
-//!   modules, so nothing outside this crate can add a config variant or a
-//!   dispatch arm. Your objective reaches the evolver by being handed over
-//!   directly, and is never named in a config file.
-//! - **You are editing your own copy of GET.** All six are yours. What that
+//!   implement [`Fitness`] for it, and pass it to `Evolver::run`. Steps 2–6
+//!   are unreachable rather than skipped: `config`, `dispatch` and `py_config`
+//!   are private modules, so nothing outside this crate can add a config
+//!   variant or a dispatch arm, and the example file and the tests live in the
+//!   GET repository rather than yours. Your objective reaches the evolver by
+//!   being handed over directly, and is never named in a config file.
+//! - **You are editing your own copy of GET.** All six steps are yours. What that
 //!   buys, and what the first reader structurally cannot have, is an objective
 //!   selectable by name from `config.toml` and runnable by the `get-run`
 //!   binary, with no Rust written at the call site.
