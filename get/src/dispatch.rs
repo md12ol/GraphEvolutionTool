@@ -586,6 +586,10 @@ fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
 ///
 /// One variant each today. Kept as a function rather than inlined so a second
 /// selection strategy is one arm here and touches neither evolver.
+///
+/// This arm is step 6 of the seven a new scheme touches;
+/// [`crate::evolver::common::Selection`] lists them all. Steps 5 and 6 are one
+/// change split across two files, so neither compiles without the other.
 fn selection(config: &SelectionConfig) -> Selection {
     match config {
         SelectionConfig::Tournament { tournament_size } => Selection::Tournament {
