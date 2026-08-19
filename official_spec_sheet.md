@@ -636,10 +636,21 @@ to prevent. Nothing user-supplied is deserialized either way, so §7's "serde *i
 still holds.
 
 **Reference graphs, and any base graph supplied for edge-edit seeding, may use a caller's own node
-indexing.** A `min_node_index` parameter, shared by both the base-graph loader and the reference-set
-loader within one run, shifts every supplied index to 0 once on the way in; only the run's *evolved*
-output graph is shifted back on the way out (§6, §8) — the reference set is input-only and is never
-remapped, the same "once in, once out" shape `Direction`'s erase/orient step already uses.
+indexing.** A `min_node_index` parameter, ~~shared by both the base-graph loader and the
+reference-set loader within one run~~ **shared by all three ways caller-supplied graph data enters a
+run** (amended 2026-08-18 — James), shifts every supplied index to 0 once on the way in; only the
+run's *evolved* output graph is shifted back on the way out (§6, §8) — the reference set is
+input-only and is never remapped, the same "once in, once out" shape `Direction`'s erase/orient step
+already uses.
+
+**Amended 2026-08-18 — James.** The parameter is taken by the in-memory base-graph setter as well as
+by the two file loaders, so the enumeration above named two of three entry points. One run has one
+numbering: whichever entry point is called first declares it, a later call that disagrees is
+rejected rather than mixed in, and that numbering is what the evolved output is shifted back into.
+Excluding the setter would have left it as the single path still requiring a caller to renumber data
+by hand, which is the burden this parameter exists to remove — so the omission was a gap in the
+enumeration rather than a deliberate limit. GitHub #107; raised as an FYI in `collab.md` because it
+amends the sheet outside a joint meeting.
 
 ---
 
@@ -1158,9 +1169,10 @@ engine-generated indices is wrong for caller-supplied data at the boundary.
 **A base graph or a reference set (§5.4) may also arrive from a file, not just a setter call.**
 Added 2026-08-17 at the joint meeting — `collab.md` #75. One edge per line, `start,end,weight`,
 comma-delimited, any line ending; a **bulk reference set is one such file per graph in a folder**,
-read in a fixed and reported order. Both loaders take a shared `min_node_index`, so a caller whose
-own data is not 0-indexed does not have to renumber it by hand — every index shifts to 0 once on the
-way in, and only the run's evolved output graph shifts back on the way out (§5.4, §6). Validated
+read in a fixed and reported order. ~~Both loaders take~~ **Both loaders and the in-memory setter
+take** (amended 2026-08-18 — James, see §5.4) a shared `min_node_index`, so a caller whose own data
+is not 0-indexed does not have to renumber it by hand — every index shifts to 0 once on the way in,
+and only the run's evolved output graph shifts back on the way out (§5.4, §6). Validated
 eagerly, whole-file, before anything is built — the same shape as checks 1–3 above: a self-loop
 (`start == end`) or a malformed row is rejected outright, an out-of-range or over-cap edge is
 rejected outright and names the offending line, a repeated edge (canonicalized as
