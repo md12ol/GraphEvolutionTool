@@ -1,10 +1,11 @@
 # Runs the Rust checks that nothing else runs: the test suite and the two lint
-# gates. Until this existed, `get/src`'s 269 `#[test]` functions ran only when
-# a maintainer remembered to run them locally, so the convention of committing
-# each step once its own check has passed rested on a gate nobody's push met.
+# gates. Until this existed, `get/src`'s unit tests ran only when a maintainer
+# remembered to run them locally, so the convention of committing each step
+# once its own check has passed rested on a gate nobody's push met.
 #
-# `get-run.yml` is the sibling job: it builds and runs the `cli`-gated binary,
-# which this workflow's `cargo test` does not touch.
+# `get-run.yml` is the sibling job: it is the one that actually *runs* the
+# `cli`-gated binary against the shipped example. This workflow compiles and
+# lints that binary but never executes it.
 
 name: ci
 
@@ -21,6 +22,12 @@ jobs:
   check:
     name: test, clippy and rustfmt
     runs-on: ubuntu-latest
+    # The whole job takes about 30 seconds, so this cap only ever fires on a
+    # hang. That is not hypothetical here: calling Python from inside a rayon
+    # closure deadlocks rather than failing, and was measured hanging until
+    # killed. A hang carries no failing assertion to report, so without a cap
+    # it would sit on a runner for the six-hour default instead.
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v6
@@ -53,8 +60,12 @@ jobs:
       - name: cargo fmt --check
         run: cargo fmt -p get --check
 
+      # `--features cli` so the `get-run` binary is covered too. It is
+      # `required-features = ["cli"]`, so without the flag cargo skips that
+      # target outright: it is neither linted nor built for tests, and any
+      # `#[test]` added to it would silently never run.
       - name: cargo clippy
-        run: cargo clippy -p get --all-targets -- -D warnings
+        run: cargo clippy -p get --all-targets --features cli -- -D warnings
 
       - name: cargo test
-        run: cargo test -p get
+        run: cargo test -p get --features cli
