@@ -736,8 +736,8 @@ mod tests {
     use super::*;
 
     use crate::config::{
-        Config, EvolutionConfig, FitnessConfig, GenomeConfig, SdaGenomeConfig, SelectionConfig,
-        SirParams,
+        Config, EdgeEditGenomeConfig, EvolutionConfig, FitnessConfig, GenomeConfig,
+        SdaGenomeConfig, SelectionConfig, SirParams,
     };
     use crate::genomes::EdgeEditOperationWeights;
 
@@ -819,10 +819,13 @@ mod tests {
         }
 
         match genome {
-            GenomeConfig::EdgeEdit {
+            // Destructured exhaustively, no `..`: a field added to
+            // `EdgeEditGenomeConfig` and forgotten here fails to compile, which
+            // is the drift guard `traps.md` describes for the config mirror.
+            GenomeConfig::EdgeEdit(EdgeEditGenomeConfig {
                 gene_length,
                 operation_weights,
-            } => {
+            }) => {
                 assert_eq!(gene_length, 256);
                 // Omitted from the document, so serde's default supplies it.
                 assert_eq!(operation_weights, EdgeEditOperationWeights::default());
@@ -961,13 +964,11 @@ mod tests {
         );
 
         match round_trip(&config).genome {
-            GenomeConfig::EdgeEdit {
-                operation_weights, ..
-            } => {
-                assert_eq!(operation_weights.null, 0.0);
-                assert_eq!(operation_weights.swap, 2.0);
+            GenomeConfig::EdgeEdit(edge_edit) => {
+                assert_eq!(edge_edit.operation_weights.null, 0.0);
+                assert_eq!(edge_edit.operation_weights.swap, 2.0);
                 // Untouched fields keep the 1.0 default.
-                assert_eq!(operation_weights.toggle, 1.0);
+                assert_eq!(edge_edit.operation_weights.toggle, 1.0);
             }
             other => panic!("expected edge_edit, got {other:?}"),
         }

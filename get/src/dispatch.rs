@@ -32,7 +32,8 @@ use rayon::prelude::*;
 
 use crate::GraphEvolver;
 use crate::config::{
-    self, Config, EvolutionConfig, FitnessConfig, GenomeConfig, SdaGenomeConfig, SelectionConfig,
+    self, Config, EdgeEditGenomeConfig, EvolutionConfig, FitnessConfig, GenomeConfig,
+    SdaGenomeConfig, SelectionConfig,
 };
 use crate::evolver::common::Selection;
 use crate::evolver::{
@@ -42,8 +43,8 @@ use crate::evolver::{
 use crate::fitness::{EpiLength, EpiProfMatch, EpiSpread, Fitness};
 use crate::genomes::edge_edit::IDENTITY_GENE;
 use crate::genomes::{
-    EdgeEditContext, EdgeEditGenome, EdgeEditOperationWeights, EdgeEditOperators, Genome,
-    SdaContext, SdaDimensions, SdaGenome,
+    EdgeEditContext, EdgeEditGenome, EdgeEditOperators, Genome, SdaContext, SdaDimensions,
+    SdaGenome,
 };
 use crate::graph::Graph;
 use crate::sir::{self, SirSampleParams};
@@ -234,17 +235,17 @@ impl GraphEvolver {
 /// backstop for a `Config` assembled in Rust without validation.
 pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
     config: &Config,
-    gene_length: usize,
-    weights: EdgeEditOperationWeights,
+    edge_edit: &EdgeEditGenomeConfig,
     base_graph: Option<&Graph>,
     rng: &mut R,
 ) -> PyResult<(EdgeEditContext, Vec<EdgeEditGenome>)> {
-    let operators = EdgeEditOperators::new(weights).map_err(PyValueError::new_err)?;
+    let operators =
+        EdgeEditOperators::new(edge_edit.operation_weights).map_err(PyValueError::new_err)?;
 
     let mut population = Vec::with_capacity(config.population_size);
     for _ in 0..config.population_size {
         population.push(EdgeEditGenome::random_with_operators(
-            gene_length,
+            edge_edit.gene_length,
             Arc::clone(&operators),
             rng,
         ));
@@ -262,7 +263,7 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
     // still evict this individual on a bad draw.
     if base_graph.is_some() && !population.is_empty() {
         population[0] = EdgeEditGenome::new_with_operators(
-            vec![IDENTITY_GENE; gene_length],
+            vec![IDENTITY_GENE; edge_edit.gene_length],
             Arc::clone(&operators),
         );
     }
@@ -396,17 +397,9 @@ pub(crate) fn evolve<F: Fitness>(
     // Genome outside, strategy inside: `Genome` cannot be a trait object, so the
     // concrete type has to be settled before an evolver can be named at all.
     match &config.genome {
-        GenomeConfig::EdgeEdit {
-            gene_length,
-            operation_weights,
-        } => {
-            let (genome_context, population) = edge_edit_start(
-                config,
-                *gene_length,
-                *operation_weights,
-                base_graph,
-                &mut rng,
-            )?;
+        GenomeConfig::EdgeEdit(edge_edit) => {
+            let (genome_context, population) =
+                edge_edit_start(config, edge_edit, base_graph, &mut rng)?;
             Ok(run_strategy(
                 config,
                 genome_context,
@@ -827,14 +820,28 @@ mod tests {
         ChaCha8Rng::seed_from_u64(11)
     }
 
+    /// The `[genome]` block of a config built by `evolver_with_genome`, for the
+    /// tests that call `edge_edit_start` directly. Reading it back out of the
+    /// config is what stops the test restating `gene_length` beside the TOML
+    /// that already sets it, and disagreeing with it.
+    fn edge_edit_config(config: &Config) -> &EdgeEditGenomeConfig {
+        match &config.genome {
+            GenomeConfig::EdgeEdit(edge_edit) => edge_edit,
+            other => panic!("expected an edge-edit genome, got {other:?}"),
+        }
+    }
+
     #[test]
     fn the_edge_edit_start_sizes_the_population_and_the_empty_base_graph() {
         let evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
-        let weights = EdgeEditOperationWeights::default();
 
-        let (context, population) =
-            edge_edit_start(&evolver.config, 16, weights, None, &mut test_rng())
-                .expect("default weights are usable");
+        let (context, population) = edge_edit_start(
+            &evolver.config,
+            edge_edit_config(&evolver.config),
+            None,
+            &mut test_rng(),
+        )
+        .expect("default weights are usable");
 
         assert_eq!(population.len(), 4, "one individual per population_size");
         for genome in &population {
@@ -860,8 +867,7 @@ mod tests {
 
         let (context, _) = edge_edit_start(
             &evolver.config,
-            16,
-            EdgeEditOperationWeights::default(),
+            edge_edit_config(&evolver.config),
             evolver.base_graph.as_ref(),
             &mut test_rng(),
         )
@@ -885,8 +891,7 @@ mod tests {
 
         let (context, population) = edge_edit_start(
             &evolver.config,
-            16,
-            EdgeEditOperationWeights::default(),
+            edge_edit_config(&evolver.config),
             evolver.base_graph.as_ref(),
             &mut test_rng(),
         )
@@ -911,8 +916,7 @@ mod tests {
 
         let (_, population) = edge_edit_start(
             &evolver.config,
-            16,
-            EdgeEditOperationWeights::default(),
+            edge_edit_config(&evolver.config),
             None,
             &mut test_rng(),
         )
@@ -1146,28 +1150,25 @@ mod tests {
     fn the_same_seed_builds_the_same_starting_population() {
         // The whole point of `run(seed)`: one master seed reproduces everything.
         let evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 12\n");
-        let weights = EdgeEditOperationWeights::default();
+        let genome = edge_edit_config(&evolver.config);
 
         let (_, first) = edge_edit_start(
             &evolver.config,
-            12,
-            weights,
+            genome,
             None,
             &mut ChaCha8Rng::seed_from_u64(5),
         )
         .expect("first build");
         let (_, second) = edge_edit_start(
             &evolver.config,
-            12,
-            weights,
+            genome,
             None,
             &mut ChaCha8Rng::seed_from_u64(5),
         )
         .expect("second build");
         let (_, different) = edge_edit_start(
             &evolver.config,
-            12,
-            weights,
+            genome,
             None,
             &mut ChaCha8Rng::seed_from_u64(6),
         )
@@ -1194,8 +1195,7 @@ mod tests {
 
         let (_, population) = edge_edit_start(
             &evolver.config,
-            8,
-            EdgeEditOperationWeights::default(),
+            edge_edit_config(&evolver.config),
             None,
             &mut rng,
         )

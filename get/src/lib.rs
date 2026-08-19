@@ -367,7 +367,7 @@ impl GraphEvolver {
             )));
         }
 
-        if !matches!(self.config.genome, GenomeConfig::EdgeEdit { .. }) {
+        if !matches!(self.config.genome, GenomeConfig::EdgeEdit(_)) {
             return Err(PyValueError::new_err(
                 "[genome] type is \"sda\", which generates its graph rather than editing one, \
                  so a base graph would never be read; set type = \"edge_edit\" to seed a run",
@@ -487,7 +487,7 @@ impl GraphEvolver {
         path: String,
         min_node_index: i64,
     ) -> PyResult<()> {
-        if !matches!(self.config.genome, GenomeConfig::EdgeEdit { .. }) {
+        if !matches!(self.config.genome, GenomeConfig::EdgeEdit(_)) {
             return Err(PyValueError::new_err(
                 "[genome] type is \"sda\", which generates its graph rather than editing one, \
                  so a base graph would never be read; set type = \"edge_edit\" to seed a run",

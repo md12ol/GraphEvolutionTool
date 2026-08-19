@@ -82,14 +82,29 @@ pub enum SelectionConfig {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GenomeConfig {
-    EdgeEdit {
-        gene_length: usize,
-        /// Relative probability of each edit operation. Omitted entirely, or
-        /// omitted field by field, every operation defaults to a weight of 1.0.
-        #[serde(default)]
-        operation_weights: EdgeEditOperationWeights,
-    },
+    EdgeEdit(EdgeEditGenomeConfig),
     Sda(SdaGenomeConfig),
+}
+
+/// Everything the edge-edit genome takes from `[genome]`.
+///
+/// Named for the same reason as [`SdaGenomeConfig`]: a struct variant is not a
+/// type, so anything wanting to pass "the edge-edit settings" around had to
+/// re-list every field positionally. Only `py_config`'s mirror re-lists them
+/// now, and the round-trip tests fail to compile if it falls behind.
+///
+/// `deny_unknown_fields` because every key here is either required or has a
+/// default, so an unrecognized one under `[genome]` is a typo or a setting the
+/// writer expected to have an effect — silently ignoring it is how a run comes
+/// back with the wrong parameters and no complaint.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EdgeEditGenomeConfig {
+    pub gene_length: usize,
+    /// Relative probability of each edit operation. Omitted entirely, or
+    /// omitted field by field, every operation defaults to a weight of 1.0.
+    #[serde(default)]
+    pub operation_weights: EdgeEditOperationWeights,
 }
 
 /// Everything the sda genome takes from `[genome]`.
@@ -494,12 +509,10 @@ impl Config {
     /// Constraints on the genome and its dimensions.
     fn validate_genome(&self) -> Result<(), ConfigError> {
         match &self.genome {
-            GenomeConfig::EdgeEdit {
-                operation_weights, ..
-            } => {
+            GenomeConfig::EdgeEdit(edge_edit) => {
                 // The weights already own their rules; map the message rather
                 // than restating it here and letting the two drift.
-                if let Err(constraint) = operation_weights.validate() {
+                if let Err(constraint) = edge_edit.operation_weights.validate() {
                     return Err(invalid("operation_weights", constraint));
                 }
             }
@@ -656,9 +669,7 @@ num_epidemics  = 30
             .expect("config should parse")
             .genome
         {
-            GenomeConfig::EdgeEdit {
-                operation_weights, ..
-            } => operation_weights,
+            GenomeConfig::EdgeEdit(edge_edit) => edge_edit.operation_weights,
             other => panic!("expected an edge-edit genome, got {other:?}"),
         }
     }
@@ -711,6 +722,20 @@ num_epidemics  = 30
                 local_delete: 8.0,
                 null: 9.0,
             }
+        );
+    }
+
+    #[test]
+    fn a_misspelled_genome_key_is_an_error_rather_than_a_silent_default() {
+        // Same guarantee one level up from the operation-weight test below: a
+        // key under `[genome]` that nothing reads means the run is not the one
+        // the writer configured.
+        let error = Config::from_toml_str(&config_text("gene_lenght = 128"))
+            .expect_err("an unknown genome key should not parse");
+
+        assert!(
+            error.to_string().contains("gene_lenght"),
+            "the error should name the offending key, got: {error}"
         );
     }
 
