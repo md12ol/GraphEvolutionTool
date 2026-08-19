@@ -154,9 +154,171 @@ pub fn clustering_histogram(graph: &Graph, num_bins: usize) -> Vec<f64> {
     hist
 }
 
+/// Build the symmetric normalized Laplacian, `L = I - D^(-1/2) A D^(-1/2)`.
+///
+/// Unweighted: a present edge contributes 1 whatever its multiplicity.
+///
+/// **Isolated nodes are the hazard this function exists to contain.** The
+/// candidate can strip a node's last edge mid-run, and `D^(-1/2)` is undefined
+/// at degree zero, so the natural expression yields `inf * 0 = NaN`. A `NaN`
+/// reaching the fitness value crashes the run rather than scoring it badly.
+///
+/// Taking `1/sqrt(0) = 0` — as NetworkX does — leaves an isolated node's row
+/// and column entirely zero, so it contributes one zero eigenvalue. That is
+/// consistent rather than a patch: an isolated node *is* a connected
+/// component, and the multiplicity of eigenvalue 0 is exactly the number of
+/// connected components.
+fn normalized_laplacian(graph: &Graph) -> Vec<Vec<f64>> {
+    let n = graph.num_nodes;
+    let mut inverse_sqrt_degree = Vec::with_capacity(n);
+    for node in 0..n {
+        let degree = graph.degree(node);
+        if degree > 0 {
+            inverse_sqrt_degree.push(1.0 / (degree as f64).sqrt());
+        } else {
+            // Degree zero deliberately contributes 0.0 here, not infinity.
+            inverse_sqrt_degree.push(0.0);
+        }
+    }
+
+    let mut laplacian = vec![vec![0.0; n]; n];
+    for u in 0..n {
+        // An isolated node keeps an all-zero row, including the diagonal: it
+        // has no self-similarity to subtract from.
+        if graph.degree(u) > 0 {
+            laplacian[u][u] = 1.0;
+        }
+        for v in 0..n {
+            if u != v && graph.has_edge(u, v) {
+                laplacian[u][v] -= inverse_sqrt_degree[u] * inverse_sqrt_degree[v];
+            }
+        }
+    }
+    laplacian
+}
+
+/// All eigenvalues of a real symmetric matrix, ascending, by cyclic Jacobi
+/// rotation.
+///
+/// Jacobi is chosen over a general eigensolver because the input is always
+/// small (one row per node) and always symmetric, which is the case Jacobi is
+/// exact and unconditionally convergent for. Each rotation zeroes one
+/// off-diagonal pair and preserves symmetry, so the matrix converges to a
+/// diagonal one whose entries are the eigenvalues.
+// The rotation below touches two specific rows and two specific columns of a
+// square matrix, so indices are what the algorithm is written in terms of.
+// Rewriting it as iterator chains would obscure it, and this crate prefers the
+// explicit loop where the two disagree.
+#[allow(clippy::needless_range_loop)]
+fn symmetric_eigenvalues(mut matrix: Vec<Vec<f64>>) -> Vec<f64> {
+    let n = matrix.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    if n == 1 {
+        return vec![matrix[0][0]];
+    }
+
+    // Generous ceilings: a sweep costs O(n^2) rotations and convergence is
+    // quadratic once the off-diagonal mass is small, so this is a guard
+    // against a pathological input rather than the expected exit.
+    const MAX_SWEEPS: usize = 100;
+    const TOLERANCE: f64 = 1e-12;
+
+    for _ in 0..MAX_SWEEPS {
+        // Total off-diagonal magnitude: the quantity each rotation reduces.
+        let mut off_diagonal = 0.0;
+        for p in 0..n {
+            for q in (p + 1)..n {
+                off_diagonal += matrix[p][q] * matrix[p][q];
+            }
+        }
+        if off_diagonal <= TOLERANCE {
+            break;
+        }
+
+        for p in 0..n {
+            for q in (p + 1)..n {
+                if matrix[p][q].abs() <= TOLERANCE {
+                    continue;
+                }
+
+                // The rotation angle that sends matrix[p][q] to exactly zero.
+                let theta = (matrix[q][q] - matrix[p][p]) / (2.0 * matrix[p][q]);
+                let sign = if theta >= 0.0 { 1.0 } else { -1.0 };
+                let t = sign / (theta.abs() + (theta * theta + 1.0).sqrt());
+                let cos = 1.0 / (t * t + 1.0).sqrt();
+                let sin = t * cos;
+
+                // Apply the rotation to rows p and q, then to columns p and q,
+                // keeping the matrix symmetric throughout.
+                for k in 0..n {
+                    let a_kp = matrix[k][p];
+                    let a_kq = matrix[k][q];
+                    matrix[k][p] = cos * a_kp - sin * a_kq;
+                    matrix[k][q] = sin * a_kp + cos * a_kq;
+                }
+                for k in 0..n {
+                    let a_pk = matrix[p][k];
+                    let a_qk = matrix[q][k];
+                    matrix[p][k] = cos * a_pk - sin * a_qk;
+                    matrix[q][k] = sin * a_pk + cos * a_qk;
+                }
+            }
+        }
+    }
+
+    let mut eigenvalues = Vec::with_capacity(n);
+    for (i, row) in matrix.iter().enumerate() {
+        eigenvalues.push(row[i]);
+    }
+    eigenvalues.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    eigenvalues
+}
+
+/// Spectrum of the normalized Laplacian, histogrammed over the fixed axis
+/// `[0, 2]`.
+///
+/// The axis is fixed at `[0, 2]` because that is where the normalized
+/// Laplacian's eigenvalues lie for **any** graph of any size — the
+/// size-invariance the other two families have natively.
+///
+/// This deliberately replaces the more usual "first *k* eigenvalues of the
+/// combinatorial Laplacian". An *n*-node graph has *n* eigenvalues, so a
+/// fixed-length prefix compares different fractions of two spectra, and the
+/// prefix is dominated by the zeros — one per connected component — rather
+/// than by anything structural. A histogram uses the whole spectrum and stays
+/// the same length whatever *n* is.
+///
+/// Bin 0 therefore carries the fraction of eigenvalues that are zero, which is
+/// the connected-component count divided by *n*. Fragmentation is penalised as
+/// a side effect, with no rule written for it.
+pub fn spectral_histogram(graph: &Graph, num_bins: usize) -> Vec<f64> {
+    let mut hist = vec![0.0; num_bins];
+    if num_bins == 0 || graph.num_nodes == 0 {
+        return hist;
+    }
+
+    let eigenvalues = symmetric_eigenvalues(normalized_laplacian(graph));
+    for value in &eigenvalues {
+        // Rounding can push an eigenvalue a hair outside [0, 2]; clamping
+        // keeps every one of them an observation instead of silently dropping
+        // the ones at the ends, which are the structurally meaningful ones.
+        let clamped = value.clamp(0.0, 2.0);
+        let index = bin_index(clamped, 2.0, num_bins);
+        hist[index] += 1.0;
+    }
+
+    normalize(&mut hist);
+    hist
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{bin_index, clustering_histogram, degree_histogram, normalize};
+    use super::{
+        bin_index, clustering_histogram, degree_histogram, normalize, normalized_laplacian,
+        spectral_histogram, symmetric_eigenvalues,
+    };
     use crate::graph::Graph;
 
     /// Sum of a histogram, for the "is a probability distribution" checks.
@@ -339,6 +501,160 @@ mod tests {
         assert_eq!(
             clustering_histogram(&weighted, 4),
             clustering_histogram(&path_of_three(), 4)
+        );
+    }
+
+    /// Count how many eigenvalues are zero, which is the connected-component
+    /// count for the normalized Laplacian.
+    fn zero_eigenvalue_count(graph: &Graph) -> usize {
+        let values = symmetric_eigenvalues(normalized_laplacian(graph));
+        let mut count = 0;
+        for value in &values {
+            if value.abs() < 1e-9 {
+                count += 1;
+            }
+        }
+        count
+    }
+
+    /// The bound the fixed axis depends on: every eigenvalue of the normalized
+    /// Laplacian lies in [0, 2], whatever the graph.
+    #[test]
+    fn every_eigenvalue_lies_in_zero_to_two() {
+        let mut complete = Graph::new(7, 1);
+        for u in 0..7 {
+            for v in (u + 1)..7 {
+                complete.add_edge(u, v);
+            }
+        }
+
+        let mut star = Graph::new(9, 1);
+        for leaf in 1..9 {
+            star.add_edge(0, leaf);
+        }
+
+        for graph in [complete, star, path_of_three()] {
+            for value in symmetric_eigenvalues(normalized_laplacian(&graph)) {
+                assert!(value.is_finite(), "eigenvalue was not finite");
+                assert!(
+                    (-1e-9..=2.0 + 1e-9).contains(&value),
+                    "eigenvalue {value} outside [0, 2]"
+                );
+            }
+        }
+    }
+
+    /// A complete graph K_n has eigenvalue 0 once and n/(n-1) with multiplicity
+    /// n-1 — a spectrum known in closed form, so this pins the solver itself
+    /// rather than just its self-consistency.
+    #[test]
+    fn a_complete_graph_matches_its_closed_form_spectrum() {
+        let n = 5;
+        let mut complete = Graph::new(n, 1);
+        for u in 0..n {
+            for v in (u + 1)..n {
+                complete.add_edge(u, v);
+            }
+        }
+
+        let values = symmetric_eigenvalues(normalized_laplacian(&complete));
+        let expected = n as f64 / (n as f64 - 1.0);
+
+        assert!(
+            values[0].abs() < 1e-9,
+            "smallest should be 0, was {}",
+            values[0]
+        );
+        for value in &values[1..] {
+            assert!(
+                (value - expected).abs() < 1e-9,
+                "expected {expected}, got {value}"
+            );
+        }
+    }
+
+    /// An isolated node must not produce a NaN: 1/sqrt(0) is taken as 0, so the
+    /// node contributes one zero eigenvalue instead of an undefined one.
+    #[test]
+    fn an_isolated_node_scores_without_nan() {
+        let mut graph = Graph::new(4, 1);
+        graph.add_edge(0, 1);
+        graph.add_edge(1, 2);
+        // Node 3 is isolated.
+
+        let hist = spectral_histogram(&graph, 10);
+        for value in &hist {
+            assert!(value.is_finite(), "histogram carried a non-finite value");
+        }
+        assert!((total(&hist) - 1.0).abs() < 1e-12);
+
+        // Two components: the path 0-1-2, and the isolated node 3.
+        assert_eq!(zero_eigenvalue_count(&graph), 2);
+    }
+
+    /// Three disjoint components, and the zero-eigenvalue multiplicity has to
+    /// equal the component count exactly.
+    #[test]
+    fn three_components_give_three_zero_eigenvalues_and_no_nan() {
+        let mut graph = Graph::new(9, 1);
+        graph.add_edge(0, 1);
+        graph.add_edge(1, 2);
+        graph.add_edge(3, 4);
+        graph.add_edge(4, 5);
+        graph.add_edge(6, 7);
+        graph.add_edge(7, 8);
+
+        let hist = spectral_histogram(&graph, 10);
+        for value in &hist {
+            assert!(value.is_finite());
+        }
+        assert!((total(&hist) - 1.0).abs() < 1e-12);
+        assert_eq!(zero_eigenvalue_count(&graph), 3);
+
+        // Bin 0 carries components / n = 3/9.
+        assert!((hist[0] - 3.0 / 9.0).abs() < 1e-12);
+    }
+
+    /// A graph with no edges at all is every node isolated: n components, so
+    /// every eigenvalue is zero and nothing is undefined.
+    #[test]
+    fn a_graph_with_no_edges_is_all_zero_eigenvalues() {
+        let graph = Graph::new(5, 1);
+
+        assert_eq!(zero_eigenvalue_count(&graph), 5);
+        let hist = spectral_histogram(&graph, 10);
+        assert!((hist[0] - 1.0).abs() < 1e-12);
+        assert!((total(&hist) - 1.0).abs() < 1e-12);
+    }
+
+    /// The whole point of the fixed axis, checked on the spectral family: two
+    /// graphs with different node counts produce histograms of the same length
+    /// on the same axis.
+    #[test]
+    fn spectra_of_different_sized_graphs_share_one_axis() {
+        let small = path_of_three();
+        let mut large = Graph::new(12, 1);
+        for i in 0..11 {
+            large.add_edge(i, i + 1);
+        }
+
+        let small_hist = spectral_histogram(&small, 8);
+        let large_hist = spectral_histogram(&large, 8);
+
+        assert_eq!(small_hist.len(), large_hist.len());
+        assert!((total(&small_hist) - 1.0).abs() < 1e-12);
+        assert!((total(&large_hist) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn edge_multiplicity_does_not_change_the_spectral_histogram() {
+        let mut weighted = Graph::new(3, 5);
+        weighted.set_edge(0, 1, 5);
+        weighted.set_edge(1, 2, 2);
+
+        assert_eq!(
+            spectral_histogram(&weighted, 8),
+            spectral_histogram(&path_of_three(), 8)
         );
     }
 }
