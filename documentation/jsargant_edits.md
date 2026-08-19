@@ -398,3 +398,39 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   other alternatives are still unverified.
 
 *#struct-match-objective-added · filed 2026-08-19 19:50 — James.*
+
+## `documentation/reference/evolver-common.html` — the `Selection` section, after #101
+
+- **Page:** `reference/evolver-common.html`, "Selection — picking parents", currently lines 338-360.
+  **Sweep against the post-#131 file, not the one on the site today** — PR #131 is already
+  rewriting this page's signatures (it corrects `tournament_indices` from `pub` to `pub(super)`)
+  and does not touch the prose below.
+- **Now false — "one extra variant plus one match arm".** The page's summary of the `Selection`
+  enum is the exact sentence #101 replaced, and it understates the work by roughly a factor of
+  eight. A second scheme touches **eight sites across six files**: the variant, `select`'s arm,
+  `tournament_indices`'s arm, `SteadyStateEvolver::new`'s variant match, three edits in
+  `config.rs`, `dispatch::selection`, three in `py_config.rs`, and `config.example.toml`.
+- **Now missing — the route framing, which is the page's job more than the crate doc's.**
+  `Selection` is an enum rather than a trait, so unlike an objective, a genome or an evolver it
+  **cannot be extended from outside the crate at all**. A depending program's only schemes are the
+  ones GET ships. A reader on this site is more likely than a reader of the source to assume the
+  trait pattern holds throughout, so this belongs high in the section.
+- **Now missing — the three contracts.** Selection samples **with** replacement; fitnesses arrive
+  already oriented so a scheme never consults a `Direction`; all randomness comes from the RNG
+  passed in. None is enforced by the signature, and the page currently states none of them.
+- **Now incomplete — what `tournament_indices` actually is.** It is not half of a two-method
+  selection contract. It returns one ranked draw of distinct individuals from which steady-state
+  takes both its parents and the individuals they replace, so it is a replacement policy, and a
+  scheme with no such draw is rejected against steady-state at config-parse time rather than
+  implementing it. Reasoning in `decisions.md`,
+  `selection-contract-excludes-tournament-indices`.
+- **Should say:** the enum-not-a-trait framing first; the eight-site chain, with the note that
+  steps 1-6 fail to compile if forgotten and steps 7-8 do not; the three contracts; and
+  `tournament_indices` described as steady-state's requirement.
+- **Worth considering while sweeping:** `evolver-common.html:57`'s table row for `Selection` says
+  "how parents are picked", which is right for `select` and wrong for `tournament_indices`. And
+  the `<span class="src">evolver/common.rs:22-25</span>` line reference has shifted — the enum's
+  doc block grew substantially, so every `src` reference in this section needs re-checking rather
+  than trusting the ones on the page.
+
+*#selection-extension-point-documented · filed 2026-08-19 21:55 — James.*
