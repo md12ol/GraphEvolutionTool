@@ -1567,12 +1567,26 @@ num_epidemics  = 30
         ))
         .expect("the shipped example config should be readable");
 
-        let start = text
-            .find("# [fitness]\n# type             = \"struct_match\"")
-            .expect("the example should carry a commented struct_match block");
+        // Located by walking lines rather than by searching for a needle with
+        // an embedded "\n". `config.example.toml` has no `eol` attribute, so a
+        // checkout with `core.autocrlf=true` -- git's default on Windows, which
+        // is what both owners develop on -- gives it CRLF endings, and a needle
+        // containing a bare "\n" then matches nothing at all. The loop below was
+        // never exposed to this: `lines()` strips the "\r" itself. Only the
+        // search was, which is why the test failed while the parse it guards
+        // would have been fine.
+        let lines: Vec<&str> = text.lines().collect();
+        let mut found = None;
+        for i in 0..lines.len().saturating_sub(1) {
+            if lines[i] == "# [fitness]" && lines[i + 1].contains("\"struct_match\"") {
+                found = Some(i);
+                break;
+            }
+        }
+        let start = found.expect("the example should carry a commented struct_match block");
 
         let mut block = String::new();
-        for line in text[start..].lines() {
+        for line in &lines[start..] {
             // The block ends at the first line that is not part of it.
             let Some(rest) = line.strip_prefix("# ") else {
                 break;
