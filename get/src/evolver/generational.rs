@@ -4,7 +4,7 @@
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use super::common::{best_index, express_and_score, generation_stats, mutate_child, rank};
+use super::common::{best_index, breed_pair, express_and_score, generation_stats, rank};
 use super::{
     EvolutionOutcome, Evolver, GenerationStats, GenerationalContext, SharedEvolutionContext,
 };
@@ -23,13 +23,13 @@ pub struct GenerationalEvolver<G: Genome> {
 
 impl<G: Genome> GenerationalEvolver<G> {
     /// Produce the next generation: copy `context.elite_count` elites forward,
-    /// then fill the rest by selecting parents, recombining them with
-    /// probability `crossover_rate`, and mutating each child through
-    /// [`mutate_child`](super::common::mutate_child).
+    /// then fill the rest by selecting parents and breeding them through
+    /// [`breed_pair`](super::common::breed_pair).
     ///
-    /// That helper owns **both** mutation rolls — `mutation_rate` and
-    /// `max_mutations` — so this strategy and steady-state cannot disagree about
-    /// what they mean. Neither roll is made here.
+    /// That helper owns every random draw involved in making a child — the
+    /// crossover roll and both mutation rolls — so this strategy and
+    /// steady-state cannot disagree about what they mean or draw from the RNG in
+    /// a different order. None of those rolls is made here.
     ///
     /// Takes `fitnesses` for the population it is replacing and does no scoring:
     /// the whole next generation is scored in one batch by [`Evolver::run`].
@@ -67,26 +67,7 @@ impl<G: Genome> GenerationalEvolver<G> {
             let mut second = pair.pop().expect("select returned two parents");
             let mut first = pair.pop().expect("select returned two parents");
 
-            // One crossover roll for the pair, then the mutation rolls per
-            // child, in the same fixed order steady-state uses so the two
-            // strategies consume their RNG the same way.
-            if rng.random_bool(self.shared.crossover_rate) {
-                first.crossover(&mut second, rng);
-            }
-            mutate_child(
-                &mut first,
-                &self.shared.genome_context,
-                self.shared.mutation_rate,
-                self.shared.max_mutations,
-                rng,
-            );
-            mutate_child(
-                &mut second,
-                &self.shared.genome_context,
-                self.shared.mutation_rate,
-                self.shared.max_mutations,
-                rng,
-            );
+            breed_pair(&mut first, &mut second, &self.shared, rng);
 
             // Both children are always bred, so a pass costs the same RNG
             // whether or not its second child is kept. On an odd fill count the

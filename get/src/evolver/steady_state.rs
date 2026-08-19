@@ -5,7 +5,7 @@
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use super::common::{Selection, best_index, express_and_score, generation_stats, mutate_child};
+use super::common::{Selection, best_index, breed_pair, express_and_score, generation_stats};
 use super::{
     EvolutionOutcome, Evolver, GenerationStats, SharedEvolutionContext, SteadyStateContext,
 };
@@ -38,6 +38,11 @@ impl<G: Genome> SteadyStateEvolver<G> {
     /// best is never among the replaced, the population's best individual is
     /// never discarded and no explicit elitism is needed.
     ///
+    /// Breeding goes through [`breed_pair`](super::common::breed_pair), which
+    /// owns the crossover roll and both mutation rolls, so this strategy and
+    /// generational cannot disagree about what they mean or draw from the RNG in
+    /// a different order.
+    ///
     /// Replacement is unconditional: a child takes its slot even if it scores
     /// worse than the individual it displaces.
     fn mating_event<F, R>(&mut self, fitness: &F, fitnesses: &mut [f64], rng: &mut R)
@@ -50,27 +55,7 @@ impl<G: Genome> SteadyStateEvolver<G> {
         let mut first = self.population[tournament[0]].clone();
         let mut second = self.population[tournament[1]].clone();
 
-        // One crossover roll for the pair, then the mutation rolls per child, in
-        // a fixed order so a seeded run reproduces exactly. Mutation goes through
-        // the shared helper so this strategy and generational cannot disagree
-        // about what `mutation_rate` and `max_mutations` mean.
-        if rng.random_bool(self.shared.crossover_rate) {
-            first.crossover(&mut second, rng);
-        }
-        mutate_child(
-            &mut first,
-            &self.shared.genome_context,
-            self.shared.mutation_rate,
-            self.shared.max_mutations,
-            rng,
-        );
-        mutate_child(
-            &mut second,
-            &self.shared.genome_context,
-            self.shared.mutation_rate,
-            self.shared.max_mutations,
-            rng,
-        );
+        breed_pair(&mut first, &mut second, &self.shared, rng);
 
         // Scoring both children in one batch rather than individually halves the
         // FFI hops a Python-backed objective pays per event.
