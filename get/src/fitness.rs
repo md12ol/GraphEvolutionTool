@@ -3,17 +3,91 @@
 //!
 //! # Adding your own objective
 //!
-//! 1. Implement [`Fitness`] — [`Fitness::evaluate`] is the only required
-//!    method; add [`Fitness::direction`] if bigger is better.
-//! 2. Add a variant to `FitnessConfig` in `crate::config`.
-//! 3. Add the matching arm in `GraphEvolver::run`.
+//! An objective touches up to six places. How many of them are yours depends
+//! on which way you are using GET, so start by working out which reader you
+//! are:
 //!
-//! If it is epidemic-based, build it on [`EpidemicScorer`] rather than calling
-//! the simulator yourself. It owns the seeding, and wrong seeding still gives
-//! numbers that look fine. Copy the shape [`EpiSpread`] uses: both `evaluate`
-//! and `evaluate_batch` hand [`EpidemicScorer::mean_batch`] a closure
-//! saying what to read off one epidemic. Write the same reading in both — the
-//! test `both_entry_points_use_the_same_reading` fails if they disagree.
+//! - **You depend on this crate from your own program.** Step 1 is the only
+//!   one available to you, and it is enough on its own: write your type,
+//!   implement [`Fitness`] for it, and pass it to `Evolver::run`. Steps 2–5
+//!   are unreachable rather than skipped — `config` and `dispatch` are private
+//!   modules, so nothing outside this crate can add a config variant or a
+//!   dispatch arm. Your objective reaches the evolver by being handed over
+//!   directly, and is never named in a config file.
+//! - **You are editing your own copy of GET.** All six are yours. What that
+//!   buys, and what the first reader structurally cannot have, is an objective
+//!   selectable by name from `config.toml` and runnable by the `get-run`
+//!   binary, with no Rust written at the call site.
+//!
+//! The steps, in the order you would walk them:
+//!
+//! 1. **This file** — implement [`Fitness`] for your type. [`Fitness::evaluate`]
+//!    is the only required method. Add [`Fitness::direction`] if bigger is
+//!    better, and override [`Fitness::evaluate_batch`] if the default is wrong
+//!    for you — see "When overriding `evaluate_batch` is required" below,
+//!    because that case is about correctness rather than speed.
+//! 2. **`config.rs`** — add a variant to `FitnessConfig` holding whatever the
+//!    objective needs to read out of the file, and validate those parameters.
+//!    This variant is what a user selects under `[fitness]` by name.
+//! 3. **`dispatch.rs`** — add the matching arm to `objective()`, which turns
+//!    that variant into a `Box<dyn Fitness>`. Steps 2 and 3 are one change
+//!    split across two files: a variant nothing constructs is dead code, and
+//!    an arm for a variant that does not exist will not compile.
+//! 4. **`py_config.rs`** — add the Python-side constructor, if the objective
+//!    should be reachable from Python. Leave it out and everything else still
+//!    works; a Python caller simply has no way to name the objective.
+//! 5. **`config.example.toml`** — add an example block if the objective ships.
+//!    The example file is what a user copies from, so an objective missing
+//!    from it is one most people never find.
+//! 6. **The dispatch tests** — assert the new variant erases to a box that
+//!    reports its own [`Direction`]. Worth writing because the failure it
+//!    catches is silent: an objective whose direction is lost runs the search
+//!    backwards and looks merely unconverged.
+//!
+//! # What `Direction` costs you if you get it wrong
+//!
+//! [`Fitness::evaluate`] returns your score in your own units, and
+//! [`Fitness::direction`] is what tells the engine whether large or small
+//! wins. The engine compares in one convention throughout and converts back at
+//! the boundary, so you never negate your own output — see [`Direction`],
+//! which explains both forms and why the objective does not do the flipping.
+//!
+//! The default is [`Direction::Minimize`], which means an objective that
+//! should be maximized and does not say so is not rejected anywhere. It runs,
+//! it logs, and it optimizes for the worst graph it can find.
+//!
+//! # When overriding `evaluate_batch` is required
+//!
+//! The default scores each graph independently across rayon threads, which is
+//! correct for an objective that is a pure function of one graph. Two cases
+//! are not merely slower under it — they are wrong:
+//!
+//! - **The objective is stochastic.** The default draws fresh randomness per
+//!   graph, so two graphs in one batch are scored against different samples
+//!   and their scores stop being comparable to each other. Share one sample
+//!   across the batch instead; [`EpidemicScorer::mean_batch`] is how the
+//!   epidemic objectives do it.
+//! - **The objective calls Python.** Taking the GIL inside a rayon closure
+//!   deadlocks rather than running slowly, so a Python objective must batch
+//!   its crossing of the boundary. `PyFitness` exists for this.
+//!
+//! # What an objective must not do
+//!
+//! Nothing that makes two runs at the same seed disagree. Every source of
+//! randomness an objective uses has to derive from the seed it was built with,
+//! never from the system clock, an address, thread scheduling, or iteration
+//! order over a hash map. Reproducing a run from its seed is the only way a
+//! result can be checked afterwards, and a run that quietly stopped being
+//! reproducible looks exactly like one that is fine.
+//!
+//! # If it is epidemic-based
+//!
+//! Build it on [`EpidemicScorer`] rather than calling the simulator yourself.
+//! It owns the seeding, and wrong seeding still gives numbers that look fine.
+//! Copy the shape [`EpiSpread`] uses: both `evaluate` and `evaluate_batch`
+//! hand [`EpidemicScorer::mean_batch`] a closure saying what to read off one
+//! epidemic. Write the same reading in both — the test
+//! `both_entry_points_use_the_same_reading` fails if they disagree.
 
 use std::slice;
 use std::sync::atomic::{AtomicU64, Ordering};
