@@ -40,6 +40,7 @@ use crate::evolver::{
     SharedEvolutionContext, SteadyStateContext, SteadyStateEvolver,
 };
 use crate::fitness::{EpiLength, EpiProfMatch, EpiSpread, Fitness};
+use crate::genomes::edge_edit::IDENTITY_GENE;
 use crate::genomes::{
     EdgeEditContext, EdgeEditGenome, EdgeEditOperationWeights, EdgeEditOperators, Genome,
     SdaContext, SdaDimensions, SdaGenome,
@@ -239,6 +240,23 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
             Arc::clone(&operators),
             rng,
         ));
+    }
+
+    // A seeded run keeps one individual that edits nothing, so generation 0
+    // contains the graph the caller supplied and not only random departures
+    // from it. Every gene is opcode 8, `Null`, which expression skips — so this
+    // genome expresses to exactly the base graph.
+    //
+    // Unconditional, with no config flag: without it a seeded run can return
+    // something worse than its own input, if nothing in a random generation 0
+    // happens to beat it. What that buys is a soft floor rather than a hard one
+    // — elites are rescored every generation, so a stochastic objective can
+    // still evict this individual on a bad draw.
+    if base_graph.is_some() && !population.is_empty() {
+        population[0] = EdgeEditGenome::new_with_operators(
+            vec![IDENTITY_GENE; gene_length],
+            Arc::clone(&operators),
+        );
     }
 
     // Unset means empty, which is the default an unseeded run gets.
@@ -655,6 +673,7 @@ mod tests {
             config: config_with(fitness_block),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: String::new(),
         }
     }
@@ -787,6 +806,7 @@ mod tests {
             config: config_with_genome_and_cap(genome_block, cap),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: String::new(),
         }
     }
@@ -823,8 +843,7 @@ mod tests {
     fn a_set_base_graph_is_what_the_edge_edit_population_expresses_against() {
         let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
         let seeded = vec![(0, 1, 2), (3, 4, 1)];
-        evolver
-            .set_base_graph(8, seeded.clone())
+        Python::attach(|py| evolver.set_base_graph(py, 8, seeded.clone(), 0))
             .expect("a graph matching the config is accepted");
 
         let (context, _) = edge_edit_start(
@@ -844,11 +863,61 @@ mod tests {
     }
 
     #[test]
+    fn a_seeded_population_keeps_one_individual_that_expresses_the_base_graph() {
+        // Without this, generation 0 holds nothing near the graph the caller
+        // supplied, and a run can return something worse than its own input.
+        let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+        let seeded = vec![(0, 1, 1), (3, 4, 1)];
+        Python::attach(|py| evolver.set_base_graph(py, 8, seeded.clone(), 0))
+            .expect("a graph matching the config is accepted");
+
+        let (context, population) = edge_edit_start(
+            &evolver.config,
+            16,
+            EdgeEditOperationWeights::default(),
+            evolver.base_graph.as_ref(),
+            &mut test_rng(),
+        )
+        .expect("default weights are usable");
+
+        // Expressed, not just inspected: the guarantee is about the graph this
+        // individual produces, not about the bytes in its genes.
+        let expressed = population[0].express(&context);
+        assert_eq!(expressed.get_edge_list(), seeded);
+        assert_eq!(
+            population.len(),
+            evolver.config.population_size,
+            "the identity replaces a slot rather than adding one",
+        );
+    }
+
+    #[test]
+    fn an_unseeded_population_gets_no_identity_individual() {
+        // The identity is only a floor when there is something to hold up: with
+        // no base graph it would just be an empty graph taking a slot.
+        let evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
+
+        let (_, population) = edge_edit_start(
+            &evolver.config,
+            16,
+            EdgeEditOperationWeights::default(),
+            None,
+            &mut test_rng(),
+        )
+        .expect("default weights are usable");
+
+        let all_null = population[0]
+            .genes
+            .iter()
+            .all(|gene| *gene == IDENTITY_GENE);
+        assert!(!all_null, "an unseeded run has no identity individual");
+    }
+
+    #[test]
     fn a_base_graph_whose_node_count_disagrees_with_the_config_is_rejected() {
         let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
 
-        let err = evolver
-            .set_base_graph(9, vec![(0, 1, 1)])
+        let err = Python::attach(|py| evolver.set_base_graph(py, 9, vec![(0, 1, 1)], 0))
             .expect_err("9 nodes against a network_size of 8 must be rejected");
 
         let message = err.to_string();
@@ -866,8 +935,7 @@ mod tests {
         let mut evolver =
             evolver_with_genome_and_cap("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n", 1);
 
-        let err = evolver
-            .set_base_graph(8, vec![(0, 1, 1), (2, 3, 3)])
+        let err = Python::attach(|py| evolver.set_base_graph(py, 8, vec![(0, 1, 1), (2, 3, 3)], 0))
             .expect_err("multiplicity 3 against a cap of 1 must be rejected");
 
         let message = err.to_string();
@@ -894,8 +962,7 @@ mod tests {
         // dropped by `Graph::set_edge` without a word.
         let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
 
-        let err = evolver
-            .set_base_graph(8, vec![(0, 1, 1), (2, 9, 1)])
+        let err = Python::attach(|py| evolver.set_base_graph(py, 8, vec![(0, 1, 1), (2, 9, 1)], 0))
             .expect_err("node 9 in an 8-node network must be rejected");
 
         let message = err.to_string();
@@ -903,8 +970,13 @@ mod tests {
             message.contains("(2, 9)"),
             "names the offending edge: {message}",
         );
+        // The range is inclusive and stated in the caller's own numbering, the
+        // same way the file loader states it. Asserting the whole range rather
+        // than one digit of it: `contains('8')` passed on the old exclusive
+        // `0..8` wording by accident, and would pass again on any message that
+        // merely mentioned the network size.
         assert!(
-            message.contains('8'),
+            message.contains("0..=7"),
             "names the range it fell outside: {message}",
         );
         assert!(evolver.base_graph.is_none(), "nothing stored on rejection");
@@ -918,8 +990,7 @@ mod tests {
         // vertex. Reported rather than absorbed.
         let mut evolver = evolver_with_genome("[genome]\ntype = \"edge_edit\"\ngene_length = 16\n");
 
-        let err = evolver
-            .set_base_graph(8, vec![(0, 1, 1), (3, 3, 1)])
+        let err = Python::attach(|py| evolver.set_base_graph(py, 8, vec![(0, 1, 1), (3, 3, 1)], 0))
             .expect_err("a self-loop must be rejected");
 
         let message = err.to_string();
@@ -942,8 +1013,7 @@ mod tests {
         let mut evolver =
             evolver_with_genome("[genome]\ntype = \"sda\"\nnum_states = 5\nmax_resp_len = 3\n");
 
-        let err = evolver
-            .set_base_graph(8, vec![(0, 1, 1)])
+        let err = Python::attach(|py| evolver.set_base_graph(py, 8, vec![(0, 1, 1)], 0))
             .expect_err("an SDA run has no base graph to seed");
 
         let message = err.to_string();
@@ -1440,6 +1510,7 @@ mod tests {
                 config: runnable_with_fitness(GENERATIONAL, EDGE_EDIT, PYTHON_FITNESS),
                 fitness_function: None,
                 base_graph: None,
+                min_node_index: None,
                 config_toml: String::new(),
             };
             let callable = py
@@ -1687,6 +1758,7 @@ mod tests {
             config: Config::from_toml_str(&config_toml).expect("the fixture parses"),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: config_toml.clone(),
         };
 
@@ -1725,6 +1797,7 @@ mod tests {
             config: runnable(GENERATIONAL, EDGE_EDIT),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: String::new(),
         }
     }
@@ -1831,6 +1904,7 @@ mod tests {
             config: runnable(GENERATIONAL, EDGE_EDIT),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: String::new(),
         };
 
@@ -1868,6 +1942,7 @@ mod tests {
                 config: runnable(evolution, EDGE_EDIT),
                 fitness_function: None,
                 base_graph: None,
+                min_node_index: None,
                 config_toml: String::new(),
             };
             let [result] = <[_; 1]>::try_from(
@@ -1940,6 +2015,7 @@ mod tests {
             config: Config::from_toml_str(&config_toml).expect("the fixture parses"),
             fitness_function: None,
             base_graph: None,
+            min_node_index: None,
             config_toml: config_toml.clone(),
         };
         let [result] = <[_; 1]>::try_from(

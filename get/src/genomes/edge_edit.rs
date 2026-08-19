@@ -17,6 +17,10 @@ use operations::GraphOperation;
 const OPERATION_COUNT: usize = 9;
 const OPCODE_MASK: u64 = 0xF;
 
+/// A whole gene that edits nothing: opcode 8 is `Null`, and the payload above
+/// it is unread, so a genome of these expresses to its base graph unchanged.
+pub const IDENTITY_GENE: u64 = 8;
+
 /// Relative probabilities for generating each edge-edit operation.
 ///
 /// The default gives all nine operations equal probability. Set via
@@ -150,11 +154,16 @@ pub struct EdgeEditGenome {
 impl EdgeEditGenome {
     /// Construct a genome from encoded genes and a shared operation mix.
     ///
-    /// A run never builds a genome this way — `dispatch` mints the population
-    /// with [`EdgeEditGenome::random_with_operators`]. It is here for the
-    /// caller driving an evolver directly, who needs a known starting
-    /// population: the genes read off a previous run's best individual, a
-    /// recorded edit script, or a deterministic fixture. Without it `genes`
+    /// Almost every individual is minted at random by
+    /// [`EdgeEditGenome::random_with_operators`] instead, so this is the path for
+    /// the callers that need a *chosen* gene sequence. There are two, and they
+    /// are why this is public rather than test-only.
+    ///
+    /// `dispatch` builds the identity individual a seeded run starts with —
+    /// [`IDENTITY_GENE`] repeated — which is a chosen sequence by definition. And
+    /// a caller driving an evolver directly needs a known starting population,
+    /// whether that is the genes read off a previous run's best individual, a
+    /// recorded edit script, or a deterministic fixture; without this, `genes`
     /// would be readable with no supported way to feed them back.
     pub fn new_with_operators(genes: Vec<u64>, operators: Arc<EdgeEditOperators>) -> Self {
         Self { genes, operators }

@@ -52,6 +52,21 @@ tournament_size = 5          # larger = stronger selection pressure
 
 # --- Genome representation ----------------------------------------------------
 # Edge-edit: an edit script applied to a base graph.
+#
+# The base graph itself is NOT a config value, and there is deliberately no key
+# for it here: it is either data you brought or the output of a previous run,
+# and neither belongs in a document that is meant to be the run's reproducible
+# record. It arrives through the evolver instead, either as a list you already
+# hold or as a file:
+#
+#     evolver.set_base_graph(100, edges)
+#     evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)
+#
+# The file is one edge per line, `start,end,weight`. `min_node_index` is where
+# your own node numbering starts — pass 1 for a 1-indexed file, and the results
+# come back 1-indexed too. Left unset, a run starts from an empty graph, which
+# leaves five of the nine edit operations inert until `add` or `toggle` have
+# built some structure. See `examples/config_builder.py`, `seeding_from_a_file`.
 
 [genome]
 type        = "edge_edit"
