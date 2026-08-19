@@ -290,9 +290,13 @@ fn symmetric_eigenvalues(mut matrix: Vec<Vec<f64>>) -> Vec<f64> {
 /// than by anything structural. A histogram uses the whole spectrum and stays
 /// the same length whatever *n* is.
 ///
-/// Bin 0 therefore carries the fraction of eigenvalues that are zero, which is
-/// the connected-component count divided by *n*. Fragmentation is penalised as
-/// a side effect, with no rule written for it.
+/// Bin 0 carries every eigenvalue below `2 / num_bins`, so it *contains* the
+/// exact zeros — one per connected component — without being only them. A
+/// connected graph whose spectrum crowds near zero puts several eigenvalues
+/// there as well: a 12-node path on 8 bins contributes three, not one. So a
+/// heavy bin 0 tracks fragmentation rather than counting it, and the component
+/// count is the zero multiplicity alone, which this histogram does not isolate.
+/// Read it as a signal, never as `components / n`.
 pub fn spectral_histogram(graph: &Graph, num_bins: usize) -> Vec<f64> {
     let mut hist = vec![0.0; num_bins];
     if num_bins == 0 || graph.num_nodes == 0 {
@@ -896,8 +900,35 @@ mod tests {
         assert!((total(&hist) - 1.0).abs() < 1e-12);
         assert_eq!(zero_eigenvalue_count(&graph), 3);
 
-        // Bin 0 carries components / n = 3/9.
+        // Bin 0 holds 3/9 here, but only because it happens to catch nothing
+        // besides the zeros: a 3-node path's other eigenvalues are 1 and 2, and
+        // the first bin ends at 0.2. That coincidence is not the general rule —
+        // see `bin_zero_is_a_range_not_the_component_count`.
         assert!((hist[0] - 3.0 / 9.0).abs() < 1e-12);
+    }
+
+    /// Bin 0 is a range, and reading it as the component count is wrong the
+    /// moment a connected graph has eigenvalues near zero.
+    ///
+    /// A 12-node path is **one** component, so `components / n` would be 1/12.
+    /// Bin 0 holds 3/12, because 0.0405 and 0.1587 also fall below the first
+    /// boundary at 2/8 = 0.25. The three cases above all pin graphs whose
+    /// nonzero eigenvalues sit far from zero, so none of them can catch this.
+    #[test]
+    fn bin_zero_is_a_range_not_the_component_count() {
+        let mut path = Graph::new(12, 1);
+        for i in 0..11 {
+            path.add_edge(i, i + 1);
+        }
+
+        assert_eq!(zero_eigenvalue_count(&path), 1);
+
+        let hist = spectral_histogram(&path, 8);
+        assert!(
+            (hist[0] - 3.0 / 12.0).abs() < 1e-12,
+            "bin 0 was {}, expected 3/12 — three eigenvalues below 0.25",
+            hist[0]
+        );
     }
 
     /// A graph with no edges at all is every node isolated: n components, so
