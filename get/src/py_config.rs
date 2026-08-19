@@ -488,8 +488,8 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         // On the genome object; each belongs to one variant.
         "operation_weights" => Some("config.genome.operation_weights"),
         "init_state" => Some("config.genome.init_state"),
-        // Raised from a loop in `validate_genome`, so the field name is not a
-        // string literal at the call site and the scraper below cannot see it.
+        // Raised from a loop in `validate_genome` rather than as a literal at
+        // the call site — the second of the two shapes the scraper below reads.
         "init_char_mutation_rate" => Some("config.genome.init_char_mutation_rate"),
         "transition_vs_response_rate" => Some("config.genome.transition_vs_response_rate"),
         // On the SIR block, which every epidemic objective reaches the same
@@ -503,8 +503,7 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         // `epi_prof_match` has one.
         "target_profile" => Some("config.fitness.target_profile"),
         // `struct_match`'s own block. All are raised from loops in
-        // `validate_struct_match`, so the scraper below cannot see them as
-        // string literals at the call site.
+        // `validate_struct_match` rather than as literals at the call site.
         "reference_folder" => Some("config.fitness.reference_folder"),
         "degree_bins" => Some("config.fitness.degree_bins"),
         "clustering_bins" => Some("config.fitness.clustering_bins"),
@@ -1084,37 +1083,122 @@ mod tests {
             .expect("a sane mirror should produce a valid config");
     }
 
+    /// The string literal starting at `index`, ignoring leading whitespace.
+    ///
+    /// Returns `None` when anything else sits there — an identifier, or another
+    /// call — which is how a caller tells a literal field name from a variable
+    /// holding one.
+    fn literal_at(source: &str, index: usize) -> Option<String> {
+        let rest = &source[index..];
+        let open = rest.find('"')?;
+        if !rest[..open].trim().is_empty() {
+            return None;
+        }
+        let after_open = &rest[open + 1..];
+        let close = after_open.find('"')?;
+        Some(after_open[..close].to_string())
+    }
+
+    /// The `[...]` list of a `for (field, value) in [...]` loop whose `for`
+    /// keyword sits at `index`, or `None` if what follows is not that shape.
+    ///
+    /// The list has to follow the loop pattern immediately: searching the whole
+    /// file for the next `in [` would silently scrape an unrelated loop.
+    fn field_loop_list(source: &str, index: usize) -> Option<&str> {
+        let close_pattern = source[index..].find(')')?;
+        let mut start = index + close_pattern + 1;
+        while start < source.len() && source.as_bytes()[start].is_ascii_whitespace() {
+            start += 1;
+        }
+        let rest = source.get(start..)?.strip_prefix("in [")?;
+        let contents = source.len() - rest.len();
+        Some(&source[contents..closing_bracket(source, contents)?])
+    }
+
+    /// The index of the `]` closing a list whose contents start at `start`.
+    ///
+    /// Depth-counted rather than searched for: the tuples inside can hold
+    /// brackets of their own, and a `]` inside a string literal must not be
+    /// taken for the end of the list.
+    fn closing_bracket(source: &str, start: usize) -> Option<usize> {
+        let bytes = source.as_bytes();
+        let mut depth = 1;
+        let mut index = start;
+        while index < bytes.len() {
+            match bytes[index] {
+                b'"' => {
+                    index += 1;
+                    while index < bytes.len() && bytes[index] != b'"' {
+                        if bytes[index] == b'\\' {
+                            index += 1;
+                        }
+                        index += 1;
+                    }
+                }
+                b'[' => depth += 1,
+                b']' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(index);
+                    }
+                }
+                _ => {}
+            }
+            index += 1;
+        }
+        None
+    }
+
     /// Every field name `config.rs` can raise, scraped from its own source.
     ///
     /// Reading the source rather than maintaining a second list by hand: a list
     /// is exactly the thing that goes stale, and the failure it would hide is
     /// silent — an unmapped field degrades to a bare name rather than erroring.
+    ///
+    /// Two shapes, because `config.rs` raises in two ways: the direct
+    /// `invalid("<field>", ...)` call, and a loop over a list of
+    /// `("<field>", value)` pairs whose body raises `invalid(field, ...)`. Both
+    /// have to be read — a field visible in neither is one the sweep below
+    /// stops checking without saying so. A *third* shape is not handled here but
+    /// by `every_invalid_call_names_its_field_scrapably`, which fails rather than
+    /// letting this function silently cover less than it claims.
     fn validation_fields_in_config_rs() -> Vec<String> {
         let source = include_str!("config.rs");
         let mut fields = Vec::new();
 
-        // Every check is `invalid("<field>", ...)`, sometimes wrapped onto the
+        // Shape 1: `invalid("<field>", ...)`, sometimes wrapped onto the
         // following line by rustfmt, so this takes the first string literal
         // after each call rather than assuming it is on the same line.
         for (index, _) in source.match_indices("invalid(") {
-            let rest = &source[index + "invalid(".len()..];
-            let Some(open) = rest.find('"') else {
-                continue;
-            };
-            // Nothing but whitespace may sit between the paren and the literal,
-            // or this is a call whose first argument is not the field name.
-            if !rest[..open].trim().is_empty() {
-                continue;
-            }
-            let after_open = &rest[open + 1..];
-            let Some(close) = after_open.find('"') else {
-                continue;
-            };
-            let field = after_open[..close].to_string();
-            if !fields.contains(&field) {
+            if let Some(field) = literal_at(source, index + "invalid(".len())
+                && !fields.contains(&field)
+            {
                 fields.push(field);
             }
         }
+
+        // Shape 2: `for (field, value) in [("<field>", value), ...]`. Every name
+        // is the head of a tuple in that list, so this takes the first literal
+        // after each `(` inside it. A `(` in one of the value expressions could
+        // add a name that is not a field — harmless, since the only cost is an
+        // attribute path nobody needs, and the sweep stays loud rather than
+        // silently dropping a real one.
+        for (index, _) in source.match_indices("for (field,") {
+            let Some(list) = field_loop_list(source, index) else {
+                // Not the shape this reads. Left to
+                // `every_field_loop_is_a_shape_the_scraper_reads`, which fails
+                // rather than letting the skip go unnoticed here.
+                continue;
+            };
+            for (paren, _) in list.match_indices('(') {
+                if let Some(field) = literal_at(list, paren + 1)
+                    && !fields.contains(&field)
+                {
+                    fields.push(field);
+                }
+            }
+        }
+
         fields
     }
 
@@ -1129,13 +1213,94 @@ mod tests {
             "expected the scraper to find every validation field, found {}: {fields:?}",
             fields.len()
         );
-        for expected in ["max_edge_multiplicity", "init_state", "patient_zero"] {
+        for expected in [
+            // Raised as literals at the call site.
+            "max_edge_multiplicity",
+            "init_state",
+            "patient_zero",
+            // Raised through a loop variable, one from each of the two
+            // functions that use that shape.
+            "init_char_mutation_rate",
+            "degree_bins",
+        ] {
             assert!(
                 fields.iter().any(|field| field == expected),
                 "the scraper missed `{expected}`, so it is not reading config.rs correctly: \
                  {fields:?}"
             );
         }
+    }
+
+    #[test]
+    fn every_invalid_call_names_its_field_scrapably() {
+        // `validation_fields_in_config_rs` reads two shapes: a literal at the
+        // call site, and the `for (field, value) in [...]` loop. A raise fitting
+        // neither is invisible to it, and the sweep below then passes whether or
+        // not that field is mapped — a guard that has quietly stopped guarding.
+        // Fail loudly on a third shape instead.
+        let source = include_str!("config.rs");
+
+        let mut unreadable = Vec::new();
+        for (index, _) in source.match_indices("invalid(") {
+            let after = index + "invalid(".len();
+            if literal_at(source, after).is_some() {
+                continue;
+            }
+            // Not a literal, so it is a variable. `field` is the only name the
+            // loop shape binds, and so the only one the scraper can resolve.
+            let mut argument = String::new();
+            for character in source[after..].trim_start().chars() {
+                if !character.is_alphanumeric() && character != '_' {
+                    break;
+                }
+                argument.push(character);
+            }
+            if argument != "field" {
+                unreadable.push(argument);
+            }
+        }
+
+        assert!(
+            unreadable.is_empty(),
+            "these `invalid(...)` calls name their field with something the scraper cannot read: \
+             {unreadable:?}. Either pass a string literal, or bind the name as `field` in a \
+             `for (field, value) in [...]` loop, or teach `validation_fields_in_config_rs` the new \
+             shape. Left alone, `every_validation_field_maps_to_a_python_attribute` silently stops \
+             checking that field."
+        );
+    }
+
+    #[test]
+    fn every_field_loop_is_a_shape_the_scraper_reads() {
+        // The other half of the guard above. That one checks the raise site
+        // names `field`; this checks the loop binding it is a list of literal
+        // pairs the scraper can actually read. A loop whose pattern or list is
+        // written some other way — a nested binding, a named constant in place
+        // of the list — is skipped in silence otherwise, and the two together
+        // are what make "named `field`" mean "scraped".
+        let source = include_str!("config.rs");
+
+        let mut unreadable = Vec::new();
+        for (index, _) in source.match_indices("for (field,") {
+            let readable = match field_loop_list(source, index) {
+                Some(list) => list
+                    .match_indices('(')
+                    .any(|(paren, _)| literal_at(list, paren + 1).is_some()),
+                None => false,
+            };
+            if !readable {
+                // The line number is what locates it; the source text of a
+                // wrapped loop would run to the end of the file.
+                unreadable.push(source[..index].lines().count() + 1);
+            }
+        }
+
+        assert!(
+            unreadable.is_empty(),
+            "the `for (field, ...)` loops at these lines of config.rs are not a list of \
+             (\"<field>\", value) pairs, so `validation_fields_in_config_rs` skips them and the \
+             fields they raise go unchecked: {unreadable:?}"
+        );
     }
 
     #[test]
@@ -1160,19 +1325,6 @@ mod tests {
             "these validation fields have no Python attribute path, so a user would be told a \
              bare field name: {unmapped:?}. Add them to `python_attribute_path`."
         );
-    }
-
-    #[test]
-    fn the_two_rate_fields_raised_from_a_loop_are_mapped() {
-        // `validate_genome` raises these two through a loop variable rather than
-        // a string literal, so `validation_fields_in_config_rs` skips them and
-        // the sweep above passes whether or not they are mapped. Pin them here.
-        for field in ["init_char_mutation_rate", "transition_vs_response_rate"] {
-            assert!(
-                python_attribute_path(field).is_some(),
-                "{field} is raisable from Python but has no attribute path"
-            );
-        }
     }
 
     #[test]
