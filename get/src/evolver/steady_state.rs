@@ -5,7 +5,7 @@
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use super::common::{Selection, best_index, express_and_score, generation_stats, mutate_child};
+use super::common::{Selection, best_index, breed_pair, express_and_score, generation_stats};
 use super::{
     EvolutionOutcome, Evolver, GenerationStats, SharedEvolutionContext, SteadyStateContext,
 };
@@ -38,6 +38,11 @@ impl<G: Genome> SteadyStateEvolver<G> {
     /// best is never among the replaced, the population's best individual is
     /// never discarded and no explicit elitism is needed.
     ///
+    /// Breeding goes through [`breed_pair`](super::common::breed_pair), which
+    /// owns the crossover roll and both mutation rolls, so this strategy and
+    /// generational cannot disagree about what they mean or draw from the RNG in
+    /// a different order.
+    ///
     /// Replacement is unconditional: a child takes its slot even if it scores
     /// worse than the individual it displaces.
     fn mating_event<F, R>(&mut self, fitness: &F, fitnesses: &mut [f64], rng: &mut R)
@@ -50,27 +55,7 @@ impl<G: Genome> SteadyStateEvolver<G> {
         let mut first = self.population[tournament[0]].clone();
         let mut second = self.population[tournament[1]].clone();
 
-        // One crossover roll for the pair, then the mutation rolls per child, in
-        // a fixed order so a seeded run reproduces exactly. Mutation goes through
-        // the shared helper so this strategy and generational cannot disagree
-        // about what `mutation_rate` and `max_mutations` mean.
-        if rng.random_bool(self.shared.crossover_rate) {
-            first.crossover(&mut second, rng);
-        }
-        mutate_child(
-            &mut first,
-            &self.shared.genome_context,
-            self.shared.mutation_rate,
-            self.shared.max_mutations,
-            rng,
-        );
-        mutate_child(
-            &mut second,
-            &self.shared.genome_context,
-            self.shared.mutation_rate,
-            self.shared.max_mutations,
-            rng,
-        );
+        breed_pair(&mut first, &mut second, &self.shared, rng);
 
         // Scoring both children in one batch rather than individually halves the
         // FFI hops a Python-backed objective pays per event.
@@ -89,9 +74,9 @@ impl<G: Genome> SteadyStateEvolver<G> {
         }
     }
 
-    /// Run every mating event, recording the starting population as iteration 0
-    /// and then one row per "generation equivalent" — every `population_size`
-    /// events.
+    /// Run every mating event, logging one row per "generation equivalent" —
+    /// every `population_size` events. Row 0 is already in place, seeded by
+    /// [`Evolver::run`] from the starting population.
     ///
     /// The interval keeps a steady-state log comparable to a generational one
     /// and stops a 100,000-event run from producing a 100,000-row history. The
@@ -109,9 +94,6 @@ impl<G: Genome> SteadyStateEvolver<G> {
         // and steady-state only ever replaces individuals, never removes them.
         let log_interval = self.population.len();
 
-        self.history.clear();
-        self.history.push(generation_stats(0, fitnesses));
-
         for event in 1..=self.context.num_mating_events {
             self.mating_event(fitness, fitnesses, rng);
 
@@ -125,7 +107,10 @@ impl<G: Genome> SteadyStateEvolver<G> {
     ///
     /// Expresses the winner once here rather than tracking graphs through every
     /// event, which would mean keeping a `Graph` per individual alive for the
-    /// whole run to save a single expression at the end.
+    /// whole run to save a single expression at the end. Generational does the
+    /// opposite — it `swap_remove`s the winner from the graphs its final scoring
+    /// pass already built — because it scores everyone every generation and so
+    /// has them to hand.
     ///
     /// `direction` is stored, not applied: the outcome leaves here in engine
     /// orientation and the boundary converts it once. Spec §5.1.
@@ -160,6 +145,10 @@ impl<G: Genome> Evolver<G> for SteadyStateEvolver<G> {
         // rather than trusting its caller. Both checks belong at construction:
         // `tournament_indices` would catch the second one too, but not until the
         // first mating event, which is exactly the mid-run failure this avoids.
+        //
+        // There is deliberately no matching `elite_count` assert as generational
+        // has — steady-state carries no elites, because the tournament's best is
+        // never among the two it replaces.
         match shared.selection {
             Selection::Tournament { tournament_size } => {
                 assert!(
@@ -188,13 +177,19 @@ impl<G: Genome> Evolver<G> for SteadyStateEvolver<G> {
     }
 
     fn run<F: Fitness>(&mut self, fitness: &F, seed: u64) -> EvolutionOutcome<G> {
-        // ChaCha8 rather than StdRng: StdRng's algorithm is allowed to change
-        // between `rand` releases, which would silently break the reproducibility
-        // this `seed` argument exists to provide.
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
 
+        // The graphs are dropped rather than kept: steady-state re-expresses the
+        // winner in `outcome`, so holding a `Graph` per individual for the whole
+        // run would buy one expression at the end.
         let (_, mut fitnesses) =
             express_and_score(&self.population, &self.shared.genome_context, fitness);
+
+        // Row 0 is seeded here, beside the scoring it summarizes, for the same
+        // reason and in the same place as generational's.
+        self.history.clear();
+        self.history.push(generation_stats(0, &fitnesses));
+
         self.evolve(fitness, &mut fitnesses, &mut rng);
         self.outcome(&fitnesses, fitness.direction())
     }
@@ -208,89 +203,10 @@ mod tests {
     use rand::rngs::StdRng;
 
     use crate::evolver::common::express_and_score;
-    use crate::graph::Graph;
+    use crate::evolver::test_support::{MostNodes, NodeCount, Val, Walk, best_of, mean_of};
 
-    /// A genome whose single value drives both its identity and its fitness, so
-    /// a test can say exactly which individual ended up in which slot.
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    struct Val(usize);
-
-    impl Genome for Val {
-        type Context = ();
-
-        fn express(&self, _context: &Self::Context) -> Graph {
-            Graph::new(self.0 + 1, 1)
-        }
-
-        /// Swap, so a crossover that happened is visible in the result.
-        fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, _rng: &mut R) {
-            std::mem::swap(&mut self.0, &mut other.0);
-        }
-
-        /// A large, unmistakable jump — no test value is near it.
-        fn mutate<R: Rng + ?Sized>(&mut self, _context: &Self::Context, _rng: &mut R) {
-            self.0 += 100;
-        }
-
-        fn print(&self) -> String {
-            format!("Val({})", self.0)
-        }
-    }
-
-    /// Like `Val`, but mutation drifts up or down using the RNG, so evolution
-    /// can actually improve a population and a run test is not vacuous.
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    struct Walk(usize);
-
-    impl Genome for Walk {
-        type Context = ();
-
-        fn express(&self, _context: &Self::Context) -> Graph {
-            Graph::new(self.0 + 1, 1)
-        }
-
-        fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, _rng: &mut R) {
-            std::mem::swap(&mut self.0, &mut other.0);
-        }
-
-        fn mutate<R: Rng + ?Sized>(&mut self, _context: &Self::Context, rng: &mut R) {
-            if rng.random_bool(0.5) {
-                self.0 = self.0.saturating_sub(1);
-            } else {
-                self.0 += 1;
-            }
-        }
-
-        fn print(&self) -> String {
-            format!("Walk({})", self.0)
-        }
-    }
-
-    /// Fitness is the node count, which `Val::express` sets from its value, so
-    /// a lower value is a fitter individual.
-    struct NodeCount;
-
-    impl Fitness for NodeCount {
-        fn evaluate(&self, graph: &Graph) -> f64 {
-            graph.num_nodes as f64
-        }
-    }
-
-    /// The same score under `Maximize`, so a test can tell an engine-oriented
-    /// outcome from a converted one — under `NodeCount` the two are identical,
-    /// because orienting a minimizing objective is the identity.
-    struct MostNodes;
-
-    impl Fitness for MostNodes {
-        fn evaluate(&self, graph: &Graph) -> f64 {
-            graph.num_nodes as f64
-        }
-
-        fn direction(&self) -> Direction {
-            Direction::Maximize
-        }
-    }
-
+    /// Steady-state's tournament size. Larger than generational's, because the
+    /// two parents and the two individuals they replace must be distinct.
     const TOURNAMENT_SIZE: usize = 5;
 
     fn selection() -> Selection {
@@ -300,7 +216,7 @@ mod tests {
     }
 
     /// Population of `size` individuals with distinct values, and their scores.
-    fn evolver(
+    fn val_evolver(
         size: usize,
         crossover_rate: f64,
         mutation_rate: f64,
@@ -325,37 +241,36 @@ mod tests {
         )
     }
 
+    /// A `Walk` evolver whose population starts at `20..20 + size`.
+    fn walk_evolver(size: usize, events: usize) -> SteadyStateEvolver<Walk> {
+        let shared = SharedEvolutionContext {
+            genome_context: (),
+            crossover_rate: 0.7,
+            mutation_rate: 0.7,
+            max_mutations: 1,
+            selection: selection(),
+        };
+        let context = SteadyStateContext {
+            num_mating_events: events,
+        };
+        let population = (0..size).map(|i| Walk(i + 20)).collect();
+        SteadyStateEvolver::new(shared, context, population)
+    }
+
     /// The tournament `mating_event` will draw: it is the first thing to consume
     /// the RNG, so an identically seeded mirror reproduces it exactly.
+    ///
+    /// Steady-state-only, and deliberately: generational draws no tournament whose
+    /// membership a test needs to know.
     fn tournament_for(fitnesses: &[f64], seed: u64) -> Vec<usize> {
         let mut mirror = StdRng::seed_from_u64(seed);
         selection().tournament_indices(fitnesses, &mut mirror)
     }
 
-    /// The best (lowest) fitness among a population's scores.
-    fn best_of(fitnesses: &[f64]) -> f64 {
-        let mut best = fitnesses[0];
-        for &f in &fitnesses[1..] {
-            if f < best {
-                best = f;
-            }
-        }
-        best
-    }
-
-    /// The mean fitness across a population's scores.
-    fn mean_of(fitnesses: &[f64]) -> f64 {
-        let mut sum = 0.0;
-        for &f in fitnesses {
-            sum += f;
-        }
-        sum / fitnesses.len() as f64
-    }
-
     #[test]
     fn a_mating_event_replaces_the_tournaments_two_worst_and_nothing_else() {
         let seed = 12;
-        let (mut evolver, mut fitnesses) = evolver(10, 0.0, 0.0);
+        let (mut evolver, mut fitnesses) = val_evolver(10, 0.0, 0.0);
         let before = evolver.population.clone();
         let tournament = tournament_for(&fitnesses, seed);
 
@@ -386,7 +301,7 @@ mod tests {
         // rates a child can be an exact clone, and writing it back into the
         // best slot would be invisible — the test would pass vacuously.
         let seed = 7;
-        let (mut evolver, mut fitnesses) = evolver(12, 1.0, 1.0);
+        let (mut evolver, mut fitnesses) = val_evolver(12, 1.0, 1.0);
         let before = evolver.population.clone();
         let tournament = tournament_for(&fitnesses, seed);
 
@@ -401,7 +316,7 @@ mod tests {
 
     #[test]
     fn fitnesses_still_describe_the_population_after_an_event() {
-        let (mut evolver, mut fitnesses) = evolver(9, 0.7, 0.7);
+        let (mut evolver, mut fitnesses) = val_evolver(9, 0.7, 0.7);
         let mut rng = StdRng::seed_from_u64(99);
 
         for _ in 0..25 {
@@ -417,7 +332,7 @@ mod tests {
 
     #[test]
     fn the_best_individual_never_gets_worse() {
-        let (mut evolver, mut fitnesses) = evolver(10, 0.9, 0.9);
+        let (mut evolver, mut fitnesses) = val_evolver(10, 0.9, 0.9);
         let mut rng = StdRng::seed_from_u64(4);
         let mut best = best_of(&fitnesses);
 
@@ -435,7 +350,7 @@ mod tests {
     #[test]
     fn mutation_is_applied_to_the_children() {
         let seed = 3;
-        let (mut evolver, mut fitnesses) = evolver(10, 0.0, 1.0);
+        let (mut evolver, mut fitnesses) = val_evolver(10, 0.0, 1.0);
         let before = evolver.population.clone();
         let tournament = tournament_for(&fitnesses, seed);
 
@@ -487,21 +402,6 @@ mod tests {
             num_mating_events: 0,
         };
         SteadyStateEvolver::new(shared, context, (0..3).map(Val).collect());
-    }
-
-    fn walk_evolver(size: usize, events: usize) -> SteadyStateEvolver<Walk> {
-        let shared = SharedEvolutionContext {
-            genome_context: (),
-            crossover_rate: 0.7,
-            mutation_rate: 0.7,
-            max_mutations: 1,
-            selection: selection(),
-        };
-        let context = SteadyStateContext {
-            num_mating_events: events,
-        };
-        let population = (0..size).map(|i| Walk(i + 20)).collect();
-        SteadyStateEvolver::new(shared, context, population)
     }
 
     #[test]

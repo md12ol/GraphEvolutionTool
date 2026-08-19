@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 use rand::Rng;
 use rayon::prelude::*;
 
-use super::GenerationStats;
+use super::{GenerationStats, SharedEvolutionContext};
 use crate::fitness::Fitness;
 use crate::genomes::Genome;
 use crate::graph::Graph;
@@ -207,6 +207,49 @@ pub fn mutate_child<G, R>(
     for _ in 0..count {
         child.mutate(context, rng);
     }
+}
+
+/// Recombine a selected pair and mutate both children, in the fixed order every
+/// strategy uses.
+///
+/// One crossover roll for the pair, then one [`mutate_child`] call per child.
+/// The order is part of the contract, not an implementation detail: a seeded run
+/// only reproduces if every strategy draws from the RNG in the same sequence, so
+/// generational and steady-state both breed through here rather than each
+/// spelling the same four calls out.
+///
+/// Takes the whole [`SharedEvolutionContext`] rather than its four relevant
+/// fields, so a field added there cannot be forgotten at one of the two call
+/// sites.
+///
+/// `first` and `second` are the parents, mutated in place into the children.
+/// Neither is scored here — the caller decides when and in what batch.
+pub fn breed_pair<G, R>(
+    first: &mut G,
+    second: &mut G,
+    shared: &SharedEvolutionContext<G>,
+    rng: &mut R,
+) where
+    G: Genome,
+    R: Rng + ?Sized,
+{
+    if rng.random_bool(shared.crossover_rate) {
+        first.crossover(second, rng);
+    }
+    mutate_child(
+        first,
+        &shared.genome_context,
+        shared.mutation_rate,
+        shared.max_mutations,
+        rng,
+    );
+    mutate_child(
+        second,
+        &shared.genome_context,
+        shared.mutation_rate,
+        shared.max_mutations,
+        rng,
+    );
 }
 
 /// Express every genome against the shared context and score the whole batch,

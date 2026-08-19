@@ -8,6 +8,11 @@ pub mod common;
 pub mod generational;
 pub mod steady_state;
 
+// Test doubles both strategies' test modules share. Compiled out of the lib
+// target entirely, so nothing here ships.
+#[cfg(test)]
+pub(crate) mod test_support;
+
 // Re-exported so callers write evolver::GenerationalEvolver rather than
 // reaching into the generational submodule directly.
 pub use generational::GenerationalEvolver;
@@ -165,5 +170,10 @@ pub trait Evolver<G: Genome> {
     /// Evolve the population against `fitness`, seeding all randomness from
     /// `seed` for reproducibility, and return the best genome and its
     /// expressed graph.
+    ///
+    /// Implementations seed a `ChaCha8Rng`, not a `StdRng`: `StdRng`'s algorithm
+    /// is allowed to change between `rand` releases, which would silently break
+    /// the reproducibility this `seed` argument exists to provide. Stated here
+    /// rather than in each strategy because it binds all of them.
     fn run<F: Fitness>(&mut self, fitness: &F, seed: u64) -> EvolutionOutcome<G>;
 }
