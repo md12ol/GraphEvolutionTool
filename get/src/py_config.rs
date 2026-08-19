@@ -223,6 +223,16 @@ pub enum PySelectionConfig {
 /// Genome representation and the dimensions used to build random individuals.
 ///
 /// Mirrors [`crate::config::GenomeConfig`].
+///
+/// # Part of the chain that adds a representation
+///
+/// This is step 7, and it is optional: it is what lets a Python caller name
+/// the representation. Leaving it out costs nothing elsewhere — the
+/// representation still runs from a TOML config and from Rust. One thing does
+/// have to follow step 4 even so: a field its validation raises by name needs
+/// an attribute path in `python_attribute_path` below, or a Python caller gets
+/// an error naming a TOML field they never wrote.
+/// [`crate::genomes::genome`]'s module doc has all seven steps.
 #[pyclass(name = "GenomeConfig")]
 #[derive(Debug, Clone)]
 pub enum PyGenomeConfig {
@@ -265,6 +275,17 @@ pub enum PyGenomeConfig {
         /// `Option`-wrapped for the same reason.
         transition_vs_response_rate: Option<f64>,
     },
+    // ADD A GENOME STEP 7 — the Python-side variant, if the representation
+    // should be reachable from Python. Optional; leaving it out costs nothing
+    // elsewhere.
+    //
+    //     #[pyo3(constructor = (some_dimension))]
+    //     MyGenome { some_dimension: usize },
+    //
+    // Then add the matching arm to `PyGenomeConfig::to_toml_value` below, which
+    // writes `type = "my_genome"` and the fields under `[genome]`. And if step
+    // 4's validation raises a field by name, give it a path in
+    // `python_attribute_path` — search `ADD A GENOME STEP 7` again for it.
 }
 
 /// Fitness objective and its parameters.
@@ -492,6 +513,13 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         // the call site — the second of the two shapes the scraper below reads.
         "init_char_mutation_rate" => Some("config.genome.init_char_mutation_rate"),
         "transition_vs_response_rate" => Some("config.genome.transition_vs_response_rate"),
+        // ADD A GENOME STEP 7 — one line per field step 4's validation names:
+        //
+        //     "some_dimension" => Some("config.genome.some_dimension"),
+        //
+        // Without it a Python caller gets an error naming a TOML field they
+        // never wrote. `every_validation_field_maps_to_a_python_attribute` is
+        // the test that catches a missing one.
         // On the SIR block, which every epidemic objective reaches the same
         // way even though it flattens into `[fitness]` in the document.
         "infection_rate" => Some("config.fitness.sir.infection_rate"),

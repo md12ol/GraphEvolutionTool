@@ -1,6 +1,164 @@
+//! The genome representations the GA evolves, and where a new one has to be
+//! wired in.
+//!
+//! A representation is whatever an individual *is*: [`crate::genomes::sda`]
+//! evolves an automaton that generates a graph from nothing, and
+//! [`crate::genomes::edge_edit`] evolves a script of edits applied to a graph
+//! you already have. Both reach the engine through [`Genome`] below, and the
+//! engine never sees anything else about them.
+//!
+//! # Adding your own representation
+//!
+//! A representation touches **seven steps across five files**. `dispatch.rs`
+//! appears twice, once to build the starting population and once to select the
+//! representation, and they are separate steps because they fail differently:
+//! the first reports a bad dimension, the second only picks.
+//!
+//! How many of the seven are yours depends on which way you are using GET, so
+//! work out which reader you are first:
+//!
+//! - **You depend on this crate from your own program.** Steps 1 and 2 are the
+//!   only ones available to you, and together they are enough: write your
+//!   type, implement [`Genome`] for it, and build the population and the
+//!   [`Genome::Context`] by hand before handing both to the evolver. Steps 3-7
+//!   are unreachable rather than skipped — `config`, `dispatch` and
+//!   `py_config` are private modules, so nothing outside this crate can add a
+//!   config variant, a start builder or a dispatch arm, and the example file
+//!   lives in the GET repository rather than yours. `examples/library_route.rs`
+//!   walks this end to end.
+//! - **You are editing your own copy of GET.** All seven steps are yours. What
+//!   that buys, and what the first reader structurally cannot have, is a
+//!   representation selectable by name under `[genome]` in `config.toml` and
+//!   runnable by the `get-run` binary with no Rust at the call site. Step 5 is
+//!   the one that makes that true: a start builder is what turns a config
+//!   document into a sized population and a context.
+//!
+//! **Every step below is marked at its own site in the code.** Search the repo
+//! for `ADD A GENOME STEP 3` — or any other number — and you land on the exact
+//! place that step is made, next to a worked example of what to add there:
+//!
+//! ```text
+//! git grep -n "ADD A GENOME STEP"      # all seven, in one list
+//! ```
+//!
+//! The steps, in the order you would walk them:
+//!
+//! 1. **This file** — implement [`Genome`] for your type: the
+//!    [`Genome::Context`] associated type, [`Genome::express`],
+//!    [`Genome::crossover`], [`Genome::mutate`] and [`Genome::print`]. Every
+//!    one is required; there are no defaults to inherit. `crossover` and
+//!    `mutate` carry a contract about mutation *count* that the engine depends
+//!    on — it is stated on [`Genome::mutate`], and is the one part of this
+//!    trait a representation cannot reinterpret locally.
+//! 2. **Your context type**, declared beside the representation or here next to
+//!    [`EdgeEditContext`] and [`SdaContext`]. See "What `Context` is, and what
+//!    it is not" below — deciding what goes on the context rather than on the
+//!    genome is a design call this trait makes you take deliberately, and it is
+//!    easy to get wrong in a way nothing reports.
+//! 3. **`genomes/mod.rs`** — declare the module and re-export the type and its
+//!    context, so callers name them from `crate::genomes` rather than from the
+//!    private path.
+//! 4. **`config.rs`** — add a `GenomeConfig` variant carrying the dimensions
+//!    random individuals are built from, and validate them in
+//!    `Config::validate_genome`. A dimension that would panic during expression
+//!    belongs here, at load, rather than mid-run: `init_state` is checked
+//!    against `num_states` for exactly that reason.
+//! 5. **`dispatch.rs`, the start builder** — a function beside `edge_edit_start`
+//!    and `sda_start` that turns that config variant into a population and a
+//!    context. See "What a start builder owes the engine" below; this is the
+//!    step with real obligations rather than a line of wiring.
+//! 6. **`dispatch.rs`, the `evolve` match** — one arm selecting your
+//!    representation. Steps 4, 5 and 6 are one change split across two files: a
+//!    variant nothing constructs is dead code, and an arm for a variant that
+//!    does not exist will not compile. The match is genome outside, strategy
+//!    inside, so a third representation is one arm there and nothing at all in
+//!    the evolvers.
+//! 7. **`py_config.rs` and `config.example.toml`** — the Python-side
+//!    constructor, if the representation should be reachable from Python, and
+//!    an example block if it ships. Both are optional and neither costs
+//!    anything elsewhere if left out: a caller simply has no way to name the
+//!    representation from Python, and most people never find one that is
+//!    missing from the example file. If step 4's validation raises a new field
+//!    name, that name also needs a Python attribute path in `py_config.rs`, or
+//!    the error a Python caller sees will name a TOML field they never wrote.
+//!
+//! # What `Context` is, and what it is not
+//!
+//! [`Genome::Context`] is **run configuration** — built once, before generation
+//! 0, and read but never written for the rest of the run. It is not evolved
+//! state, and nothing in the trait can write to it: [`Genome::express`] and
+//! [`Genome::mutate`] both take `&Self::Context`.
+//!
+//! It comes from the start builder in step 5, which is the only place holding
+//! both the parsed config and the freedom to fail. [`EdgeEditContext`] carries
+//! the base graph an edit script is applied to; [`SdaContext`] carries the node
+//! count, the edge-weight cap and the two mutation probabilities.
+//!
+//! [`SdaContext::init_state`] is the worked example of the split, and the
+//! reason it is worth taking deliberately. It looks like genome data — it is
+//! the automaton's starting state — and an earlier shape could have put it on
+//! `SdaGenome` beside `init_char`, which *is* evolved. It sits on the context
+//! because [`Genome::mutate`] and [`Genome::crossover`] never touch it: it is
+//! the same for every individual for the whole run. So the test is not "does
+//! this describe the individual" but **"can variation change it"**. Anything
+//! variation cannot change is configuration, and putting it on the genome
+//! instead costs one copy per individual and invites a mutation that has no
+//! business existing.
+//!
+//! # Why `Send + Sync` is on both the trait and the context
+//!
+//! `evolver::common::express_and_score` expresses a whole population in
+//! parallel over rayon: it `par_iter`s the batch and hands every worker thread
+//! the *same* `&Self::Context`. That needs `Genome: Send + Sync` for
+//! individuals to cross thread boundaries, and `Context: Send + Sync` for one
+//! reference to be shared across them.
+//!
+//! Both bounds are load-bearing, and the compiler error if either is missing
+//! does not say why — it surfaces inside rayon's `ParallelIterator` machinery,
+//! several layers away from anything you wrote. A representation or context
+//! holding an `Rc`, a `RefCell` or a raw pointer fails there rather than at its
+//! own definition.
+//!
+//! # What a start builder owes the engine
+//!
+//! Step 5 has three obligations, and no type enforces any of them:
+//!
+//! - **A population of exactly `config.population_size` individuals.** The
+//!   evolvers size their working buffers from what they are handed, so a short
+//!   population is a quietly smaller search rather than an error.
+//! - **A context `express` can actually use.** Anything `express` indexes with
+//!   has to be range-checked here, because the alternative is a panic mid-run
+//!   inside a generic, which crosses the Python boundary as an opaque
+//!   `PanicException`. Reporting beats asserting for anything that can reach a
+//!   release build.
+//! - **Rejection rather than clamping** when caller-supplied data disagrees
+//!   with the config. A base graph with the wrong node count, or one carrying
+//!   an edge above `max_edge_multiplicity`, is refused outright — clamping it
+//!   would run the search against a graph the caller never handed over and
+//!   never gets to see.
+//!
+//! Validate once, in the builder, rather than per individual: the dimensions
+//! are the same for the whole population, so a failure there can only ever be a
+//! startup failure.
+
 use rand::Rng;
 
 use crate::graph::Graph;
+
+// ADD A GENOME STEP 1 — implement this trait for your own type.
+//
+//     impl Genome for MyGenome {
+//         type Context = MyContext;
+//
+//         fn express(&self, context: &Self::Context) -> Graph { ... }
+//         fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) { ... }
+//         fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R) { ... }
+//         fn print(&self) -> String { ... }
+//     }
+//
+// All five items are required. Read `mutate`'s contract below before writing
+// it — exactly one mutation per call is what the engine's `max_mutations`
+// depends on.
 
 /// The variation-operator interface implemented by every genome representation.
 ///
@@ -59,6 +217,19 @@ pub trait Genome: Clone + Send + Sync {
     /// Return a human-readable description of the genome.
     fn print(&self) -> String;
 }
+
+// ADD A GENOME STEP 2 — declare your context type, here or beside your
+// representation.
+//
+//     #[derive(Clone, Debug)]
+//     pub struct MyContext {
+//         pub num_nodes: usize,
+//         pub some_mutation_rate: f64,
+//     }
+//
+// Run configuration only, never evolved state — the test is "can variation
+// change it", and anything variation cannot change belongs here rather than on
+// the genome. `SdaContext::init_state` below is the worked example.
 
 /// Configuration used when an edge-edit genome modifies an initial graph.
 #[derive(Clone, Debug)]

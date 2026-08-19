@@ -81,11 +81,40 @@ pub enum SelectionConfig {
 }
 
 /// Genome representation and the dimensions used to build random individuals.
+///
+/// Each variant carries only what a *random* individual is built from, plus
+/// whatever the representation's own mutation needs — not run-level settings
+/// like `network_size` or `max_edge_multiplicity`, which are top-level and
+/// reach the genome through its context.
+///
+/// # Part of the chain that adds a representation
+///
+/// This is step 4 of seven: the variant here is what a user selects under
+/// `[genome]`, and [`Config::validate_genome`] is where its dimensions are
+/// checked. Validate anything that would panic during expression — an
+/// out-of-range `init_state` is the live example — because the alternative is
+/// a panic mid-run inside a generic. `dispatch`'s start builder (step 5) then
+/// turns the variant into a population and a context;
+/// [`crate::genomes::genome`]'s module doc has all seven steps.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GenomeConfig {
     EdgeEdit(EdgeEditGenomeConfig),
     Sda(SdaGenomeConfig),
+    // ADD A GENOME STEP 4 — a variant here, plus the struct it carries and its
+    // arm in `validate_genome`.
+    //
+    //     MyGenome(MyGenomeConfig),
+    //
+    //     #[derive(Debug, Deserialize)]
+    //     #[serde(deny_unknown_fields)]
+    //     pub struct MyGenomeConfig {
+    //         pub some_dimension: usize,
+    //     }
+    //
+    // The variant name becomes `type = "my_genome"` under `[genome]`, via the
+    // `rename_all` above. Validate in `Config::validate_genome` — search for
+    // `ADD A GENOME STEP 4` again to find that arm.
 }
 
 /// Everything the edge-edit genome takes from `[genome]`.
@@ -625,7 +654,30 @@ impl Config {
                         return Err(invalid(field, "must be between 0.0 and 1.0"));
                     }
                 }
-            }
+            } // ADD A GENOME STEP 4 — the validation arm for your variant:
+              //
+              //     GenomeConfig::MyGenome(mine) => {
+              //         if mine.some_dimension == 0 {
+              //             return Err(invalid(
+              //                 "some_dimension",
+              //                 "must be at least 1",
+              //             ));
+              //         }
+              //     }
+              //
+              // Anything that would panic during expression is checked here, at
+              // load, rather than mid-run. A field named in an `invalid` call
+              // also needs an attribute path in `py_config`'s
+              // `python_attribute_path` — step 7.
+              //
+              // Keep the field name on its own line in any example you add
+              // here, wrapped exactly as above. `py_config`'s test scraper
+              // reads this file as text and cannot tell a commented-out call
+              // from a live one: it takes the first string literal after an
+              // opening `invalid(`, and only skips it when something other
+              // than whitespace intervenes — which the wrap's `//` supplies.
+              // Written on one line, the example fails the suite by demanding
+              // a Python attribute for a field that does not exist.
         }
         Ok(())
     }

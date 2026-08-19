@@ -1,4 +1,24 @@
+//! The genome representations, and the helpers both of them share.
+//!
+//! # Part of the chain that adds a representation
+//!
+//! This is step 3: declare the module below and re-export the type and its
+//! context, so callers name them from `crate::genomes` rather than from the
+//! private path. The step before it is implementing [`Genome`] itself, and
+//! [`genome`]'s module doc has all seven.
+//!
+//! Anything two representations genuinely share lives here rather than in one
+//! of them — `two_distinct_cut_points` is the case that exists, so that a
+//! crossover segment means the same thing whichever genome drew it.
+
 use rand::Rng;
+
+// ADD A GENOME STEP 3 — declare the module and re-export the type and its
+// context, so callers name them from `crate::genomes`.
+//
+//     pub mod my_genome;
+//     pub use my_genome::MyGenome;
+//     pub use genome::MyContext;      // if the context lives in `genome.rs`
 
 pub mod edge_edit;
 pub mod genome;

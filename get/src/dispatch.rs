@@ -349,7 +349,37 @@ impl GraphEvolver {
     }
 }
 
+// ADD A GENOME STEP 5 — a start builder beside this one and `sda_start`.
+//
+//     pub(crate) fn my_genome_start<R: Rng + ?Sized>(
+//         config: &Config,
+//         mine: &MyGenomeConfig,
+//         rng: &mut R,
+//     ) -> PyResult<(MyContext, Vec<MyGenome>)> {
+//         // Validate the dimensions once, here — not per individual.
+//         let mut population = Vec::with_capacity(config.population_size);
+//         for _ in 0..config.population_size {
+//             population.push(MyGenome::random(mine.some_dimension, rng));
+//         }
+//         let context = MyContext { num_nodes: config.network_size, .. };
+//         Ok((context, population))
+//     }
+//
+// Exactly `population_size` individuals, a context `express` can index without
+// panicking, and rejection rather than clamping for caller data that disagrees
+// with the config. The doc below says why each of those matters.
+
 /// The edge-edit starting population and the context it expresses against.
+///
+/// # Part of the chain that adds a representation
+///
+/// This is step 5 of seven, and the one with real obligations rather than
+/// wiring: a start builder owes the engine a population of exactly
+/// `population_size`, a context `express` can use, and rejection rather than
+/// clamping for caller data that disagrees with the config.
+/// [`crate::genomes::genome`]'s module doc states all three and has the other
+/// six steps; a new representation adds a function beside this one and
+/// [`sda_start`].
 ///
 /// **Why the dispatch layer builds the population at all.** `Evolver::new`
 /// takes a ready-made `Vec<G>` because `Genome` has no uniform random
@@ -429,6 +459,9 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
 }
 
 /// The SDA starting population and the context it expresses against.
+///
+/// The second start builder — step 5 of the chain that adds a representation,
+/// alongside [`edge_edit_start`], where that step's obligations are stated.
 ///
 /// **`num_chars` is derived, never configured** (§3.2): the alphabet is
 /// `max_edge_multiplicity + 1`, so every character the automaton can emit is
@@ -512,6 +545,14 @@ pub(crate) fn replicate_seeds(master: u64, n_runs: usize) -> Vec<u64> {
 
 /// Run one evolution and hand back its result with the genome type erased.
 ///
+/// # Part of the chain that adds a representation
+///
+/// The match below is step 6 of seven: one arm, selecting the representation
+/// and calling its step-5 start builder. Steps 4, 5 and 6 are one change split
+/// across two files — a `GenomeConfig` variant nothing constructs is dead code,
+/// and an arm for a variant that does not exist will not compile.
+/// [`crate::genomes::genome`]'s module doc has all seven.
+///
 /// **Step 2 of the dispatch** (§1, §8). The objective has already been erased to
 /// `Box<dyn Fitness>`, so only strategy × genome is left — and this is arranged
 /// as genome outside, strategy inside [`run_strategy`], which is why there are
@@ -567,7 +608,23 @@ pub(crate) fn evolve<F: Fitness>(
                 fitness,
                 rng.random::<u64>(),
             ))
-        }
+        } // ADD A GENOME STEP 6 — one arm, calling your step-5 start builder:
+          //
+          //     GenomeConfig::MyGenome(mine) => {
+          //         let (genome_context, population) = my_genome_start(config, mine, &mut rng)?;
+          //         Ok(run_strategy(
+          //             config,
+          //             genome_context,
+          //             population,
+          //             selection,
+          //             fitness,
+          //             rng.random::<u64>(),
+          //         ))
+          //     }
+          //
+          // Copy the arm above verbatim and change the builder it calls. The
+          // match is exhaustive, so omitting this will not compile — which is
+          // the whole reason steps 4, 5 and 6 cannot be half-done.
     }
 }
 
