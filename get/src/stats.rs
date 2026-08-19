@@ -496,6 +496,49 @@ fn standardize(histogram: &[f64], mean: &[f64], deviation: &[f64]) -> Vec<f64> {
     result
 }
 
+/// Check the RBF bandwidths before they reach `exp`.
+///
+/// Finite and greater than zero is what makes `exp(-gamma * d^2)` a similarity
+/// in `(0, 1]`. At exactly zero every candidate scores identically and the
+/// search has nothing to climb; below zero the exponent grows with the distance
+/// instead of shrinking, and the score runs away to infinity.
+fn assert_gammas(gammas: PerFamily) {
+    let named = [
+        ("degree", gammas.degree),
+        ("clustering", gammas.clustering),
+        ("spectral", gammas.spectral),
+    ];
+    for (family, gamma) in named {
+        assert!(
+            gamma.is_finite() && gamma > 0.0,
+            "the {family} gamma must be finite and greater than zero, got {gamma}: \
+             exp(-gamma * d^2) is a similarity in (0, 1] only for a positive gamma, \
+             and a negative one sends the score to infinity",
+        );
+    }
+}
+
+/// Check the per-family weights before they multiply a family's error.
+///
+/// Zero is allowed and means "ignore this family", which is a real
+/// configuration. Negative is not: it rewards a candidate for being *unlike*
+/// the reference set, inverting the objective without anything reporting it.
+fn assert_weights(weights: PerFamily) {
+    let named = [
+        ("degree", weights.degree),
+        ("clustering", weights.clustering),
+        ("spectral", weights.spectral),
+    ];
+    for (family, weight) in named {
+        assert!(
+            weight.is_finite() && weight >= 0.0,
+            "the {family} weight must be finite and not negative, got {weight}: \
+             a negative weight inverts the objective for that family, and a \
+             non-finite one carries straight into the score",
+        );
+    }
+}
+
 /// A reference set reduced to the statistics a candidate is scored against.
 ///
 /// Built once per run: the reference graphs never change, so their histograms
@@ -569,11 +612,27 @@ impl ReferenceStatistics {
     /// scores ~1.0, there is no gradient to climb, and evolution stalls while
     /// appearing to run normally.
     ///
-    /// The result is always finite. Every route to a `NaN` is closed —
-    /// the deviation floor, the isolated-node rule in the Laplacian, and the
-    /// empty reference set being rejected at construction — because a `NaN`
-    /// fitness aborts a run instead of scoring a bad candidate.
+    /// The result is always finite **given the preconditions below**. Every
+    /// route to a `NaN` from the graphs themselves is closed — the deviation
+    /// floor, the isolated-node rule in the Laplacian, and the empty reference
+    /// set being rejected at construction — because a `NaN` fitness aborts a
+    /// run instead of scoring a bad candidate.
+    ///
+    /// # Panics
+    ///
+    /// If any gamma is not finite and positive, or any weight is not finite and
+    /// non-negative. Neither is expressible in `PerFamily`, which is a plain
+    /// triple of `f64`, and this module is public exactly so a caller can drive
+    /// it without a `Config` — so the checks a config-file run gets are not on
+    /// this path and have to be made here. Left unchecked these return a score
+    /// rather than an error: a negative gamma flips the sign inside
+    /// `exp(-gamma * d^2)` and overflows to infinity, and a non-finite gamma or
+    /// weight carries straight through. An aborted run with a message beats a
+    /// finished one whose numbers mean nothing.
     pub fn error(&self, candidate: &Graph, gammas: PerFamily, weights: PerFamily) -> f64 {
+        assert_gammas(gammas);
+        assert_weights(weights);
+
         let degree_histogram_of_candidate =
             degree_histogram(candidate, self.axes.max_degree, self.axes.degree_bins);
         let clustering_of_candidate = clustering_histogram(candidate, self.axes.clustering_bins);
@@ -1090,6 +1149,140 @@ mod tests {
     }
 
     // --- the kernel score ---
+
+    /// The gamma and weight preconditions, which nothing but these asserts
+    /// enforces on the route-3 path.
+    ///
+    /// `config` validates them for a config-file run, but this module is public
+    /// so that a caller can score graphs without one — and a bad value there
+    /// used to come back as a finite-looking score rather than a failure. The
+    /// candidate must differ from the reference or the squared distance is zero
+    /// and every gamma gives the same answer, which is what made this hard to
+    /// see: the passing tests above all score near-identical graphs.
+    fn stats_for_precondition_tests() -> ReferenceStatistics {
+        ReferenceStatistics::from_graphs(&[ring(8)], axes()).unwrap()
+    }
+
+    #[test]
+    #[should_panic(expected = "the degree gamma must be finite and greater than zero")]
+    fn a_negative_gamma_panics_rather_than_returning_infinity() {
+        let stats = stats_for_precondition_tests();
+        let bad = PerFamily {
+            degree: -1.0,
+            clustering: 0.01,
+            spectral: 0.01,
+        };
+
+        stats.error(&path_of_three(), bad, equal_weights());
+    }
+
+    #[test]
+    #[should_panic(expected = "the clustering gamma must be finite and greater than zero")]
+    fn a_nan_gamma_panics() {
+        let stats = stats_for_precondition_tests();
+        let bad = PerFamily {
+            degree: 0.01,
+            clustering: f64::NAN,
+            spectral: 0.01,
+        };
+
+        stats.error(&path_of_three(), bad, equal_weights());
+    }
+
+    #[test]
+    #[should_panic(expected = "the spectral gamma must be finite and greater than zero")]
+    fn a_zero_gamma_panics_because_every_candidate_would_score_alike() {
+        let stats = stats_for_precondition_tests();
+        let bad = PerFamily {
+            degree: 0.01,
+            clustering: 0.01,
+            spectral: 0.0,
+        };
+
+        stats.error(&path_of_three(), bad, equal_weights());
+    }
+
+    #[test]
+    #[should_panic(expected = "the degree weight must be finite and not negative")]
+    fn a_negative_weight_panics_rather_than_inverting_the_objective() {
+        let stats = stats_for_precondition_tests();
+        let bad = PerFamily {
+            degree: -1.0,
+            clustering: 1.0,
+            spectral: 1.0,
+        };
+
+        stats.error(&path_of_three(), gammas(), bad);
+    }
+
+    #[test]
+    #[should_panic(expected = "the spectral weight must be finite and not negative")]
+    fn an_infinite_weight_panics() {
+        let stats = stats_for_precondition_tests();
+        let bad = PerFamily {
+            degree: 1.0,
+            clustering: 1.0,
+            spectral: f64::INFINITY,
+        };
+
+        stats.error(&path_of_three(), gammas(), bad);
+    }
+
+    /// A zero weight is allowed — it means "ignore this family", which is a
+    /// real configuration and must not be swept up by the negative check.
+    #[test]
+    fn a_zero_weight_is_allowed_and_drops_that_family() {
+        let stats = stats_for_precondition_tests();
+        let only_degree = PerFamily {
+            degree: 1.0,
+            clustering: 0.0,
+            spectral: 0.0,
+        };
+
+        let error = stats.error(&path_of_three(), gammas(), only_degree);
+        assert!(error.is_finite(), "got {error}");
+    }
+
+    /// The finiteness promise, over the whole legal input range rather than one
+    /// convenient point: extreme-but-valid gammas and weights against a
+    /// candidate as unlike the reference as possible.
+    #[test]
+    fn the_score_stays_finite_across_the_legal_gamma_and_weight_range() {
+        let stats = stats_for_precondition_tests();
+
+        let mut complete = Graph::new(9, 1);
+        for u in 0..9 {
+            for v in (u + 1)..9 {
+                complete.add_edge(u, v);
+            }
+        }
+
+        let candidates = [path_of_three(), ring(3), complete, Graph::new(4, 1)];
+        let extremes = [1e-9, 1.0, 1e9];
+
+        for candidate in &candidates {
+            for gamma in extremes {
+                for weight in extremes {
+                    let g = PerFamily {
+                        degree: gamma,
+                        clustering: gamma,
+                        spectral: gamma,
+                    };
+                    let w = PerFamily {
+                        degree: weight,
+                        clustering: weight,
+                        spectral: weight,
+                    };
+
+                    let error = stats.error(candidate, g, w);
+                    assert!(
+                        error.is_finite(),
+                        "gamma {gamma}, weight {weight} gave {error}"
+                    );
+                }
+            }
+        }
+    }
 
     /// A candidate identical to a single-graph reference set scores ~0.
     #[test]
