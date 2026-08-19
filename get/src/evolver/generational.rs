@@ -85,7 +85,8 @@ impl<G: Genome> GenerationalEvolver<G> {
     ///
     /// Moves the winner's graph out of the ones the final scoring pass built
     /// rather than re-expressing it — generational scores every individual every
-    /// generation, so the graph already exists. Spec §6.2.
+    /// generation, so the graph already exists. Steady-state re-expresses instead,
+    /// because it never has a full set of graphs to take one from. Spec §6.2.
     ///
     /// The winner is the best of the **final** population, which is the same
     /// individual the last history row reports, and the same rule steady-state's
@@ -164,14 +165,8 @@ impl<G: Genome> Evolver<G> for GenerationalEvolver<G> {
     /// individual, where keeping the old one would let a lucky draw persist.
     /// Spec §6.2, §5.2.
     fn run<F: Fitness>(&mut self, fitness: &F, seed: u64) -> EvolutionOutcome<G> {
-        // ChaCha8 rather than StdRng: StdRng's algorithm is allowed to change
-        // between `rand` releases, which would silently break the reproducibility
-        // this `seed` argument exists to provide.
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
 
-        // express_and_score is the engine's only scoring entry — it is what
-        // orients the fitnesses and rejects NaN. Calling `Fitness::evaluate`
-        // here instead would bypass both, silently.
         let (mut graphs, mut fitnesses) =
             express_and_score(&self.population, &self.shared.genome_context, fitness);
 

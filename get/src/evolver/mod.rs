@@ -170,5 +170,10 @@ pub trait Evolver<G: Genome> {
     /// Evolve the population against `fitness`, seeding all randomness from
     /// `seed` for reproducibility, and return the best genome and its
     /// expressed graph.
+    ///
+    /// Implementations seed a `ChaCha8Rng`, not a `StdRng`: `StdRng`'s algorithm
+    /// is allowed to change between `rand` releases, which would silently break
+    /// the reproducibility this `seed` argument exists to provide. Stated here
+    /// rather than in each strategy because it binds all of them.
     fn run<F: Fitness>(&mut self, fitness: &F, seed: u64) -> EvolutionOutcome<G>;
 }

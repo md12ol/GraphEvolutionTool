@@ -74,9 +74,9 @@ impl<G: Genome> SteadyStateEvolver<G> {
         }
     }
 
-    /// Run every mating event, recording the starting population as iteration 0
-    /// and then one row per "generation equivalent" — every `population_size`
-    /// events.
+    /// Run every mating event, logging one row per "generation equivalent" —
+    /// every `population_size` events. Row 0 is already in place, seeded by
+    /// [`Evolver::run`] from the starting population.
     ///
     /// The interval keeps a steady-state log comparable to a generational one
     /// and stops a 100,000-event run from producing a 100,000-row history. The
@@ -94,9 +94,6 @@ impl<G: Genome> SteadyStateEvolver<G> {
         // and steady-state only ever replaces individuals, never removes them.
         let log_interval = self.population.len();
 
-        self.history.clear();
-        self.history.push(generation_stats(0, fitnesses));
-
         for event in 1..=self.context.num_mating_events {
             self.mating_event(fitness, fitnesses, rng);
 
@@ -110,7 +107,10 @@ impl<G: Genome> SteadyStateEvolver<G> {
     ///
     /// Expresses the winner once here rather than tracking graphs through every
     /// event, which would mean keeping a `Graph` per individual alive for the
-    /// whole run to save a single expression at the end.
+    /// whole run to save a single expression at the end. Generational does the
+    /// opposite — it `swap_remove`s the winner from the graphs its final scoring
+    /// pass already built — because it scores everyone every generation and so
+    /// has them to hand.
     ///
     /// `direction` is stored, not applied: the outcome leaves here in engine
     /// orientation and the boundary converts it once. Spec §5.1.
@@ -145,6 +145,10 @@ impl<G: Genome> Evolver<G> for SteadyStateEvolver<G> {
         // rather than trusting its caller. Both checks belong at construction:
         // `tournament_indices` would catch the second one too, but not until the
         // first mating event, which is exactly the mid-run failure this avoids.
+        //
+        // There is deliberately no matching `elite_count` assert as generational
+        // has — steady-state carries no elites, because the tournament's best is
+        // never among the two it replaces.
         match shared.selection {
             Selection::Tournament { tournament_size } => {
                 assert!(
@@ -173,13 +177,19 @@ impl<G: Genome> Evolver<G> for SteadyStateEvolver<G> {
     }
 
     fn run<F: Fitness>(&mut self, fitness: &F, seed: u64) -> EvolutionOutcome<G> {
-        // ChaCha8 rather than StdRng: StdRng's algorithm is allowed to change
-        // between `rand` releases, which would silently break the reproducibility
-        // this `seed` argument exists to provide.
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
 
+        // The graphs are dropped rather than kept: steady-state re-expresses the
+        // winner in `outcome`, so holding a `Graph` per individual for the whole
+        // run would buy one expression at the end.
         let (_, mut fitnesses) =
             express_and_score(&self.population, &self.shared.genome_context, fitness);
+
+        // Row 0 is seeded here, beside the scoring it summarizes, for the same
+        // reason and in the same place as generational's.
+        self.history.clear();
+        self.history.push(generation_stats(0, &fitnesses));
+
         self.evolve(fitness, &mut fitnesses, &mut rng);
         self.outcome(&fitnesses, fitness.direction())
     }
