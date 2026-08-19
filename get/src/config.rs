@@ -82,14 +82,23 @@ pub enum SelectionConfig {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GenomeConfig {
-    EdgeEdit {
-        gene_length: usize,
-        /// Relative probability of each edit operation. Omitted entirely, or
-        /// omitted field by field, every operation defaults to a weight of 1.0.
-        #[serde(default)]
-        operation_weights: EdgeEditOperationWeights,
-    },
+    EdgeEdit(EdgeEditGenomeConfig),
     Sda(SdaGenomeConfig),
+}
+
+/// Everything the edge-edit genome takes from `[genome]`.
+///
+/// Named for the same reason as [`SdaGenomeConfig`]: a struct variant is not a
+/// type, so anything wanting to pass "the edge-edit settings" around had to
+/// re-list every field positionally. Only `py_config`'s mirror re-lists them
+/// now, and the round-trip tests fail to compile if it falls behind.
+#[derive(Debug, Deserialize)]
+pub struct EdgeEditGenomeConfig {
+    pub gene_length: usize,
+    /// Relative probability of each edit operation. Omitted entirely, or
+    /// omitted field by field, every operation defaults to a weight of 1.0.
+    #[serde(default)]
+    pub operation_weights: EdgeEditOperationWeights,
 }
 
 /// Everything the sda genome takes from `[genome]`.
@@ -486,12 +495,10 @@ impl Config {
     /// Constraints on the genome and its dimensions.
     fn validate_genome(&self) -> Result<(), ConfigError> {
         match &self.genome {
-            GenomeConfig::EdgeEdit {
-                operation_weights, ..
-            } => {
+            GenomeConfig::EdgeEdit(edge_edit) => {
                 // The weights already own their rules; map the message rather
                 // than restating it here and letting the two drift.
-                if let Err(constraint) = operation_weights.validate() {
+                if let Err(constraint) = edge_edit.operation_weights.validate() {
                     return Err(invalid("operation_weights", constraint));
                 }
             }
@@ -648,9 +655,7 @@ num_epidemics  = 30
             .expect("config should parse")
             .genome
         {
-            GenomeConfig::EdgeEdit {
-                operation_weights, ..
-            } => operation_weights,
+            GenomeConfig::EdgeEdit(edge_edit) => edge_edit.operation_weights,
             other => panic!("expected an edge-edit genome, got {other:?}"),
         }
     }
