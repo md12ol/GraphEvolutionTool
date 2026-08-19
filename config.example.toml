@@ -175,6 +175,57 @@ num_epidemics  = 30          # outbreaks averaged per evaluation
 # num_epidemics  = 30
 # target_profile = [1, 3, 8, 17, 24, 19, 11, 5, 2, 1]
 
+# Structure-matching alternative: score a graph on how closely its structure
+# resembles a folder of real reference graphs, one edge-list file per graph.
+# Minimized, and zero is a perfect match. Three size-invariant statistics are
+# compared — degree, clustering, and the normalized Laplacian spectrum — so
+# reference graphs of different sizes are all usable together.
+#
+# Unlike every other objective here the reference data is pointed at rather than
+# written inline: a set of graphs is far too large to embed. Two consequences.
+# The folder is NOT checked when the config is parsed, because validation does
+# no I/O — a mistyped path is reported when the run starts instead. And this
+# document no longer reproduces the run on its own; keep the reference folder
+# with it.
+#
+# Requires max_edge_multiplicity = 1. The statistics count neighbours rather
+# than summing weights, so a multigraph would be scored as though every parallel
+# edge were a single one; that is rejected rather than silently flattened.
+#
+# Every key but reference_folder has the default shown, so the two lines above
+# the dashes are a complete block.
+#
+# TWO WAYS A RUN CAN LOOK HEALTHY AND SEARCH NOTHING, both worth reading before
+# setting the weights:
+#
+#   - A family whose reference set cannot support it. Rings and paths have
+#     clustering coefficient 0 at every node, so a reference set drawn only from
+#     those leaves clustering_weight set while the family it weights contributes
+#     exactly nothing to any score. Nothing reports this. Set the weight to 0.0
+#     deliberately, or give the reference set graphs that vary in the statistic.
+#   - A gamma set too high. exp(-gamma * d^2) collapses to zero for every
+#     candidate, the whole population scores ~1.0, and there is no gradient to
+#     climb. Too high is the dangerous direction; start at 1.0 and lower it if
+#     scores cluster at the top.
+#
+# The degree axis has no key. It is the one statistic with no natural bound, and
+# its top is taken from the reference set — a value set too low would squash
+# every reference graph into the last bin and retire the whole degree family.
+# [fitness]
+# type             = "struct_match"
+# reference_folder = "reference_graphs"
+# # Everything below is optional; these are the defaults.
+# degree_bins       = 50
+# clustering_bins   = 50
+# spectral_bins     = 50
+# degree_gamma      = 1.0
+# clustering_gamma  = 1.0
+# spectral_gamma    = 1.0
+# degree_weight     = 1.0
+# clustering_weight = 1.0
+# spectral_weight   = 1.0
+# density_weight    = 1.0
+
 # Python fitness alternative: select "python" here, then call
 # `evolver.set_fitness_function(callable, direction)` from Python before `run()`.
 # The callable receives a batch and returns one float per graph, and declares its

@@ -1555,6 +1555,70 @@ num_epidemics  = 30
     }
 
     #[test]
+    fn the_examples_commented_struct_match_block_parses_and_matches_the_defaults() {
+        // `the_example_config_loads_and_validates_from_disk` only exercises the
+        // *active* [fitness] block, so every commented alternative in that file
+        // is unchecked prose. This uncomments the struct_match one, swaps it in
+        // for the active block, and validates it -- which also pins the
+        // documented defaults against the ones the code actually applies.
+        let text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../config.example.toml"
+        ))
+        .expect("the shipped example config should be readable");
+
+        let start = text
+            .find("# [fitness]\n# type             = \"struct_match\"")
+            .expect("the example should carry a commented struct_match block");
+
+        let mut block = String::new();
+        for line in text[start..].lines() {
+            // The block ends at the first line that is not part of it.
+            let Some(rest) = line.strip_prefix("# ") else {
+                break;
+            };
+            block.push_str(rest);
+            block.push('\n');
+        }
+
+        // Everything above [fitness] in the fixture, with the example's block
+        // in place of the fixture's own.
+        let config_text = format!(
+            "population_size = 20\nnetwork_size = 30\ncrossover_rate = 0.9\n\
+             mutation_rate = 0.2\nmax_edge_multiplicity = 1\n\
+             \n[evolution]\ntype = \"generational\"\nnum_generations = 5\n\
+             \n[selection]\ntype = \"tournament\"\ntournament_size = 3\n\
+             \n[genome]\ntype = \"edge_edit\"\ngene_length = 32\n\n{block}"
+        );
+
+        let config = Config::from_toml_str(&config_text)
+            .expect("the example's struct_match block should parse once uncommented");
+        config
+            .validate()
+            .expect("and should validate, or the example documents an invalid config");
+
+        // The example writes the defaults out explicitly, so a default changed
+        // in code and not in the file is a silent documentation lie.
+        match &config.fitness {
+            FitnessConfig::StructMatch {
+                degree_bins,
+                clustering_bins,
+                spectral_bins,
+                degree_gamma,
+                density_weight,
+                ..
+            } => {
+                assert_eq!(*degree_bins, default_struct_bins());
+                assert_eq!(*clustering_bins, default_struct_bins());
+                assert_eq!(*spectral_bins, default_struct_bins());
+                assert_eq!(*degree_gamma, default_struct_gamma());
+                assert_eq!(*density_weight, default_struct_weight());
+            }
+            other => panic!("expected struct_match, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn a_missing_config_file_is_an_io_error_rather_than_a_panic() {
         match load_and_validate("no/such/directory/config.toml") {
             Err(ConfigError::Io(_)) => {}
