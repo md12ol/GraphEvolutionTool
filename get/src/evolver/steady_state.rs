@@ -205,6 +205,8 @@ mod tests {
     use crate::evolver::common::express_and_score;
     use crate::evolver::test_support::{MostNodes, NodeCount, Val, Walk, best_of, mean_of};
 
+    /// Steady-state's tournament size. Larger than generational's, because the
+    /// two parents and the two individuals they replace must be distinct.
     const TOURNAMENT_SIZE: usize = 5;
 
     fn selection() -> Selection {
@@ -214,7 +216,7 @@ mod tests {
     }
 
     /// Population of `size` individuals with distinct values, and their scores.
-    fn evolver(
+    fn val_evolver(
         size: usize,
         crossover_rate: f64,
         mutation_rate: f64,
@@ -239,6 +241,22 @@ mod tests {
         )
     }
 
+    /// A `Walk` evolver whose population starts at `20..20 + size`.
+    fn walk_evolver(size: usize, events: usize) -> SteadyStateEvolver<Walk> {
+        let shared = SharedEvolutionContext {
+            genome_context: (),
+            crossover_rate: 0.7,
+            mutation_rate: 0.7,
+            max_mutations: 1,
+            selection: selection(),
+        };
+        let context = SteadyStateContext {
+            num_mating_events: events,
+        };
+        let population = (0..size).map(|i| Walk(i + 20)).collect();
+        SteadyStateEvolver::new(shared, context, population)
+    }
+
     /// The tournament `mating_event` will draw: it is the first thing to consume
     /// the RNG, so an identically seeded mirror reproduces it exactly.
     fn tournament_for(fitnesses: &[f64], seed: u64) -> Vec<usize> {
@@ -249,7 +267,7 @@ mod tests {
     #[test]
     fn a_mating_event_replaces_the_tournaments_two_worst_and_nothing_else() {
         let seed = 12;
-        let (mut evolver, mut fitnesses) = evolver(10, 0.0, 0.0);
+        let (mut evolver, mut fitnesses) = val_evolver(10, 0.0, 0.0);
         let before = evolver.population.clone();
         let tournament = tournament_for(&fitnesses, seed);
 
@@ -280,7 +298,7 @@ mod tests {
         // rates a child can be an exact clone, and writing it back into the
         // best slot would be invisible — the test would pass vacuously.
         let seed = 7;
-        let (mut evolver, mut fitnesses) = evolver(12, 1.0, 1.0);
+        let (mut evolver, mut fitnesses) = val_evolver(12, 1.0, 1.0);
         let before = evolver.population.clone();
         let tournament = tournament_for(&fitnesses, seed);
 
@@ -295,7 +313,7 @@ mod tests {
 
     #[test]
     fn fitnesses_still_describe_the_population_after_an_event() {
-        let (mut evolver, mut fitnesses) = evolver(9, 0.7, 0.7);
+        let (mut evolver, mut fitnesses) = val_evolver(9, 0.7, 0.7);
         let mut rng = StdRng::seed_from_u64(99);
 
         for _ in 0..25 {
@@ -311,7 +329,7 @@ mod tests {
 
     #[test]
     fn the_best_individual_never_gets_worse() {
-        let (mut evolver, mut fitnesses) = evolver(10, 0.9, 0.9);
+        let (mut evolver, mut fitnesses) = val_evolver(10, 0.9, 0.9);
         let mut rng = StdRng::seed_from_u64(4);
         let mut best = best_of(&fitnesses);
 
@@ -329,7 +347,7 @@ mod tests {
     #[test]
     fn mutation_is_applied_to_the_children() {
         let seed = 3;
-        let (mut evolver, mut fitnesses) = evolver(10, 0.0, 1.0);
+        let (mut evolver, mut fitnesses) = val_evolver(10, 0.0, 1.0);
         let before = evolver.population.clone();
         let tournament = tournament_for(&fitnesses, seed);
 
@@ -381,21 +399,6 @@ mod tests {
             num_mating_events: 0,
         };
         SteadyStateEvolver::new(shared, context, (0..3).map(Val).collect());
-    }
-
-    fn walk_evolver(size: usize, events: usize) -> SteadyStateEvolver<Walk> {
-        let shared = SharedEvolutionContext {
-            genome_context: (),
-            crossover_rate: 0.7,
-            mutation_rate: 0.7,
-            max_mutations: 1,
-            selection: selection(),
-        };
-        let context = SteadyStateContext {
-            num_mating_events: events,
-        };
-        let population = (0..size).map(|i| Walk(i + 20)).collect();
-        SteadyStateEvolver::new(shared, context, population)
     }
 
     #[test]

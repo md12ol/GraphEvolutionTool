@@ -224,6 +224,17 @@ mod tests {
         }
     }
 
+    /// Generational's tournament size. Steady-state uses a larger one because it
+    /// needs the two parents and the two individuals they replace to be distinct;
+    /// generational samples with replacement and has no such floor.
+    const TOURNAMENT_SIZE: usize = 3;
+
+    fn selection() -> Selection {
+        Selection::Tournament {
+            tournament_size: TOURNAMENT_SIZE,
+        }
+    }
+
     /// A `Val` evolver over the given starting values.
     fn val_evolver(
         values: &[usize],
@@ -238,7 +249,7 @@ mod tests {
             crossover_rate,
             mutation_rate,
             max_mutations,
-            selection: Selection::Tournament { tournament_size: 3 },
+            selection: selection(),
         };
         let context = GenerationalContext {
             num_generations,
@@ -255,7 +266,7 @@ mod tests {
             crossover_rate: 0.7,
             mutation_rate: 0.7,
             max_mutations: 1,
-            selection: Selection::Tournament { tournament_size: 3 },
+            selection: selection(),
         };
         let context = GenerationalContext {
             num_generations,
