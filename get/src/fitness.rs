@@ -108,6 +108,7 @@ use rayon::prelude::*;
 
 use crate::graph::Graph;
 use crate::sir::{Epidemic, SirSampleParams, simulate_epidemics};
+use crate::stats::{PerFamily, ReferenceStatistics};
 
 /// Whether an objective wants its value small or large.
 ///
@@ -531,6 +532,97 @@ impl Fitness for EpiProfMatch {
     fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
         self.scorer
             .mean_batch(graphs, |epidemic| self.rmse(epidemic))
+    }
+}
+
+/// How closely a graph's structure matches a reference set of real graphs.
+///
+/// Three size-invariant statistics — degree, clustering and the normalized
+/// Laplacian spectrum — are reduced to histograms on axes shared with the
+/// reference set, and compared by an RBF kernel. Zero is a perfect match, so
+/// this minimizes and says nothing about direction.
+///
+/// # Why the score is not called MMD
+///
+/// MMD is a two-sample statistic. This compares **one** candidate against a
+/// fixed reference distribution, which makes the within-candidate term
+/// degenerate and leaves `1 - mean similarity`. That is rank-equivalent to MMD
+/// for a single candidate against a fixed reference, so the arithmetic is
+/// sound — but the name would claim a two-sample test that is not being run.
+///
+/// # A reference set can make a whole family inert, silently
+///
+/// Rings and paths have clustering coefficient 0 at every node. A reference
+/// set drawn only from those leaves `clustering_weight` live while the family
+/// it weights contributes exactly nothing to any candidate's score, and
+/// nothing reports it. Give the weights a reference set that actually varies
+/// in the statistic being weighted.
+pub struct StructMatch {
+    reference: ReferenceStatistics,
+    gammas: PerFamily,
+    weights: PerFamily,
+    density_weight: f64,
+}
+
+impl StructMatch {
+    /// Build the objective from a reference set's statistics and its weights.
+    ///
+    /// # Errors
+    ///
+    /// If any gamma is not finite and strictly positive, if any weight is not
+    /// finite and non-negative, if every weight is zero, or if
+    /// `density_weight` is not finite and non-negative.
+    ///
+    /// The guards live here rather than only in `config.rs` because an
+    /// embedder constructing this type directly never runs the config layer,
+    /// and every one of these inputs reaches `evaluate` as a multiplier: a
+    /// non-finite one yields a non-finite score, which [`Fitness`] forbids.
+    /// All-zero weights are rejected separately — that scores every candidate
+    /// identically, so the search runs with no gradient while looking healthy.
+    pub fn new(
+        reference: ReferenceStatistics,
+        gammas: PerFamily,
+        weights: PerFamily,
+        density_weight: f64,
+    ) -> Result<Self, &'static str> {
+        let gamma_values = [gammas.degree, gammas.clustering, gammas.spectral];
+        for gamma in gamma_values {
+            if !gamma.is_finite() || gamma <= 0.0 {
+                return Err("struct_match gammas must be finite and greater than zero");
+            }
+        }
+
+        let weight_values = [weights.degree, weights.clustering, weights.spectral];
+        let mut weight_total = 0.0;
+        for weight in weight_values {
+            if !weight.is_finite() || weight < 0.0 {
+                return Err("struct_match weights must be finite and non-negative");
+            }
+            weight_total += weight;
+        }
+        if weight_total == 0.0 {
+            return Err("struct_match weights must not all be zero");
+        }
+
+        if !density_weight.is_finite() || density_weight < 0.0 {
+            return Err("struct_match density_weight must be finite and non-negative");
+        }
+
+        Ok(Self {
+            reference,
+            gammas,
+            weights,
+            density_weight,
+        })
+    }
+}
+
+impl Fitness for StructMatch {
+    fn evaluate(&self, graph: &Graph) -> f64 {
+        let kernel = self.reference.error(graph, self.gammas, self.weights);
+        let penalty = self.reference.density_penalty(graph);
+
+        kernel + self.density_weight * penalty
     }
 }
 
@@ -1392,5 +1484,125 @@ def fitness(batch):
                 "batch {i} of run seed 2026 also appears in run seed 2027",
             );
         }
+    }
+
+    /// The axes the struct_match tests share. Small bin counts keep the
+    /// hand-checking tractable; the values themselves are not special.
+    fn struct_match_axes() -> crate::stats::HistogramAxes {
+        crate::stats::HistogramAxes {
+            max_degree: 4,
+            degree_bins: 5,
+            clustering_bins: 4,
+            spectral_bins: 4,
+        }
+    }
+
+    /// A triangle — every node degree 2, clustering 1.0.
+    fn triangle() -> Graph {
+        let mut graph = Graph::new(3, 1);
+        graph.set_edges(&[(0, 1, 1), (1, 2, 1), (0, 2, 1)]);
+        graph
+    }
+
+    fn uniform(value: f64) -> PerFamily {
+        PerFamily {
+            degree: value,
+            clustering: value,
+            spectral: value,
+        }
+    }
+
+    fn struct_match_over(reference: &[Graph]) -> StructMatch {
+        let statistics = ReferenceStatistics::from_graphs(reference, struct_match_axes())
+            .expect("a non-empty reference set on valid axes");
+        StructMatch::new(statistics, uniform(1.0), uniform(1.0), 1.0)
+            .expect("finite positive gammas and weights")
+    }
+
+    #[test]
+    fn struct_match_minimizes_because_its_score_is_an_error() {
+        // The default is Minimize, so this passes whether or not `direction`
+        // is implemented. That is exactly why it is asserted rather than
+        // assumed: if someone later adds a `direction` returning Maximize, the
+        // search runs backwards and looks merely unconverged.
+        let objective = struct_match_over(&[triangle()]);
+
+        assert_eq!(objective.direction(), Direction::Minimize);
+    }
+
+    #[test]
+    fn struct_match_scores_a_copy_of_its_reference_at_zero() {
+        let objective = struct_match_over(&[triangle()]);
+
+        let score = objective.evaluate(&triangle());
+
+        // Identical histograms, identical density: both halves vanish.
+        assert!(
+            score.abs() < 1e-9,
+            "a candidate identical to a single-graph reference should score ~0, got {score}"
+        );
+    }
+
+    #[test]
+    fn struct_match_scores_a_different_graph_worse_than_a_matching_one() {
+        let objective = struct_match_over(&[triangle()]);
+
+        let matching = objective.evaluate(&triangle());
+        // Three isolated nodes: no edges, so no clustering, no density, and a
+        // spectrum of three zeros rather than the triangle's.
+        let different = objective.evaluate(&Graph::new(3, 1));
+
+        assert!(
+            different > matching,
+            "an unrelated graph must score worse: {different} vs {matching}"
+        );
+        assert!(different.is_finite(), "score must never be non-finite");
+    }
+
+    #[test]
+    fn struct_match_never_returns_a_non_finite_score() {
+        // Direction::orient panics on NaN, so this is the guard that keeps a
+        // bad candidate from aborting the whole run. The empty graph and a
+        // graph with an isolated node are the two shapes that reach the
+        // division-by-zero paths in the Laplacian.
+        let objective = struct_match_over(&[triangle()]);
+
+        let mut one_isolated = Graph::new(4, 1);
+        one_isolated.set_edges(&[(0, 1, 1), (1, 2, 1), (0, 2, 1)]);
+
+        for candidate in [Graph::new(0, 1), Graph::new(3, 1), one_isolated, triangle()] {
+            let score = objective.evaluate(&candidate);
+            assert!(
+                score.is_finite(),
+                "every candidate must score finitely, got {score} on a {}-node graph",
+                candidate.num_nodes
+            );
+        }
+    }
+
+    #[test]
+    fn struct_match_rejects_the_inputs_that_would_poison_every_score() {
+        let axes = struct_match_axes();
+        let statistics = || {
+            ReferenceStatistics::from_graphs(&[triangle()], axes.clone())
+                .expect("a non-empty reference set")
+        };
+
+        // Each of these reaches `evaluate` as a multiplier, so a bad one is a
+        // non-finite score on every candidate rather than a visible failure.
+        assert!(StructMatch::new(statistics(), uniform(0.0), uniform(1.0), 1.0).is_err());
+        assert!(StructMatch::new(statistics(), uniform(f64::NAN), uniform(1.0), 1.0).is_err());
+        assert!(StructMatch::new(statistics(), uniform(-1.0), uniform(1.0), 1.0).is_err());
+        assert!(StructMatch::new(statistics(), uniform(1.0), uniform(-1.0), 1.0).is_err());
+        assert!(StructMatch::new(statistics(), uniform(1.0), uniform(f64::NAN), 1.0).is_err());
+        assert!(StructMatch::new(statistics(), uniform(1.0), uniform(1.0), -1.0).is_err());
+        assert!(StructMatch::new(statistics(), uniform(1.0), uniform(1.0), f64::INFINITY).is_err());
+
+        // All-zero weights score every candidate identically: no gradient, and
+        // a run that looks healthy while searching nothing.
+        assert!(StructMatch::new(statistics(), uniform(1.0), uniform(0.0), 1.0).is_err());
+
+        // A zero density weight is legitimate — it turns the penalty off.
+        assert!(StructMatch::new(statistics(), uniform(1.0), uniform(1.0), 0.0).is_ok());
     }
 }
