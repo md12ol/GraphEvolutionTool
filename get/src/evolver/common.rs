@@ -32,8 +32,9 @@ use crate::graph::Graph;
 /// reader expecting the trait pattern to hold here will go looking for a
 /// `Selection` trait that does not exist.
 ///
-/// A scheme touches five files, in seven steps — `common.rs` and `config.rs`
-/// each want more than one edit. In the order you would walk them:
+/// A scheme touches six files, in eight steps — `common.rs`, `config.rs` and
+/// `py_config.rs` each want more than one edit. In the order you would walk
+/// them:
 ///
 /// 1. **This enum** — add the variant, carrying whatever parameters the scheme
 ///    reads out of the file.
@@ -41,20 +42,22 @@ use crate::graph::Graph;
 ///    only method every scheme must answer. Read its contract first: it governs
 ///    replacement, orientation and where randomness may come from, and none of
 ///    the three is enforced by the signature.
-/// 3. **`tournament_indices`** — add an arm **only if the scheme is to be usable
-///    with steady-state**. It is deliberately not part of the general contract.
-///    It draws one ranked set of *distinct* individuals, from which
-///    [`super::steady_state`] takes both its parents and the individuals they
-///    replace — a replacement policy rather than a selection one, and one that
-///    only means something over a set. A scheme whose own theory has no such
-///    draw (roulette-wheel samples with replacement, and a distinct-sample
-///    variant of it is a different scheme wearing the name) supplies no arm, and
-///    step 5 rejects the pairing at config time.
+/// 3. **`tournament_indices`** — add an arm, but **implement it only if the
+///    scheme is to be usable with steady-state**. It is deliberately not part of
+///    the general contract. It draws one ranked set of *distinct* individuals,
+///    from which [`super::steady_state`] takes both its parents and the
+///    individuals they replace — a replacement policy rather than a selection
+///    one, and one that only means something over a set. A scheme whose own
+///    theory has no such draw (roulette-wheel samples with replacement, and a
+///    distinct-sample variant of it is a different scheme wearing the name)
+///    writes an arm that panics, because step 5 rejects the pairing before a run
+///    can reach it. The match is exhaustive, so the arm itself is not optional —
+///    only what goes in it.
 /// 4. **`steady_state.rs`** — `SteadyStateEvolver::new` matches on the variant
 ///    directly, to assert its tournament floor before a run starts rather than
-///    at the first mating event. A scheme that reached step 3 needs the
-///    equivalent guarantee stated here; one that did not still needs the arm, to
-///    reject the combination.
+///    at the first mating event. A scheme that implemented step 3 states the
+///    equivalent guarantee here; one that did not panics here too, for the same
+///    reason and as the same backstop.
 /// 5. **`config.rs`** — three edits. Add a `SelectionConfig` variant holding
 ///    what the scheme reads out of the file; add any constraint on its own
 ///    parameters; and extend `validate_evolution_and_selection`, whose
@@ -68,12 +71,23 @@ use crate::graph::Graph;
 ///    variant into this enum. Steps 5 and 6 are one change split across two
 ///    files: a variant nothing constructs is dead code, and an arm for a variant
 ///    that does not exist will not compile.
-/// 7. **`config.example.toml`** — add the `[selection]` block if the scheme
+/// 7. **`py_config.rs`** — three edits, and all of them optional: leave the file
+///    alone and everything still works, a Python caller simply has no way to
+///    name the scheme. Add the `PySelectionConfig` variant with its constructor;
+///    add its arm to the conversion that writes the `[selection]` table; and if
+///    step 5's validation raises a new field name, add that name to
+///    `python_attribute_path`, or the error a Python caller sees will name a
+///    TOML field they never wrote. The test
+///    `every_validation_field_maps_to_a_python_attribute` catches a missing one;
+///    nothing catches a missing variant.
+/// 8. **`config.example.toml`** — add the `[selection]` block if the scheme
 ///    ships. The example file is what a user copies from, so a scheme missing
 ///    from it is one most people never find.
 ///
-/// Steps 1, 2, 5 and 6 fail to compile if forgotten; the matches are exhaustive.
-/// Steps 3, 4 and 7 do not, and are the ones to check by hand.
+/// Steps 1 through 6 fail to compile if forgotten — every one of those matches
+/// is exhaustive, which is why steps 3 and 4 still need an arm from a scheme
+/// that cannot serve them. Steps 7 and 8 compile clean when skipped, and are the
+/// two to check by hand.
 pub enum Selection {
     /// Sample `tournament_size` individuals per pick and keep the best.
     Tournament { tournament_size: usize },
@@ -210,9 +224,12 @@ impl Selection {
     /// satisfy the match would give a user a scheme that is not the one they
     /// named, with nothing to report the substitution.
     ///
-    /// A scheme that supplies no arm is rejected against steady-state in
-    /// `config.rs`'s `validate_evolution_and_selection`, at config-parse time.
-    /// It stays usable with every strategy that only calls `select`.
+    /// Such a scheme is rejected against steady-state in `config.rs`'s
+    /// `validate_evolution_and_selection`, at config-parse time, and stays
+    /// usable with every strategy that only calls `select`. Its arm here is
+    /// still required — the match is exhaustive — and should panic rather than
+    /// improvise: reaching it means the config layer let through a pairing it
+    /// was supposed to reject, which is a bug to surface, not to paper over.
     pub(super) fn tournament_indices<R>(&self, fitnesses: &[f64], rng: &mut R) -> Vec<usize>
     where
         R: Rng + ?Sized,
