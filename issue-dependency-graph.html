@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GraphEvolutionTool · Issue dependency graph</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0f1c;
+      --panel: rgba(17, 25, 43, 0.94);
+      --line: #33415f;
+      --text: #e7edf8;
+      --muted: #92a0ba;
+      --open: #50d890;
+      --blocked: #ffbd5b;
+      --closed: #7f8ca6;
+      --accent: #79a7ff;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      background:
+        radial-gradient(circle at 18% 8%, rgba(65, 98, 168, 0.18), transparent 33%),
+        var(--bg);
+      color: var(--text);
+      font: 14px/1.4 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    header {
+      position: fixed;
+      z-index: 10;
+      top: 18px;
+      left: 18px;
+      right: 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      border: 1px solid rgba(121, 167, 255, 0.2);
+      border-radius: 14px;
+      background: var(--panel);
+      box-shadow: 0 14px 45px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(16px);
+    }
+
+    .heading { min-width: 250px; }
+    h1 { margin: 0; font-size: 16px; letter-spacing: 0.01em; }
+    .subtitle { margin-top: 2px; color: var(--muted); font-size: 12px; }
+    .controls { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    input[type="search"] {
+      width: min(300px, 27vw);
+      padding: 9px 12px;
+      color: var(--text);
+      border: 1px solid #34425e;
+      border-radius: 9px;
+      outline: none;
+      background: #0d1424;
+    }
+    input[type="search"]:focus { border-color: var(--accent); }
+    label { display: flex; align-items: center; gap: 7px; color: var(--muted); white-space: nowrap; }
+    button {
+      padding: 9px 11px;
+      color: var(--text);
+      border: 1px solid #34425e;
+      border-radius: 9px;
+      background: #151f34;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); }
+
+    #canvas { width: 100%; height: 100%; cursor: grab; touch-action: none; }
+    #canvas.dragging { cursor: grabbing; }
+    .edge { fill: none; stroke: var(--line); stroke-width: 1.7; opacity: 0.8; }
+    .edge.active { stroke: var(--accent); stroke-width: 2.6; opacity: 1; }
+    .edge-marker { fill: var(--line); }
+    .node { cursor: pointer; transition: opacity 120ms ease; }
+    .node rect { stroke-width: 1.5; filter: drop-shadow(0 7px 8px rgba(0, 0, 0, 0.22)); }
+    .node.open rect { fill: #10271f; stroke: var(--open); }
+    .node.blocked rect { fill: #2b2113; stroke: var(--blocked); }
+    .node.closed rect { fill: #171d29; stroke: var(--closed); }
+    .node.selected rect { stroke: var(--accent); stroke-width: 3; }
+    .node.dim { opacity: 0.14; }
+    .node .number { fill: #fff; font-size: 13px; font-weight: 720; }
+    .node .title { fill: #cbd5e7; font-size: 11px; }
+    .node .meta { fill: #8795ae; font-size: 10px; }
+    .node .avatar { clip-path: circle(50% at 50% 50%); }
+    .node .pr-badge { fill: var(--accent); font-size: 10px; font-weight: 750; }
+    .node .status { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+    .node.open .status { fill: var(--open); }
+    .node.blocked .status { fill: var(--blocked); }
+    .node.closed .status { fill: var(--closed); }
+    .column-label { fill: #71809d; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+
+    .legend {
+      position: fixed;
+      z-index: 8;
+      left: 20px;
+      bottom: 18px;
+      display: flex;
+      gap: 14px;
+      padding: 8px 11px;
+      border: 1px solid rgba(121, 167, 255, 0.14);
+      border-radius: 10px;
+      color: var(--muted);
+      background: var(--panel);
+      font-size: 12px;
+    }
+    .legend span { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .ready-dot { background: var(--open); }
+    .blocked-dot { background: var(--blocked); }
+    .closed-dot { background: var(--closed); }
+
+    #details {
+      position: fixed;
+      z-index: 9;
+      right: 20px;
+      bottom: 18px;
+      width: min(390px, calc(100vw - 40px));
+      padding: 16px;
+      border: 1px solid rgba(121, 167, 255, 0.3);
+      border-radius: 13px;
+      background: var(--panel);
+      box-shadow: 0 14px 45px rgba(0, 0, 0, 0.35);
+      display: none;
+    }
+    #details.visible { display: block; }
+    #details h2 { margin: 0 26px 8px 0; font-size: 15px; }
+    #details p { margin: 6px 0; color: var(--muted); }
+    #details a { color: var(--accent); }
+    #detail-assignee { display: flex; align-items: center; gap: 7px; }
+    .detail-avatar { width: 24px; height: 24px; border-radius: 50%; }
+    #close-details { position: absolute; top: 10px; right: 10px; padding: 3px 8px; }
+
+    dialog {
+      width: min(460px, calc(100vw - 36px));
+      padding: 20px;
+      color: var(--text);
+      border: 1px solid rgba(121, 167, 255, 0.35);
+      border-radius: 14px;
+      background: #11192b;
+      box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
+    }
+    dialog::backdrop { background: rgba(3, 7, 16, 0.75); backdrop-filter: blur(4px); }
+    dialog h2 { margin: 0 0 8px; font-size: 17px; }
+    dialog p { color: var(--muted); }
+    dialog input {
+      width: 100%;
+      padding: 10px 12px;
+      color: var(--text);
+      border: 1px solid #34425e;
+      border-radius: 9px;
+      background: #0d1424;
+    }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }
+
+    @media (max-width: 760px) {
+      header { align-items: flex-start; flex-direction: column; }
+      .controls { width: 100%; margin-left: 0; flex-wrap: wrap; }
+      input[type="search"] { flex: 1; width: auto; min-width: 150px; }
+      .legend { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="heading">
+      <h1>GraphEvolutionTool issue dependencies</h1>
+      <div class="subtitle" id="summary">Loading graph…</div>
+    </div>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Find issue number or title…" aria-label="Find issue">
+      <label><input id="show-closed" type="checkbox"> Show closed</label>
+      <button id="authenticate" type="button">Authenticate</button>
+      <button id="refresh" type="button">Refresh data</button>
+      <button id="reset" type="button">Reset view</button>
+    </div>
+  </header>
+
+  <svg id="canvas" role="img" aria-label="Issue blocking dependency graph">
+    <defs>
+      <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+        <path class="edge-marker" d="M0,0 L8,4 L0,8 z"></path>
+      </marker>
+    </defs>
+    <g id="viewport">
+      <g id="edges"></g>
+      <g id="nodes"></g>
+    </g>
+  </svg>
+
+  <div class="legend">
+    <span><i class="dot ready-dot"></i> Ready</span>
+    <span><i class="dot blocked-dot"></i> Blocked by open issue</span>
+    <span><i class="dot closed-dot"></i> Closed</span>
+    <span>Arrow: blocker → blocked</span>
+  </div>
+
+  <aside id="details">
+    <button id="close-details" type="button" aria-label="Close details">×</button>
+    <h2 id="detail-title"></h2>
+    <p id="detail-status"></p>
+    <p id="detail-assignee"></p>
+    <p id="detail-blockers"></p>
+    <p id="detail-blocking"></p>
+    <p id="detail-prs"></p>
+    <a id="detail-link" target="_blank" rel="noopener">Open on GitHub ↗</a>
+  </aside>
+
+  <dialog id="auth-dialog">
+    <form id="auth-form">
+      <h2>Authenticate live refresh</h2>
+      <p>GitHub limits anonymous requests. Paste a read-only GitHub token to refresh the graph. It is kept for this tab session; choosing “remember” stores it in this browser, never in the HTML file.</p>
+      <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_… or ghp_…" required>
+      <label><input id="remember-token" type="checkbox" checked> Remember on this device after closing the browser</label>
+      <div class="dialog-actions">
+        <button id="forget-auth" type="button">Forget saved token</button>
+        <button id="cancel-auth" type="button">Cancel</button>
+        <button type="submit">Connect and refresh</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    const REPOSITORY = "md12ol/GraphEvolutionTool";
+    const FALLBACK_UPDATED = "2026-08-20 00:01 CEST";
+    const fallbackAssignees = {
+      130:["md12ol"],121:["shorinbonsai"],115:["md12ol"],114:["md12ol"],111:["shorinbonsai"],
+      109:["shorinbonsai"],108:["md12ol"],107:["shorinbonsai"],102:["shorinbonsai"],101:["shorinbonsai"],
+      100:["shorinbonsai"],99:["shorinbonsai"],98:["md12ol"],97:["shorinbonsai"],96:["md12ol"],
+      88:["shorinbonsai"],87:["md12ol"],84:["shorinbonsai"],81:["md12ol"],80:["shorinbonsai"],
+      79:["shorinbonsai"],73:["shorinbonsai"],68:["md12ol"],67:["md12ol"],56:["md12ol"],
+      123:["md12ol"],137:["shorinbonsai"]
+    };
+    const fallbackPrs = {
+      123:[{number:136,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/136"}],
+      98:[{number:138,state:"OPEN",url:"https://github.com/md12ol/GraphEvolutionTool/pull/138"}],
+      115:[{number:122,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/122"}],
+      114:[{number:128,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/128"}],
+      109:[{number:117,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/117"}],
+      108:[{number:116,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/116"}],
+      107:[{number:118,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/118"}],
+      101:[{number:134,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/134"}],
+      97:[{number:127,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/127"}],
+      84:[{number:103,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/103"}],
+      81:[{number:105,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/105"}],
+      80:[{number:106,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/106"}],
+      79:[{number:104,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/104"}],
+      56:[{number:129,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/129"}]
+    };
+    let issues = [
+      {number:121,state:"OPEN",title:"Prove route 3 reaches every genome, evolver and setting, and can read results back",blockedBy:[115]},
+      {number:115,state:"CLOSED",title:"Dead-code pass: decide what is public API and what only exists for tests",blockedBy:[]},
+      {number:114,state:"CLOSED",title:"Sweep for field lists that are re-spelled positionally instead of carried as a type",blockedBy:[]},
+      {number:111,state:"OPEN",title:"Spec-sheet, config.example.toml and config_builder.py sweep for the 2026-08-17 meeting's decisions",blockedBy:[99,109,108,107]},
+      {number:109,state:"CLOSED",title:"Promote get-run to a supported route, and add a route-3 library-usage example",blockedBy:[]},
+      {number:108,state:"CLOSED",title:"sda's mutation-mix probabilities become user-configurable",blockedBy:[]},
+      {number:107,state:"CLOSED",title:"Base-graph and bulk reference-graph file loaders, with min_node_index remapping",blockedBy:[]},
+      {number:102,state:"OPEN",title:"Make crossover and mutation config-selectable enums, and document both",blockedBy:[80,79,81,84]},
+      {number:101,state:"CLOSED",title:"Document where a new selection scheme goes",blockedBy:[80,79,81,84]},
+      {number:100,state:"OPEN",title:"Document where a new evolution strategy goes",blockedBy:[80,79,56,81,84]},
+      {number:99,state:"CLOSED",title:"Test the fitness docs by adding a second objective through them",blockedBy:[107,97]},
+      {number:98,state:"OPEN",title:"Document where a new genome representation goes",blockedBy:[115,114,80,79,81,84]},
+      {number:97,state:"CLOSED",title:"Document where a new fitness function goes: the six files it has to touch",blockedBy:[80,79,56,81,84]},
+      {number:96,state:"OPEN",title:"Publish documentation/ to GitHub Pages so the Python route has a site to land on",blockedBy:[115,114,67,87]},
+      {number:88,state:"OPEN",title:"Publish the crate to crates.io: the Rust route has no way to obtain GET",blockedBy:[73,114,111,109]},
+      {number:87,state:"OPEN",title:"Publish the first real release to PyPI",blockedBy:[114,111,73]},
+      {number:84,state:"CLOSED",title:"(1) Nothing tests a seeded base graph across replicate runs",blockedBy:[]},
+      {number:81,state:"CLOSED",title:"The shipped example exists in three places and only two are checked",blockedBy:[]},
+      {number:80,state:"CLOSED",title:"config.rs and py_config.rs: make each divergence say why it exists",blockedBy:[]},
+      {number:79,state:"CLOSED",title:"Sweep edge_edit and sda for divergent style and duplication",blockedBy:[115,114]},
+      {number:73,state:"OPEN",title:"Audit the whole test suite: do the tests exercise the behaviour, or just the code?",blockedBy:[102,68,123,135]},
+      {number:68,state:"OPEN",title:"Cut the comment volume in get/src: explain the logic, not the design history",blockedBy:[102,101,100,99,98,123,135]},
+      {number:67,state:"OPEN",title:"Rework documentation/: explain what the code does, not why it was designed that way, and cut the length",blockedBy:[121,115,114,111,102,101,100,99,98,135,137]},
+      {number:56,state:"CLOSED",title:"Sweep generational and steady_state for divergent style and outright duplication",blockedBy:[115,114]},
+      {number:123,state:"CLOSED",title:"Validation-field guard test cannot see fields raised from a loop",blockedBy:[]},
+      {number:135,state:"OPEN",title:"Split Selection from replacement, so steady-state stops constraining every future scheme",blockedBy:[]},
+      {number:137,state:"OPEN",title:"TUDataset-to-GET reference-graph converter",blockedBy:[]}
+    ].map(issue => ({
+      ...issue,
+      assignees: fallbackAssignees[issue.number] || [],
+      prs: fallbackPrs[issue.number] || [],
+      url: `https://github.com/${REPOSITORY}/issues/${issue.number}`
+    }));
+
+    const NS = "http://www.w3.org/2000/svg";
+    const NODE_W = 270;
+    const NODE_H = 91;
+    const X_GAP = 120;
+    const Y_GAP = 24;
+    let issueMap = new Map();
+    const svg = document.querySelector("#canvas");
+    const viewport = document.querySelector("#viewport");
+    const edgesLayer = document.querySelector("#edges");
+    const nodesLayer = document.querySelector("#nodes");
+    let transform = {x: 70, y: 120, scale: 0.82};
+    let selected = null;
+    let positions = new Map();
+    let dataStatus = `offline snapshot ${FALLBACK_UPDATED}`;
+    let githubToken = "";
+    const CACHE_KEY = "get-issue-dependency-graph-v5";
+    const TOKEN_KEY = "get-issue-dependency-graph-token-v1";
+    const CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+
+    function restoreGitHubToken() {
+      try {
+        githubToken = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || "";
+      } catch {
+        githubToken = "";
+      }
+      if (githubToken) document.querySelector("#authenticate").textContent = "Authenticated";
+      return Boolean(githubToken);
+    }
+
+    function saveGitHubToken(remember) {
+      try {
+        sessionStorage.setItem(TOKEN_KEY, githubToken);
+        if (remember) localStorage.setItem(TOKEN_KEY, githubToken);
+        else localStorage.removeItem(TOKEN_KEY);
+      } catch {
+        // Restrictive file:// storage policies fall back to this tab's memory.
+      }
+    }
+
+    function forgetGitHubToken() {
+      githubToken = "";
+      try {
+        sessionStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(TOKEN_KEY);
+      } catch {
+        // The in-memory token is still cleared when browser storage is unavailable.
+      }
+      document.querySelector("#token").value = "";
+      document.querySelector("#authenticate").textContent = "Authenticate";
+    }
+
+    function rebuildIndexes() {
+      issueMap = new Map(issues.map(issue => [issue.number, issue]));
+      for (const issue of issues) issue.blocking = [];
+      for (const issue of issues) {
+        for (const blocker of issue.blockedBy) issueMap.get(blocker)?.blocking.push(issue.number);
+      }
+    }
+    rebuildIndexes();
+
+    function svgElement(name, attributes = {}) {
+      const element = document.createElementNS(NS, name);
+      for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
+      return element;
+    }
+
+    function visibleIssues() {
+      const showClosed = document.querySelector("#show-closed").checked;
+      return issues.filter(issue => showClosed || issue.state === "OPEN");
+    }
+
+    function layout(items) {
+      const visible = new Set(items.map(issue => issue.number));
+      const levels = new Map(items.map(issue => [issue.number, 0]));
+      for (let pass = 0; pass < items.length; pass++) {
+        let changed = false;
+        for (const issue of items) {
+          for (const blocker of issue.blockedBy.filter(number => visible.has(number))) {
+            const next = Math.max(levels.get(issue.number), levels.get(blocker) + 1);
+            if (next !== levels.get(issue.number)) {
+              levels.set(issue.number, next);
+              changed = true;
+            }
+          }
+        }
+        if (!changed) break;
+      }
+
+      const columns = new Map();
+      for (const issue of items) {
+        const level = levels.get(issue.number);
+        if (!columns.has(level)) columns.set(level, []);
+        columns.get(level).push(issue);
+      }
+      for (const column of columns.values()) column.sort((a, b) => b.number - a.number);
+
+      const maxRows = Math.max(...[...columns.values()].map(column => column.length), 1);
+      const graphHeight = maxRows * (NODE_H + Y_GAP);
+      positions = new Map();
+      for (const [level, column] of columns) {
+        const columnHeight = column.length * (NODE_H + Y_GAP);
+        const offset = (graphHeight - columnHeight) / 2;
+        column.forEach((issue, index) => positions.set(issue.number, {
+          x: level * (NODE_W + X_GAP),
+          y: offset + index * (NODE_H + Y_GAP)
+        }));
+      }
+      return {columns, visible};
+    }
+
+    function wrapTitle(title, limit = 38) {
+      const words = title.split(/\s+/);
+      const lines = [""];
+      for (const word of words) {
+        const candidate = `${lines.at(-1)} ${word}`.trim();
+        if (candidate.length > limit && lines.at(-1)) lines.push(word);
+        else lines[lines.length - 1] = candidate;
+      }
+      if (lines.length > 2) {
+        lines[1] = `${lines[1].slice(0, Math.max(0, limit - 1))}…`;
+        return lines.slice(0, 2);
+      }
+      return lines;
+    }
+
+    function statusFor(issue) {
+      if (issue.state === "CLOSED") return "closed";
+      return issue.blockedBy.some(number => issueMap.get(number)?.state === "OPEN") ? "blocked" : "open";
+    }
+
+    function render() {
+      const items = visibleIssues();
+      const {columns, visible} = layout(items);
+      edgesLayer.replaceChildren();
+      nodesLayer.replaceChildren();
+
+      for (const [level] of [...columns].sort((a, b) => a[0] - b[0])) {
+        const label = svgElement("text", {x: level * (NODE_W + X_GAP), y: -24, class: "column-label"});
+        label.textContent = level === 0 ? "Available first" : `Dependency stage ${level}`;
+        nodesLayer.append(label);
+      }
+
+      for (const issue of items) {
+        const target = positions.get(issue.number);
+        for (const blockerNumber of issue.blockedBy.filter(number => visible.has(number))) {
+          const source = positions.get(blockerNumber);
+          const startX = source.x + NODE_W;
+          const startY = source.y + NODE_H / 2;
+          const endX = target.x;
+          const endY = target.y + NODE_H / 2;
+          const bend = Math.max(45, (endX - startX) * 0.44);
+          const edge = svgElement("path", {
+            d: `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX} ${endY}`,
+            class: `edge${selected && (selected === issue.number || selected === blockerNumber) ? " active" : ""}`,
+            "data-from": blockerNumber,
+            "data-to": issue.number,
+            "marker-end": "url(#arrow)"
+          });
+          edgesLayer.append(edge);
+        }
+      }
+
+      const query = document.querySelector("#search").value.trim().toLowerCase();
+      for (const issue of items) {
+        const point = positions.get(issue.number);
+        const status = statusFor(issue);
+        const matches = !query || `#${issue.number} ${issue.title}`.toLowerCase().includes(query);
+        const group = svgElement("g", {
+          class: `node ${status}${selected === issue.number ? " selected" : ""}${matches ? "" : " dim"}`,
+          transform: `translate(${point.x} ${point.y})`,
+          tabindex: "0",
+          role: "link",
+          "aria-label": `Issue ${issue.number}: ${issue.title}`
+        });
+        group.append(svgElement("rect", {width: NODE_W, height: NODE_H, rx: 10}));
+
+        const number = svgElement("text", {x: 13, y: 22, class: "number"});
+        number.textContent = `#${issue.number}`;
+        group.append(number);
+
+        const statusText = svgElement("text", {x: NODE_W - 13, y: 21, class: "status", "text-anchor": "end"});
+        statusText.textContent = status === "open" ? "ready" : status;
+        group.append(statusText);
+
+        const title = svgElement("text", {x: 13, y: 43, class: "title"});
+        wrapTitle(issue.title).forEach((line, index) => {
+          const span = svgElement("tspan", {x: 13, dy: index === 0 ? 0 : 15});
+          span.textContent = line;
+          title.append(span);
+        });
+        group.append(title);
+
+        const shownAssignees = issue.assignees.slice(0, 2);
+        shownAssignees.forEach((login, index) => {
+          group.append(svgElement("image", {
+            x: 13 + index * 15,
+            y: 66,
+            width: 18,
+            height: 18,
+            href: `https://github.com/${login}.png?size=40`,
+            class: "avatar"
+          }));
+        });
+        const assigneeX = shownAssignees.length ? 13 + shownAssignees.length * 15 + 6 : 13;
+        const assignee = svgElement("text", {x: assigneeX, y: 79, class: "meta"});
+        assignee.textContent = issue.assignees.length
+          ? `Assignee: ${issue.assignees.join(", ")}`
+          : "Assignee: unassigned";
+        group.append(assignee);
+        if (issue.prs.length) {
+          const pr = issue.prs.find(item => item.state === "OPEN") || issue.prs[0];
+          const prBadge = svgElement("text", {x: NODE_W - 13, y: 78, class: "pr-badge", "text-anchor": "end"});
+          prBadge.textContent = `PR #${pr.number} ${pr.state.toLowerCase()}`;
+          group.append(prBadge);
+        }
+        group.addEventListener("click", event => {
+          event.stopPropagation();
+          selectIssue(issue.number);
+        });
+        group.addEventListener("dblclick", () => window.open(issue.url, "_blank", "noopener"));
+        group.addEventListener("keydown", event => {
+          if (event.key === "Enter") selectIssue(issue.number);
+        });
+        nodesLayer.append(group);
+      }
+
+      const edgeCount = items.reduce((sum, issue) => sum + issue.blockedBy.filter(number => visible.has(number)).length, 0);
+      const blockedCount = items.filter(issue => statusFor(issue) === "blocked").length;
+      const prCount = items.filter(issue => issue.prs.length).length;
+      document.querySelector("#summary").textContent = `${items.length} issues · ${edgeCount} dependencies · ${blockedCount} blocked · ${prCount} with PRs · ${dataStatus}`;
+      applyTransform();
+    }
+
+    function selectIssue(number) {
+      selected = number;
+      const issue = issueMap.get(number);
+      document.querySelector("#detail-title").textContent = `#${number} · ${issue.title}`;
+      document.querySelector("#detail-status").textContent = `Status: ${statusFor(issue) === "open" ? "ready" : statusFor(issue)}`;
+      const assigneeDetails = document.querySelector("#detail-assignee");
+      assigneeDetails.replaceChildren();
+      for (const login of issue.assignees) {
+        const avatar = document.createElement("img");
+        avatar.src = `https://github.com/${login}.png?size=48`;
+        avatar.alt = `${login}'s GitHub avatar`;
+        avatar.className = "detail-avatar";
+        assigneeDetails.append(avatar);
+      }
+      assigneeDetails.append(document.createTextNode(
+        `Assignee: ${issue.assignees.length ? issue.assignees.join(", ") : "unassigned"}`
+      ));
+      document.querySelector("#detail-blockers").textContent = issue.blockedBy.length
+        ? `Blocked by: ${issue.blockedBy.map(value => `#${value}`).join(", ")}`
+        : "Blocked by: nobody";
+      document.querySelector("#detail-blocking").textContent = issue.blocking.length
+        ? `Blocking: ${issue.blocking.map(value => `#${value}`).join(", ")}`
+        : "Blocking: nobody";
+      const prDetails = document.querySelector("#detail-prs");
+      prDetails.replaceChildren(document.createTextNode("Pull requests: "));
+      if (!issue.prs.length) {
+        prDetails.append(document.createTextNode("none"));
+      } else {
+        issue.prs.forEach((pr, index) => {
+          if (index) prDetails.append(document.createTextNode(", "));
+          const link = document.createElement("a");
+          link.href = pr.url;
+          link.target = "_blank";
+          link.rel = "noopener";
+          link.textContent = `#${pr.number} (${pr.state.toLowerCase()})`;
+          prDetails.append(link);
+        });
+      }
+      document.querySelector("#detail-link").href = issue.url;
+      document.querySelector("#details").classList.add("visible");
+      render();
+    }
+
+    function applyTransform() {
+      viewport.setAttribute("transform", `translate(${transform.x} ${transform.y}) scale(${transform.scale})`);
+    }
+
+    function resetView() {
+      const items = visibleIssues();
+      layout(items);
+      const bounds = [...positions.values()];
+      const width = Math.max(...bounds.map(point => point.x), 0) + NODE_W;
+      const height = Math.max(...bounds.map(point => point.y), 0) + NODE_H;
+      const availableW = window.innerWidth - 80;
+      const availableH = window.innerHeight - 180;
+      transform.scale = Math.min(1, availableW / Math.max(width, 1), availableH / Math.max(height, 1));
+      transform.x = Math.max(35, (window.innerWidth - width * transform.scale) / 2);
+      transform.y = 120 + Math.max(0, (availableH - height * transform.scale) / 2);
+      applyTransform();
+    }
+
+    function normalizeIssue(raw, blockedBy = []) {
+      return {
+        number: raw.number,
+        state: raw.state.toUpperCase(),
+        title: raw.title,
+        blockedBy,
+        blocking: [],
+        assignees: (raw.assignees || []).map(assignee => assignee.login),
+        prs: [],
+        url: raw.html_url || `https://github.com/${REPOSITORY}/issues/${raw.number}`
+      };
+    }
+
+    async function githubApi(path) {
+      const headers = {Accept: "application/vnd.github+json"};
+      if (githubToken) headers.Authorization = `Bearer ${githubToken}`;
+      const response = await fetch(`https://api.github.com/repos/${REPOSITORY}${path}`, {
+        headers
+      });
+      if (!response.ok) {
+        const remaining = response.headers.get("x-ratelimit-remaining");
+        const suffix = remaining === "0" && !githubToken ? " (anonymous rate limit reached; authenticate to continue)" : "";
+        throw new Error(`GitHub returned ${response.status}${suffix}`);
+      }
+      return response.json();
+    }
+
+    function loadCachedData() {
+      try {
+        const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
+        if (!cached || !Array.isArray(cached.issues) || Date.now() - cached.at > CACHE_MAX_AGE_MS) return false;
+        issues = cached.issues;
+        rebuildIndexes();
+        dataStatus = `cached · refreshed ${new Date(cached.at).toLocaleString()}`;
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    function cacheLiveData() {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({at: Date.now(), issues}));
+      } catch {
+        // A file opened under a restrictive browser policy still works without caching.
+      }
+    }
+
+    function issueNumbersReferencedBy(pr) {
+      const numbers = new Set();
+      const closingText = `${pr.title || ""}\n${pr.body || ""}`;
+      const closingPattern = /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:https:\/\/github\.com\/[^/]+\/[^/]+\/issues\/|#)(\d+)/gi;
+      for (const match of closingText.matchAll(closingPattern)) numbers.add(Number(match[1]));
+      for (const match of (pr.title || "").matchAll(/#(\d+)/g)) numbers.add(Number(match[1]));
+      return numbers;
+    }
+
+    async function refreshFromGitHub() {
+      const refreshButton = document.querySelector("#refresh");
+      refreshButton.disabled = true;
+      refreshButton.textContent = "Refreshing…";
+      dataStatus = "loading live GitHub data…";
+      render();
+      try {
+        const [rawItems, pulls] = await Promise.all([
+          githubApi("/issues?state=open&per_page=100"),
+          githubApi("/pulls?state=all&per_page=100&sort=updated&direction=desc")
+        ]);
+        const openIssues = rawItems.filter(item => !item.pull_request);
+        const liveMap = new Map(openIssues.map(item => [item.number, normalizeIssue(item)]));
+        const dependencyLists = await Promise.all(openIssues.map(async item => ({
+          number: item.number,
+          blockers: await githubApi(`/issues/${item.number}/dependencies/blocked_by?per_page=100`)
+        })));
+
+        for (const {number, blockers} of dependencyLists) {
+          const issue = liveMap.get(number);
+          issue.blockedBy = blockers.map(blocker => blocker.number);
+          for (const blocker of blockers) {
+            if (!liveMap.has(blocker.number)) liveMap.set(blocker.number, normalizeIssue(blocker));
+          }
+        }
+
+        for (const pr of pulls) {
+          for (const number of issueNumbersReferencedBy(pr)) {
+            const issue = liveMap.get(number);
+            if (!issue) continue;
+            issue.prs.push({
+              number: pr.number,
+              state: pr.merged_at ? "MERGED" : pr.state.toUpperCase(),
+              url: pr.html_url
+            });
+          }
+        }
+
+        issues = [...liveMap.values()].sort((a, b) => b.number - a.number);
+        rebuildIndexes();
+        if (selected && !issueMap.has(selected)) selected = null;
+        dataStatus = `live · refreshed ${new Date().toLocaleString()}`;
+        cacheLiveData();
+        render();
+        resetView();
+      } catch (error) {
+        dataStatus = `offline fallback · ${error.message}`;
+        if (githubToken && /401/.test(error.message)) {
+          forgetGitHubToken();
+          dataStatus = "saved GitHub token was rejected · authenticate again";
+        }
+        if (!githubToken && /403|rate limit/i.test(error.message)) {
+          document.querySelector("#authenticate").textContent = "Authenticate to refresh";
+        }
+        render();
+      } finally {
+        refreshButton.disabled = false;
+        refreshButton.textContent = "Refresh data";
+      }
+    }
+
+    let drag = null;
+    svg.addEventListener("pointerdown", event => {
+      if (event.target.closest?.(".node")) return;
+      drag = {x: event.clientX, y: event.clientY, originX: transform.x, originY: transform.y};
+      svg.setPointerCapture(event.pointerId);
+      svg.classList.add("dragging");
+    });
+    svg.addEventListener("pointermove", event => {
+      if (!drag) return;
+      transform.x = drag.originX + event.clientX - drag.x;
+      transform.y = drag.originY + event.clientY - drag.y;
+      applyTransform();
+    });
+    svg.addEventListener("pointerup", () => { drag = null; svg.classList.remove("dragging"); });
+    svg.addEventListener("wheel", event => {
+      event.preventDefault();
+      const oldScale = transform.scale;
+      const nextScale = Math.min(2.2, Math.max(0.25, oldScale * Math.exp(-event.deltaY * 0.0012)));
+      const worldX = (event.clientX - transform.x) / oldScale;
+      const worldY = (event.clientY - transform.y) / oldScale;
+      transform.x = event.clientX - worldX * nextScale;
+      transform.y = event.clientY - worldY * nextScale;
+      transform.scale = nextScale;
+      applyTransform();
+    }, {passive: false});
+
+    document.querySelector("#search").addEventListener("input", render);
+    document.querySelector("#show-closed").addEventListener("change", () => { render(); resetView(); });
+    document.querySelector("#refresh").addEventListener("click", refreshFromGitHub);
+    document.querySelector("#authenticate").addEventListener("click", () => {
+      document.querySelector("#auth-dialog").showModal();
+      document.querySelector("#token").focus();
+    });
+    document.querySelector("#cancel-auth").addEventListener("click", () => {
+      document.querySelector("#token").value = "";
+      document.querySelector("#auth-dialog").close();
+    });
+    document.querySelector("#forget-auth").addEventListener("click", () => {
+      forgetGitHubToken();
+      document.querySelector("#auth-dialog").close();
+    });
+    document.querySelector("#auth-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const tokenInput = document.querySelector("#token");
+      githubToken = tokenInput.value.trim();
+      saveGitHubToken(document.querySelector("#remember-token").checked);
+      tokenInput.value = "";
+      document.querySelector("#auth-dialog").close();
+      document.querySelector("#authenticate").textContent = "Authenticated";
+      refreshFromGitHub();
+    });
+    document.querySelector("#reset").addEventListener("click", resetView);
+    document.querySelector("#close-details").addEventListener("click", () => {
+      selected = null;
+      document.querySelector("#details").classList.remove("visible");
+      render();
+    });
+    svg.addEventListener("click", () => {
+      selected = null;
+      document.querySelector("#details").classList.remove("visible");
+      render();
+    });
+
+    const restoredAuthentication = restoreGitHubToken();
+    const loadedCache = loadCachedData();
+    render();
+    resetView();
+    if (restoredAuthentication || !loadedCache) refreshFromGitHub();
+  </script>
+</body>
+</html>
