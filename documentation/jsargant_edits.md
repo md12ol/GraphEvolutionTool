@@ -363,3 +363,38 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   `#[cfg(test)]` and never reaches the shipped crate, so it wants no page at all.
 
 *#crossover-now-has-a-shared-helper · filed 2026-08-19 11:51 — James, reviewing PR #129.*
+
+### `new-fitness.html` and `configuration.html` — a fourth objective exists, and the chain grew
+
+- **Pages:** `documentation/guide/new-fitness.html`, `documentation/reference/config.html`,
+  `documentation/guide/configuration.html`.
+- **Why now:** GitHub #99 added `struct_match`, a structural (non-SIR) objective, and fixed four
+  gaps in `get/src/fitness.rs`'s module doc in the same PR. Both the objective list and the chain
+  description on the site are now behind the crate.
+- **Now false — the objective list.** Every page that enumerates the objectives names three plus
+  `python`. There are four: `struct_match` scores how closely a graph's structure matches a folder
+  of reference graphs, is minimized, and is the only one that reads data from disk. `config.html`'s
+  `[fitness]` reference needs its eleven keys (`reference_folder`, three `*_bins`, three
+  `*_gamma`, three `*_weight`, `density_weight`) and the note that only `reference_folder` is
+  required.
+- **Now false — the chain.** This compounds the `#fitness-chain-documented-in-crate` entry above
+  rather than replacing it, so fix them together. The crate doc no longer says "up to five files":
+  five is what an objective built from config values alone touches, and one bringing its own data
+  touches the loader and its shared state too — `struct_match` touched seven. `new-fitness.html`'s
+  count is wrong in a second way now, not just the six-versus-seven one already filed.
+- **Now missing — three constraints the crate doc gained and the site never had.** A reader who
+  follows the page alone will get all three wrong: validation belongs in the objective's
+  constructor *as well as* `config.rs`, because the library route never runs the config layer;
+  `Config::validate` may not touch the filesystem, so a path-valued parameter cannot be checked
+  there; and the `dispatch` arm runs **once per replicate**, so anything expensive and immutable
+  belongs behind an `Arc`.
+- **Should say:** four objectives everywhere they are listed; the chain's file count stated as a
+  floor with the data-carrying case named; and the three constraints above, which are the part a
+  page can carry better than a doc comment because they are cross-cutting rather than per-step.
+- **Worth considering while sweeping:** `configuration.html:431` says `config.example.toml` is
+  "parsed *and* validated by the test suite". That was only true of the file's **active** block
+  until this PR — every commented alternative was unchecked prose. It is now true of the
+  `struct_match` alternative as well, and of no other. Either narrow the claim or note that the
+  other alternatives are still unverified.
+
+*#struct-match-objective-added · filed 2026-08-19 19:50 — James.*
