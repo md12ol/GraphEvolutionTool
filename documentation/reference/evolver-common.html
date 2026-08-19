@@ -57,6 +57,7 @@
     <tr><td><code>Selection</code></td><td>common.rs</td><td>how parents are picked</td></tr>
     <tr><td><code>express_and_score</code></td><td>common.rs</td><td>expression + scoring + orientation + NaN gate</td></tr>
     <tr><td><code>mutate_child</code></td><td>common.rs</td><td>the engine's two mutation dice rolls</td></tr>
+    <tr><td><code>breed_pair</code></td><td>common.rs</td><td>one crossover roll and both mutation rolls, in the order every strategy must draw them</td></tr>
     <tr><td><code>generation_stats</code></td><td>common.rs</td><td>one population → one log row</td></tr>
     <tr><td><code>rank</code>, <code>best_index</code></td><td>common.rs</td><td>the engine's one and only comparator</td></tr>
   </tbody>
@@ -272,9 +273,10 @@ where
     pub best_fitness: f64,
     pub mean_fitness: f64,
     pub std_dev: f64,
+    pub ci_95: f64,
 }</div>
   <div class="api-body">
-    <span class="src">evolver/mod.rs:91-96</span>
+    <span class="src">evolver/mod.rs:96-107</span>
     <p>
       One row of the evolution log. <code>iteration</code> counts <b>generations</b> for the
       generational strategy and <b>mating events</b> for steady-state.
@@ -288,7 +290,7 @@ where
   </div>
 </div>
 
-<p>The log the reporting layer writes has five columns:</p>
+<p>The log the reporting layer writes has seven columns:</p>
 
 <div class="table-wrap">
 <table>
@@ -304,14 +306,15 @@ where
         <td><b>population</b> deviation — divides by <code>n</code>, because these are all the
             individuals there are, not a sample of a larger group. A single individual therefore has
             a deviation of exactly zero. Crosses the boundary unchanged.</td></tr>
-    <tr><td><code>ci_95</code> <span class="badge badge-planned">planned</span></td>
+    <tr><td><code>ci_95</code></td>
         <td>95% confidence half-width on the mean, <code>1.96 · s / √n</code>, where <code>s</code>
             is the <b>sample</b> deviation — divides by <code>n−1</code>. It answers "how tightly is
             this generation clustered around its mean". A single individual has an undefined
             interval, reported as <code>0</code>.</td></tr>
-    <tr><td>the run's <code>seed</code> and run index <span class="badge badge-planned">planned</span></td>
+    <tr><td><code>seed</code> and <code>run_index</code></td>
         <td>stamped on every row, so 30 replicate runs can be concatenated into one file and still
-            be separated afterwards</td></tr>
+            be separated afterwards. These two are fields on the <b>result</b>, not on
+            <code>GenerationStats</code> — <code>save_logs</code> repeats them down every row.</td></tr>
   </tbody>
 </table>
 </div>
@@ -324,15 +327,13 @@ where
   the population deviation would not be.
 </div>
 
-<div class="plan-note">
-  <b>What exists today.</b> <code>GenerationStats</code> has the four fields shown in the signature
-  above — <code>ci_95</code>, the seed and the run index are not fields yet, and nothing computes
-  them. The rows themselves do reach Python: the boundary (<code>dispatch::erase</code>,
-  <code>get/src/dispatch.rs:411</code>) converts each row's two fitness columns out of engine
-  orientation and carries the whole log out on the result object. A Rust embedder calling
-  <code>Evolver::run</code> directly gets the same <code>history</code> on
-  <code>EvolutionOutcome</code>, unconverted. Progress is tracked on
-  <a href="../status.html">Status</a>.
+<div class="note">
+  <b>How a row reaches Python.</b> The boundary (<code>dispatch::erase</code>) converts each row's
+  two fitness columns out of engine orientation and carries the whole log out on the result object.
+  <code>seed</code> and <code>run_index</code> are added there, from the result, rather than being
+  carried per row through the engine. A Rust embedder calling <code>Evolver::run</code> directly
+  gets the same <code>history</code> on <code>EvolutionOutcome</code>, unconverted — and without
+  those two columns, which exist only in what <code>save_logs</code> writes.
 </div>
 
 <h2>Selection — picking parents</h2>
@@ -387,7 +388,7 @@ where
 </p>
 
 <div class="api-item">
-  <div class="api-sig">pub fn select&lt;G, R&gt;(
+  <div class="api-sig">pub(super) fn select&lt;G, R&gt;(
     &amp;self,
     population: &amp;[G],
     fitnesses: &amp;[f64],
@@ -420,7 +421,7 @@ where
 </div>
 
 <div class="api-item">
-  <div class="api-sig">pub fn tournament_indices&lt;R&gt;(&amp;self, fitnesses: &amp;[f64], rng: &amp;mut R) -&gt; Vec&lt;usize&gt;
+  <div class="api-sig">pub(super) fn tournament_indices&lt;R&gt;(&amp;self, fitnesses: &amp;[f64], rng: &amp;mut R) -&gt; Vec&lt;usize&gt;
 where
     R: Rng + ?Sized</div>
   <div class="api-body">
@@ -541,7 +542,7 @@ where
 <h2>Variation helpers</h2>
 
 <div class="api-item">
-  <div class="api-sig">pub fn mutate_child&lt;G, R&gt;(child: &amp;mut G, mutation_rate: f64, max_mutations: usize, rng: &amp;mut R)
+  <div class="api-sig">pub fn mutate_child&lt;G, R&gt;(child: &amp;mut G, context: &amp;G::Context, mutation_rate: f64, max_mutations: usize, rng: &amp;mut R)
 where
     G: Genome,
     R: Rng + ?Sized</div>
@@ -580,17 +581,37 @@ where
   output. See <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a>.
 </div>
 
-<p>
-  Crossover has no shared helper — it is a single roll each strategy makes for itself, immediately
-  before calling <code>mutate_child</code> on each of the two children. Both strategies make the
-  rolls in the identical order (crossover, then child one, then child two) so the two consume
-  randomness the same way.
-</p>
+<div class="api-item">
+  <div class="api-sig">pub fn breed_pair&lt;G, R&gt;(first: &amp;mut G, second: &amp;mut G, shared: &amp;SharedEvolutionContext&lt;G&gt;, rng: &amp;mut R)
+where
+    G: Genome,
+    R: Rng + ?Sized</div>
+  <div class="api-body">
+    <span class="src">evolver/common.rs:227-231</span>
+    <p>
+      Recombine a selected pair and mutate both children, in the fixed order every strategy uses:
+      one crossover roll for the pair, then one <code>mutate_child</code> call per child. The two
+      parents are mutated in place into the children.
+    </p>
+    <p>
+      Both strategies breed through here, so the rolls happen in the identical order — crossover,
+      then child one, then child two — and the two consume randomness the same way. That is now
+      guaranteed by there being <b>one copy of the sequence</b> rather than by two copies agreeing:
+      the order is part of the reproducibility contract, and it is the one kind of divergence that
+      would stay invisible until a seeded run quietly stopped reproducing.
+    </p>
+    <p>
+      Takes the whole <code>SharedEvolutionContext</code> rather than the four fields it reads, so a
+      field added there cannot be forgotten at one of the two call sites.
+    </p>
+    <p>Nothing is scored here — the caller decides when, and in what batch.</p>
+  </div>
+</div>
 
 <h2>Logging</h2>
 
 <div class="api-item">
-  <div class="api-sig">pub fn generation_stats(iteration: usize, fitnesses: &amp;[f64]) -&gt; GenerationStats</div>
+  <div class="api-sig">pub(super) fn generation_stats(iteration: usize, fitnesses: &amp;[f64]) -&gt; GenerationStats</div>
   <div class="api-body">
     <span class="src">evolver/common.rs:292</span>
     <p>
