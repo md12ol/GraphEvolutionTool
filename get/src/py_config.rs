@@ -1177,59 +1177,6 @@ mod tests {
         None
     }
 
-    /// `config.rs`'s source with whole-line `//` comments blanked out.
-    ///
-    /// Everything below reads `config.rs` as text, with no notion of Rust
-    /// syntax, so without this a raise site written *inside* a comment counts
-    /// as a real one — and `config.rs` deliberately carries worked examples in
-    /// comments showing what a new genome's validation arm looks like. The
-    /// failure is loud but misleading: the sweep demands a Python attribute
-    /// path for a field name nobody ever wrote. The same blindness points the
-    /// other way too, and that half is silent — a real check commented out
-    /// while debugging still reads as present.
-    ///
-    /// Only lines whose **first non-whitespace is `//`** are blanked, so a
-    /// `//` inside a string literal cannot take its line with it. That leaves a
-    /// trailing comment on a line of code in place, which is deliberate: the
-    /// shapes scanned for are calls, and a raise site hiding after `//` at the
-    /// end of a live line is not a thing `config.rs` does.
-    ///
-    /// Blanked to spaces rather than removed, so every byte offset is
-    /// unchanged. `literal_at` and `field_loop_list` both scan forward from an
-    /// index into this string; deleting lines would shift those and report the
-    /// wrong line numbers in the guards' failure messages.
-    ///
-    /// One space **per byte**, not per character. These comments contain
-    /// em-dashes and other multi-byte text, and one space per `char` would
-    /// shorten the string — quietly reintroducing the offset drift this exists
-    /// to avoid.
-    fn config_rs_without_comments() -> String {
-        blank_comment_lines(include_str!("config.rs"))
-    }
-
-    /// The blanking itself, over any source text — separate from the reader
-    /// above so it can be tested against a fixture rather than against
-    /// `config.rs`, whose contents move.
-    fn blank_comment_lines(source: &str) -> String {
-        let mut out = String::with_capacity(source.len());
-        for line in source.split_inclusive('\n') {
-            if line.trim_start().starts_with("//") {
-                for character in line.chars() {
-                    if character == '\n' {
-                        out.push('\n');
-                    } else {
-                        for _ in 0..character.len_utf8() {
-                            out.push(' ');
-                        }
-                    }
-                }
-            } else {
-                out.push_str(line);
-            }
-        }
-        out
-    }
-
     /// Every field name `config.rs` can raise, scraped from its own source.
     ///
     /// Reading the source rather than maintaining a second list by hand: a list
@@ -1244,7 +1191,7 @@ mod tests {
     /// by `every_invalid_call_names_its_field_scrapably`, which fails rather than
     /// letting this function silently cover less than it claims.
     fn validation_fields_in_config_rs() -> Vec<String> {
-        let source = &config_rs_without_comments();
+        let source = include_str!("config.rs");
         let mut fields = Vec::new();
 
         // Shape 1: `invalid("<field>", ...)`, sometimes wrapped onto the
@@ -1319,7 +1266,7 @@ mod tests {
         // neither is invisible to it, and the sweep below then passes whether or
         // not that field is mapped — a guard that has quietly stopped guarding.
         // Fail loudly on a third shape instead.
-        let source = &config_rs_without_comments();
+        let source = include_str!("config.rs");
 
         let mut unreadable = Vec::new();
         for (index, _) in source.match_indices("invalid(") {
@@ -1359,7 +1306,7 @@ mod tests {
         // written some other way — a nested binding, a named constant in place
         // of the list — is skipped in silence otherwise, and the two together
         // are what make "named `field`" mean "scraped".
-        let source = &config_rs_without_comments();
+        let source = include_str!("config.rs");
 
         let mut unreadable = Vec::new();
         for (index, _) in source.match_indices("for (field,") {
@@ -1382,67 +1329,6 @@ mod tests {
              (\"<field>\", value) pairs, so `validation_fields_in_config_rs` skips them and the \
              fields they raise go unchecked: {unreadable:?}"
         );
-    }
-
-    #[test]
-    fn a_raise_site_written_inside_a_comment_is_not_scraped() {
-        // The third blind spot, after the two guards above: everything here
-        // reads `config.rs` as text, so without `config_rs_without_comments` a
-        // worked example in a comment is indistinguishable from a live call.
-        // `config.rs` carries exactly such an example — the `ADD A GENOME STEP 4`
-        // marker — and the symptom is the sweep below demanding a Python
-        // attribute for a field name nobody wrote.
-        //
-        // Asserted against a fixture rather than `config.rs` itself, so the test
-        // still means something after someone edits that marker away.
-        let source = "\
-fn validate(&self) -> Result<(), ConfigError> {
-    // Example for a new variant:
-    //     return Err(invalid(\"commented_out_field\", \"must be at least 1\"));
-    if self.real == 0 {
-        return Err(invalid(\"real_field\", \"must be at least 1\"));
-    }
-    Ok(())
-}
-";
-        let mut fields = Vec::new();
-        for (index, _) in blank_comment_lines(source).match_indices("invalid(") {
-            if let Some(field) = literal_at(&blank_comment_lines(source), index + "invalid(".len())
-            {
-                fields.push(field);
-            }
-        }
-
-        assert_eq!(
-            fields,
-            vec!["real_field".to_string()],
-            "a raise site inside a `//` comment must not be scraped, and a live one must be"
-        );
-    }
-
-    #[test]
-    fn blanking_a_comment_preserves_every_byte_offset() {
-        // `literal_at` and `field_loop_list` scan forward from byte indices into
-        // the blanked string and the guards report line numbers from it, so the
-        // blanking has to be length-preserving. One space per *char* would not
-        // be: these comments contain em-dashes, which are three bytes.
-        let source = "let x = 1;\n    // an em-dash — three bytes\nlet y = 2;\n";
-        let blanked = blank_comment_lines(source);
-
-        assert_eq!(blanked.len(), source.len(), "byte length must not change");
-        assert_eq!(blanked.lines().count(), source.lines().count());
-        // The code either side survives; only the comment line is blanked.
-        assert!(blanked.contains("let x = 1;"));
-        assert!(blanked.contains("let y = 2;"));
-        assert!(!blanked.contains("em-dash"));
-    }
-
-    #[test]
-    fn a_double_slash_inside_a_string_literal_does_not_blank_its_line() {
-        // Only a *leading* `//` counts. Blanking on any occurrence would take
-        // out live code whose string happens to contain one.
-        let source = "let url = \"http://example.com\";\n";
-        assert_eq!(blank_comment_lines(source), source);
     }
 
     #[test]

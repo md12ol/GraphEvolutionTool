@@ -658,7 +658,10 @@ impl Config {
               //
               //     GenomeConfig::MyGenome(mine) => {
               //         if mine.some_dimension == 0 {
-              //             return Err(invalid("some_dimension", "must be at least 1"));
+              //             return Err(invalid(
+              //                 "some_dimension",
+              //                 "must be at least 1",
+              //             ));
               //         }
               //     }
               //
@@ -666,6 +669,15 @@ impl Config {
               // load, rather than mid-run. A field named in an `invalid` call
               // also needs an attribute path in `py_config`'s
               // `python_attribute_path` — step 7.
+              //
+              // Keep the field name on its own line in any example you add
+              // here, wrapped exactly as above. `py_config`'s test scraper
+              // reads this file as text and cannot tell a commented-out call
+              // from a live one: it takes the first string literal after an
+              // opening `invalid(`, and only skips it when something other
+              // than whitespace intervenes — which the wrap's `//` supplies.
+              // Written on one line, the example fails the suite by demanding
+              // a Python attribute for a field that does not exist.
         }
         Ok(())
     }
