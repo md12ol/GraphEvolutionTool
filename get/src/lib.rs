@@ -36,9 +36,11 @@ use crate::py_config::{
     PySelectionConfig, PySirParams, config_error_to_py,
 };
 use crate::py_result::{PyGenerationStats, PyRunResult};
+use crate::stats::ReferenceStatistics;
 use pyo3::exceptions::{PyUserWarning, PyValueError};
 use pyo3::prelude::*;
 use std::ffi::CString;
+use std::sync::{Arc, OnceLock};
 
 /// One graph as a folder load hands it back: the file it was read from, and its
 /// edges as `(u, v, multiplicity)`.
@@ -117,6 +119,21 @@ pub struct GraphEvolver {
     /// The TOML document `config` was parsed from — the run's provenance
     /// record, written alongside its results.
     config_toml: String,
+    /// `struct_match`'s reduced reference set, built at most once per evolver.
+    ///
+    /// # Why this is cached when the objective itself is not
+    ///
+    /// `objective()` is called once per replicate, and §8.1 requires each
+    /// replicate its *own* objective because an `EpidemicScorer` holds a
+    /// per-run counter that must not be shared. `StructMatch` has no such
+    /// state — it is a pure function of one graph — so what must be fresh is
+    /// the objective, not the reference statistics behind it. Those are
+    /// immutable, and rebuilding them per replicate would re-read the folder
+    /// and re-run an eigendecomposition of every reference graph, `n_runs`
+    /// times, in a phase that logs nothing.
+    ///
+    /// Empty for every other objective, and until the first run.
+    struct_match_reference: OnceLock<Arc<ReferenceStatistics>>,
 }
 
 #[pymethods]
@@ -143,6 +160,7 @@ impl GraphEvolver {
             fitness_function: None,
             base_graph: None,
             min_node_index: None,
+            struct_match_reference: OnceLock::new(),
             config_toml: text,
         })
     }
@@ -206,6 +224,7 @@ impl GraphEvolver {
             fitness_function: None,
             base_graph: None,
             min_node_index: None,
+            struct_match_reference: OnceLock::new(),
             config_toml: text,
         })
     }
@@ -909,6 +928,7 @@ pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String>
         fitness_function: None,
         base_graph: None,
         min_node_index: None,
+        struct_match_reference: OnceLock::new(),
         config_toml: text.clone(),
     };
 
@@ -992,6 +1012,7 @@ mod tests {
             fitness_function: None,
             base_graph: None,
             min_node_index: None,
+            struct_match_reference: OnceLock::new(),
             config_toml: String::new(),
         }
     }

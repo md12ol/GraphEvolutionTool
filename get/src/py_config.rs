@@ -292,6 +292,38 @@ pub enum PyFitnessConfig {
         /// Compared verbatim — see [`crate::config::FitnessConfig`].
         target_profile: Vec<f64>,
     },
+    /// How closely a graph's structure matches a set of reference graphs.
+    /// Minimized; requires `max_edge_multiplicity = 1`.
+    ///
+    /// Every parameter but the folder has a default, matching the TOML side —
+    /// see [`crate::config::FitnessConfig`] for what each one does and for the
+    /// two ways a reference set can retire a family without saying so.
+    #[pyo3(constructor = (
+        reference_folder,
+        degree_bins = 50,
+        clustering_bins = 50,
+        spectral_bins = 50,
+        degree_gamma = 1.0,
+        clustering_gamma = 1.0,
+        spectral_gamma = 1.0,
+        degree_weight = 1.0,
+        clustering_weight = 1.0,
+        spectral_weight = 1.0,
+        density_weight = 1.0,
+    ))]
+    StructMatch {
+        reference_folder: String,
+        degree_bins: usize,
+        clustering_bins: usize,
+        spectral_bins: usize,
+        degree_gamma: f64,
+        clustering_gamma: f64,
+        spectral_gamma: f64,
+        degree_weight: f64,
+        clustering_weight: f64,
+        spectral_weight: f64,
+        density_weight: f64,
+    },
     /// A Python callable registered before the run, via
     /// `GraphEvolver.set_fitness_function`. Its direction is declared at
     /// registration, not here (spec §7).
@@ -465,6 +497,20 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         // On the objective itself rather than the shared SIR block — only
         // `epi_prof_match` has one.
         "target_profile" => Some("config.fitness.target_profile"),
+        // `struct_match`'s own block. All are raised from loops in
+        // `validate_struct_match`, so the scraper below cannot see them as
+        // string literals at the call site.
+        "reference_folder" => Some("config.fitness.reference_folder"),
+        "degree_bins" => Some("config.fitness.degree_bins"),
+        "clustering_bins" => Some("config.fitness.clustering_bins"),
+        "spectral_bins" => Some("config.fitness.spectral_bins"),
+        "degree_gamma" => Some("config.fitness.degree_gamma"),
+        "clustering_gamma" => Some("config.fitness.clustering_gamma"),
+        "spectral_gamma" => Some("config.fitness.spectral_gamma"),
+        "degree_weight" => Some("config.fitness.degree_weight"),
+        "clustering_weight" => Some("config.fitness.clustering_weight"),
+        "spectral_weight" => Some("config.fitness.spectral_weight"),
+        "density_weight" => Some("config.fitness.density_weight"),
         _ => None,
     }
 }
@@ -684,6 +730,46 @@ impl PyFitnessConfig {
                     profile.push(Value::Float(*value));
                 }
                 table.insert("target_profile".to_string(), Value::Array(profile));
+            }
+            PyFitnessConfig::StructMatch {
+                reference_folder,
+                degree_bins,
+                clustering_bins,
+                spectral_bins,
+                degree_gamma,
+                clustering_gamma,
+                spectral_gamma,
+                degree_weight,
+                clustering_weight,
+                spectral_weight,
+                density_weight,
+            } => {
+                table.insert(
+                    "type".to_string(),
+                    Value::String("struct_match".to_string()),
+                );
+                table.insert(
+                    "reference_folder".to_string(),
+                    Value::String(reference_folder.clone()),
+                );
+                for (key, bins) in [
+                    ("degree_bins", *degree_bins),
+                    ("clustering_bins", *clustering_bins),
+                    ("spectral_bins", *spectral_bins),
+                ] {
+                    table.insert(key.to_string(), integer(key, bins)?);
+                }
+                for (key, value) in [
+                    ("degree_gamma", *degree_gamma),
+                    ("clustering_gamma", *clustering_gamma),
+                    ("spectral_gamma", *spectral_gamma),
+                    ("degree_weight", *degree_weight),
+                    ("clustering_weight", *clustering_weight),
+                    ("spectral_weight", *spectral_weight),
+                    ("density_weight", *density_weight),
+                ] {
+                    table.insert(key.to_string(), Value::Float(value));
+                }
             }
             PyFitnessConfig::Python() => {
                 table.insert("type".to_string(), Value::String("python".to_string()));

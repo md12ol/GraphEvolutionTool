@@ -101,6 +101,7 @@
 //! `both_entry_points_use_the_same_reading` fails if they disagree.
 
 use std::slice;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use pyo3::prelude::*;
@@ -558,7 +559,7 @@ impl Fitness for EpiProfMatch {
 /// nothing reports it. Give the weights a reference set that actually varies
 /// in the statistic being weighted.
 pub struct StructMatch {
-    reference: ReferenceStatistics,
+    reference: Arc<ReferenceStatistics>,
     gammas: PerFamily,
     weights: PerFamily,
     density_weight: f64,
@@ -566,6 +567,10 @@ pub struct StructMatch {
 
 impl StructMatch {
     /// Build the objective from a reference set's statistics and its weights.
+    ///
+    /// The statistics arrive behind an [`Arc`] because they are immutable and
+    /// expensive: replicates each need their own objective, and can share one
+    /// reduced reference set rather than rebuilding it per run.
     ///
     /// # Errors
     ///
@@ -580,7 +585,7 @@ impl StructMatch {
     /// All-zero weights are rejected separately — that scores every candidate
     /// identically, so the search runs with no gradient while looking healthy.
     pub fn new(
-        reference: ReferenceStatistics,
+        reference: Arc<ReferenceStatistics>,
         gammas: PerFamily,
         weights: PerFamily,
         density_weight: f64,
@@ -1513,8 +1518,10 @@ def fitness(batch):
     }
 
     fn struct_match_over(reference: &[Graph]) -> StructMatch {
-        let statistics = ReferenceStatistics::from_graphs(reference, struct_match_axes())
-            .expect("a non-empty reference set on valid axes");
+        let statistics = Arc::new(
+            ReferenceStatistics::from_graphs(reference, struct_match_axes())
+                .expect("a non-empty reference set on valid axes"),
+        );
         StructMatch::new(statistics, uniform(1.0), uniform(1.0), 1.0)
             .expect("finite positive gammas and weights")
     }
@@ -1584,8 +1591,10 @@ def fitness(batch):
     fn struct_match_rejects_the_inputs_that_would_poison_every_score() {
         let axes = struct_match_axes();
         let statistics = || {
-            ReferenceStatistics::from_graphs(&[triangle()], axes.clone())
-                .expect("a non-empty reference set")
+            Arc::new(
+                ReferenceStatistics::from_graphs(&[triangle()], axes.clone())
+                    .expect("a non-empty reference set"),
+            )
         };
 
         // Each of these reaches `evaluate` as a multiplier, so a bad one is a
