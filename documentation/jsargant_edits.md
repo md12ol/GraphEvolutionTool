@@ -226,3 +226,28 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   `lib.rs:NNN` on `reference/lib.html` past the base-graph setter has shifted.
 
 *#base-graph-file-loaders · filed 2026-08-17 23:58 — James.*
+
+## 2026-08-18 20:05 — James — `set_base_graph` takes `min_node_index` too, and the numbering is shared by all three entry points
+
+- **Trigger:** GitHub #107, `jsargant_graph_file_loaders`, answering Michael's review point 2 on
+  PR #118. The in-memory setter now takes the same `min_node_index` the two file loaders take, so a
+  caller whose dataset numbers nodes from 1 does not have to renumber it on any route in.
+- **Files:** `guide/python-api.html:320` (the `set_base_graph` signature block and the prose under
+  it); `examples/index.html:304` (the `refiner.set_base_graph(100, topology)` sample) and `:315`
+  (the "Today: there is no `set_base_graph`" callout, already false before this change).
+- **Now false:** `python-api.html:320` prints
+  `GraphEvolver.set_base_graph(num_nodes, edges)`. The signature is
+  `set_base_graph(num_nodes, edges, min_node_index=0)`. Nothing on the site says that the run's
+  node numbering is *shared* — that one numbering is declared by whichever of the three entry
+  points is called first, that a later call disagreeing with it raises, and that the numbering is
+  what the evolved graph is shifted back into on the way out.
+- **Should say:** the new signature, with `min_node_index=0` as the default, and one short
+  paragraph on the shared numbering: `set_base_graph`, `set_base_graph_from_file` and
+  `load_reference_graphs` all declare it; the first call wins; a second that disagrees raises
+  `ValueError`; results come back in the numbering the data went in as. Worth an explicit line that
+  an out-of-range message names the index as the caller wrote it, not as it is after shifting, and
+  that the range it prints is inclusive (`1..=8` for 1-indexed data in an 8-node run).
+- **Badges:** `examples/index.html:315`'s "Today: there is no `set_base_graph`" callout goes — it
+  was already stale, and it is the one claim on these pages a reader would act on.
+
+*#set-base-graph-takes-min-node-index · filed 2026-08-18 20:05 — James.*
