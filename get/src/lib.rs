@@ -21,6 +21,10 @@ pub mod graph_io;
 mod py_config;
 pub mod py_result;
 pub mod sir;
+// Structural graph statistics. Public for the same reason as `sir`: it is a
+// domain computation objectives are built on, and a caller who writes their own
+// fitness function needs the same measurements the built-in ones use.
+pub mod stats;
 
 use crate::config::{Config, ConfigError, FitnessConfig, GenomeConfig};
 use crate::evolver::GenerationStats;
