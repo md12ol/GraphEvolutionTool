@@ -149,6 +149,12 @@ impl<G: Genome> Evolver<G> for SteadyStateEvolver<G> {
         // There is deliberately no matching `elite_count` assert as generational
         // has — steady-state carries no elites, because the tournament's best is
         // never among the two it replaces.
+        //
+        // A second selection scheme has to extend this match too — it is the one
+        // site outside `common.rs` that reads the variant, and nothing points at
+        // it from the config layer. A scheme that cannot serve
+        // `tournament_indices` is unusable here and its arm says so, though the
+        // config layer should have rejected the pairing first.
         match shared.selection {
             Selection::Tournament { tournament_size } => {
                 assert!(

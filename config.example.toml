@@ -45,6 +45,10 @@ elite_count     = 1          # best individuals carried forward (default 1)
 # num_mating_events = 100000
 
 # --- Parent selection ---------------------------------------------------------
+# Tournament is the only scheme GET ships. Adding another means editing your own
+# copy of GET — selection is an enum rather than a trait, so unlike an objective
+# or a genome it cannot be supplied from outside the crate. The `Selection` enum
+# in get/src/evolver/common.rs documents every site such a scheme touches.
 
 [selection]
 type            = "tournament"
