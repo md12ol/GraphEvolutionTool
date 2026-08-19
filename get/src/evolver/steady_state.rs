@@ -259,6 +259,9 @@ mod tests {
 
     /// The tournament `mating_event` will draw: it is the first thing to consume
     /// the RNG, so an identically seeded mirror reproduces it exactly.
+    ///
+    /// Steady-state-only, and deliberately: generational draws no tournament whose
+    /// membership a test needs to know.
     fn tournament_for(fitnesses: &[f64], seed: u64) -> Vec<usize> {
         let mut mirror = StdRng::seed_from_u64(seed);
         selection().tournament_indices(fitnesses, &mut mirror)

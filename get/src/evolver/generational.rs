@@ -201,6 +201,9 @@ mod tests {
     /// the same graph scores one higher on every second scoring pass. That is what
     /// makes "elites are rescored" observable — an unchanged genome whose recorded
     /// fitness still moves.
+    ///
+    /// Generational-only, and deliberately: steady-state carries no elites, so it
+    /// has no unchanged genome to watch a fitness move under.
     struct Alternating {
         passes: AtomicUsize,
     }
