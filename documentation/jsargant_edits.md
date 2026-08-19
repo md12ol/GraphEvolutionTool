@@ -321,3 +321,45 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   `reference/config.html`, for `Config::from_path`. One page, two queues — apply both together.
 
 *#genome-table-now-rejects-unknown-keys · filed 2026-08-19 11:05 — James, reviewing PR #128.*
+
+## 2026-08-19 11:51 — James — crossover has a shared helper now (`breed_pair`), and the page says twice that it does not
+
+- **Why:** GitHub #56 / PR #129 (merged `1d2dc3e`) extracted the crossover-and-mutate sequence out
+  of `generational.rs`'s `advance_generation` and `steady_state.rs`'s `mating_event` into
+  `common::breed_pair`. The page was written when each strategy really did spell the sequence out
+  itself, and it says so in the strongest available terms. **Filed by James, not the task's owner** —
+  PR #129 changed no file under `documentation/`, and this is the third consecutive PR to skip the
+  filing (#108, #128, #129), so it is filed here rather than waiting.
+- **Files:** `reference/evolver-common.html` — the prose at `:583-588`, the common.rs function table
+  at `:58-61`, and the `mutate_child` signature at `:544`.
+- **Now false — the prose, and it is emphatic about it** (`:583-588`):
+
+      Crossover has no shared helper — it is a single roll each strategy makes for itself,
+      immediately before calling `mutate_child` on each of the two children.
+
+  Both halves are now wrong. There *is* a shared helper, and the strategies do **not** make the roll
+  for themselves: `breed_pair` owns the crossover roll and both `mutate_child` calls, and each call
+  site is one line.
+- **Still true, and worth keeping:** the sentence that follows — "Both strategies make the rolls in
+  the identical order (crossover, then child one, then child two) so the two consume randomness the
+  same way." That is now guaranteed structurally rather than by two copies agreeing, which is a
+  stronger claim and the actual point of the change. Rewrite around it rather than deleting it.
+- **Now incomplete — the function table** (`:58-61`) lists `express_and_score`, `mutate_child`,
+  `generation_stats` and `rank`/`best_index`, and omits `breed_pair`. It should gain a row:
+  *"one crossover roll and both mutation rolls, in the order every strategy must draw them"*.
+- **Now false, and NOT from #129** (`:544`): the page prints
+
+      pub fn mutate_child<G, R>(child: &mut G, mutation_rate: f64, max_mutations: usize, rng: &mut R)
+
+  The real signature takes `context: &G::Context` as its second parameter (`common.rs:186-192`).
+  Pre-existing staleness, folded in here because it is the same page and the same section, and a
+  sweep that corrects the prose around it and leaves the signature wrong is the half-corrected page
+  the one-sweep convention exists to prevent.
+- **Should say:** `breed_pair` is the shared helper for recombination and mutation; each strategy
+  selects its parents and then calls it. Keep the draw-order sentence, reattributed to the helper.
+  Add the table row. Fix `mutate_child`'s signature.
+- **What is NOT owed an edit:** the `mutate_child` narrative at `:585` about the two dice rolls, and
+  the reproducibility callout at `:578-580`, are both still accurate. `test_support.rs` is new but is
+  `#[cfg(test)]` and never reaches the shipped crate, so it wants no page at all.
+
+*#crossover-now-has-a-shared-helper · filed 2026-08-19 11:51 — James, reviewing PR #129.*
