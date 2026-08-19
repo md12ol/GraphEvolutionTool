@@ -22,6 +22,8 @@
 
 use std::path::Path;
 
+use crate::graph::Graph;
+
 /// A validated edge list, plus whatever was worth saying about it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EdgeFile {
@@ -32,6 +34,44 @@ pub struct EdgeFile {
     pub warnings: Vec<LoadWarning>,
     /// What to call this in a message — a path, or a test's own label.
     pub source: String,
+}
+
+impl EdgeFile {
+    /// Build the graph these edges describe, sizing it from the data itself.
+    ///
+    /// # Why the node count is inferred rather than passed
+    ///
+    /// [`load_edge_folder`] takes **one** `num_nodes` for the whole folder,
+    /// which suits a set of same-sized graphs and does not suit a reference
+    /// set: those come from real data and differ in size, and the loader's
+    /// `num_nodes` is an upper bound used to reject out-of-range indices, not
+    /// a description of any one file. So a caller passes a generous cap to the
+    /// loader — which still catches a wild index — and gets each graph's real
+    /// size from here.
+    ///
+    /// **The count is `highest index + 1`, so a trailing isolated node cannot
+    /// be seen.** Nothing in the file distinguishes "node 9 exists but has no
+    /// edges" from "there is no node 9". A file whose graph genuinely has one
+    /// is one node short, silently. Where the count is known from elsewhere —
+    /// TUDataset's `graph_indicator` file gives it exactly — prefer that and
+    /// use this as a check.
+    pub fn to_graph(&self, max_edge_multiplicity: u32) -> Graph {
+        // Indices are 0-based by the time they reach here, so a graph with no
+        // edges at all is the only one with no nodes.
+        let mut num_nodes = 0;
+        for &(u, v, _) in &self.edges {
+            if u + 1 > num_nodes {
+                num_nodes = u + 1;
+            }
+            if v + 1 > num_nodes {
+                num_nodes = v + 1;
+            }
+        }
+
+        let mut graph = Graph::new(num_nodes, max_edge_multiplicity);
+        graph.set_edges(&self.edges);
+        graph
+    }
 }
 
 /// Why one row was rejected.
@@ -739,5 +779,54 @@ mod tests {
             Err(GraphLoadError::Io { path, .. }) => assert!(path.contains("no_such_directory")),
             other => panic!("expected an Io error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn to_graph_sizes_each_file_from_its_own_highest_index() {
+        // The point of the method: one folder-wide `num_nodes` is an upper
+        // bound for validation, and each file's real size comes from its data.
+        let small = parse("0,1,1\n1,2,1").expect("a valid three-node file");
+        let large = parse("0,1,1\n1,5,1").expect("a valid six-node file");
+
+        assert_eq!(small.to_graph(1).num_nodes, 3);
+        assert_eq!(large.to_graph(1).num_nodes, 6);
+    }
+
+    #[test]
+    fn to_graph_carries_every_edge_across() {
+        let file = parse("0,1,1\n1,2,1\n0,2,1").expect("a valid triangle");
+
+        let graph = file.to_graph(1);
+
+        assert_eq!(graph.num_nodes, 3);
+        for node in 0..3 {
+            assert_eq!(
+                graph.degree(node),
+                2,
+                "every node of a triangle has degree 2"
+            );
+        }
+    }
+
+    #[test]
+    fn to_graph_of_an_edgeless_file_is_a_graph_with_no_nodes() {
+        let file = parse("").expect("an empty file is a valid empty edge list");
+
+        assert_eq!(file.to_graph(1).num_nodes, 0);
+    }
+
+    #[test]
+    fn to_graph_cannot_see_a_trailing_isolated_node() {
+        // Documented limitation, pinned so it is a known cost rather than a
+        // surprise: nothing in the file says node 3 exists, so a graph whose
+        // real size is 4 with node 3 isolated comes back as 3 nodes. Where the
+        // count is known from elsewhere, pass it rather than inferring.
+        let file = parse("0,1,1\n1,2,1").expect("a valid file");
+
+        assert_eq!(
+            file.to_graph(1).num_nodes,
+            3,
+            "inference reports the nodes that appear in edges, and only those"
+        );
     }
 }
