@@ -16,9 +16,64 @@ use crate::graph::Graph;
 
 /// Parent-selection strategy.
 ///
-/// An enum so a new mechanism (roulette-wheel, truncation, rank, ...) is one
-/// extra variant plus one match arm, and maps directly onto a `config.toml`
-/// field.
+/// An enum rather than a trait, so a new mechanism (roulette-wheel, truncation,
+/// rank, ...) is one extra variant plus its match arms, and maps directly onto a
+/// `config.toml` field.
+///
+/// # Adding your own scheme
+///
+/// **This is the one extension point that cannot be reached from outside the
+/// crate.** The others — `Fitness`, `Genome`, `Evolver` — are traits, so a
+/// program that depends on GET implements them for its own types. A variant
+/// cannot be added to an enum from another crate, so a depending program's only
+/// schemes are the ones GET ships. Adding one means editing your own copy of
+/// GET, and what that buys is a scheme selectable by name from `config.toml`
+/// and runnable by the `get-run` binary, with no Rust at the call site. A
+/// reader expecting the trait pattern to hold here will go looking for a
+/// `Selection` trait that does not exist.
+///
+/// A scheme touches five files, in seven steps — `common.rs` and `config.rs`
+/// each want more than one edit. In the order you would walk them:
+///
+/// 1. **This enum** — add the variant, carrying whatever parameters the scheme
+///    reads out of the file.
+/// 2. **`select`** — add its arm. This is the whole of parent selection and the
+///    only method every scheme must answer. Read its contract first: it governs
+///    replacement, orientation and where randomness may come from, and none of
+///    the three is enforced by the signature.
+/// 3. **`tournament_indices`** — add an arm **only if the scheme is to be usable
+///    with steady-state**. It is deliberately not part of the general contract.
+///    It draws one ranked set of *distinct* individuals, from which
+///    [`super::steady_state`] takes both its parents and the individuals they
+///    replace — a replacement policy rather than a selection one, and one that
+///    only means something over a set. A scheme whose own theory has no such
+///    draw (roulette-wheel samples with replacement, and a distinct-sample
+///    variant of it is a different scheme wearing the name) supplies no arm, and
+///    step 5 rejects the pairing at config time.
+/// 4. **`steady_state.rs`** — `SteadyStateEvolver::new` matches on the variant
+///    directly, to assert its tournament floor before a run starts rather than
+///    at the first mating event. A scheme that reached step 3 needs the
+///    equivalent guarantee stated here; one that did not still needs the arm, to
+///    reject the combination.
+/// 5. **`config.rs`** — three edits. Add a `SelectionConfig` variant holding
+///    what the scheme reads out of the file; add any constraint on its own
+///    parameters; and extend `validate_evolution_and_selection`, whose
+///    `let SelectionConfig::Tournament { .. } = self.selection;` is irrefutable
+///    only while there is one variant and becomes a real match with the second.
+///    That function is where a scheme is paired with a strategy, so it is where
+///    a scheme with no step 3 is rejected against steady-state — a config error
+///    naming the pair, rather than a run that quietly is not the scheme asked
+///    for.
+/// 6. **`dispatch.rs`** — add the arm to `selection()`, which turns the config
+///    variant into this enum. Steps 5 and 6 are one change split across two
+///    files: a variant nothing constructs is dead code, and an arm for a variant
+///    that does not exist will not compile.
+/// 7. **`config.example.toml`** — add the `[selection]` block if the scheme
+///    ships. The example file is what a user copies from, so a scheme missing
+///    from it is one most people never find.
+///
+/// Steps 1, 2, 5 and 6 fail to compile if forgotten; the matches are exhaustive.
+/// Steps 3, 4 and 7 do not, and are the ones to check by hand.
 pub enum Selection {
     /// Sample `tournament_size` individuals per pick and keep the best.
     Tournament { tournament_size: usize },
