@@ -81,7 +81,11 @@ pub enum Selection {
 
 /// Order two individuals, better first, ties broken by lower index.
 ///
-/// Fitnesses are already oriented so lower is better. The index tie-break makes
+/// Fitnesses are already oriented so lower is better — every comparison in this
+/// module rests on that, and none of them consults a `Direction`. Orientation
+/// happens once, before a score reaches selection at all; a scheme that checks
+/// the direction again inverts it for maximizing objectives. The index
+/// tie-break makes
 /// a tournament's outcome depend only on which indices were drawn, not the
 /// order the RNG produced them. `total_cmp` is used simply because sorting
 /// needs a total order; `Direction::orient` rejects `NaN` before it gets here.
@@ -115,10 +119,37 @@ pub(super) fn best_index(fitnesses: &[f64]) -> usize {
 }
 
 impl Selection {
-    /// Select `count` parents, sampling **with** replacement — the same
-    /// individual may be returned more than once. Callers needing distinct
-    /// individuals must enforce that themselves, since `select` cannot know
-    /// whether its output is a mating pair or an unrelated batch.
+    /// Select `count` parents from `population`.
+    ///
+    /// # The contract every scheme keeps
+    ///
+    /// These bind new variants as much as the one that is here. None of the
+    /// three is enforced by the signature, and breaking any of them changes the
+    /// behaviour of every evolver at once rather than failing anywhere visible.
+    ///
+    /// **Sampling is with replacement.** The same individual may be returned
+    /// more than once, and a caller wanting distinct individuals enforces that
+    /// itself — `select` cannot know whether its output is a mating pair or an
+    /// unrelated batch. A scheme that quietly de-duplicates is not a stricter
+    /// version of this one: it removes the selection pressure that comes from a
+    /// strong individual being drawn twice.
+    ///
+    /// **Fitnesses arrive already oriented**, lower is better, so a scheme
+    /// compares them directly and never consults a `Direction` — see `rank`,
+    /// which is the ordering to reach for rather than comparing floats by hand.
+    /// This is the likeliest mistake a new scheme makes, because re-checking the
+    /// direction looks defensive and silently inverts every maximizing
+    /// objective.
+    ///
+    /// **All randomness comes from `rng`.** Nothing may reach for a thread RNG,
+    /// the clock, or the address of anything. Two replicate runs at one seed are
+    /// required to agree, and a scheme is the easiest place to break that
+    /// without any test noticing, since the run still completes and still looks
+    /// plausible.
+    ///
+    /// Nothing here constrains *how* a scheme picks — pressure, and whether it
+    /// looks at fitness values or only at their order, are the scheme's own
+    /// business.
     pub(super) fn select<G, R>(
         &self,
         population: &[G],
