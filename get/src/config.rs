@@ -134,6 +134,14 @@ pub struct SdaGenomeConfig {
 /// The three epidemic objectives read the same simulation differently (spec
 /// §5.2), so they share one parameter block rather than triplicating it — see
 /// [`SirParams`]. `epi_prof_match` is the only one that adds anything.
+///
+/// # Part of the chain that adds an objective
+///
+/// This is where a new objective becomes selectable by name from a config
+/// file. The step before it is implementing `Fitness` in `crate::fitness`,
+/// whose module doc walks the whole chain; the step after is the arm in
+/// `dispatch`'s `objective()` that turns this variant into a boxed objective.
+/// A variant added here and nowhere else is dead — nothing constructs it.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FitnessConfig {
