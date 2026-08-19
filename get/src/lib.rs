@@ -454,7 +454,7 @@ impl GraphEvolver {
             ));
         }
 
-        self.adopt_min_node_index(min_node_index)?;
+        self.check_min_node_index(min_node_index)?;
 
         let loaded = graph_io::load_edge_file(
             std::path::Path::new(&path),
@@ -469,6 +469,7 @@ impl GraphEvolver {
         let mut graph = Graph::new(self.config.network_size, self.config.max_edge_multiplicity);
         graph.set_edges(&loaded.edges);
         self.base_graph = Some(graph);
+        self.commit_min_node_index(min_node_index);
         Ok(())
     }
 
@@ -520,7 +521,7 @@ impl GraphEvolver {
         folder: String,
         min_node_index: i64,
     ) -> PyResult<Vec<NamedGraph>> {
-        self.adopt_min_node_index(min_node_index)?;
+        self.check_min_node_index(min_node_index)?;
 
         let loaded = graph_io::load_edge_folder(
             std::path::Path::new(&folder),
@@ -536,6 +537,7 @@ impl GraphEvolver {
             graphs.push((file.source, file.edges));
         }
 
+        self.commit_min_node_index(min_node_index);
         Ok(graphs)
     }
 
@@ -705,23 +707,35 @@ impl GraphEvolver {
 }
 
 impl GraphEvolver {
-    /// Record the numbering a loader was given, or reject one that disagrees
-    /// with a numbering already in force.
+    /// Reject a numbering that disagrees with one already in force, recording
+    /// nothing either way.
+    ///
+    /// Checking and recording are two steps rather than one so that a load which
+    /// fails leaves the evolver exactly as it found it. The check runs first, so
+    /// a mismatch is still reported before the named file is opened; the
+    /// recording waits until every fallible step has succeeded. A numbering
+    /// recorded by a call that then failed would shift the node indices of every
+    /// later run's output, with no base graph loaded and nothing to say so.
     ///
     /// Not a `#[pymethods]` function: it is internal bookkeeping, and everything
     /// in that block is exposed to Python.
-    fn adopt_min_node_index(&mut self, min_node_index: i64) -> PyResult<()> {
+    fn check_min_node_index(&self, min_node_index: i64) -> PyResult<()> {
         match self.min_node_index {
             Some(existing) if existing != min_node_index => Err(PyValueError::new_err(format!(
                 "this evolver already reads node indices as starting at {existing}, and this \
                  call says {min_node_index}; one run has one numbering, so two files that \
                  disagree about where counting starts would be mixed together silently"
             ))),
-            _ => {
-                self.min_node_index = Some(min_node_index);
-                Ok(())
-            }
+            _ => Ok(()),
         }
+    }
+
+    /// Record the numbering this run reads node indices in.
+    ///
+    /// Call only once every fallible step of a load has succeeded — see
+    /// [`GraphEvolver::check_min_node_index`] for why the two are separate.
+    fn commit_min_node_index(&mut self, min_node_index: i64) {
+        self.min_node_index = Some(min_node_index);
     }
 }
 
@@ -1140,6 +1154,40 @@ mod tests {
             assert!(message.contains("self-loop"), "{message}");
             // Nothing is stored when the file is rejected.
             assert!(evolver.base_graph.is_none());
+
+            std::fs::remove_file(&path).expect("cleanup");
+        });
+    }
+
+    #[test]
+    fn a_failed_load_leaves_the_numbering_untouched() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+
+            // A path that does not exist, so the load fails after the numbering
+            // has been checked but before anything is read.
+            let err = evolver
+                .set_base_graph_from_file(py, "no_such_file.csv".to_string(), 1)
+                .expect_err("a missing file must be rejected");
+            assert!(!err.to_string().contains("one run has one numbering"), "{err}");
+
+            // Nothing observable changed. The numbering is the one that bites:
+            // `shift_out` reads it on every later run, so a value left behind
+            // here renumbers output for a run with no base graph at all.
+            assert_eq!(evolver.min_node_index, None);
+            assert!(evolver.base_graph.is_none());
+
+            let mut edges = vec![(0, 1, 1)];
+            shift_out(&mut edges, evolver.min_node_index);
+            assert_eq!(edges, vec![(0, 1, 1)], "a failed load must not shift output");
+
+            // And a later load is still free to choose any numbering, rather
+            // than being rejected by the one the failed call would have pinned.
+            let path = file_holding("after_failure", "0,1,1\n");
+            evolver
+                .set_base_graph_from_file(py, path.display().to_string(), 0)
+                .expect("a numbering is still free to be chosen after a failed load");
+            assert_eq!(evolver.min_node_index, Some(0));
 
             std::fs::remove_file(&path).expect("cleanup");
         });
