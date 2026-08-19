@@ -3,9 +3,9 @@
 //!
 //! # Adding your own objective
 //!
-//! An objective touches up to six places. How many of them are yours depends
-//! on which way you are using GET, so start by working out which reader you
-//! are:
+//! An objective touches up to six files — a few more edits than six, because
+//! two of the files want more than one. How many are yours depends on which
+//! way you are using GET, so start by working out which reader you are:
 //!
 //! - **You depend on this crate from your own program.** Step 1 is the only
 //!   one available to you, and it is enough on its own: write your type,
@@ -26,16 +26,25 @@
 //!    better, and override [`Fitness::evaluate_batch`] if the default is wrong
 //!    for you — see "When overriding `evaluate_batch` is required" below,
 //!    because that case is about correctness rather than speed.
-//! 2. **`config.rs`** — add a variant to `FitnessConfig` holding whatever the
-//!    objective needs to read out of the file, and validate those parameters.
-//!    This variant is what a user selects under `[fitness]` by name.
+//! 2. **`config.rs`** — three edits, not one. Add a variant to
+//!    `FitnessConfig` holding whatever the objective reads out of the file;
+//!    add its arm to `FitnessConfig::type_name`, which is the string error
+//!    messages name the objective by; and add validation for any parameter
+//!    worth constraining. Only the first is what a user selects under
+//!    `[fitness]`. The `type_name` arm cannot be forgotten — the match is
+//!    exhaustive, so omitting it fails to compile.
 //! 3. **`dispatch.rs`** — add the matching arm to `objective()`, which turns
 //!    that variant into a `Box<dyn Fitness>`. Steps 2 and 3 are one change
 //!    split across two files: a variant nothing constructs is dead code, and
 //!    an arm for a variant that does not exist will not compile.
 //! 4. **`py_config.rs`** — add the Python-side constructor, if the objective
 //!    should be reachable from Python. Leave it out and everything else still
-//!    works; a Python caller simply has no way to name the objective.
+//!    works; a Python caller simply has no way to name the objective. If step
+//!    2's validation raises a new field name, that name also needs a Python
+//!    attribute path here, or the error a Python caller sees will name a TOML
+//!    field they never wrote. The test
+//!    `every_validation_field_maps_to_a_python_attribute` is what catches a
+//!    missing one.
 //! 5. **`config.example.toml`** — add an example block if the objective ships.
 //!    The example file is what a user copies from, so an objective missing
 //!    from it is one most people never find.
