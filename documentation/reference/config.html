@@ -50,8 +50,9 @@
 
 <div class="note">
   <b>Validation is a function, not a side effect of parsing.</b> <code>Config::validate</code> is
-  called by <i>both</i> front ends — the file path calls it inside <code>from_path</code>, and the
-  Python path calls it after rendering its objects to TOML. If it were folded into
+  called by <i>both</i> front ends — the file path reads the file, calls
+  <code>from_toml_str</code> and then calls it, and the Python path calls it after rendering its
+  objects to TOML. If it were folded into
   deserialization, the Python route would silently accept configurations the file route rejects,
   and Python is the route users actually take.
 </div>
@@ -217,6 +218,11 @@
             dispatch — because an out-of-range value would <b>panic</b> during expression.</td>
         <td><code>init_state</code> — "must be less than num_states (N); SdaGenome::run indexes its
             response table with it"</td></tr>
+    <tr><td><i>any unrecognised key</i></td><td>—</td><td>—</td>
+        <td>—</td>
+        <td><b>Rejected</b>, under either <code>type</code>. A key this table does not list is a
+            parse error, rather than a setting that silently stays at its default.</td>
+        <td>parse error naming the misspelled key</td></tr>
   </tbody>
 </table>
 </div>
@@ -251,7 +257,7 @@
         <td><code>operation_weights</code> — "operation weights must be finite and non-negative"
             or "at least one operation weight must be positive"</td></tr>
     <tr><td><i>any unrecognised key</i></td><td>—</td><td>—</td>
-        <td><b>Rejected.</b> This is the one table in the whole document that refuses typos.</td>
+        <td><b>Rejected.</b> Like <code>[genome]</code> itself.</td>
         <td>parse error naming the misspelled key</td></tr>
   </tbody>
 </table>
@@ -414,18 +420,6 @@ result = evolver.run(20260812)                  # one master seed drives everyth
 </div>
 
 <div class="api-item">
-  <div class="api-sig">pub fn from_path(path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self, ConfigError&gt;</div>
-  <div class="api-body">
-    <span class="src">config.rs:351</span>
-    <p>
-      Read a file, parse it, and validate it. This is the whole TOML front end and the function
-      <code>GraphEvolver("config.toml")</code> calls. A missing file comes back as
-      <code>ConfigError::Io</code>, never a panic.
-    </p>
-  </div>
-</div>
-
-<div class="api-item">
   <div class="api-sig">pub fn validate(&amp;self) -&gt; Result&lt;(), ConfigError&gt;</div>
   <div class="api-body">
     <span class="src">config.rs:371</span>
@@ -473,7 +467,7 @@ result = evolver.run(20260812)                  # one master seed drives everyth
 </div>
 
 <div class="api-item">
-  <div class="api-sig">pub enum GenomeConfig { EdgeEdit { gene_length, operation_weights }, Sda { num_states, max_resp_len, init_state } }</div>
+  <div class="api-sig">pub enum GenomeConfig { EdgeEdit(EdgeEditGenomeConfig), Sda(SdaGenomeConfig) }</div>
   <div class="api-body">
     <span class="src">config.rs:75</span>
     <p>
@@ -603,14 +597,18 @@ result = evolver.run(20260812)                  # one master seed drives everyth
 <h2>Gotchas</h2>
 
 <ul>
-  <li><b>Parsing and validating are separate calls.</b> <code>from_path</code> does both;
-      <code>from_toml_str</code> does only the first. A <code>Config</code> built by the latter is
-      unchecked, which is exactly why <a href="dispatch.html">dispatch.rs</a> keeps its own backstop
-      checks.</li>
-  <li><b>Unknown keys are ignored nearly everywhere.</b> The single exception is
-      <code>[genome.operation_weights]</code>. A stray top-level key vanishes; a misspelled
-      <i>required</i> key is caught, but only as a "missing field" error naming the correct
-      spelling.</li>
+  <li><b>Parsing and validating are separate calls.</b> <code>from_toml_str</code> parses and does
+      not validate, so a <code>Config</code> it returns is unchecked until <code>validate</code> is
+      called on it — which is exactly why <a href="dispatch.html">dispatch.rs</a> keeps its own
+      backstop checks. There is no single call that does both: reading the file, parsing it and
+      validating it are three steps the caller makes in order.</li>
+  <li><b>Unknown keys are rejected under <code>[genome]</code>, ignored elsewhere.</b>
+      <code>[genome]</code> and <code>[genome.operation_weights]</code> both refuse a key they do
+      not recognise, under either genome <code>type</code>. <code>[fitness]</code> cannot: it uses
+      <code>#[serde(flatten)]</code> for the shared SIR block, and flatten swallows unrecognised
+      keys into the flattened field's content map before <code>deny_unknown_fields</code> could
+      fire. So a stray top-level key still vanishes, and a misspelled <i>required</i> key is caught
+      only as a "missing field" error naming the correct spelling.</li>
   <li><b>Switching strategy can invalidate a working <code>[selection]</code> block.</b> The
       <code>tournament_size ≥ 4</code> floor applies to steady-state only, because that strategy
       needs two parents <i>and</i> two individuals to replace, all distinct. Generational has no
