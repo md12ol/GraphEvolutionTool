@@ -1,0 +1,60 @@
+# Runs the Rust checks that nothing else runs: the test suite and the two lint
+# gates. Until this existed, `get/src`'s 269 `#[test]` functions ran only when
+# a maintainer remembered to run them locally, so the convention of committing
+# each step once its own check has passed rested on a gate nobody's push met.
+#
+# `get-run.yml` is the sibling job: it builds and runs the `cli`-gated binary,
+# which this workflow's `cargo test` does not touch.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: test, clippy and rustfmt
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      # Cuts a cold ~90s dependency build to a few seconds on a cache hit.
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      # The crate embeds a Python interpreter, so the test binary needs
+      # libpython at link and run time. A setup-python interpreter is not on
+      # the default loader path — derive LIBDIR rather than hardcoding a
+      # version, which is what breaks when the runner moves.
+      - name: Put libpython on the loader path
+        shell: bash
+        run: |
+          set -euo pipefail
+          libdir="$(python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
+          echo "LD_LIBRARY_PATH=${libdir}:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+          echo "libpython dir: ${libdir}"
+
+      # Formatting first: it is the cheapest check and needs no build, so a
+      # formatting-only failure reports in seconds instead of after a compile.
+      - name: cargo fmt --check
+        run: cargo fmt -p get --check
+
+      - name: cargo clippy
+        run: cargo clippy -p get --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test -p get
