@@ -3,10 +3,18 @@
 //!
 //! # Adding your own objective
 //!
-//! An objective touches up to five files, in six steps — two of the files want
+//! An objective touches five files, in six steps — two of the files want
 //! more than one edit, and `dispatch.rs` appears twice, once for the code and
-//! once for the test. How many are yours depends on which way you are using
-//! GET, so start by working out which reader you are:
+//! once for the test.
+//!
+//! **Five is the floor, not the ceiling.** It is what an objective assembled
+//! from config values alone needs, which is what all three of the originals
+//! were. One that brings data of its own — anything read from disk — will also
+//! touch the loader it reads through and wherever its shared state lives;
+//! `struct_match` touched seven files for that reason.
+//!
+//! How many of the six steps are yours depends on which way you are using GET,
+//! so start by working out which reader you are:
 //!
 //! - **You depend on this crate from your own program.** Step 1 is the only
 //!   one available to you, and it is enough on its own: write your type,
@@ -28,6 +36,15 @@
 //!    better, and override [`Fitness::evaluate_batch`] if the default is wrong
 //!    for you — see "When overriding `evaluate_batch` is required" below,
 //!    because that case is about correctness rather than speed.
+//!
+//!    **Validate the objective's own inputs in its constructor, and make it
+//!    fallible if it has any worth checking.** Step 2's validation lives in
+//!    `config.rs`, which the library route never runs — so a guard written
+//!    only there does not exist for the first reader above. Anything that
+//!    would put a `NaN` into every score belongs here: `EpiProfMatch::new`
+//!    rejects an empty or non-finite target for exactly this reason, and
+//!    `StructMatch::new` rejects a non-finite weight. The two sites are
+//!    additive, not alternatives.
 //! 2. **`config.rs`** — three edits, not one. Add a variant to
 //!    `FitnessConfig` holding whatever the objective reads out of the file;
 //!    add its arm to `FitnessConfig::type_name`, which is the string error
@@ -35,10 +52,30 @@
 //!    worth constraining. Only the first is what a user selects under
 //!    `[fitness]`. The `type_name` arm cannot be forgotten — the match is
 //!    exhaustive, so omitting it fails to compile.
+//!
+//!    Two things about that validation are not obvious. **It may not touch
+//!    the filesystem** — `Config::validate` does no I/O, which is why
+//!    `epi_prof_match` takes its target inline rather than as a path. An
+//!    objective that must name a file therefore cannot check it here, and
+//!    everything about that file's contents becomes step 3's problem instead.
+//!    And **it may constrain fields outside the `[fitness]` block**:
+//!    `struct_match` requires a top-level `max_edge_multiplicity` of 1,
+//!    because its statistics count neighbours rather than summing weights.
 //! 3. **`dispatch.rs`** — add the matching arm to `objective()`, which turns
 //!    that variant into a `Box<dyn Fitness>`. Steps 2 and 3 are one change
 //!    split across two files: a variant nothing constructs is dead code, and
 //!    an arm for a variant that does not exist will not compile.
+//!
+//!    **This arm runs once per replicate**, not once per run — `run` builds
+//!    one objective per seed before starting. Two consequences. It is where
+//!    anything needing the filesystem finally happens, since step 2 could not;
+//!    an unreadable folder or an empty reference set is reported from here.
+//!    And anything **expensive and immutable** should be built once and shared
+//!    behind an `Arc` rather than rebuilt per replicate — see
+//!    `GraphEvolver::struct_match_reference`. What §8.1 requires per replicate
+//!    is a fresh *objective*, because an [`EpidemicScorer`] holds a per-run
+//!    counter; an objective with no per-run state has nothing to keep apart,
+//!    and rebuilding its data is pure waste in a phase that logs nothing.
 //! 4. **`py_config.rs`** — add the Python-side constructor, if the objective
 //!    should be reachable from Python. Leave it out and everything else still
 //!    works; a Python caller simply has no way to name the objective. If step
@@ -101,6 +138,7 @@
 //! `both_entry_points_use_the_same_reading` fails if they disagree.
 
 use std::slice;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use pyo3::prelude::*;
@@ -108,6 +146,7 @@ use rayon::prelude::*;
 
 use crate::graph::Graph;
 use crate::sir::{Epidemic, SirSampleParams, simulate_epidemics};
+use crate::stats::{PerFamily, ReferenceStatistics};
 
 /// Whether an objective wants its value small or large.
 ///
@@ -531,6 +570,101 @@ impl Fitness for EpiProfMatch {
     fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
         self.scorer
             .mean_batch(graphs, |epidemic| self.rmse(epidemic))
+    }
+}
+
+/// How closely a graph's structure matches a reference set of real graphs.
+///
+/// Three size-invariant statistics — degree, clustering and the normalized
+/// Laplacian spectrum — are reduced to histograms on axes shared with the
+/// reference set, and compared by an RBF kernel. Zero is a perfect match, so
+/// this minimizes and says nothing about direction.
+///
+/// # Why the score is not called MMD
+///
+/// MMD is a two-sample statistic. This compares **one** candidate against a
+/// fixed reference distribution, which makes the within-candidate term
+/// degenerate and leaves `1 - mean similarity`. That is rank-equivalent to MMD
+/// for a single candidate against a fixed reference, so the arithmetic is
+/// sound — but the name would claim a two-sample test that is not being run.
+///
+/// # A reference set can make a whole family inert, silently
+///
+/// Rings and paths have clustering coefficient 0 at every node. A reference
+/// set drawn only from those leaves `clustering_weight` live while the family
+/// it weights contributes exactly nothing to any candidate's score, and
+/// nothing reports it. Give the weights a reference set that actually varies
+/// in the statistic being weighted.
+pub struct StructMatch {
+    reference: Arc<ReferenceStatistics>,
+    gammas: PerFamily,
+    weights: PerFamily,
+    density_weight: f64,
+}
+
+impl StructMatch {
+    /// Build the objective from a reference set's statistics and its weights.
+    ///
+    /// The statistics arrive behind an [`Arc`] because they are immutable and
+    /// expensive: replicates each need their own objective, and can share one
+    /// reduced reference set rather than rebuilding it per run.
+    ///
+    /// # Errors
+    ///
+    /// If any gamma is not finite and strictly positive, if any weight is not
+    /// finite and non-negative, if every weight is zero, or if
+    /// `density_weight` is not finite and non-negative.
+    ///
+    /// The guards live here rather than only in `config.rs` because an
+    /// embedder constructing this type directly never runs the config layer,
+    /// and every one of these inputs reaches `evaluate` as a multiplier: a
+    /// non-finite one yields a non-finite score, which [`Fitness`] forbids.
+    /// All-zero weights are rejected separately — that scores every candidate
+    /// identically, so the search runs with no gradient while looking healthy.
+    pub fn new(
+        reference: Arc<ReferenceStatistics>,
+        gammas: PerFamily,
+        weights: PerFamily,
+        density_weight: f64,
+    ) -> Result<Self, &'static str> {
+        let gamma_values = [gammas.degree, gammas.clustering, gammas.spectral];
+        for gamma in gamma_values {
+            if !gamma.is_finite() || gamma <= 0.0 {
+                return Err("struct_match gammas must be finite and greater than zero");
+            }
+        }
+
+        let weight_values = [weights.degree, weights.clustering, weights.spectral];
+        let mut weight_total = 0.0;
+        for weight in weight_values {
+            if !weight.is_finite() || weight < 0.0 {
+                return Err("struct_match weights must be finite and non-negative");
+            }
+            weight_total += weight;
+        }
+        if weight_total == 0.0 {
+            return Err("struct_match weights must not all be zero");
+        }
+
+        if !density_weight.is_finite() || density_weight < 0.0 {
+            return Err("struct_match density_weight must be finite and non-negative");
+        }
+
+        Ok(Self {
+            reference,
+            gammas,
+            weights,
+            density_weight,
+        })
+    }
+}
+
+impl Fitness for StructMatch {
+    fn evaluate(&self, graph: &Graph) -> f64 {
+        let kernel = self.reference.error(graph, self.gammas, self.weights);
+        let penalty = self.reference.density_penalty(graph);
+
+        kernel + self.density_weight * penalty
     }
 }
 
@@ -1392,5 +1526,129 @@ def fitness(batch):
                 "batch {i} of run seed 2026 also appears in run seed 2027",
             );
         }
+    }
+
+    /// The axes the struct_match tests share. Small bin counts keep the
+    /// hand-checking tractable; the values themselves are not special.
+    fn struct_match_axes() -> crate::stats::HistogramAxes {
+        crate::stats::HistogramAxes {
+            max_degree: 4,
+            degree_bins: 5,
+            clustering_bins: 4,
+            spectral_bins: 4,
+        }
+    }
+
+    /// A triangle — every node degree 2, clustering 1.0.
+    fn triangle() -> Graph {
+        let mut graph = Graph::new(3, 1);
+        graph.set_edges(&[(0, 1, 1), (1, 2, 1), (0, 2, 1)]);
+        graph
+    }
+
+    fn uniform(value: f64) -> PerFamily {
+        PerFamily {
+            degree: value,
+            clustering: value,
+            spectral: value,
+        }
+    }
+
+    fn struct_match_over(reference: &[Graph]) -> StructMatch {
+        let statistics = Arc::new(
+            ReferenceStatistics::from_graphs(reference, struct_match_axes())
+                .expect("a non-empty reference set on valid axes"),
+        );
+        StructMatch::new(statistics, uniform(1.0), uniform(1.0), 1.0)
+            .expect("finite positive gammas and weights")
+    }
+
+    #[test]
+    fn struct_match_minimizes_because_its_score_is_an_error() {
+        // The default is Minimize, so this passes whether or not `direction`
+        // is implemented. That is exactly why it is asserted rather than
+        // assumed: if someone later adds a `direction` returning Maximize, the
+        // search runs backwards and looks merely unconverged.
+        let objective = struct_match_over(&[triangle()]);
+
+        assert_eq!(objective.direction(), Direction::Minimize);
+    }
+
+    #[test]
+    fn struct_match_scores_a_copy_of_its_reference_at_zero() {
+        let objective = struct_match_over(&[triangle()]);
+
+        let score = objective.evaluate(&triangle());
+
+        // Identical histograms, identical density: both halves vanish.
+        assert!(
+            score.abs() < 1e-9,
+            "a candidate identical to a single-graph reference should score ~0, got {score}"
+        );
+    }
+
+    #[test]
+    fn struct_match_scores_a_different_graph_worse_than_a_matching_one() {
+        let objective = struct_match_over(&[triangle()]);
+
+        let matching = objective.evaluate(&triangle());
+        // Three isolated nodes: no edges, so no clustering, no density, and a
+        // spectrum of three zeros rather than the triangle's.
+        let different = objective.evaluate(&Graph::new(3, 1));
+
+        assert!(
+            different > matching,
+            "an unrelated graph must score worse: {different} vs {matching}"
+        );
+        assert!(different.is_finite(), "score must never be non-finite");
+    }
+
+    #[test]
+    fn struct_match_never_returns_a_non_finite_score() {
+        // Direction::orient panics on NaN, so this is the guard that keeps a
+        // bad candidate from aborting the whole run. The empty graph and a
+        // graph with an isolated node are the two shapes that reach the
+        // division-by-zero paths in the Laplacian.
+        let objective = struct_match_over(&[triangle()]);
+
+        let mut one_isolated = Graph::new(4, 1);
+        one_isolated.set_edges(&[(0, 1, 1), (1, 2, 1), (0, 2, 1)]);
+
+        for candidate in [Graph::new(0, 1), Graph::new(3, 1), one_isolated, triangle()] {
+            let score = objective.evaluate(&candidate);
+            assert!(
+                score.is_finite(),
+                "every candidate must score finitely, got {score} on a {}-node graph",
+                candidate.num_nodes
+            );
+        }
+    }
+
+    #[test]
+    fn struct_match_rejects_the_inputs_that_would_poison_every_score() {
+        let axes = struct_match_axes();
+        let statistics = || {
+            Arc::new(
+                ReferenceStatistics::from_graphs(&[triangle()], axes.clone())
+                    .expect("a non-empty reference set"),
+            )
+        };
+
+        // Each of these reaches `evaluate` as a multiplier, so a bad one is a
+        // non-finite score on every candidate rather than a visible failure.
+        assert!(StructMatch::new(statistics(), uniform(0.0), uniform(1.0), 1.0).is_err());
+        assert!(StructMatch::new(statistics(), uniform(f64::NAN), uniform(1.0), 1.0).is_err());
+        assert!(StructMatch::new(statistics(), uniform(-1.0), uniform(1.0), 1.0).is_err());
+        assert!(StructMatch::new(statistics(), uniform(1.0), uniform(-1.0), 1.0).is_err());
+        assert!(StructMatch::new(statistics(), uniform(1.0), uniform(f64::NAN), 1.0).is_err());
+        assert!(StructMatch::new(statistics(), uniform(1.0), uniform(1.0), -1.0).is_err());
+        assert!(StructMatch::new(statistics(), uniform(1.0), uniform(1.0), f64::INFINITY).is_err());
+
+        // All-zero weights score every candidate identically: no gradient, and
+        // a run that looks healthy while searching nothing.
+        assert!(StructMatch::new(statistics(), uniform(1.0), uniform(0.0), 1.0).is_err());
+
+        // A zero density weight is legitimate — it turns the penalty off.
+        assert!(StructMatch::new(statistics(), uniform(1.0), uniform(1.0), 0.0).is_ok());
     }
 }

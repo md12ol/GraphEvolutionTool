@@ -40,14 +40,16 @@ use crate::evolver::{
     EvolutionOutcome, Evolver, GenerationStats, GenerationalContext, GenerationalEvolver,
     SharedEvolutionContext, SteadyStateContext, SteadyStateEvolver,
 };
-use crate::fitness::{EpiLength, EpiProfMatch, EpiSpread, Fitness};
+use crate::fitness::{EpiLength, EpiProfMatch, EpiSpread, Fitness, StructMatch};
 use crate::genomes::edge_edit::IDENTITY_GENE;
 use crate::genomes::{
     EdgeEditContext, EdgeEditGenome, EdgeEditOperators, Genome, SdaContext, SdaDimensions,
     SdaGenome,
 };
 use crate::graph::Graph;
+use crate::graph_io;
 use crate::sir::{self, SirSampleParams};
+use crate::stats::{HistogramAxes, PerFamily, ReferenceStatistics};
 
 /// One run's result, with the genome type erased.
 ///
@@ -83,6 +85,16 @@ pub(crate) struct ErasedOutcome {
     /// have been oriented by [`erase`] — see this struct's own note above.
     pub history: Vec<GenerationStats>,
 }
+
+/// The node index a reference file may not exceed, when the run's own
+/// `network_size` is smaller.
+///
+/// `load_edge_folder` takes one node count for a whole folder and uses it to
+/// reject out-of-range indices. Reference graphs come from real data and differ
+/// in size, so there is no single right value; this is a sanity bound that
+/// still catches a file indexed the wrong way (a global TUDataset index, say)
+/// while admitting any plausible reference graph.
+const MAX_REFERENCE_NODES: usize = 100_000;
 
 /// The parts of dispatch that need the evolver itself, not just its config.
 ///
@@ -148,10 +160,146 @@ impl GraphEvolver {
                         .map_err(PyValueError::new_err)?;
                 Ok(Box::new(objective))
             }
+            FitnessConfig::StructMatch {
+                degree_gamma,
+                clustering_gamma,
+                spectral_gamma,
+                degree_weight,
+                clustering_weight,
+                spectral_weight,
+                density_weight,
+                ..
+            } => {
+                // Shared, not rebuilt: this arm runs once per replicate, and
+                // the reduced reference set is immutable. See
+                // `GraphEvolver::struct_match_reference`.
+                let reference = self.struct_match_reference()?;
+
+                let objective = StructMatch::new(
+                    reference,
+                    PerFamily {
+                        degree: *degree_gamma,
+                        clustering: *clustering_gamma,
+                        spectral: *spectral_gamma,
+                    },
+                    PerFamily {
+                        degree: *degree_weight,
+                        clustering: *clustering_weight,
+                        spectral: *spectral_weight,
+                    },
+                    *density_weight,
+                )
+                .map_err(PyValueError::new_err)?;
+
+                Ok(Box::new(objective))
+            }
             // The one arm that is not built from config alone: the callable
             // arrived through a setter, so `python_fitness` owns the "nothing
             // registered" error and this stays one call.
             FitnessConfig::Python => self.python_fitness(),
+        }
+    }
+
+    /// `struct_match`'s reduced reference set, loaded and reduced at most once.
+    ///
+    /// # Why the folder is read here rather than in `Config::validate`
+    ///
+    /// `validate` does no I/O deliberately, so every failure that needs the
+    /// filesystem surfaces here instead: a missing or unreadable folder, a
+    /// file that does not parse, and an empty reference set — which task A
+    /// made a hard error because scoring against nothing returns 0.0, and 0.0
+    /// is a *perfect* score in this objective. A mistyped folder would
+    /// otherwise make every candidate ideal and the convergence log read like
+    /// a solved problem.
+    ///
+    /// # The degree axis is taken from the reference set
+    ///
+    /// Clustering and the normalized spectrum have natural bounds; degree does
+    /// not, so its axis needs a top. Deriving it from the reference graphs
+    /// means it cannot be set too low — which would squash every reference
+    /// histogram into the last bin and silently retire the whole family.
+    /// A candidate above the top lands in the last bin, which is the honest
+    /// reading: more connected than anything in the reference set.
+    fn struct_match_reference(&self) -> PyResult<Arc<ReferenceStatistics>> {
+        if let Some(cached) = self.struct_match_reference.get() {
+            return Ok(Arc::clone(cached));
+        }
+
+        let FitnessConfig::StructMatch {
+            reference_folder,
+            degree_bins,
+            clustering_bins,
+            spectral_bins,
+            ..
+        } = &self.config.fitness
+        else {
+            return Err(PyValueError::new_err(
+                "struct_match_reference is only for a \"struct_match\" objective",
+            ));
+        };
+
+        // `min_node_index` is whatever a loader already established for this
+        // run, and 0 when none has: reference files are the caller's data and
+        // share the run's indexing convention.
+        let min_node_index = self.min_node_index.unwrap_or(0);
+
+        // The loader wants one node count for the whole folder, and reference
+        // graphs differ in size. This is an upper bound that still catches a
+        // wild index; each graph's real size comes from `EdgeFile::to_graph`.
+        let index_cap = self.config.network_size.max(MAX_REFERENCE_NODES);
+
+        let loaded = graph_io::load_edge_folder(
+            std::path::Path::new(reference_folder.as_str()),
+            index_cap,
+            1,
+            min_node_index,
+        )
+        .map_err(|error| {
+            PyValueError::new_err(format!(
+                "[fitness] reference_folder {reference_folder:?} could not be read: {error}"
+            ))
+        })?;
+
+        let mut graphs = Vec::with_capacity(loaded.len());
+        for file in &loaded {
+            graphs.push(file.to_graph(1));
+        }
+
+        let mut max_degree = 0;
+        for graph in &graphs {
+            for node in 0..graph.num_nodes {
+                let degree = graph.degree(node);
+                if degree > max_degree {
+                    max_degree = degree;
+                }
+            }
+        }
+
+        let axes = HistogramAxes {
+            max_degree,
+            degree_bins: *degree_bins,
+            clustering_bins: *clustering_bins,
+            spectral_bins: *spectral_bins,
+        };
+
+        let statistics = ReferenceStatistics::from_graphs(&graphs, axes).map_err(|error| {
+            PyValueError::new_err(format!(
+                "[fitness] reference_folder {reference_folder:?} did not yield a usable \
+                 reference set: {error}"
+            ))
+        })?;
+
+        let shared = Arc::new(statistics);
+
+        // If another caller won the race, take theirs, so every replicate in a
+        // run shares exactly one reduced reference set.
+        match self.struct_match_reference.set(Arc::clone(&shared)) {
+            Ok(()) => Ok(shared),
+            Err(_) => {
+                Ok(Arc::clone(self.struct_match_reference.get().expect(
+                    "set failed only because a value is already present",
+                )))
+            }
         }
     }
 
@@ -679,8 +827,36 @@ mod tests {
             fitness_function: None,
             base_graph: None,
             min_node_index: None,
+            struct_match_reference: Default::default(),
             config_toml: String::new(),
         }
+    }
+
+    /// Write a reference set into a fresh temporary folder and hand back the
+    /// `[fitness]` block naming it.
+    ///
+    /// Three triangles and a four-cycle: the triangles give the clustering
+    /// family something non-zero to work with, which a set of rings or paths
+    /// alone would not.
+    fn struct_match_block(name: &str) -> String {
+        let folder = std::env::temp_dir().join(format!("get_struct_match_{name}"));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("temp reference folder");
+
+        let files = [
+            ("a.csv", "0,1,1\n1,2,1\n0,2,1\n"),
+            ("b.csv", "0,1,1\n1,2,1\n0,2,1\n"),
+            ("c.csv", "0,1,1\n1,2,1\n2,3,1\n0,3,1\n"),
+        ];
+        for (file_name, text) in files {
+            std::fs::write(folder.join(file_name), text).expect("temp reference file");
+        }
+
+        format!(
+            "[fitness]\ntype = \"struct_match\"\nreference_folder = {:?}\n\
+             degree_bins = 6\nclustering_bins = 4\nspectral_bins = 4\n",
+            folder.display().to_string()
+        )
     }
 
     /// The `[fitness]` block for `objective`'s remaining two SIR arms.
@@ -709,6 +885,7 @@ mod tests {
                 sir_block("epi_prof_match", "target_profile = [1, 3, 7, 2]\n"),
                 Direction::Minimize,
             ),
+            (struct_match_block("direction"), Direction::Minimize),
         ];
 
         for (block, expected) in cases {
@@ -723,6 +900,98 @@ mod tests {
                 "wrong direction erased for: {block}",
             );
         }
+    }
+
+    #[test]
+    fn struct_match_replicates_share_one_reduced_reference_set() {
+        // `objective()` runs once per replicate (`lib.rs`), and rebuilding the
+        // reference set each time would re-read the folder and re-run an
+        // eigendecomposition of every reference graph, n_runs times, in a
+        // phase that logs nothing. The objects must differ; what is behind
+        // them must not.
+        let evolver = evolver_with(&struct_match_block("shared"));
+
+        let first = evolver.objective(1).expect("first replicate's objective");
+        let second = evolver.objective(2).expect("second replicate's objective");
+
+        // Same reference set means the same score for the same graph.
+        let mut candidate = Graph::new(3, 1);
+        candidate.set_edges(&[(0, 1, 1), (1, 2, 1), (0, 2, 1)]);
+        assert_eq!(first.evaluate(&candidate), second.evaluate(&candidate));
+
+        let cached = evolver
+            .struct_match_reference
+            .get()
+            .expect("the first build populates the cache");
+        // Both objectives are still alive, so the cache plus the two of them
+        // is three handles on ONE allocation. Had each replicate rebuilt its
+        // own, every count here would be 1.
+        assert_eq!(
+            Arc::strong_count(cached),
+            3,
+            "the cache and both replicates' objectives should share one reference set"
+        );
+    }
+
+    #[test]
+    fn struct_match_takes_its_degree_axis_from_the_reference_set() {
+        // Not a config field: a top set too low squashes every reference
+        // histogram into the last bin, retiring the whole degree family with
+        // nothing reporting it. The fixture's densest graph is a triangle, so
+        // the top is 2.
+        let evolver = evolver_with(&struct_match_block("axis"));
+
+        evolver.objective(1).expect("an objective");
+
+        let axes = evolver
+            .struct_match_reference
+            .get()
+            .expect("built above")
+            .axes();
+        assert_eq!(axes.max_degree, 2, "the reference set's highest degree");
+        assert_eq!(axes.degree_bins, 6, "and the configured bin count");
+    }
+
+    #[test]
+    fn struct_match_reports_a_reference_folder_it_cannot_read() {
+        // `Config::validate` does no I/O, so this is the layer that catches a
+        // mistyped path -- and it must catch it, because scoring against an
+        // absent reference set would otherwise be indistinguishable from a
+        // run that is going well.
+        let block = "[fitness]\ntype = \"struct_match\"\n\
+                     reference_folder = \"no_such_reference_folder_anywhere\"\n";
+        let evolver = evolver_with(block);
+
+        let text = match evolver.objective(1) {
+            Err(error) => error.to_string(),
+            Ok(_) => panic!("a missing folder must not build an objective"),
+        };
+        assert!(
+            text.contains("no_such_reference_folder_anywhere"),
+            "the error should name the folder, got: {text}"
+        );
+    }
+
+    #[test]
+    fn struct_match_rejects_an_empty_reference_folder() {
+        // An empty reference set scores every candidate 0.0, and 0.0 is a
+        // *perfect* score here: the population would converge immediately and
+        // the log would read like a solved problem. Task A made it a hard
+        // error; this is the layer that surfaces it.
+        let folder = std::env::temp_dir().join("get_struct_match_empty");
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("temp folder");
+
+        let block = format!(
+            "[fitness]\ntype = \"struct_match\"\nreference_folder = {:?}\n",
+            folder.display().to_string()
+        );
+        let evolver = evolver_with(&block);
+
+        assert!(
+            evolver.objective(1).is_err(),
+            "an empty reference set must not build an objective"
+        );
     }
 
     #[test]
@@ -816,6 +1085,7 @@ mod tests {
             fitness_function: None,
             base_graph: None,
             min_node_index: None,
+            struct_match_reference: Default::default(),
             config_toml: String::new(),
         }
     }
@@ -1527,6 +1797,7 @@ mod tests {
                 fitness_function: None,
                 base_graph: None,
                 min_node_index: None,
+                struct_match_reference: Default::default(),
                 config_toml: String::new(),
             };
             let callable = py
@@ -1724,6 +1995,41 @@ mod tests {
     }
 
     #[test]
+    fn two_struct_match_replicates_at_one_seed_agree() {
+        // The second test #99 asks every new objective for. It is worth having
+        // here specifically because this objective reads from disk: a loader
+        // that let filesystem order into the reference set -- which
+        // `load_edge_folder` sorts precisely to prevent -- would give two
+        // replicates different targets, and the run would still look fine.
+        let evolver = evolver_with(&struct_match_block("replicates"));
+        let run = |seed: u64| {
+            let objective = evolver.objective(seed).expect("an objective per replicate");
+            evolve(&evolver.config, &objective, None, seed).expect("run completes")
+        };
+
+        let first = run(4);
+        let again = run(4);
+        let other = run(5);
+
+        assert_eq!(
+            first.best_fitness, again.best_fitness,
+            "same seed, same score"
+        );
+        assert_eq!(
+            first.best_edges, again.best_edges,
+            "same seed, same network"
+        );
+        assert!(
+            first.best_fitness.is_finite(),
+            "a structural score must never be non-finite"
+        );
+        assert!(
+            other.best_fitness != first.best_fitness || other.best_edges != first.best_edges,
+            "a different seed should not reproduce the same run"
+        );
+    }
+
+    #[test]
     fn steady_state_and_generational_do_not_produce_the_same_run() {
         // Guards against both arms of `run_strategy` reaching the same evolver —
         // which would compile, run, and return plausible numbers.
@@ -1775,6 +2081,7 @@ mod tests {
             fitness_function: None,
             base_graph: None,
             min_node_index: None,
+            struct_match_reference: Default::default(),
             config_toml: config_toml.clone(),
         };
 
@@ -1814,6 +2121,7 @@ mod tests {
             fitness_function: None,
             base_graph: None,
             min_node_index: None,
+            struct_match_reference: Default::default(),
             config_toml: String::new(),
         }
     }
@@ -1921,6 +2229,7 @@ mod tests {
             fitness_function: None,
             base_graph: None,
             min_node_index: None,
+            struct_match_reference: Default::default(),
             config_toml: String::new(),
         };
 
@@ -1959,6 +2268,7 @@ mod tests {
                 fitness_function: None,
                 base_graph: None,
                 min_node_index: None,
+                struct_match_reference: Default::default(),
                 config_toml: String::new(),
             };
             let [result] = <[_; 1]>::try_from(
@@ -2032,6 +2342,7 @@ mod tests {
             fitness_function: None,
             base_graph: None,
             min_node_index: None,
+            struct_match_reference: Default::default(),
             config_toml: config_toml.clone(),
         };
         let [result] = <[_; 1]>::try_from(

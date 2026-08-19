@@ -184,6 +184,64 @@ pub enum FitnessConfig {
         /// at the size of the network being built.
         target_profile: Vec<f64>,
     },
+    /// How closely a graph's structure matches a set of reference graphs.
+    ///
+    /// Minimized: zero is a perfect match. Unweighted by construction, so it
+    /// requires `max_edge_multiplicity = 1`.
+    ///
+    /// # The degree axis is not configurable, deliberately
+    ///
+    /// The other two statistic families have natural bounds — clustering is a
+    /// ratio in `[0, 1]`, the normalized Laplacian's spectrum is in `[0, 2]` —
+    /// but degree has none, so its axis needs a top. That top is taken from
+    /// the reference set rather than the config file. A user who sets it too
+    /// low squashes every reference graph into the last bin, which makes all
+    /// their histograms identical and the whole degree family contribute
+    /// nothing to any candidate's score, with nothing reporting it.
+    StructMatch {
+        /// Folder of reference graphs, one edge-list file per graph.
+        ///
+        /// Not checked here: `validate` does no I/O, so an unreadable or empty
+        /// folder is reported when the objective is built, not when the config
+        /// is parsed.
+        reference_folder: String,
+        /// Bins per statistic family. More bins resolve finer differences and
+        /// need more reference graphs to fill them.
+        #[serde(default = "default_struct_bins")]
+        degree_bins: usize,
+        #[serde(default = "default_struct_bins")]
+        clustering_bins: usize,
+        #[serde(default = "default_struct_bins")]
+        spectral_bins: usize,
+        /// RBF bandwidths, one per family.
+        ///
+        /// **Too large is the dangerous direction**: `exp(-gamma * d^2)`
+        /// collapses to zero for every candidate, the whole population scores
+        /// ~1.0, and evolution stalls while appearing to run normally.
+        #[serde(default = "default_struct_gamma")]
+        degree_gamma: f64,
+        #[serde(default = "default_struct_gamma")]
+        clustering_gamma: f64,
+        #[serde(default = "default_struct_gamma")]
+        spectral_gamma: f64,
+        /// How much each family counts. Zero switches a family off; they
+        /// cannot all be zero, which would score every candidate identically.
+        ///
+        /// A weight is only as live as the reference set makes it. Rings and
+        /// paths have clustering coefficient 0 at every node, so a reference
+        /// set drawn only from those leaves `clustering_weight` set and the
+        /// family it weights inert.
+        #[serde(default = "default_struct_weight")]
+        degree_weight: f64,
+        #[serde(default = "default_struct_weight")]
+        clustering_weight: f64,
+        #[serde(default = "default_struct_weight")]
+        spectral_weight: f64,
+        /// How much the distance from the reference set's mean density counts.
+        /// Zero switches the penalty off.
+        #[serde(default = "default_struct_weight")]
+        density_weight: f64,
+    },
     /// A Python callable registered before the run. Its direction is declared
     /// at registration, not here (spec §7).
     Python,
@@ -200,6 +258,7 @@ impl FitnessConfig {
             FitnessConfig::EpiSpread { .. } => "epi_spread",
             FitnessConfig::EpiLength { .. } => "epi_length",
             FitnessConfig::EpiProfMatch { .. } => "epi_prof_match",
+            FitnessConfig::StructMatch { .. } => "struct_match",
             FitnessConfig::Python => "python",
         }
     }
@@ -236,6 +295,22 @@ pub struct SirParams {
 
 fn default_max_edge_multiplicity() -> u32 {
     1
+}
+
+// `struct_match`'s axis and kernel defaults. 50 bins over a bounded axis is
+// fine resolution without needing an enormous reference set to fill it, and a
+// gamma of 1.0 is the neutral starting point users tune from.
+
+fn default_struct_bins() -> usize {
+    50
+}
+
+fn default_struct_gamma() -> f64 {
+    1.0
+}
+
+fn default_struct_weight() -> f64 {
+    1.0
 }
 
 // sda owns both values; these read them back rather than restating the
@@ -555,6 +630,113 @@ impl Config {
         Ok(())
     }
 
+    /// The `struct_match` half of [`Config::validate_fitness`].
+    ///
+    /// **Everything checkable without touching the filesystem, and no more.**
+    /// `validate` does no I/O — the reason is spelled out on `target_profile`
+    /// below — so `reference_folder` is not opened here. An unreadable folder,
+    /// an empty one, or files that do not parse are reported when the
+    /// objective is built, in `dispatch`.
+    fn validate_struct_match(&self) -> Result<(), ConfigError> {
+        let FitnessConfig::StructMatch {
+            reference_folder,
+            degree_bins,
+            clustering_bins,
+            spectral_bins,
+            degree_gamma,
+            clustering_gamma,
+            spectral_gamma,
+            degree_weight,
+            clustering_weight,
+            spectral_weight,
+            density_weight,
+        } = &self.fitness
+        else {
+            return Ok(());
+        };
+
+        // A top-level field, not one of this objective's own: the three
+        // statistics count neighbours rather than summing weights, so a
+        // multigraph would be scored as though every parallel edge were one.
+        // Rejected rather than silently flattened.
+        if self.max_edge_multiplicity != 1 {
+            return Err(invalid(
+                "max_edge_multiplicity",
+                format!(
+                    "must be 1 for struct_match, which is unweighted by construction, \
+                     but is {}",
+                    self.max_edge_multiplicity
+                ),
+            ));
+        }
+
+        if reference_folder.trim().is_empty() {
+            return Err(invalid(
+                "reference_folder",
+                "must name a folder of reference graphs",
+            ));
+        }
+
+        // A zero-bin family has no histogram to compare, so it would divide by
+        // a zero bin width.
+        for (field, bins) in [
+            ("degree_bins", *degree_bins),
+            ("clustering_bins", *clustering_bins),
+            ("spectral_bins", *spectral_bins),
+        ] {
+            if bins == 0 {
+                return Err(invalid(field, "must be at least 1"));
+            }
+        }
+
+        // Every gamma and weight reaches `evaluate` as a multiplier, so a
+        // non-finite one makes every score non-finite -- and a NaN fitness
+        // aborts the run rather than scoring a bad candidate.
+        for (field, gamma) in [
+            ("degree_gamma", *degree_gamma),
+            ("clustering_gamma", *clustering_gamma),
+            ("spectral_gamma", *spectral_gamma),
+        ] {
+            if !gamma.is_finite() || gamma <= 0.0 {
+                return Err(invalid(
+                    field,
+                    "must be finite and greater than zero; the RBF kernel divides by it",
+                ));
+            }
+        }
+
+        let mut weight_total = 0.0;
+        for (field, weight) in [
+            ("degree_weight", *degree_weight),
+            ("clustering_weight", *clustering_weight),
+            ("spectral_weight", *spectral_weight),
+        ] {
+            if !weight.is_finite() || weight < 0.0 {
+                return Err(invalid(field, "must be finite and non-negative"));
+            }
+            weight_total += weight;
+        }
+
+        // All three zero scores every candidate identically: selection stops
+        // discriminating and the run searches nothing while looking healthy.
+        if weight_total == 0.0 {
+            return Err(invalid(
+                "degree_weight",
+                "at least one of degree_weight, clustering_weight and spectral_weight \
+                 must be greater than zero, or every graph scores the same",
+            ));
+        }
+
+        if !density_weight.is_finite() || *density_weight < 0.0 {
+            return Err(invalid(
+                "density_weight",
+                "must be finite and non-negative; 0 switches the penalty off",
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Constraints on the epidemic sampling parameters.
     fn validate_fitness(&self) -> Result<(), ConfigError> {
         // `python` carries no SIR block at all — its parameters belong to the
@@ -563,6 +745,7 @@ impl Config {
             FitnessConfig::EpiSpread { sir } => sir,
             FitnessConfig::EpiLength { sir } => sir,
             FitnessConfig::EpiProfMatch { sir, .. } => sir,
+            FitnessConfig::StructMatch { .. } => return self.validate_struct_match(),
             FitnessConfig::Python => return Ok(()),
         };
 
@@ -1380,6 +1563,84 @@ num_epidemics  = 30
     }
 
     #[test]
+    fn the_examples_commented_struct_match_block_parses_and_matches_the_defaults() {
+        // `the_example_config_loads_and_validates_from_disk` only exercises the
+        // *active* [fitness] block, so every commented alternative in that file
+        // is unchecked prose. This uncomments the struct_match one, swaps it in
+        // for the active block, and validates it -- which also pins the
+        // documented defaults against the ones the code actually applies.
+        let text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../config.example.toml"
+        ))
+        .expect("the shipped example config should be readable");
+
+        // Located by walking lines rather than by searching for a needle with
+        // an embedded "\n". `config.example.toml` has no `eol` attribute, so a
+        // checkout with `core.autocrlf=true` -- git's default on Windows, which
+        // is what both owners develop on -- gives it CRLF endings, and a needle
+        // containing a bare "\n" then matches nothing at all. The loop below was
+        // never exposed to this: `lines()` strips the "\r" itself. Only the
+        // search was, which is why the test failed while the parse it guards
+        // would have been fine.
+        let lines: Vec<&str> = text.lines().collect();
+        let mut found = None;
+        for i in 0..lines.len().saturating_sub(1) {
+            if lines[i] == "# [fitness]" && lines[i + 1].contains("\"struct_match\"") {
+                found = Some(i);
+                break;
+            }
+        }
+        let start = found.expect("the example should carry a commented struct_match block");
+
+        let mut block = String::new();
+        for line in &lines[start..] {
+            // The block ends at the first line that is not part of it.
+            let Some(rest) = line.strip_prefix("# ") else {
+                break;
+            };
+            block.push_str(rest);
+            block.push('\n');
+        }
+
+        // Everything above [fitness] in the fixture, with the example's block
+        // in place of the fixture's own.
+        let config_text = format!(
+            "population_size = 20\nnetwork_size = 30\ncrossover_rate = 0.9\n\
+             mutation_rate = 0.2\nmax_edge_multiplicity = 1\n\
+             \n[evolution]\ntype = \"generational\"\nnum_generations = 5\n\
+             \n[selection]\ntype = \"tournament\"\ntournament_size = 3\n\
+             \n[genome]\ntype = \"edge_edit\"\ngene_length = 32\n\n{block}"
+        );
+
+        let config = Config::from_toml_str(&config_text)
+            .expect("the example's struct_match block should parse once uncommented");
+        config
+            .validate()
+            .expect("and should validate, or the example documents an invalid config");
+
+        // The example writes the defaults out explicitly, so a default changed
+        // in code and not in the file is a silent documentation lie.
+        match &config.fitness {
+            FitnessConfig::StructMatch {
+                degree_bins,
+                clustering_bins,
+                spectral_bins,
+                degree_gamma,
+                density_weight,
+                ..
+            } => {
+                assert_eq!(*degree_bins, default_struct_bins());
+                assert_eq!(*clustering_bins, default_struct_bins());
+                assert_eq!(*spectral_bins, default_struct_bins());
+                assert_eq!(*degree_gamma, default_struct_gamma());
+                assert_eq!(*density_weight, default_struct_weight());
+            }
+            other => panic!("expected struct_match, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn a_missing_config_file_is_an_io_error_rather_than_a_panic() {
         match load_and_validate("no/such/directory/config.toml") {
             Err(ConfigError::Io(_)) => {}
@@ -1468,5 +1729,157 @@ num_epidemics  = 30
             }
             other => panic!("expected the sda genome, got {other:?}"),
         }
+    }
+
+    /// A `struct_match` config, with `overrides` folded into `[fitness]`.
+    fn struct_match_config(overrides: &str) -> Config {
+        let text = format!(
+            r#"
+population_size = 20
+network_size    = 30
+crossover_rate  = 0.9
+mutation_rate   = 0.2
+max_edge_multiplicity = 1
+
+[evolution]
+type            = "generational"
+num_generations = 5
+
+[selection]
+type            = "tournament"
+tournament_size = 3
+
+[genome]
+type        = "edge_edit"
+gene_length = 32
+
+[fitness]
+type = "struct_match"
+reference_folder = "reference"
+{overrides}
+"#
+        );
+        Config::from_toml_str(&text).expect("the struct_match fixture should parse")
+    }
+
+    #[test]
+    fn a_struct_match_config_validates_and_names_itself() {
+        let config = struct_match_config("");
+
+        config
+            .validate()
+            .expect("the struct_match fixture should be valid");
+        assert_eq!(config.fitness.type_name(), "struct_match");
+    }
+
+    #[test]
+    fn struct_match_defaults_every_field_but_the_folder() {
+        // The example block a user copies is one line plus the type, so the
+        // defaults are what most runs actually use.
+        let config = struct_match_config("");
+
+        match &config.fitness {
+            FitnessConfig::StructMatch {
+                reference_folder,
+                degree_bins,
+                spectral_gamma,
+                density_weight,
+                ..
+            } => {
+                assert_eq!(reference_folder, "reference");
+                assert_eq!(*degree_bins, 50);
+                assert_eq!(*spectral_gamma, 1.0);
+                assert_eq!(*density_weight, 1.0);
+            }
+            other => panic!("expected struct_match, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn struct_match_requires_an_unweighted_graph() {
+        // The three statistics count neighbours rather than summing weights,
+        // so a multigraph would be scored as though parallel edges were one.
+        let mut config = struct_match_config("");
+        config.max_edge_multiplicity = 3;
+
+        assert_eq!(validation_field(&config), "max_edge_multiplicity");
+    }
+
+    #[test]
+    fn struct_match_rejects_the_settings_that_would_retire_the_search() {
+        // Each of these leaves a run that produces numbers and searches
+        // nothing, which is the failure this objective keeps having to guard.
+        let cases = [
+            ("degree_bins = 0", "degree_bins"),
+            ("clustering_bins = 0", "clustering_bins"),
+            ("spectral_bins = 0", "spectral_bins"),
+            ("degree_gamma = 0.0", "degree_gamma"),
+            ("clustering_gamma = -1.0", "clustering_gamma"),
+            ("spectral_gamma = nan", "spectral_gamma"),
+            ("degree_weight = -0.5", "degree_weight"),
+            ("density_weight = -1.0", "density_weight"),
+        ];
+
+        for (override_text, expected_field) in cases {
+            let config = struct_match_config(override_text);
+            assert_eq!(
+                validation_field(&config),
+                expected_field,
+                "`{override_text}` should be rejected against {expected_field}"
+            );
+        }
+    }
+
+    #[test]
+    fn struct_match_rejects_an_all_zero_set_of_weights() {
+        // Every candidate then scores identically: selection stops
+        // discriminating while the run still logs generations.
+        let config = struct_match_config(
+            "degree_weight = 0.0\nclustering_weight = 0.0\nspectral_weight = 0.0",
+        );
+
+        assert_eq!(validation_field(&config), "degree_weight");
+    }
+
+    #[test]
+    fn struct_match_accepts_switching_one_family_off() {
+        // Zeroing a single weight is legitimate — it is how a user drops a
+        // family whose reference set cannot support it.
+        struct_match_config("clustering_weight = 0.0")
+            .validate()
+            .expect("one zero weight among three is a valid choice");
+    }
+
+    #[test]
+    fn struct_match_rejects_an_empty_reference_folder_name() {
+        // The *name* is checked here; the folder's contents are not, because
+        // `validate` does no I/O. Anything needing the filesystem — a missing
+        // folder, an empty one, files that do not parse — belongs to dispatch.
+        let text = r#"
+population_size = 20
+network_size    = 30
+crossover_rate  = 0.9
+mutation_rate   = 0.2
+max_edge_multiplicity = 1
+
+[evolution]
+type            = "generational"
+num_generations = 5
+
+[selection]
+type            = "tournament"
+tournament_size = 3
+
+[genome]
+type        = "edge_edit"
+gene_length = 32
+
+[fitness]
+type = "struct_match"
+reference_folder = "   "
+"#;
+        let config = Config::from_toml_str(text).expect("a blank folder name still parses");
+
+        assert_eq!(validation_field(&config), "reference_folder");
     }
 }
