@@ -187,11 +187,32 @@ impl Selection {
         }
     }
 
-    /// Draw one tournament of **distinct** individuals, best first.
+    /// Draw one tournament of **distinct** individuals, ranked best first.
     ///
     /// Feeds tournament-local replacement: the front of the result are parents,
     /// the back are the individuals they displace. Distinctness is required —
     /// "the worst two members" means nothing over a multiset.
+    ///
+    /// # Not part of the selection contract
+    ///
+    /// Unlike `select`, this is **optional for a new scheme**, and the name is
+    /// the reason it looks otherwise: it says tournament because tournament is
+    /// the only scheme that has ever answered it.
+    ///
+    /// What it really returns is one sample serving two decisions at once —
+    /// who breeds and who dies — and steady-state's self-elitism depends on both
+    /// coming from the *same* draw, which is why the result is a ranking rather
+    /// than a set of parents. That makes it a replacement policy expressed as a
+    /// selection method, so a scheme whose own theory has no such draw has
+    /// nothing to write here. Proportional schemes are the clear case:
+    /// sampling distinct individuals proportionally is a different mechanism
+    /// from roulette-wheel, not a constrained one, and implementing it here to
+    /// satisfy the match would give a user a scheme that is not the one they
+    /// named, with nothing to report the substitution.
+    ///
+    /// A scheme that supplies no arm is rejected against steady-state in
+    /// `config.rs`'s `validate_evolution_and_selection`, at config-parse time.
+    /// It stays usable with every strategy that only calls `select`.
     pub(super) fn tournament_indices<R>(&self, fitnesses: &[f64], rng: &mut R) -> Vec<usize>
     where
         R: Rng + ?Sized,
