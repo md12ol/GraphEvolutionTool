@@ -313,11 +313,296 @@ pub fn spectral_histogram(graph: &Graph, num_bins: usize) -> Vec<f64> {
     hist
 }
 
+/// Fraction of the possible edges that are present, `2m / (n(n-1))`.
+///
+/// A density rather than an edge count, because an edge count is not
+/// comparable across graphs of different sizes: the source penalises distance
+/// from an average edge count taken over reference graphs of many sizes, which
+/// makes the target wrong for any candidate whose node count differs from the
+/// reference mean. A density is unchanged when a graph and its target scale
+/// together.
+///
+/// Unweighted, like everything else here: multiplicity does not add edges.
+pub fn density(graph: &Graph) -> f64 {
+    let n = graph.num_nodes;
+    if n < 2 {
+        return 0.0;
+    }
+
+    let mut edges = 0.0;
+    for u in 0..n {
+        for v in (u + 1)..n {
+            if graph.has_edge(u, v) {
+                edges += 1.0;
+            }
+        }
+    }
+
+    let possible = n as f64 * (n as f64 - 1.0) / 2.0;
+    edges / possible
+}
+
+/// Why a reference set could not be turned into statistics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StatsError {
+    /// No reference graphs were supplied.
+    ///
+    /// This is an error and not a score. The source returns a *perfect* score
+    /// for an empty reference set, so a mistyped or empty reference folder
+    /// makes every candidate ideal, the population converges immediately, and
+    /// the run looks healthy while measuring nothing.
+    EmptyReferenceSet,
+    /// A family was configured with zero bins, which leaves nothing to compare.
+    ZeroBins { family: &'static str },
+}
+
+impl std::fmt::Display for StatsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StatsError::EmptyReferenceSet => write!(
+                f,
+                "the reference set is empty, so there is nothing to compare a candidate against"
+            ),
+            StatsError::ZeroBins { family } => {
+                write!(f, "the {family} statistic was configured with zero bins")
+            }
+        }
+    }
+}
+
+impl std::error::Error for StatsError {}
+
+/// The shared axes every graph is binned onto — the candidate and every
+/// reference graph alike, so the two can never bin differently.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistogramAxes {
+    /// Top of the degree axis. Degrees above it land in the last bin.
+    pub max_degree: usize,
+    pub degree_bins: usize,
+    pub clustering_bins: usize,
+    pub spectral_bins: usize,
+}
+
+/// A per-family value: the three statistics each take their own.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PerFamily {
+    pub degree: f64,
+    pub clustering: f64,
+    pub spectral: f64,
+}
+
+/// One statistic family's view of the reference set.
+#[derive(Debug, Clone)]
+struct FamilyReference {
+    /// One standardized histogram per reference graph.
+    standardized: Vec<Vec<f64>>,
+    /// Per-bin mean across the reference set, used to standardize a candidate.
+    mean: Vec<f64>,
+    /// Per-bin standard deviation, already guarded against zero.
+    deviation: Vec<f64>,
+}
+
+/// Added to every per-bin standard deviation before dividing by it.
+///
+/// A bin that is identical across every reference graph has deviation exactly
+/// zero, and dividing by it would put a `NaN` into the fitness value — which
+/// crashes a run rather than scoring it badly. The guard also carries a
+/// meaning worth keeping: a candidate that differs on a bin the reference set
+/// is unanimous about is divided by a very small number, so it is pushed far
+/// away, which is the right verdict.
+const DEVIATION_FLOOR: f64 = 1e-6;
+
+impl FamilyReference {
+    /// Standardize each bin against the reference set's own mean and deviation
+    /// for that bin.
+    ///
+    /// This is what makes the score weight *what the reference set agrees
+    /// about*: a bin the reference graphs vary widely on contributes less to
+    /// the distance than one they all agree on. An unstandardized kernel would
+    /// treat every bin alike.
+    fn build(histograms: Vec<Vec<f64>>) -> Self {
+        let count = histograms.len() as f64;
+        let bins = histograms[0].len();
+
+        let mut mean = vec![0.0; bins];
+        for histogram in &histograms {
+            for bin in 0..bins {
+                mean[bin] += histogram[bin];
+            }
+        }
+        for value in mean.iter_mut() {
+            *value /= count;
+        }
+
+        let mut deviation = vec![0.0; bins];
+        for histogram in &histograms {
+            for bin in 0..bins {
+                let difference = histogram[bin] - mean[bin];
+                deviation[bin] += difference * difference;
+            }
+        }
+        for value in deviation.iter_mut() {
+            *value = (*value / count).sqrt() + DEVIATION_FLOOR;
+        }
+
+        let mut standardized = Vec::with_capacity(histograms.len());
+        for histogram in &histograms {
+            standardized.push(standardize(histogram, &mean, &deviation));
+        }
+
+        Self {
+            standardized,
+            mean,
+            deviation,
+        }
+    }
+
+    /// `1 - mean RBF similarity` between a candidate histogram and every
+    /// reference histogram.
+    ///
+    /// Deliberately **not** MMD, and not named as such. MMD is a two-sample
+    /// statistic; this compares one candidate against a fixed reference
+    /// distribution, so the within-reference term is a constant and the
+    /// candidate's self-similarity is 1. Both quantities are strictly
+    /// decreasing in the mean similarity, so candidates rank identically —
+    /// the simplification is sound, but the name would claim something else.
+    fn error(&self, histogram: &[f64], gamma: f64) -> f64 {
+        let candidate = standardize(histogram, &self.mean, &self.deviation);
+
+        let mut total_similarity = 0.0;
+        for reference in &self.standardized {
+            let mut squared_distance = 0.0;
+            for bin in 0..candidate.len() {
+                let difference = candidate[bin] - reference[bin];
+                squared_distance += difference * difference;
+            }
+            total_similarity += (-gamma * squared_distance).exp();
+        }
+
+        1.0 - total_similarity / self.standardized.len() as f64
+    }
+}
+
+/// Z-score a histogram bin by bin against a supplied mean and deviation.
+fn standardize(histogram: &[f64], mean: &[f64], deviation: &[f64]) -> Vec<f64> {
+    let mut result = Vec::with_capacity(histogram.len());
+    for bin in 0..histogram.len() {
+        result.push((histogram[bin] - mean[bin]) / deviation[bin]);
+    }
+    result
+}
+
+/// A reference set reduced to the statistics a candidate is scored against.
+///
+/// Built once per run: the reference graphs never change, so their histograms
+/// and per-bin moments are computed here rather than on every evaluation.
+#[derive(Debug, Clone)]
+pub struct ReferenceStatistics {
+    degree: FamilyReference,
+    clustering: FamilyReference,
+    spectral: FamilyReference,
+    mean_density: f64,
+    axes: HistogramAxes,
+}
+
+impl ReferenceStatistics {
+    /// Reduce a reference set to its statistics, on the supplied shared axes.
+    pub fn from_graphs(graphs: &[Graph], axes: HistogramAxes) -> Result<Self, StatsError> {
+        if graphs.is_empty() {
+            return Err(StatsError::EmptyReferenceSet);
+        }
+        if axes.degree_bins == 0 {
+            return Err(StatsError::ZeroBins { family: "degree" });
+        }
+        if axes.clustering_bins == 0 {
+            return Err(StatsError::ZeroBins {
+                family: "clustering",
+            });
+        }
+        if axes.spectral_bins == 0 {
+            return Err(StatsError::ZeroBins { family: "spectral" });
+        }
+
+        let mut degree = Vec::with_capacity(graphs.len());
+        let mut clustering = Vec::with_capacity(graphs.len());
+        let mut spectral = Vec::with_capacity(graphs.len());
+        let mut density_total = 0.0;
+
+        for graph in graphs {
+            degree.push(degree_histogram(graph, axes.max_degree, axes.degree_bins));
+            clustering.push(clustering_histogram(graph, axes.clustering_bins));
+            spectral.push(spectral_histogram(graph, axes.spectral_bins));
+            density_total += density(graph);
+        }
+
+        Ok(Self {
+            degree: FamilyReference::build(degree),
+            clustering: FamilyReference::build(clustering),
+            spectral: FamilyReference::build(spectral),
+            mean_density: density_total / graphs.len() as f64,
+            axes,
+        })
+    }
+
+    /// The axes this reference set was built on. A candidate must be binned on
+    /// the same ones, which is why they are carried here rather than passed
+    /// again at scoring time.
+    pub fn axes(&self) -> &HistogramAxes {
+        &self.axes
+    }
+
+    /// Mean density across the reference set — the density penalty's target.
+    pub fn mean_density(&self) -> f64 {
+        self.mean_density
+    }
+
+    /// How far a candidate is from this reference set: a weighted sum of the
+    /// three family errors and the density penalty. Zero is a perfect match.
+    ///
+    /// `gammas` are the RBF bandwidths, one per family. They are per-family and
+    /// small on purpose: a gamma that is too large collapses
+    /// `exp(-gamma * d^2)` to zero for every candidate, so the whole population
+    /// scores ~1.0, there is no gradient to climb, and evolution stalls while
+    /// appearing to run normally.
+    ///
+    /// The result is always finite. Every route to a `NaN` is closed —
+    /// the deviation floor, the isolated-node rule in the Laplacian, and the
+    /// empty reference set being rejected at construction — because a `NaN`
+    /// fitness aborts a run instead of scoring a bad candidate.
+    pub fn error(&self, candidate: &Graph, gammas: PerFamily, weights: PerFamily) -> f64 {
+        let degree_histogram_of_candidate =
+            degree_histogram(candidate, self.axes.max_degree, self.axes.degree_bins);
+        let clustering_of_candidate = clustering_histogram(candidate, self.axes.clustering_bins);
+        let spectral_of_candidate = spectral_histogram(candidate, self.axes.spectral_bins);
+
+        let degree_error = self
+            .degree
+            .error(&degree_histogram_of_candidate, gammas.degree);
+        let clustering_error = self
+            .clustering
+            .error(&clustering_of_candidate, gammas.clustering);
+        let spectral_error = self.spectral.error(&spectral_of_candidate, gammas.spectral);
+
+        weights.degree * degree_error
+            + weights.clustering * clustering_error
+            + weights.spectral * spectral_error
+    }
+
+    /// Absolute distance between a candidate's density and the reference mean.
+    ///
+    /// Kept separate from `error` so its weight can be set independently, and
+    /// so a caller can report the two halves apart when diagnosing a run.
+    pub fn density_penalty(&self, candidate: &Graph) -> f64 {
+        (density(candidate) - self.mean_density).abs()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        bin_index, clustering_histogram, degree_histogram, normalize, normalized_laplacian,
-        spectral_histogram, symmetric_eigenvalues,
+        HistogramAxes, PerFamily, ReferenceStatistics, StatsError, bin_index, clustering_histogram,
+        degree_histogram, density, normalize, normalized_laplacian, spectral_histogram,
+        symmetric_eigenvalues,
     };
     use crate::graph::Graph;
 
@@ -656,5 +941,320 @@ mod tests {
             spectral_histogram(&weighted, 8),
             spectral_histogram(&path_of_three(), 8)
         );
+    }
+
+    fn axes() -> HistogramAxes {
+        HistogramAxes {
+            max_degree: 6,
+            degree_bins: 7,
+            clustering_bins: 5,
+            spectral_bins: 8,
+        }
+    }
+
+    fn gammas() -> PerFamily {
+        PerFamily {
+            degree: 0.01,
+            clustering: 0.01,
+            spectral: 0.01,
+        }
+    }
+
+    fn equal_weights() -> PerFamily {
+        PerFamily {
+            degree: 1.0,
+            clustering: 1.0,
+            spectral: 1.0,
+        }
+    }
+
+    fn ring(n: usize) -> Graph {
+        let mut graph = Graph::new(n, 1);
+        for i in 0..n {
+            graph.add_edge(i, (i + 1) % n);
+        }
+        graph
+    }
+
+    // --- density ---
+
+    #[test]
+    fn density_is_the_fraction_of_possible_edges_present() {
+        // A triangle is complete on 3 nodes.
+        let mut triangle = Graph::new(3, 1);
+        triangle.add_edge(0, 1);
+        triangle.add_edge(1, 2);
+        triangle.add_edge(0, 2);
+        assert!((density(&triangle) - 1.0).abs() < 1e-12);
+
+        // The path 0-1-2 has 2 of 3 possible edges.
+        assert!((density(&path_of_three()) - 2.0 / 3.0).abs() < 1e-12);
+
+        assert_eq!(density(&Graph::new(5, 1)), 0.0);
+    }
+
+    /// The property the density penalty exists for: an absolute edge count is
+    /// not comparable across sizes, but a density is unchanged when a graph
+    /// and its target scale together.
+    #[test]
+    fn density_is_unchanged_when_a_graph_scales() {
+        // Complete graphs of very different sizes both have density 1.0, while
+        // their edge counts are 10 and 105.
+        let mut small = Graph::new(5, 1);
+        for u in 0..5 {
+            for v in (u + 1)..5 {
+                small.add_edge(u, v);
+            }
+        }
+        let mut large = Graph::new(15, 1);
+        for u in 0..15 {
+            for v in (u + 1)..15 {
+                large.add_edge(u, v);
+            }
+        }
+
+        assert!((density(&small) - density(&large)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn edge_multiplicity_does_not_change_density() {
+        let mut weighted = Graph::new(3, 5);
+        weighted.set_edge(0, 1, 5);
+        weighted.set_edge(1, 2, 3);
+
+        assert!((density(&weighted) - density(&path_of_three())).abs() < 1e-12);
+    }
+
+    // --- reference set construction ---
+
+    /// An empty reference set is an error, not a perfect score. The source
+    /// returns 0.0 here, which makes a mistyped reference folder look like a
+    /// solved problem.
+    #[test]
+    fn an_empty_reference_set_is_an_error_not_a_perfect_score() {
+        let result = ReferenceStatistics::from_graphs(&[], axes());
+        assert_eq!(result.unwrap_err(), StatsError::EmptyReferenceSet);
+    }
+
+    #[test]
+    fn a_family_with_zero_bins_is_an_error() {
+        let mut broken = axes();
+        broken.spectral_bins = 0;
+
+        let result = ReferenceStatistics::from_graphs(&[ring(6)], broken);
+        assert_eq!(
+            result.unwrap_err(),
+            StatsError::ZeroBins { family: "spectral" }
+        );
+    }
+
+    #[test]
+    fn the_reference_mean_density_is_the_mean_of_its_graphs() {
+        let reference = vec![path_of_three(), ring(3)];
+        let stats = ReferenceStatistics::from_graphs(&reference, axes()).unwrap();
+
+        // 2/3 and 1.0.
+        let expected = (2.0 / 3.0 + 1.0) / 2.0;
+        assert!((stats.mean_density() - expected).abs() < 1e-12);
+    }
+
+    // --- the kernel score ---
+
+    /// A candidate identical to a single-graph reference set scores ~0.
+    #[test]
+    fn a_candidate_matching_its_only_reference_scores_about_zero() {
+        let reference = vec![ring(8)];
+        let stats = ReferenceStatistics::from_graphs(&reference, axes()).unwrap();
+
+        let error = stats.error(&ring(8), gammas(), equal_weights());
+
+        assert!(error.is_finite());
+        assert!(error.abs() < 1e-9, "expected ~0, got {error}");
+    }
+
+    /// A structurally very different candidate scores worse than a matching
+    /// one — the ordering the objective depends on.
+    #[test]
+    fn a_dissimilar_candidate_scores_worse_than_a_matching_one() {
+        let reference = vec![ring(10), ring(12), ring(14)];
+        let stats = ReferenceStatistics::from_graphs(&reference, axes()).unwrap();
+
+        let matching = stats.error(&ring(11), gammas(), equal_weights());
+
+        // A complete graph is about as unlike a ring as a graph gets.
+        let mut complete = Graph::new(11, 1);
+        for u in 0..11 {
+            for v in (u + 1)..11 {
+                complete.add_edge(u, v);
+            }
+        }
+        let dissimilar = stats.error(&complete, gammas(), equal_weights());
+
+        assert!(matching.is_finite() && dissimilar.is_finite());
+        assert!(
+            dissimilar > matching,
+            "a complete graph scored {dissimilar}, a ring scored {matching}"
+        );
+    }
+
+    /// Every route to a NaN is closed. These are the inputs that would find
+    /// one: a graph with no edges, a complete graph, a single node, and a
+    /// candidate carrying isolated nodes.
+    #[test]
+    fn no_candidate_produces_a_non_finite_score() {
+        let reference = vec![ring(8), path_of_three(), ring(5)];
+        let stats = ReferenceStatistics::from_graphs(&reference, axes()).unwrap();
+
+        let mut complete = Graph::new(9, 1);
+        for u in 0..9 {
+            for v in (u + 1)..9 {
+                complete.add_edge(u, v);
+            }
+        }
+
+        let mut partly_isolated = Graph::new(7, 1);
+        partly_isolated.add_edge(0, 1);
+        partly_isolated.add_edge(1, 2);
+        // Nodes 3..7 isolated.
+
+        let candidates = vec![
+            Graph::new(0, 1),
+            Graph::new(1, 1),
+            Graph::new(9, 1),
+            complete,
+            partly_isolated,
+            ring(4),
+        ];
+
+        for candidate in &candidates {
+            let error = stats.error(candidate, gammas(), equal_weights());
+            let penalty = stats.density_penalty(candidate);
+            assert!(
+                error.is_finite(),
+                "error was not finite for a {}-node candidate",
+                candidate.num_nodes
+            );
+            assert!(
+                penalty.is_finite(),
+                "penalty was not finite for a {}-node candidate",
+                candidate.num_nodes
+            );
+        }
+    }
+
+    /// A bin every reference graph agrees on has deviation zero. Without the
+    /// floor that is a division by zero, and the NaN reaches the fitness value.
+    #[test]
+    fn a_reference_set_of_identical_graphs_does_not_divide_by_zero() {
+        let reference = vec![ring(6), ring(6), ring(6)];
+        let stats = ReferenceStatistics::from_graphs(&reference, axes()).unwrap();
+
+        let same = stats.error(&ring(6), gammas(), equal_weights());
+        let different = stats.error(&path_of_three(), gammas(), equal_weights());
+
+        assert!(same.is_finite(), "identical candidate gave {same}");
+        assert!(
+            different.is_finite(),
+            "different candidate gave {different}"
+        );
+        assert!(same.abs() < 1e-9);
+    }
+
+    /// Weights combine the families linearly: doubling every weight doubles
+    /// the score, and zeroing every weight removes it entirely. Together these
+    /// pin that no family is being added in twice or dropped.
+    #[test]
+    fn family_weights_combine_linearly() {
+        let reference = vec![ring(9), ring(7)];
+        let stats = ReferenceStatistics::from_graphs(&reference, axes()).unwrap();
+        let candidate = path_of_three();
+
+        let single = stats.error(&candidate, gammas(), equal_weights());
+        let doubled = stats.error(
+            &candidate,
+            gammas(),
+            PerFamily {
+                degree: 2.0,
+                clustering: 2.0,
+                spectral: 2.0,
+            },
+        );
+        let none = stats.error(
+            &candidate,
+            gammas(),
+            PerFamily {
+                degree: 0.0,
+                clustering: 0.0,
+                spectral: 0.0,
+            },
+        );
+
+        assert!(single > 0.0, "a path should not match a ring reference");
+        assert!((doubled - 2.0 * single).abs() < 1e-12);
+        assert_eq!(none, 0.0);
+    }
+
+    /// Zeroing one family's weight must change the score, or that family was
+    /// never reaching it.
+    ///
+    /// The candidate is deliberately a complete graph rather than a path: a
+    /// ring and a path both have clustering 0 at every node, so a reference set
+    /// and candidate drawn only from those would leave the clustering family
+    /// with nothing to say and this test would pass for the wrong reason.
+    #[test]
+    fn each_family_actually_contributes_to_the_score() {
+        let reference = vec![ring(9), ring(7)];
+        let stats = ReferenceStatistics::from_graphs(&reference, axes()).unwrap();
+
+        let mut candidate = Graph::new(6, 1);
+        for u in 0..6 {
+            for v in (u + 1)..6 {
+                candidate.add_edge(u, v);
+            }
+        }
+
+        let all = stats.error(&candidate, gammas(), equal_weights());
+
+        let families = [
+            (
+                "degree",
+                PerFamily {
+                    degree: 0.0,
+                    clustering: 1.0,
+                    spectral: 1.0,
+                },
+            ),
+            (
+                "clustering",
+                PerFamily {
+                    degree: 1.0,
+                    clustering: 0.0,
+                    spectral: 1.0,
+                },
+            ),
+            (
+                "spectral",
+                PerFamily {
+                    degree: 1.0,
+                    clustering: 1.0,
+                    spectral: 0.0,
+                },
+            ),
+        ];
+
+        for (name, weights) in families {
+            let without = stats.error(&candidate, gammas(), weights);
+            assert!(
+                (all - without).abs() > 1e-12,
+                "dropping the {name} family did not change the score"
+            );
+        }
+    }
+    #[test]
+    fn the_density_penalty_is_zero_when_the_candidate_matches_the_reference_mean() {
+        let reference = vec![ring(6), ring(6)];
+        let stats = ReferenceStatistics::from_graphs(&reference, axes()).unwrap();
+
+        assert!(stats.density_penalty(&ring(6)).abs() < 1e-12);
     }
 }
