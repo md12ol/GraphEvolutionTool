@@ -192,8 +192,8 @@ num_epidemics  = 30          # outbreaks averaged per evaluation
 # than summing weights, so a multigraph would be scored as though every parallel
 # edge were a single one; that is rejected rather than silently flattened.
 #
-# Every key but reference_folder has the default shown, so the two lines above
-# the dashes are a complete block.
+# Every key but reference_folder has the default shown, so `type` and
+# reference_folder alone are a complete block.
 #
 # TWO WAYS A RUN CAN LOOK HEALTHY AND SEARCH NOTHING, both worth reading before
 # setting the weights:

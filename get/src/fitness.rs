@@ -5,12 +5,16 @@
 //!
 //! An objective touches five files, in six steps — two of the files want
 //! more than one edit, and `dispatch.rs` appears twice, once for the code and
-//! once for the test. **Five is the floor, not the ceiling**: it is what an
-//! objective assembled from config values alone needs. One that brings data of
-//! its own — anything read from disk — will also touch the loader it reads
-//! through and wherever its shared state lives, as `struct_match` does.
-//! How many are yours depends on which way you are using
-//! GET, so start by working out which reader you are:
+//! once for the test.
+//!
+//! **Five is the floor, not the ceiling.** It is what an objective assembled
+//! from config values alone needs, which is what all three of the originals
+//! were. One that brings data of its own — anything read from disk — will also
+//! touch the loader it reads through and wherever its shared state lives;
+//! `struct_match` touched seven files for that reason.
+//!
+//! How many of the six steps are yours depends on which way you are using GET,
+//! so start by working out which reader you are:
 //!
 //! - **You depend on this crate from your own program.** Step 1 is the only
 //!   one available to you, and it is enough on its own: write your type,

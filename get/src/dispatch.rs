@@ -86,12 +86,6 @@ pub(crate) struct ErasedOutcome {
     pub history: Vec<GenerationStats>,
 }
 
-/// The parts of dispatch that need the evolver itself, not just its config.
-///
-/// `objective` reads the registered callable as well as `[fitness]`, and
-/// `python_fitness` is entirely about that registration — so both take `&self`.
-/// The three pure config→engine mappings below are free functions instead, which
-/// makes them testable from a bare [`Config`] with no evolver to construct.
 /// The node index a reference file may not exceed, when the run's own
 /// `network_size` is smaller.
 ///
@@ -102,6 +96,12 @@ pub(crate) struct ErasedOutcome {
 /// while admitting any plausible reference graph.
 const MAX_REFERENCE_NODES: usize = 100_000;
 
+/// The parts of dispatch that need the evolver itself, not just its config.
+///
+/// `objective` reads the registered callable as well as `[fitness]`, and
+/// `python_fitness` is entirely about that registration — so both take `&self`.
+/// The three pure config→engine mappings below are free functions instead, which
+/// makes them testable from a bare [`Config`] with no evolver to construct.
 impl GraphEvolver {
     /// Build the objective for one run, erased to `Box<dyn Fitness>`.
     ///

@@ -622,7 +622,6 @@ impl Config {
         Ok(())
     }
 
-    /// Constraints on the epidemic sampling parameters.
     /// The `struct_match` half of [`Config::validate_fitness`].
     ///
     /// **Everything checkable without touching the filesystem, and no more.**
@@ -730,6 +729,7 @@ impl Config {
         Ok(())
     }
 
+    /// Constraints on the epidemic sampling parameters.
     fn validate_fitness(&self) -> Result<(), ConfigError> {
         // `python` carries no SIR block at all — its parameters belong to the
         // callable, which is registered from Python (spec §7).
