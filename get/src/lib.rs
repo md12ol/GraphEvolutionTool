@@ -1294,7 +1294,10 @@ mod tests {
             let err = evolver
                 .set_base_graph_from_file(py, "no_such_file.csv".to_string(), 1)
                 .expect_err("a missing file must be rejected");
-            assert!(!err.to_string().contains("one run has one numbering"), "{err}");
+            assert!(
+                !err.to_string().contains("one run has one numbering"),
+                "{err}"
+            );
 
             // Nothing observable changed. The numbering is the one that bites:
             // `shift_out` reads it on every later run, so a value left behind
@@ -1304,7 +1307,11 @@ mod tests {
 
             let mut edges = vec![(0, 1, 1)];
             shift_out(&mut edges, evolver.min_node_index);
-            assert_eq!(edges, vec![(0, 1, 1)], "a failed load must not shift output");
+            assert_eq!(
+                edges,
+                vec![(0, 1, 1)],
+                "a failed load must not shift output"
+            );
 
             // And a later load is still free to choose any numbering, rather
             // than being rejected by the one the failed call would have pinned.
