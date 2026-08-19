@@ -510,7 +510,7 @@ mod tests {
         let mut b = walk_evolver(12, 200);
 
         let first = a.run(&NodeCount, 2026);
-        let second = b.run(&NodeCount, 2027);
+        let second = b.run(&NodeCount, 2026);
 
         assert_eq!(first.best_genome, second.best_genome);
         assert_eq!(first.best_fitness_engine, second.best_fitness_engine);
