@@ -277,6 +277,23 @@ impl GraphEvolver {
     /// second = edge_evolver.run(seed=2)
     /// ```
     ///
+    /// **`min_node_index` is where the caller's own node numbering starts, and it
+    /// is the same numbering the two file loaders take** — pass `1` for
+    /// 1-indexed edges, and they shift to 0 here exactly as a file's would, so
+    /// nobody has to renumber data by hand to use this setter. It defaults to
+    /// `0`, which is what `best_edges` above is, so the round-trip in that
+    /// example needs no argument.
+    ///
+    /// **One run has one numbering, and every entry point shares it.** This
+    /// setter, [`set_base_graph_from_file`](GraphEvolver::set_base_graph_from_file)
+    /// and [`load_reference_graphs`](GraphEvolver::load_reference_graphs) all
+    /// declare the same `min_node_index`, and a second call that disagrees with
+    /// the first is rejected rather than mixed in. That numbering is also what
+    /// the evolved graph is shifted back into on the way out, so results return
+    /// in the numbering the data arrived in. Supplying a 0-indexed graph here
+    /// and then a 1-indexed reference set therefore raises, instead of quietly
+    /// handing back indices that match neither.
+    ///
     /// **Left unset, every run starts from an empty graph** — that is the
     /// default, and it is worth stating rather than leaving to be discovered:
     /// five of the nine edit opcodes are inert on an empty graph. `Swap`, `Hop`
@@ -287,9 +304,12 @@ impl GraphEvolver {
     /// # Errors
     ///
     /// `ValueError` if `num_nodes` disagrees with the config's `network_size`,
-    /// if the config selected the SDA genome, or if any edge names a node
-    /// outside `0..num_nodes`, is a self-loop, or carries a multiplicity above
-    /// the config's `max_edge_multiplicity`.
+    /// if the config selected the SDA genome, if any edge names a node outside
+    /// `min_node_index ..= min_node_index + num_nodes - 1`, is a self-loop, or
+    /// carries a multiplicity above the config's `max_edge_multiplicity` — or if
+    /// a loader on this evolver already declared a different `min_node_index`.
+    /// An out-of-range message names the index as the caller wrote it, not as it
+    /// would be after shifting.
     ///
     /// The SDA case is a rejection rather than a no-op because an SDA run
     /// generates its graph from scratch instead of editing one: storing a base
@@ -324,12 +344,16 @@ impl GraphEvolver {
     /// describes a graph and the caller may well have meant to overwrite; what
     /// it must not do is happen in silence, which is what applying the list in
     /// order used to do.
+    #[pyo3(signature = (num_nodes, edges, min_node_index = 0))]
     fn set_base_graph(
         &mut self,
         py: Python<'_>,
         num_nodes: usize,
         edges: Vec<(usize, usize, u32)>,
+        min_node_index: i64,
     ) -> PyResult<()> {
+        self.check_min_node_index(min_node_index)?;
+
         if num_nodes != self.config.network_size {
             return Err(PyValueError::new_err(format!(
                 "base graph has {} nodes but [evolution] network_size is {}; \
@@ -350,10 +374,17 @@ impl GraphEvolver {
         // early on a bad endpoint or a self-loop and clamps an over-cap weight.
         // A graph constructed first and validated after would already have lost
         // the offending edge, leaving nothing to report.
+        // The caller's own numbering, so a message quotes the indices they wrote
+        // rather than shifted ones they would not recognise. Matches how the
+        // file loader validates the same thing.
+        let lowest = min_node_index;
+        let highest = min_node_index + num_nodes as i64 - 1;
+
         for &(u, v, multiplicity) in &edges {
-            if u >= num_nodes || v >= num_nodes {
+            let (u_given, v_given) = (u as i64, v as i64);
+            if u_given < lowest || u_given > highest || v_given < lowest || v_given > highest {
                 return Err(PyValueError::new_err(format!(
-                    "edge ({u}, {v}) names a node outside 0..{num_nodes}; the node count \
+                    "edge ({u}, {v}) names a node outside {lowest}..={highest}; the node count \
                      matching network_size does not make the edges in range, and an \
                      out-of-range edge would be dropped without a word",
                 )));
@@ -383,8 +414,11 @@ impl GraphEvolver {
         let mut sourced = Vec::with_capacity(edges.len());
         for &(u, v, multiplicity) in &edges {
             sourced.push(SourcedEdge {
-                u,
-                v,
+                // Shifted to 0 here, once, the same as the file loader does on
+                // the way in. The range check above is what makes this safe:
+                // every index is at least `lowest`, so neither can go negative.
+                u: (u as i64 - min_node_index) as usize,
+                v: (v as i64 - min_node_index) as usize,
                 weight: multiplicity,
                 // No file behind these, so no line to point at.
                 line: None,
@@ -397,6 +431,7 @@ impl GraphEvolver {
         let mut graph = Graph::new(self.config.network_size, self.config.max_edge_multiplicity);
         graph.set_edges(&deduplicated);
         self.base_graph = Some(graph);
+        self.commit_min_node_index(min_node_index);
         Ok(())
     }
 
@@ -499,10 +534,16 @@ impl GraphEvolver {
     /// read, since an extension convention would silently drop data the caller
     /// meant to include.
     ///
-    /// **Reference graphs are input-only and are never shifted back.** Unlike
-    /// the evolved graph, nothing hands one to the caller in their own
-    /// numbering, because these are the numbers they supplied in the first
-    /// place.
+    /// **The reference graphs themselves are never shifted back** — nothing hands
+    /// one to the caller in their own numbering, because these are the numbers
+    /// they supplied in the first place.
+    ///
+    /// **This call does, however, declare the run's numbering**, in common with
+    /// the two base-graph entry points, and that numbering is what the evolved
+    /// graph is shifted back into. So loading a 1-indexed reference set means
+    /// `run` returns `best_edges` 1-indexed too. That is deliberate — one run has
+    /// one numbering — and it is why a base graph supplied under a different
+    /// numbering is rejected rather than mixed in.
     ///
     /// # Errors
     ///
@@ -1010,7 +1051,7 @@ mod tests {
 
             let messages = warnings_from(py, || {
                 evolver
-                    .set_base_graph(py, 8, vec![(2, 5, 1), (0, 1, 2), (5, 2, 3)])
+                    .set_base_graph(py, 8, vec![(2, 5, 1), (0, 1, 2), (5, 2, 3)], 0)
                     .expect("a valid base graph");
             });
 
@@ -1036,7 +1077,7 @@ mod tests {
 
             let messages = warnings_from(py, || {
                 evolver
-                    .set_base_graph(py, 8, vec![(0, 1, 1), (2, 3, 2)])
+                    .set_base_graph(py, 8, vec![(0, 1, 1), (2, 3, 2)], 0)
                     .expect("a valid base graph");
             });
 
@@ -1156,6 +1197,81 @@ mod tests {
             assert!(evolver.base_graph.is_none());
 
             std::fs::remove_file(&path).expect("cleanup");
+        });
+    }
+
+    #[test]
+    fn a_one_indexed_edge_list_is_shifted_the_same_way_a_file_would_be() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+
+            // The use case: the caller's dataset numbers nodes from 1, and they
+            // should not have to renumber it to hand it over.
+            evolver
+                .set_base_graph(py, 8, vec![(1, 2, 1), (3, 8, 1)], 1)
+                .expect("1-indexed edges are accepted");
+
+            // Stored 0-based, so the engine sees an ordinary graph.
+            let graph = evolver.base_graph.as_ref().expect("a base graph is stored");
+            assert_eq!(graph.weight(0, 1), 1);
+            assert_eq!(graph.weight(2, 7), 1);
+            assert_eq!(graph.weight(1, 2), 0, "indices were shifted, not reused");
+
+            // And the run's numbering is now 1, so output goes back the way it came.
+            assert_eq!(evolver.min_node_index, Some(1));
+            let mut edges = vec![(0, 1, 1), (2, 7, 1)];
+            shift_out(&mut edges, evolver.min_node_index);
+            assert_eq!(edges, vec![(1, 2, 1), (3, 8, 1)]);
+        });
+    }
+
+    #[test]
+    fn an_edge_below_the_callers_first_index_is_named_as_the_caller_wrote_it() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+
+            // 0 is out of range for 1-indexed data, and shifting it would
+            // underflow, so the range check has to catch it first.
+            let err = evolver
+                .set_base_graph(py, 8, vec![(0, 1, 1)], 1)
+                .expect_err("node 0 is outside 1..=8");
+
+            let message = err.to_string();
+            assert!(message.contains("(0, 1)"), "{message}");
+            assert!(message.contains("1..=8"), "{message}");
+            assert!(evolver.base_graph.is_none());
+            assert_eq!(evolver.min_node_index, None, "a rejection records nothing");
+        });
+    }
+
+    #[test]
+    fn a_list_setter_and_a_loader_that_disagree_about_numbering_are_rejected() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            let folder = std::env::temp_dir().join("get_lib_mixed_numbering");
+            let _ = std::fs::remove_dir_all(&folder);
+            std::fs::create_dir_all(&folder).expect("temp folder");
+            std::fs::write(folder.join("a.csv"), "1,2,1\n").expect("the fixture is written");
+
+            // The case that used to pass silently and return edges numbered to
+            // match neither input.
+            evolver
+                .set_base_graph(py, 8, vec![(0, 1, 1)], 0)
+                .expect("a 0-indexed list declares numbering 0");
+
+            let err = evolver
+                .load_reference_graphs(py, folder.display().to_string(), 1)
+                .expect_err("a 1-indexed reference set disagrees with it");
+            assert!(
+                err.to_string().contains("one run has one numbering"),
+                "{err}"
+            );
+
+            // The numbering the base graph declared still stands, so output is
+            // not shifted by the call that failed.
+            assert_eq!(evolver.min_node_index, Some(0));
+
+            std::fs::remove_dir_all(&folder).expect("cleanup");
         });
     }
 
