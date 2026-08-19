@@ -72,10 +72,17 @@ tournament_size = 5          # larger = stronger selection pressure
 # leaves five of the nine edit operations inert until `add` or `toggle` have
 # built some structure. See `examples/config_builder.py`, `seeding_from_a_file`.
 
-# A new representation adds a block here — the last of the seven steps listed
-# in `get/src/genomes/genome.rs`. Optional, and free to skip if it does not
-# ship, but this file is what people copy from, so one left out is one most
-# people never find.
+# ADD A GENOME STEP 7 — a commented-out example block for your representation,
+# alongside the SDA one further down:
+#
+#   # [genome]
+#   # type           = "my_genome"
+#   # some_dimension = 12
+#
+# The last of the seven steps listed in `get/src/genomes/genome.rs`, which has
+# the other six. Optional and free to skip if the representation does not ship,
+# but this file is what people copy from, so one left out is one most people
+# never find.
 [genome]
 type        = "edge_edit"
 gene_length = 256            # number of edit operations per genome

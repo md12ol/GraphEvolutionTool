@@ -33,6 +33,14 @@
 //!   the one that makes that true: a start builder is what turns a config
 //!   document into a sized population and a context.
 //!
+//! **Every step below is marked at its own site in the code.** Search the repo
+//! for `ADD A GENOME STEP 3` — or any other number — and you land on the exact
+//! place that step is made, next to a worked example of what to add there:
+//!
+//! ```text
+//! git grep -n "ADD A GENOME STEP"      # all seven, in one list
+//! ```
+//!
 //! The steps, in the order you would walk them:
 //!
 //! 1. **This file** — implement [`Genome`] for your type: the
@@ -137,6 +145,21 @@ use rand::Rng;
 
 use crate::graph::Graph;
 
+// ADD A GENOME STEP 1 — implement this trait for your own type.
+//
+//     impl Genome for MyGenome {
+//         type Context = MyContext;
+//
+//         fn express(&self, context: &Self::Context) -> Graph { ... }
+//         fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) { ... }
+//         fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R) { ... }
+//         fn print(&self) -> String { ... }
+//     }
+//
+// All five items are required. Read `mutate`'s contract below before writing
+// it — exactly one mutation per call is what the engine's `max_mutations`
+// depends on.
+
 /// The variation-operator interface implemented by every genome representation.
 ///
 /// `Clone + Send + Sync` allows the GA to copy individuals and evaluate a
@@ -194,6 +217,19 @@ pub trait Genome: Clone + Send + Sync {
     /// Return a human-readable description of the genome.
     fn print(&self) -> String;
 }
+
+// ADD A GENOME STEP 2 — declare your context type, here or beside your
+// representation.
+//
+//     #[derive(Clone, Debug)]
+//     pub struct MyContext {
+//         pub num_nodes: usize,
+//         pub some_mutation_rate: f64,
+//     }
+//
+// Run configuration only, never evolved state — the test is "can variation
+// change it", and anything variation cannot change belongs here rather than on
+// the genome. `SdaContext::init_state` below is the worked example.
 
 /// Configuration used when an edge-edit genome modifies an initial graph.
 #[derive(Clone, Debug)]

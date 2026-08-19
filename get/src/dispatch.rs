@@ -349,6 +349,26 @@ impl GraphEvolver {
     }
 }
 
+// ADD A GENOME STEP 5 — a start builder beside this one and `sda_start`.
+//
+//     pub(crate) fn my_genome_start<R: Rng + ?Sized>(
+//         config: &Config,
+//         mine: &MyGenomeConfig,
+//         rng: &mut R,
+//     ) -> PyResult<(MyContext, Vec<MyGenome>)> {
+//         // Validate the dimensions once, here — not per individual.
+//         let mut population = Vec::with_capacity(config.population_size);
+//         for _ in 0..config.population_size {
+//             population.push(MyGenome::random(mine.some_dimension, rng));
+//         }
+//         let context = MyContext { num_nodes: config.network_size, .. };
+//         Ok((context, population))
+//     }
+//
+// Exactly `population_size` individuals, a context `express` can index without
+// panicking, and rejection rather than clamping for caller data that disagrees
+// with the config. The doc below says why each of those matters.
+
 /// The edge-edit starting population and the context it expresses against.
 ///
 /// # Part of the chain that adds a representation
@@ -588,7 +608,23 @@ pub(crate) fn evolve<F: Fitness>(
                 fitness,
                 rng.random::<u64>(),
             ))
-        }
+        } // ADD A GENOME STEP 6 — one arm, calling your step-5 start builder:
+          //
+          //     GenomeConfig::MyGenome(mine) => {
+          //         let (genome_context, population) = my_genome_start(config, mine, &mut rng)?;
+          //         Ok(run_strategy(
+          //             config,
+          //             genome_context,
+          //             population,
+          //             selection,
+          //             fitness,
+          //             rng.random::<u64>(),
+          //         ))
+          //     }
+          //
+          // Copy the arm above verbatim and change the builder it calls. The
+          // match is exhaustive, so omitting this will not compile — which is
+          // the whole reason steps 4, 5 and 6 cannot be half-done.
     }
 }
 

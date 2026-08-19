@@ -275,6 +275,17 @@ pub enum PyGenomeConfig {
         /// `Option`-wrapped for the same reason.
         transition_vs_response_rate: Option<f64>,
     },
+    // ADD A GENOME STEP 7 — the Python-side variant, if the representation
+    // should be reachable from Python. Optional; leaving it out costs nothing
+    // elsewhere.
+    //
+    //     #[pyo3(constructor = (some_dimension))]
+    //     MyGenome { some_dimension: usize },
+    //
+    // Then add the matching arm to `PyGenomeConfig::to_toml_value` below, which
+    // writes `type = "my_genome"` and the fields under `[genome]`. And if step
+    // 4's validation raises a field by name, give it a path in
+    // `python_attribute_path` — search `ADD A GENOME STEP 7` again for it.
 }
 
 /// Fitness objective and its parameters.
@@ -502,6 +513,13 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         // string literal at the call site and the scraper below cannot see it.
         "init_char_mutation_rate" => Some("config.genome.init_char_mutation_rate"),
         "transition_vs_response_rate" => Some("config.genome.transition_vs_response_rate"),
+        // ADD A GENOME STEP 7 — one line per field step 4's validation names:
+        //
+        //     "some_dimension" => Some("config.genome.some_dimension"),
+        //
+        // Without it a Python caller gets an error naming a TOML field they
+        // never wrote. `every_validation_field_maps_to_a_python_attribute` is
+        // the test that catches a missing one.
         // On the SIR block, which every epidemic objective reaches the same
         // way even though it flattens into `[fitness]` in the document.
         "infection_rate" => Some("config.fitness.sir.infection_rate"),

@@ -13,6 +13,13 @@
 
 use rand::Rng;
 
+// ADD A GENOME STEP 3 — declare the module and re-export the type and its
+// context, so callers name them from `crate::genomes`.
+//
+//     pub mod my_genome;
+//     pub use my_genome::MyGenome;
+//     pub use genome::MyContext;      // if the context lives in `genome.rs`
+
 pub mod edge_edit;
 pub mod genome;
 pub mod sda;
