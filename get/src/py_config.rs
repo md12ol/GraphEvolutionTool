@@ -267,6 +267,14 @@ pub enum PyGenomeConfig {
 /// Mirrors [`crate::config::FitnessConfig`]. The three epidemic objectives
 /// read the same simulation differently (spec §5.2), so they share one
 /// [`PySirParams`] block rather than triplicating it.
+///
+/// # Part of the chain that adds an objective
+///
+/// This is the optional step: it is what lets a Python caller name the
+/// objective. Skipping it costs nothing anywhere else — the objective still
+/// runs from a TOML config and from Rust — so it is only needed if Python
+/// should be able to select it. The steps before it are the `FitnessConfig`
+/// variant and its `dispatch` arm; `crate::fitness`'s module doc has all six.
 #[pyclass(name = "FitnessConfig")]
 #[derive(Debug, Clone)]
 pub enum PyFitnessConfig {

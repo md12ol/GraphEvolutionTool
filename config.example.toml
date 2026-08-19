@@ -125,6 +125,10 @@ gene_length = 256            # number of edit operations per genome
 # sweep: any other unrecognized key under [fitness] is still ignored without a
 # word, so check spelling against this file.
 
+# Adding an objective of your own? This block is one of six places it has to
+# touch, and the module doc at the top of `get/src/fitness.rs` walks all six in
+# order. An objective missing from this example file still works — it is just
+# one most people never find, because this is the file they copy from.
 [fitness]
 type           = "epi_spread"
 infection_rate = 0.5         # per-edge transmission probability per timestep.

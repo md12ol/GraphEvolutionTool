@@ -119,6 +119,14 @@ impl GraphEvolver {
     /// `Config::validate` already rejects an empty or non-finite profile, so
     /// that second case is a backstop for a `Config` built in Rust without
     /// going through validation — not a path a Python caller can reach.
+    /// # Part of the chain that adds an objective
+    ///
+    /// This match is the step after adding the `FitnessConfig` variant in
+    /// `crate::config`, and it is the one that erases the choice: everything
+    /// downstream of here sees one `Box<dyn Fitness>` and not a variant, which
+    /// is what keeps a new objective to a single arm rather than one arm per
+    /// strategy and genome combination. `crate::fitness`'s module doc has the
+    /// whole chain.
     pub(crate) fn objective(&self, run_seed: u64) -> PyResult<Box<dyn Fitness>> {
         match &self.config.fitness {
             FitnessConfig::EpiSpread { sir } => {
@@ -688,6 +696,10 @@ mod tests {
 
     #[test]
     fn each_objective_erases_to_a_box_carrying_its_own_direction() {
+        // Last step of the chain that adds an objective: a new
+        // `FitnessConfig` variant gets a case here. `crate::fitness`'s module
+        // doc walks all six steps.
+        //
         // The failure this exists for is silent. `Fitness::direction` has a
         // default of `Minimize`, so a boxed objective whose direction is not
         // forwarded reports "minimize" whatever it holds — and both maximizing
