@@ -1,7 +1,7 @@
 # Runs the Rust checks that nothing else runs: the test suite and the two lint
-# gates. Until this existed, `get/src`'s 269 `#[test]` functions ran only when
-# a maintainer remembered to run them locally, so the convention of committing
-# each step once its own check has passed rested on a gate nobody's push met.
+# gates. Until this existed, `get/src`'s unit tests ran only when a maintainer
+# remembered to run them locally, so the convention of committing each step
+# once its own check has passed rested on a gate nobody's push met.
 #
 # `get-run.yml` is the sibling job: it is the one that actually *runs* the
 # `cli`-gated binary against the shipped example. This workflow compiles and
