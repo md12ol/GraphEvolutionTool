@@ -15,9 +15,10 @@
 //! Two failures are warnings rather than errors, because the file still
 //! describes a graph: a repeated edge (the last occurrence wins) and a
 //! zero-weight edge (kept as given, which is no edge at all). Warnings are
-//! returned to the caller rather than printed here — the Python boundary raises
-//! them through `warnings`, the Rust runner prints them to stderr, and this
-//! module stays testable without either.
+//! returned to the caller rather than printed here, which keeps this module
+//! testable without a Python interpreter: the Python boundary is what raises
+//! them, through `warnings`. There is no consumer on the Rust side — the
+//! `get-run` binary has no loader, so nothing there can produce one.
 
 use std::path::Path;
 
