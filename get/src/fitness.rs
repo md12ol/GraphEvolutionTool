@@ -3,9 +3,13 @@
 //!
 //! # Adding your own objective
 //!
-//! An objective touches up to five files, in six steps — two of the files want
+//! An objective touches five files, in six steps — two of the files want
 //! more than one edit, and `dispatch.rs` appears twice, once for the code and
-//! once for the test. How many are yours depends on which way you are using
+//! once for the test. **Five is the floor, not the ceiling**: it is what an
+//! objective assembled from config values alone needs. One that brings data of
+//! its own — anything read from disk — will also touch the loader it reads
+//! through and wherever its shared state lives, as `struct_match` does.
+//! How many are yours depends on which way you are using
 //! GET, so start by working out which reader you are:
 //!
 //! - **You depend on this crate from your own program.** Step 1 is the only
@@ -28,6 +32,15 @@
 //!    better, and override [`Fitness::evaluate_batch`] if the default is wrong
 //!    for you — see "When overriding `evaluate_batch` is required" below,
 //!    because that case is about correctness rather than speed.
+//!
+//!    **Validate the objective's own inputs in its constructor, and make it
+//!    fallible if it has any worth checking.** Step 2's validation lives in
+//!    `config.rs`, which the library route never runs — so a guard written
+//!    only there does not exist for the first reader above. Anything that
+//!    would put a `NaN` into every score belongs here: `EpiProfMatch::new`
+//!    rejects an empty or non-finite target for exactly this reason, and
+//!    `StructMatch::new` rejects a non-finite weight. The two sites are
+//!    additive, not alternatives.
 //! 2. **`config.rs`** — three edits, not one. Add a variant to
 //!    `FitnessConfig` holding whatever the objective reads out of the file;
 //!    add its arm to `FitnessConfig::type_name`, which is the string error
@@ -35,10 +48,30 @@
 //!    worth constraining. Only the first is what a user selects under
 //!    `[fitness]`. The `type_name` arm cannot be forgotten — the match is
 //!    exhaustive, so omitting it fails to compile.
+//!
+//!    Two things about that validation are not obvious. **It may not touch
+//!    the filesystem** — `Config::validate` does no I/O, which is why
+//!    `epi_prof_match` takes its target inline rather than as a path. An
+//!    objective that must name a file therefore cannot check it here, and
+//!    everything about that file's contents becomes step 3's problem instead.
+//!    And **it may constrain fields outside the `[fitness]` block**:
+//!    `struct_match` requires a top-level `max_edge_multiplicity` of 1,
+//!    because its statistics count neighbours rather than summing weights.
 //! 3. **`dispatch.rs`** — add the matching arm to `objective()`, which turns
 //!    that variant into a `Box<dyn Fitness>`. Steps 2 and 3 are one change
 //!    split across two files: a variant nothing constructs is dead code, and
 //!    an arm for a variant that does not exist will not compile.
+//!
+//!    **This arm runs once per replicate**, not once per run — `run` builds
+//!    one objective per seed before starting. Two consequences. It is where
+//!    anything needing the filesystem finally happens, since step 2 could not;
+//!    an unreadable folder or an empty reference set is reported from here.
+//!    And anything **expensive and immutable** should be built once and shared
+//!    behind an `Arc` rather than rebuilt per replicate — see
+//!    `GraphEvolver::struct_match_reference`. What §8.1 requires per replicate
+//!    is a fresh *objective*, because an [`EpidemicScorer`] holds a per-run
+//!    counter; an objective with no per-run state has nothing to keep apart,
+//!    and rebuilding its data is pure waste in a phase that logs nothing.
 //! 4. **`py_config.rs`** — add the Python-side constructor, if the objective
 //!    should be reachable from Python. Leave it out and everything else still
 //!    works; a Python caller simply has no way to name the objective. If step

@@ -1991,6 +1991,41 @@ mod tests {
     }
 
     #[test]
+    fn two_struct_match_replicates_at_one_seed_agree() {
+        // The second test #99 asks every new objective for. It is worth having
+        // here specifically because this objective reads from disk: a loader
+        // that let filesystem order into the reference set -- which
+        // `load_edge_folder` sorts precisely to prevent -- would give two
+        // replicates different targets, and the run would still look fine.
+        let evolver = evolver_with(&struct_match_block("replicates"));
+        let run = |seed: u64| {
+            let objective = evolver.objective(seed).expect("an objective per replicate");
+            evolve(&evolver.config, &objective, None, seed).expect("run completes")
+        };
+
+        let first = run(4);
+        let again = run(4);
+        let other = run(5);
+
+        assert_eq!(
+            first.best_fitness, again.best_fitness,
+            "same seed, same score"
+        );
+        assert_eq!(
+            first.best_edges, again.best_edges,
+            "same seed, same network"
+        );
+        assert!(
+            first.best_fitness.is_finite(),
+            "a structural score must never be non-finite"
+        );
+        assert!(
+            other.best_fitness != first.best_fitness || other.best_edges != first.best_edges,
+            "a different seed should not reproduce the same run"
+        );
+    }
+
+    #[test]
     fn steady_state_and_generational_do_not_produce_the_same_run() {
         // Guards against both arms of `run_strategy` reaching the same evolver —
         // which would compile, run, and return plausible numbers.
