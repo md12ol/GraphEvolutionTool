@@ -281,7 +281,7 @@ mod tests {
         GraphOperation::Toggle.apply(&mut graph, 0, 1, 1, 0);
         assert_eq!(graph.weight(0, 1), 4);
 
-        graph.clear_edge(0, 1);
+        graph.set_edge(0, 1, 0);
         GraphOperation::Toggle.apply(&mut graph, 0, 1, 0, 0);
         assert_eq!(graph.weight(0, 1), 1);
     }

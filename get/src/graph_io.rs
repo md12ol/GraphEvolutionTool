@@ -36,10 +36,10 @@ pub struct EdgeFile {
 
 /// Why one row was rejected.
 ///
-/// Kept apart from its prose for the same reason
-/// [`ConfigError::Validation`](crate::config::ConfigError) is: a test asserts on
-/// the variant instead of matching wording that changes every time someone
-/// improves the message.
+/// Kept apart from its prose for the same reason `ConfigError::Validation` is: a
+/// test asserts on the variant instead of matching wording that changes every
+/// time someone improves the message. Not linked, because `config` is
+/// crate-internal and this type is public — a link would render as a dead one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RowProblem {
     /// Not three comma-separated fields. Carries how many there were.

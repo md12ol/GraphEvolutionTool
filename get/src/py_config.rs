@@ -127,23 +127,14 @@ impl PySirParams {
 #[pyclass(name = "OperationWeights")]
 #[derive(Debug, Clone)]
 pub struct PyOperationWeights {
-    #[pyo3(get, set)]
     pub toggle: f64,
-    #[pyo3(get, set)]
     pub hop: f64,
-    #[pyo3(get, set)]
     pub add: f64,
-    #[pyo3(get, set)]
     pub delete: f64,
-    #[pyo3(get, set)]
     pub swap: f64,
-    #[pyo3(get, set)]
     pub local_toggle: f64,
-    #[pyo3(get, set)]
     pub local_add: f64,
-    #[pyo3(get, set)]
     pub local_delete: f64,
-    #[pyo3(get, set)]
     pub null: f64,
 }
 
@@ -452,6 +443,10 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         // On the genome object; each belongs to one variant.
         "operation_weights" => Some("config.genome.operation_weights"),
         "init_state" => Some("config.genome.init_state"),
+        // Raised from a loop in `validate_genome`, so the field name is not a
+        // string literal at the call site and the scraper below cannot see it.
+        "init_char_mutation_rate" => Some("config.genome.init_char_mutation_rate"),
+        "transition_vs_response_rate" => Some("config.genome.transition_vs_response_rate"),
         // On the SIR block, which every epidemic objective reaches the same
         // way even though it flattens into `[fitness]` in the document.
         "infection_rate" => Some("config.fitness.sir.infection_rate"),
@@ -1065,6 +1060,19 @@ mod tests {
             "these validation fields have no Python attribute path, so a user would be told a \
              bare field name: {unmapped:?}. Add them to `python_attribute_path`."
         );
+    }
+
+    #[test]
+    fn the_two_rate_fields_raised_from_a_loop_are_mapped() {
+        // `validate_genome` raises these two through a loop variable rather than
+        // a string literal, so `validation_fields_in_config_rs` skips them and
+        // the sweep above passes whether or not they are mapped. Pin them here.
+        for field in ["init_char_mutation_rate", "transition_vs_response_rate"] {
+            assert!(
+                python_attribute_path(field).is_some(),
+                "{field} is raisable from Python but has no attribute path"
+            );
+        }
     }
 
     #[test]

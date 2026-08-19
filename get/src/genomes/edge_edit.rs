@@ -125,12 +125,11 @@ impl EdgeEditOperators {
     /// via [`EdgeEditOperators::new`]. Tests that do not care which operations
     /// come out use this instead of spelling nine equal weights each time.
     ///
-    /// Cached, so the weight-agnostic constructors ([`EdgeEditGenome::new`] and
-    /// [`EdgeEditGenome::random`]) share one instance rather than handing every
-    /// individual its own — which would reintroduce exactly the per-genome copy
-    /// this type exists to eliminate.
+    /// Cached, so every caller shares one instance rather than each building
+    /// its own — which would reintroduce exactly the per-genome copy this type
+    /// exists to eliminate.
     #[cfg(test)]
-    pub fn uniform() -> Arc<Self> {
+    fn uniform() -> Arc<Self> {
         // A function-local `static` initialized once, on first call, and
         // shared by every caller thereafter — Rust's version of a lazily-built
         // singleton.
@@ -156,10 +155,16 @@ impl EdgeEditGenome {
     /// Construct a genome from encoded genes and a shared operation mix.
     ///
     /// Almost every individual is minted at random by
-    /// [`EdgeEditGenome::random_with_operators`] instead. The exception is the
-    /// identity individual a seeded run starts with — [`IDENTITY_GENE`] repeated
-    /// — which is a chosen gene sequence by definition. Tests that need a known
-    /// genome to express also come through here.
+    /// [`EdgeEditGenome::random_with_operators`] instead, so this is the path for
+    /// the callers that need a *chosen* gene sequence. There are two, and they
+    /// are why this is public rather than test-only.
+    ///
+    /// `dispatch` builds the identity individual a seeded run starts with —
+    /// [`IDENTITY_GENE`] repeated — which is a chosen sequence by definition. And
+    /// a caller driving an evolver directly needs a known starting population,
+    /// whether that is the genes read off a previous run's best individual, a
+    /// recorded edit script, or a deterministic fixture; without this, `genes`
+    /// would be readable with no supported way to feed them back.
     pub fn new_with_operators(genes: Vec<u64>, operators: Arc<EdgeEditOperators>) -> Self {
         Self { genes, operators }
     }
@@ -532,6 +537,22 @@ mod tests {
             );
             assert!(changed.iter().all(|gene| **gene & OPCODE_MASK == 3));
         }
+    }
+
+    #[test]
+    fn crossover_of_empty_genomes_is_a_noop() {
+        // `shared_length` is 0, below the two distinct cut points a swap needs,
+        // so this returns before drawing anything rather than panicking on an
+        // empty range.
+        let mut left = EdgeEditGenome::new_with_operators(Vec::new(), EdgeEditOperators::uniform());
+        let mut right =
+            EdgeEditGenome::new_with_operators(Vec::new(), EdgeEditOperators::uniform());
+        let mut rng = StdRng::seed_from_u64(1);
+
+        left.crossover(&mut right, &mut rng);
+
+        assert!(left.genes.is_empty());
+        assert!(right.genes.is_empty());
     }
 
     #[test]

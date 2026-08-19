@@ -64,7 +64,7 @@ impl Selection {
     /// individual may be returned more than once. Callers needing distinct
     /// individuals must enforce that themselves, since `select` cannot know
     /// whether its output is a mating pair or an unrelated batch.
-    pub fn select<G, R>(
+    pub(super) fn select<G, R>(
         &self,
         population: &[G],
         fitnesses: &[f64],
@@ -106,7 +106,7 @@ impl Selection {
     /// Feeds tournament-local replacement: the front of the result are parents,
     /// the back are the individuals they displace. Distinctness is required —
     /// "the worst two members" means nothing over a multiset.
-    pub fn tournament_indices<R>(&self, fitnesses: &[f64], rng: &mut R) -> Vec<usize>
+    pub(super) fn tournament_indices<R>(&self, fitnesses: &[f64], rng: &mut R) -> Vec<usize>
     where
         R: Rng + ?Sized,
     {
@@ -299,7 +299,7 @@ where
 /// uncertainty in `mean_fitness` as a statistic, which is a sample-deviation
 /// question even though `std_dev` right beside it is a population-deviation
 /// one. `n == 1` gives `0.0`, not a division by zero.
-pub fn generation_stats(iteration: usize, fitnesses: &[f64]) -> GenerationStats {
+pub(super) fn generation_stats(iteration: usize, fitnesses: &[f64]) -> GenerationStats {
     assert!(
         !fitnesses.is_empty(),
         "cannot summarize an empty population",

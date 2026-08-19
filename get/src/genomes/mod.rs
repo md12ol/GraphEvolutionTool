@@ -6,7 +6,7 @@ pub mod sda;
 
 pub use edge_edit::{EdgeEditGenome, EdgeEditOperationWeights, EdgeEditOperators};
 pub use genome::{EdgeEditContext, Genome, SdaContext};
-pub use sda::SdaGenome;
+pub use sda::{SdaDimensions, SdaGenome};
 
 /// Draw two distinct cut points in `0..=shared_length` and return them in
 /// ascending order, for a two-point crossover that swaps the half-open
