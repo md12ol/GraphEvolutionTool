@@ -8,6 +8,11 @@ pub mod common;
 pub mod generational;
 pub mod steady_state;
 
+// Test doubles both strategies' test modules share. Compiled out of the lib
+// target entirely, so nothing here ships.
+#[cfg(test)]
+pub(crate) mod test_support;
+
 // Re-exported so callers write evolver::GenerationalEvolver rather than
 // reaching into the generational submodule directly.
 pub use generational::GenerationalEvolver;
