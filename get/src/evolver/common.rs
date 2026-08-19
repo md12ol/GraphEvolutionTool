@@ -16,9 +16,78 @@ use crate::graph::Graph;
 
 /// Parent-selection strategy.
 ///
-/// An enum so a new mechanism (roulette-wheel, truncation, rank, ...) is one
-/// extra variant plus one match arm, and maps directly onto a `config.toml`
-/// field.
+/// An enum rather than a trait, so a new mechanism (roulette-wheel, truncation,
+/// rank, ...) is one extra variant plus its match arms, and maps directly onto a
+/// `config.toml` field.
+///
+/// # Adding your own scheme
+///
+/// **This is the one extension point that cannot be reached from outside the
+/// crate.** The others — `Fitness`, `Genome`, `Evolver` — are traits, so a
+/// program that depends on GET implements them for its own types. A variant
+/// cannot be added to an enum from another crate, so a depending program's only
+/// schemes are the ones GET ships. Adding one means editing your own copy of
+/// GET, and what that buys is a scheme selectable by name from `config.toml`
+/// and runnable by the `get-run` binary, with no Rust at the call site. A
+/// reader expecting the trait pattern to hold here will go looking for a
+/// `Selection` trait that does not exist.
+///
+/// A scheme touches six files, in eight steps — `common.rs`, `config.rs` and
+/// `py_config.rs` each want more than one edit. In the order you would walk
+/// them:
+///
+/// 1. **This enum** — add the variant, carrying whatever parameters the scheme
+///    reads out of the file.
+/// 2. **`select`** — add its arm. This is the whole of parent selection and the
+///    only method every scheme must answer. Read its contract first: it governs
+///    replacement, orientation and where randomness may come from, and none of
+///    the three is enforced by the signature.
+/// 3. **`tournament_indices`** — add an arm, but **implement it only if the
+///    scheme is to be usable with steady-state**. It is deliberately not part of
+///    the general contract. It draws one ranked set of *distinct* individuals,
+///    from which [`super::steady_state`] takes both its parents and the
+///    individuals they replace — a replacement policy rather than a selection
+///    one, and one that only means something over a set. A scheme whose own
+///    theory has no such draw (roulette-wheel samples with replacement, and a
+///    distinct-sample variant of it is a different scheme wearing the name)
+///    writes an arm that panics, because step 5 rejects the pairing before a run
+///    can reach it. The match is exhaustive, so the arm itself is not optional —
+///    only what goes in it.
+/// 4. **`steady_state.rs`** — `SteadyStateEvolver::new` matches on the variant
+///    directly, to assert its tournament floor before a run starts rather than
+///    at the first mating event. A scheme that implemented step 3 states the
+///    equivalent guarantee here; one that did not panics here too, for the same
+///    reason and as the same backstop.
+/// 5. **`config.rs`** — three edits. Add a `SelectionConfig` variant holding
+///    what the scheme reads out of the file; add any constraint on its own
+///    parameters; and extend `validate_evolution_and_selection`, whose
+///    `let SelectionConfig::Tournament { .. } = self.selection;` is irrefutable
+///    only while there is one variant and becomes a real match with the second.
+///    That function is where a scheme is paired with a strategy, so it is where
+///    a scheme with no step 3 is rejected against steady-state — a config error
+///    naming the pair, rather than a run that quietly is not the scheme asked
+///    for.
+/// 6. **`dispatch.rs`** — add the arm to `selection()`, which turns the config
+///    variant into this enum. Steps 5 and 6 are one change split across two
+///    files: a variant nothing constructs is dead code, and an arm for a variant
+///    that does not exist will not compile.
+/// 7. **`py_config.rs`** — three edits, and all of them optional: leave the file
+///    alone and everything still works, a Python caller simply has no way to
+///    name the scheme. Add the `PySelectionConfig` variant with its constructor;
+///    add its arm to the conversion that writes the `[selection]` table; and if
+///    step 5's validation raises a new field name, add that name to
+///    `python_attribute_path`, or the error a Python caller sees will name a
+///    TOML field they never wrote. The test
+///    `every_validation_field_maps_to_a_python_attribute` catches a missing one;
+///    nothing catches a missing variant.
+/// 8. **`config.example.toml`** — add the `[selection]` block if the scheme
+///    ships. The example file is what a user copies from, so a scheme missing
+///    from it is one most people never find.
+///
+/// Steps 1 through 6 fail to compile if forgotten — every one of those matches
+/// is exhaustive, which is why steps 3 and 4 still need an arm from a scheme
+/// that cannot serve them. Steps 7 and 8 compile clean when skipped, and are the
+/// two to check by hand.
 pub enum Selection {
     /// Sample `tournament_size` individuals per pick and keep the best.
     Tournament { tournament_size: usize },
@@ -26,7 +95,11 @@ pub enum Selection {
 
 /// Order two individuals, better first, ties broken by lower index.
 ///
-/// Fitnesses are already oriented so lower is better. The index tie-break makes
+/// Fitnesses are already oriented so lower is better — every comparison in this
+/// module rests on that, and none of them consults a `Direction`. Orientation
+/// happens once, before a score reaches selection at all; a scheme that checks
+/// the direction again inverts it for maximizing objectives. The index
+/// tie-break makes
 /// a tournament's outcome depend only on which indices were drawn, not the
 /// order the RNG produced them. `total_cmp` is used simply because sorting
 /// needs a total order; `Direction::orient` rejects `NaN` before it gets here.
@@ -60,10 +133,37 @@ pub(super) fn best_index(fitnesses: &[f64]) -> usize {
 }
 
 impl Selection {
-    /// Select `count` parents, sampling **with** replacement — the same
-    /// individual may be returned more than once. Callers needing distinct
-    /// individuals must enforce that themselves, since `select` cannot know
-    /// whether its output is a mating pair or an unrelated batch.
+    /// Select `count` parents from `population`.
+    ///
+    /// # The contract every scheme keeps
+    ///
+    /// These bind new variants as much as the one that is here. None of the
+    /// three is enforced by the signature, and breaking any of them changes the
+    /// behaviour of every evolver at once rather than failing anywhere visible.
+    ///
+    /// **Sampling is with replacement.** The same individual may be returned
+    /// more than once, and a caller wanting distinct individuals enforces that
+    /// itself — `select` cannot know whether its output is a mating pair or an
+    /// unrelated batch. A scheme that quietly de-duplicates is not a stricter
+    /// version of this one: it removes the selection pressure that comes from a
+    /// strong individual being drawn twice.
+    ///
+    /// **Fitnesses arrive already oriented**, lower is better, so a scheme
+    /// compares them directly and never consults a `Direction` — see `rank`,
+    /// which is the ordering to reach for rather than comparing floats by hand.
+    /// This is the likeliest mistake a new scheme makes, because re-checking the
+    /// direction looks defensive and silently inverts every maximizing
+    /// objective.
+    ///
+    /// **All randomness comes from `rng`.** Nothing may reach for a thread RNG,
+    /// the clock, or the address of anything. Two replicate runs at one seed are
+    /// required to agree, and a scheme is the easiest place to break that
+    /// without any test noticing, since the run still completes and still looks
+    /// plausible.
+    ///
+    /// Nothing here constrains *how* a scheme picks — pressure, and whether it
+    /// looks at fitness values or only at their order, are the scheme's own
+    /// business.
     pub(super) fn select<G, R>(
         &self,
         population: &[G],
@@ -101,11 +201,35 @@ impl Selection {
         }
     }
 
-    /// Draw one tournament of **distinct** individuals, best first.
+    /// Draw one tournament of **distinct** individuals, ranked best first.
     ///
     /// Feeds tournament-local replacement: the front of the result are parents,
     /// the back are the individuals they displace. Distinctness is required —
     /// "the worst two members" means nothing over a multiset.
+    ///
+    /// # Not part of the selection contract
+    ///
+    /// Unlike `select`, this is **optional for a new scheme**, and the name is
+    /// the reason it looks otherwise: it says tournament because tournament is
+    /// the only scheme that has ever answered it.
+    ///
+    /// What it really returns is one sample serving two decisions at once —
+    /// who breeds and who dies — and steady-state's self-elitism depends on both
+    /// coming from the *same* draw, which is why the result is a ranking rather
+    /// than a set of parents. That makes it a replacement policy expressed as a
+    /// selection method, so a scheme whose own theory has no such draw has
+    /// nothing to write here. Proportional schemes are the clear case:
+    /// sampling distinct individuals proportionally is a different mechanism
+    /// from roulette-wheel, not a constrained one, and implementing it here to
+    /// satisfy the match would give a user a scheme that is not the one they
+    /// named, with nothing to report the substitution.
+    ///
+    /// Such a scheme is rejected against steady-state in `config.rs`'s
+    /// `validate_evolution_and_selection`, at config-parse time, and stays
+    /// usable with every strategy that only calls `select`. Its arm here is
+    /// still required — the match is exhaustive — and should panic rather than
+    /// improvise: reaching it means the config layer let through a pairing it
+    /// was supposed to reject, which is a bug to surface, not to paper over.
     pub(super) fn tournament_indices<R>(&self, fitnesses: &[f64], rng: &mut R) -> Vec<usize>
     where
         R: Rng + ?Sized,

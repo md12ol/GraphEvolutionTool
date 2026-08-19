@@ -71,7 +71,9 @@ pub enum EvolutionConfig {
     },
 }
 
-/// Parent-selection strategy. Maps onto [`crate::evolver::common::Selection`].
+/// Parent-selection strategy. Maps onto [`crate::evolver::common::Selection`],
+/// whose docs list every site a second scheme touches — this variant is step 5
+/// of seven, and `dispatch::selection` is the arm that constructs it.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionConfig {
@@ -545,6 +547,12 @@ impl Config {
     fn validate_evolution_and_selection(&self) -> Result<(), ConfigError> {
         // Irrefutable today — one variant. If a second selection scheme is
         // added, this stops compiling, which is the right way to find out.
+        //
+        // It becomes a real match, and this function is also where a scheme is
+        // paired with a strategy: one that cannot supply
+        // `Selection::tournament_indices` is rejected here against steady-state,
+        // since that is the only strategy which calls it. `Selection`'s docs say
+        // which schemes those are and why.
         let SelectionConfig::Tournament { tournament_size } = self.selection;
 
         if tournament_size > self.population_size {
