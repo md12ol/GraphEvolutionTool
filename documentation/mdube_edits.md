@@ -268,42 +268,46 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
 
 *#edge-files-state-their-node-count · filed 2026-08-20 09:40 — Michael.*
 
-## `Selection` is now three types — `Scope`, `Selection` and `Replacement`
+## `Selection` is now three types, and `[scope]` is a new required config block
 
-- **Pages:** `reference/evolver-common.html`, `reference/steady-state.html`,
-  `guide/evolvers.html`, `reference/dispatch.html`, `reference/index.html`, `status.html`,
-  `guide/glossary.html`.
-- **Now false:** every description of `Selection` as carrying **two draw methods**. It carries one,
-  `pick`, and `tournament_indices` no longer exists anywhere. What that method did — draw a set of
-  distinct individuals and read parents off the front, replacements off the back — is now three
-  independent things: `evolver::scope::Scope` (`Global` or `RandomSubset { size }`) decides which
+- **Pages:** `reference/evolver-common.html`, `reference/steady-state.html`, `reference/config.html`,
+  `reference/dispatch.html`, `reference/lib.html`, `guide/evolvers.html`,
+  `guide/getting-started.html`, `guide/python-api.html`, `guide/glossary.html`,
+  `reference/index.html`, `status.html`.
+- **Now false, part 1 — the type.** Every description of `Selection` as carrying **two draw
+  methods**. It carries one, `pick`, and `tournament_indices` no longer exists. What that method did
+  is now three things: `evolver::scope::Scope` (`Global` or `RandomSubset { size }`) decides which
   slice of the population a breeding event touches, `Selection` (`Best` or `Tournament`) picks
-  parents within that slice, and `evolver::replacement::Replacement` (`Worst`) picks who they
-  overwrite. Any page saying a second selection scheme must supply a ranked distinct draw, or that
-  such a scheme is rejected against steady-state at config-parse time, is describing a restriction
-  that no longer exists — `Config::validate_evolution_and_selection` has no scheme-by-strategy
-  rejection left to make. The extension chain is **six steps across five files**, not eight across
-  six; `dispatch::selection` is now `dispatch::scope_and_selection`.
-- **Should say:** steady-state is `RandomSubset { size } + Best + Worst` and generational is
-  `Global + Tournament { size }`, which is a decomposition rather than a change — "tournament
-  selection" has always meant *draw k, take the best*, and the two halves now have names. Worth
-  stating explicitly that **self-elitism is unchanged but rests somewhere new**: it used to follow
-  from the selection scheme, and now follows from replacement taking the worst of the same scope
-  the parents came from, so it holds whichever scheme picked them. That is the whole reason the
-  split lets any scheme pair with any strategy.
-- **Not user-facing:** `config.example.toml` is untouched and `[selection] type = "tournament"`
-  with a `tournament_size` still parses and means the same thing — scope is implied by the strategy
-  and there is no `[scope]` block. Pages showing config or the Python API need no change on that
-  account, and `tournament_size`'s 9 and 10 occurrences in `reference/config.html` and
-  `reference/steady-state.html` are still correct as config text. What changed is only how
-  `steady-state` explains what it does with the number: it is the size of the scope each mating
-  event draws.
+  parents within it, and `evolver::replacement::Replacement` (`Worst`) picks who they overwrite. Any
+  page saying a second scheme must supply a ranked distinct draw, or that such a scheme is rejected
+  against steady-state at config-parse time, describes a restriction that no longer exists.
+- **Now false, part 2 — the config, and this is the breaking half.** Every steady-state config
+  sample on the site is wrong. `[selection] type = "tournament"` with a `tournament_size` used to
+  size the scope; a steady-state run now writes `[scope] type = "random_subset"` with its own
+  `size`, plus `[selection] type = "best"`. **`[scope]` is required in every config**, generational
+  included (`type = "global"`), so every config sample on every page needs the block added.
+  `[evolution] replacement` is new and optional, steady-state only, defaulting to `worst`.
+  A tournament may now exceed the population — pages saying `population_size` must be at least
+  `tournament_size` are describing a rejection that has moved to the scope's `size`.
+- **Should say:** steady-state is `RandomSubset + Best + Worst` and generational is
+  `Global + Tournament`, which is a decomposition rather than a change — "tournament selection" has
+  always meant *draw k, take the best*, and the two halves now have names. State explicitly that
+  **self-elitism is unchanged but rests somewhere new**: it used to follow from the selection
+  scheme, and now follows from replacement taking the worst of the same scope the parents came from,
+  so it holds whichever scheme picked them. That is why any scheme now pairs with any strategy.
+- **Python pages:** `get.ScopeConfig` and `get.ReplacementConfig` are new classes, and
+  `get.Config(...)` takes a `scope=` argument. `get.SelectionConfig.Best()` is new.
+  `examples/config_builder.py` shows both routes and is the sample to copy from.
+- **Extension-chain pages:** the chain that adds a selection scheme is **six steps across five
+  files**, not eight across six, and `dispatch::selection` replaces `dispatch::scope_and_selection`.
+  Two further chains exist that no page mentions: adding a `Scope` variant (six steps) and adding a
+  `Replacement` policy (three).
 - **Status row:** `status.html`'s "Selection, population scoring, logging statistics" row still
-  points at `evolver/common` and is still `built`, but now understates the module — the two new
-  modules `evolver/scope` and `evolver/replacement` sit beside it and have no row at all.
+  points at `evolver/common` and is still `built`, but now understates the module — `evolver/scope`
+  and `evolver/replacement` sit beside it with no row at all.
 - **Not yet agreed:** `collab.md` #110 puts the design to the next joint meeting, and
   `official_spec_sheet.md` §6.1 and §6.3 are **not** amended — they still describe the two-method
   contract. If the meeting reverses this, the entry goes with it; do not sweep these pages before
   the meeting has run.
 
-*#selection-splits-into-scope-selection-replacement · filed 2026-08-20 17:22 — Michael.*
+*#selection-splits-into-scope-selection-replacement · filed 2026-08-20 17:22, rewritten 2026-08-20 19:05 when the config block landed — Michael.*
