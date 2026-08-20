@@ -572,6 +572,28 @@ mod tests {
     }
 
     #[test]
+    fn crossover_declines_at_a_single_shared_gene() {
+        // With one shared gene there is only one possible pair of cut points,
+        // so the segment is forced rather than chosen and the exchange carries
+        // nothing a plain gene swap would not. SdaGenome deliberately does
+        // cross at this length, because its state 0 takes init_char with it.
+        let mut left = EdgeEditGenome::new_with_operators(vec![1], EdgeEditOperators::uniform());
+        let mut right =
+            EdgeEditGenome::new_with_operators(vec![91, 92, 93], EdgeEditOperators::uniform());
+        let mut rng = StdRng::seed_from_u64(5);
+
+        // Checked after every call, not just at the end: declining is a claim
+        // about each draw, and an even number of swaps would land back on the
+        // starting genes and read as though nothing had happened.
+        for attempt in 0..50 {
+            left.crossover(&mut right, &mut rng);
+
+            assert_eq!(left.genes, vec![1], "attempt {attempt}");
+            assert_eq!(right.genes, vec![91, 92, 93], "attempt {attempt}");
+        }
+    }
+
+    #[test]
     fn crossover_of_empty_genomes_is_a_noop() {
         // `shared_length` is 0, below the two distinct cut points a swap needs,
         // so this returns before drawing anything rather than panicking on an

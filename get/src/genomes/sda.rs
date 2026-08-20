@@ -858,6 +858,55 @@ mod tests {
         (init_chars, transitions, responses)
     }
 
+    /// Every redraw has to land inside the genome's own dimensions, and the
+    /// alphabet is the one that bites: `num_chars` is `cap + 1` precisely so
+    /// that each character is a weight `set_edge` will not clamp. A redraw one
+    /// past the end leaves a perfectly valid-looking genome and quietly biases
+    /// every graph it expresses toward the cap, because the surplus character
+    /// clamps down onto it — the count is respected and the cap is not.
+    #[test]
+    fn a_redraw_never_leaves_the_alphabet_the_state_table_or_a_response() {
+        let cap = 3;
+        let num_chars = cap as usize + 1;
+        let mut rng = StdRng::seed_from_u64(90);
+        let mut genome = SdaGenome::random_with_edge_multiplicity_cap(5, cap, 4, &mut rng).unwrap();
+        let context = mutation_context(0.25, 0.5);
+
+        for call in 0..2000 {
+            genome.mutate(&context, &mut rng);
+
+            assert!(
+                (genome.init_char as usize) < num_chars,
+                "call {call}: init_char {} is outside 0..{num_chars}",
+                genome.init_char
+            );
+            for (state, targets) in genome.transitions.iter().enumerate() {
+                for &target in targets {
+                    assert!(
+                        (target as usize) < genome.transitions.len(),
+                        "call {call}: state {state} points at {target}"
+                    );
+                }
+            }
+            for (state, responses) in genome.responses.iter().enumerate() {
+                for response in responses {
+                    // An empty response would stall the read head, and the
+                    // automaton terminates only because none can be empty.
+                    assert!(
+                        !response.is_empty(),
+                        "call {call}: state {state} grew an empty response"
+                    );
+                    for &character in response {
+                        assert!(
+                            (character as usize) < num_chars,
+                            "call {call}: response character {character} is outside 0..{num_chars}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn mutate_changes_exactly_one_thing_per_call() {
         let mut rng = StdRng::seed_from_u64(3);
@@ -1011,6 +1060,34 @@ mod tests {
         // nothing on this genome may quietly break it.
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<SdaGenome>();
+    }
+
+    #[test]
+    fn crossover_at_one_shared_state_always_swaps_it_and_init_char() {
+        // The deliberate divergence from EdgeEditGenome, which declines here.
+        // One shared state forces the cut points to (0, 1), so state 0 is
+        // always the segment — and init_char travels with it, which is the
+        // thing edge-edit's genes have no equivalent of.
+        let mut rng = StdRng::seed_from_u64(3);
+
+        for _ in 0..25 {
+            let mut left = SdaGenome::random_with_edge_multiplicity_cap(1, 2, 2, &mut rng).unwrap();
+            let mut right =
+                SdaGenome::random_with_edge_multiplicity_cap(1, 2, 2, &mut rng).unwrap();
+            left.init_char = 0;
+            right.init_char = 2;
+            let left_before = left.clone();
+            let right_before = right.clone();
+
+            left.crossover(&mut right, &mut rng);
+
+            assert_eq!(left.init_char, 2, "init_char must travel with state 0");
+            assert_eq!(right.init_char, 0);
+            assert_eq!(left.transitions, right_before.transitions);
+            assert_eq!(right.transitions, left_before.transitions);
+            assert_eq!(left.responses, right_before.responses);
+            assert_eq!(right.responses, left_before.responses);
+        }
     }
 
     #[test]
