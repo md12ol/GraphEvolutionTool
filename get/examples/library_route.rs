@@ -20,7 +20,25 @@
 //! The objective here is not one GET ships: reward a graph for how many of its
 //! nodes sit at exactly a target degree, which pushes evolution toward a
 //! regular graph. It is deliberately cheap to read rather than interesting to
-//! optimize.
+//! optimize. **It is also the only one of the four programs that writes its own
+//! objective** — the others build the ones GET ships, which is the case this is
+//! a foil for.
+//!
+//! # One of four, and where the rest are
+//!
+//! This program covers SDA under the generational strategy. Between them the
+//! four cover every genome × evolver combination from outside the crate, which
+//! is what makes them a proof rather than a demonstration: narrowing anything
+//! the library route needs breaks one of these and nothing else, because
+//! nothing inside the crate goes through this door.
+//!
+//! | | `GenerationalEvolver` | `SteadyStateEvolver` |
+//! |---|---|---|
+//! | `SdaGenome` | this program | `sda_steady_state.rs` |
+//! | `EdgeEditGenome` | `edge_edit_generational.rs` | `edge_edit_steady_state.rs` |
+//!
+//! `edge_edit_generational.rs` also carries the audit of which `config.toml`
+//! settings have a route-3 equivalent and which deliberately do not.
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
