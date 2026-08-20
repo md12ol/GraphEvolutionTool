@@ -138,7 +138,105 @@ pub struct EvolutionOutcome<G: Genome> {
 ///
 /// Implementors pair the [`SharedEvolutionContext`] with their own
 /// [`Evolver::TypeContext`] (generations or mating events) and drive a
-/// population against a [`Fitness`] objective.
+/// population against a [`Fitness`] objective. [`generational`] and
+/// [`steady_state`] are the two shipped strategies.
+///
+/// # Adding your own strategy
+///
+/// Unlike a new objective or genome, a new strategy *is* the loop: there is no
+/// engine underneath it left to keep doing the work, so it has to reach
+/// [`common`] for everything a strategy is not allowed to reinvent — see "What
+/// the engine owns" below. That makes this extension point a **route-4**
+/// change in practice, whichever way you read the two routes below:
+///
+/// - **You depend on this crate from your own program (route 3).** `Evolver`
+///   is a public trait, so you can `impl Evolver<G>` for your own type and
+///   call [`Evolver::run`] on it directly — nothing here stops you. But
+///   `config`, `dispatch` and `py_config` are private modules, so your
+///   strategy can never be named from a config file or selected by the
+///   `get-run` binary, and [`common`]'s helpers are the only load-bearing
+///   reuse available to you from outside — you still have to write your own
+///   parent-selection call, your own mutation, your own scoring loop, using
+///   them. This does not weaken §5.3's obligation to keep [`Evolver::new`],
+///   [`Evolver::run`] and [`EvolutionOutcome`] public and usable from
+///   outside — that is what lets a route-3 caller drive one of the *shipped*
+///   strategies, which is the common case.
+/// - **You are editing your own copy of GET (route 4).** All seven steps below
+///   are yours, and what that buys is a strategy selectable by name from
+///   `config.toml` and runnable by `get-run`, with no Rust at the call site.
+///
+/// The steps, in the order you would walk them:
+///
+/// 1. **A new module beside [`generational`] and [`steady_state`]** —
+///    `evolver/<name>.rs` — implementing [`Evolver<G>`] for your type, plus
+///    the `pub mod` and re-export lines in this file that make the other two
+///    strategies reachable as `evolver::GenerationalEvolver` and
+///    `evolver::SteadyStateEvolver`.
+/// 2. **`config.rs`** — add a variant to `EvolutionConfig` carrying your
+///    strategy's own stopping condition (generations, mating events, or
+///    whatever yours uses).
+/// 3. **`config.rs`** — add whatever constraint `validate_evolution_and_selection`
+///    needs on the new variant, alongside the strategy-specific checks already
+///    there for the shipped two. See that function's doc.
+/// 4. **`dispatch.rs`** — add the arm of `run_strategy`'s match that builds
+///    your `TypeContext` from the new `EvolutionConfig` variant and constructs
+///    your evolver. See that function's doc.
+/// 5. **`dispatch.rs`** — nothing, if your strategy returns a normal
+///    `EvolutionOutcome<G>`. `erase` is generic over `G` alone, with no
+///    strategy match inside it, precisely so this step is a non-step — see
+///    its doc for why it still gets a mention here instead of being left off
+///    the list entirely.
+/// 6. **`py_config.rs`** — optional. Add a `PyEvolutionConfig` variant
+///    mirroring the one from step 2, if the strategy should be selectable
+///    from Python. Skipping it costs nothing anywhere else: the strategy
+///    still runs from a TOML config and from Rust, it is simply not nameable
+///    from the Python front end. See that type's doc.
+/// 7. **`config.example.toml`** — add or extend the `[evolution]` block if
+///    the strategy ships. The example file is what a user copies from, so a
+///    strategy missing from it is one most people never find.
+///
+/// # What the engine owns, so a strategy must not re-implement it
+///
+/// [`common`] is where the pieces a strategy is not free to redo live:
+/// parent selection (`Selection::select`, reached through
+/// [`SharedEvolutionContext::selection`]), the two mutation dice rolls
+/// (`common::mutate_child`, `common::breed_pair` — whether a child mutates,
+/// then how many mutations it takes), parallel expression and scoring
+/// (`common::express_and_score`, the one place fitness is read, exactly
+/// once per individual per batch), and the per-iteration log row
+/// (`common::generation_stats`). A strategy that calls the fitness objective,
+/// the selection scheme, or `Genome::mutate` directly instead of going
+/// through these has diverged from the other strategies in exactly the way
+/// #56 exists to clean up in the two that already ship — divergence a reader
+/// discovers by diffing implementations, not by anything failing loudly.
+///
+/// # `EvolutionOutcome` is built exactly once, at the end of `run`
+///
+/// A strategy constructs one [`EvolutionOutcome`] per call to
+/// [`Evolver::run`], after the loop has finished — never partway through, and
+/// never more than one. It carries the final population's best genome and its
+/// expressed graph together (so a caller never has to re-express the winner
+/// to inspect the network it produced), the best fitness and the run's
+/// `Direction` in engine orientation (see [`EvolutionOutcome`]'s own doc for
+/// what "engine orientation" costs a caller), and the accumulated
+/// `Vec<GenerationStats>` history, one row per `generation_stats` call along
+/// the way.
+///
+/// [`generational`] and [`steady_state`] build the winner's graph
+/// differently — one takes it from a set of graphs its final scoring pass
+/// already built, the other re-expresses the genome — and each strategy's own
+/// `outcome()` method says why, rather than restating it here: see
+/// `GenerationalEvolver::outcome`'s and `SteadyStateEvolver::outcome`'s docs.
+///
+/// # Determinism
+///
+/// Two replicate runs at the same `seed` must agree. Every draw a strategy
+/// makes — which parents, whether and how much a child mutates, anything else
+/// specific to the strategy itself — has to come from the RNG [`Evolver::run`]
+/// seeds from its own `seed` argument, and nowhere else: not the system clock,
+/// not an address, not thread scheduling, not iteration order over a hash map.
+/// [`Evolver::run`]'s own doc covers the `ChaCha8Rng` requirement this rests
+/// on.
 pub trait Evolver<G: Genome> {
     /// Strategy-specific configuration ([`GenerationalContext`] or
     /// [`SteadyStateContext`]).
