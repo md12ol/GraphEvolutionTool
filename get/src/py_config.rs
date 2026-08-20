@@ -1096,9 +1096,12 @@ mod tests {
                 assert_eq!(gene_length, 256);
                 // Omitted from the document, so serde's default supplies it.
                 assert_eq!(operation_weights, EdgeEditOperationWeights::default());
-                // Likewise the mutation operator: the mirror never names one,
-                // so this pins that the default reaches a parsed config rather
-                // than only being spelled on the struct.
+                // Likewise the mutation operator: `mirror()` names it
+                // explicitly (it leaves nothing to a default), so this pins
+                // that the named choice round-trips through TOML rather than
+                // only being spelled on the struct.
+                // `a_config_naming_no_mutation_operator_gets_the_representations_default`
+                // covers the defaulting half.
                 assert_eq!(mutation, EdgeEditMutationConfig::RerollGene);
             }
             other => panic!("expected edge_edit, got {other:?}"),
