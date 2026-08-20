@@ -631,6 +631,7 @@ pub(crate) fn evolve<F: Fitness>(
           //             config,
           //             genome_context,
           //             population,
+          //             scope,
           //             selection,
           //             fitness,
           //             rng.random::<u64>(),
@@ -784,10 +785,17 @@ fn run_strategy<G: Genome, F: Fitness>(
           //     EvolutionConfig::MyStrategy { num_my_events } => {
           //         let type_context = MyStrategyContext {
           //             num_my_events: *num_my_events,
+          //             // If your strategy displaces individuals, map its own
+          //             // policy here as steady-state does:
+          //             //     replacement: replacement(replacement_config),
           //         };
           //         let mut evolver = MyStrategyEvolver::new(shared, type_context, population);
           //         erase(evolver.run(fitness, seed))
           //     }
+          //
+          // `shared` already carries the scope and the selection scheme, built
+          // once above this match, so a strategy reads them without asking for
+          // them. Only what is *yours* goes in the `TypeContext`.
           //
           // `erase`, right below, is the step after this one — for most
           // strategies it is not a step at all; search `ADD A STRATEGY STEP 5`.

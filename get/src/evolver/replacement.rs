@@ -16,9 +16,13 @@ use super::common::rank;
 ///
 /// 1. **This enum** — the variant and its parameters.
 /// 2. **`Replacement::pick`** — the arm; the match is exhaustive.
-/// 3. **`dispatch::run_strategy`** — only if a user should be able to choose
-///    it. There is no `[replacement]` block today, so a policy reachable only
-///    from Rust stops at step 2.
+/// 3. **`config::ReplacementConfig`**, `dispatch::replacement` and
+///    `py_config::PyReplacementConfig` — what a user names under
+///    `[evolution] replacement`, the arm building it, and the Python mirror.
+///
+/// It is read from the strategy's own table rather than a block of its own
+/// because it belongs to whichever strategy displaces individuals, the way
+/// `elite_count` belongs to generational.
 ///
 /// A policy needing anything the engine does not record per individual — an
 /// age, a lineage, a distance — needs that recorded first, which is a wider

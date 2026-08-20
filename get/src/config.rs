@@ -102,7 +102,14 @@ pub enum EvolutionConfig {
         replacement: ReplacementConfig,
     },
     // ADD A STRATEGY STEP 2 — a variant here, carrying whatever stopping
-    // condition your strategy uses:
+    // condition your strategy uses, plus any axis that is *its* rather than
+    // every strategy's. `elite_count` and `replacement` are both that: one is
+    // how generational carries individuals forward, the other is how
+    // steady-state makes room for a child, and neither means anything to the
+    // other strategy. A strategy that displaces individuals wants a
+    // `replacement: ReplacementConfig` of its own here. What every strategy
+    // shares — `[scope]` and `[selection]` — is already on `Config` and needs
+    // nothing from you.
     //
     //     MyStrategy {
     //         num_my_events: usize,

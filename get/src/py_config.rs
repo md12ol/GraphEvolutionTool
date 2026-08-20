@@ -837,7 +837,7 @@ impl PyReplacementConfig {
         match self {
             PyReplacementConfig::Worst {} => {
                 table.insert("type".to_string(), Value::String("worst".to_string()));
-            }
+            } // ADD A REPLACEMENT STEP 3 — the matching arm for your variant.
         }
         Ok(Value::Table(table))
     }
@@ -856,7 +856,8 @@ impl PyScopeConfig {
                     Value::String("random_subset".to_string()),
                 );
                 table.insert("size".to_string(), integer("size", *size)?);
-            }
+            } // ADD A SCOPE STEP 5 — the matching arm for your variant, writing
+              // its own parameters and no other block's.
         }
         Ok(Value::Table(table))
     }
@@ -875,7 +876,7 @@ impl PySelectionConfig {
                     "tournament_size".to_string(),
                     integer("tournament_size", *tournament_size)?,
                 );
-            }
+            } // ADD A SELECTION STEP 5 — the matching arm for your variant.
         }
         Ok(Value::Table(table))
     }
