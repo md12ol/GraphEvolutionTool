@@ -513,6 +513,35 @@ mod tests {
     }
 
     #[test]
+    fn an_unrecognized_opcode_skips_its_own_gene_and_leaves_the_rest_to_apply() {
+        // The opcode field is 4 bits, spanning 0..=15, and only 0..=8 name an
+        // operation — so a genome arriving from outside can carry one. The
+        // invalid-opcode case above uses it as the only gene, where skipping it
+        // and abandoning the whole genome look exactly alike. Here it sits
+        // between two genes that must both still apply.
+        let context = EdgeEditContext {
+            base_graph: Graph::new(4, 5),
+            mutation: Default::default(),
+        };
+        let genome = EdgeEditGenome::new_with_operators(
+            vec![
+                encode_gene(2, [0, 1, 0, 0], 4),
+                encode_gene(11, [0, 0, 0, 0], 4),
+                encode_gene(2, [0, 2, 0, 0], 4),
+            ],
+            EdgeEditOperators::uniform(),
+        );
+
+        let graph = genome.express(&context);
+
+        assert_eq!(
+            graph.get_edge_list(),
+            vec![(0, 1, 1), (0, 2, 1)],
+            "the gene after the unrecognized one must still have applied"
+        );
+    }
+
+    #[test]
     fn crossover_swaps_only_a_nonempty_shared_segment() {
         let mut left =
             EdgeEditGenome::new_with_operators(vec![0, 1, 2, 3, 4], EdgeEditOperators::uniform());
