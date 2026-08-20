@@ -117,7 +117,7 @@
 
 <h3>1. Config in, validated once</h3>
 <p>
-  A run starts from a <a href="configuration.html">config document</a>. Whether you wrote it as
+  A run starts from a <a href="route-python-toml.html">Python: TOML File</a>. Whether you wrote it as
   TOML by hand or built it out of Python objects, it ends up as the same Rust <code>Config</code>
   struct, and <code>Config::validate</code> checks it <b>before a single graph is allocated</b>.
   A bad config is a user mistake, so it comes back as a Python exception naming the offending field
@@ -146,7 +146,7 @@
   The engine is <b>statically generic</b> over the genome — <code>Evolver::run</code> is a generic
   method, so there is no <code>Box&lt;dyn Evolver&gt;</code> and no <code>dyn Genome</code>.
   Runtime choice is resolved by a <code>match</code> in
-  <a href="../reference/dispatch.html">dispatch.rs</a> that instantiates real types.
+  dispatch.rs that instantiates real types.
 </p>
 <p>
   The two axes are not symmetric, and only one of them is a match:
@@ -240,7 +240,7 @@
 <p>
   Net effect: expression and native scoring are both parallel and free of the Python GIL. That
   property is exactly what makes the batched Python objective design work — see
-  <a href="performance.html">Performance &amp; Memory</a>.
+  <a href="route-python-objects.html">Python: Config Objects</a>.
 </p>
 
 <h2>Two rules worth memorising</h2>

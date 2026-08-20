@@ -12,76 +12,55 @@
 
   /* ---------- the site map -------------------------------------------- */
 
+  /* A group with no title renders as a bare link at the top of the sidebar --
+     Overview is one page, not a section, and a folder around it was noise. */
   var NAV = [
     {
-      title: "Start Here",
+      title: null,
       items: [
-        ["index.html",                    "Overview"],
-        ["guide/getting-started.html",    "Getting Started"],
-        ["guide/glossary.html",           "Glossary"]
+        ["index.html",                        "Overview"]
       ]
     },
     {
       title: "How It Works",
       items: [
-        ["guide/pipeline.html",           "The Pipeline"],
-        ["guide/graph.html",              "The Graph"],
-        ["guide/genomes.html",            "Genomes"],
-        ["guide/variation.html",          "Crossover & Mutation"],
-        ["guide/fitness.html",            "Fitness & Orientation"],
-        ["guide/sir.html",                "The SIR Model"],
-        ["guide/evolvers.html",           "Evolution Strategies"],
-        ["guide/reproducibility.html",    "Seeds & Reproducibility"],
-        ["guide/output.html",             "Logs & Results"]
+        ["guide/pipeline.html",               "The Pipeline"],
+        ["guide/graph.html",                  "The Graph"],
+        ["guide/genomes.html",                "Genomes"],
+        ["guide/variation.html",              "Crossover & Mutation"],
+        ["guide/fitness.html",                "Fitness & Orientation"],
+        ["guide/sir.html",                    "The SIR Model"],
+        ["guide/evolvers.html",               "Evolution Strategies"],
+        ["guide/reproducibility.html",        "Seeds & Reproducibility"],
+        ["guide/output.html",                 "Logs & Results"]
       ]
     },
     {
       title: "Using GET",
       items: [
-        ["guide/configuration.html",      "Configuration Reference"],
-        ["guide/python-api.html",         "Python API"],
-        ["examples/index.html",           "Examples"],
-        ["guide/performance.html",        "Performance & Memory"],
-        ["guide/troubleshooting.html",    "Troubleshooting"]
+        ["guide/route-python-objects.html",   "Python: Config Objects"],
+        ["guide/route-python-toml.html",      "Python: TOML File"],
+        ["guide/route-rust-library.html",     "Rust: As a Library"],
+        ["guide/route-rust-cli.html",         "Rust: The get-run CLI"]
       ]
     },
     {
       title: "Extending GET",
       items: [
-        ["guide/extending.html",          "Extension Points"],
-        ["guide/new-fitness.html",        "Add an Objective"],
-        ["guide/new-genome.html",         "Add a Genome"],
-        ["guide/new-evolver.html",        "Add a Strategy"],
-        ["guide/new-selection.html",      "Add a Selection Scheme"],
-        ["guide/new-crossover.html",      "Add a Crossover Operator"],
-        ["guide/new-mutation.html",       "Add a Mutation Operator"]
-      ]
-    },
-    {
-      title: "Source Reference",
-      items: [
-        ["reference/index.html",              "Module Map"],
-        ["reference/lib.html",                "lib.rs"],
-        ["reference/graph.html",              "graph.rs"],
-        ["reference/genome-trait.html",       "genomes/genome.rs"],
-        ["reference/sda.html",                "genomes/sda.rs"],
-        ["reference/edge-edit.html",          "genomes/edge_edit.rs"],
-        ["reference/edge-edit-operations.html", "edge_edit/operations.rs"],
-        ["reference/evolver-common.html",     "evolver/common.rs"],
-        ["reference/generational.html",       "evolver/generational.rs"],
-        ["reference/steady-state.html",       "evolver/steady_state.rs"],
-        ["reference/fitness.html",            "fitness.rs"],
-        ["reference/sir.html",                "sir.rs"],
-        ["reference/config.html",             "config.rs"],
-        ["reference/py-config.html",          "py_config.rs"],
-        ["reference/dispatch.html",           "dispatch.rs"]
+        ["guide/extending.html",              "Extension Points"],
+        ["guide/new-fitness.html",            "Add an Objective"],
+        ["guide/new-genome.html",             "Add a Genome"],
+        ["guide/new-evolver.html",            "Add a Strategy"],
+        ["guide/new-selection.html",          "Add a Selection Scheme"],
+        ["guide/new-crossover.html",          "Add a Crossover Operator"],
+        ["guide/new-mutation.html",           "Add a Mutation Operator"]
       ]
     },
     {
       title: "Project",
       items: [
-        ["status.html",                   "Implementation Status"],
-        ["design-notes.html",             "Design Notes"]
+        ["status.html",                       "Implementation Status"],
+        ["design-notes.html",                 "Design Notes"]
       ]
     }
   ];
@@ -125,14 +104,17 @@
       var holdsPage = group.items.some(function (i) { return i[0] === page; });
 
       var g = document.createElement("div");
-      g.className = "nav-group" + (holdsPage ? " open" : "");
+      // A titleless group has nothing to collapse, so it is always open.
+      g.className = "nav-group" + (holdsPage || !group.title ? " open" : "");
 
-      var t = document.createElement("a");
-      t.className = "nav-title";
-      t.href = href(group.items[0][0]);
-      t.textContent = group.title;
-      t.setAttribute("aria-expanded", holdsPage ? "true" : "false");
-      g.appendChild(t);
+      if (group.title) {
+        var t = document.createElement("a");
+        t.className = "nav-title";
+        t.href = href(group.items[0][0]);
+        t.textContent = group.title;
+        t.setAttribute("aria-expanded", holdsPage ? "true" : "false");
+        g.appendChild(t);
+      }
 
       var list = document.createElement("div");
       list.className = "nav-items";

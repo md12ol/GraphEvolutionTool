@@ -59,14 +59,18 @@ documentation/
 ├── assets/
 │   ├── style.css         the entire stylesheet. Tokens, layout, components
 │   └── site.js           the entire behaviour. Nav, TOC, pager, theme, code blocks
-├── guide/                concept and how-to pages, written for a reader
-└── reference/            one page per file in get/src/, written for someone in the code
+└── guide/                every page except the landing page and the two project pages
 ```
 
-The split is deliberate. **`guide/` explains ideas** and is safe to read in order.
-**`reference/` documents code** — signatures, `path:line`, invariants — and is where you land from
-a search. Each reference page links back to its concept page rather than repeating the
-introduction.
+The site has three jobs and a page belongs to exactly one. **How It Works** explains the ideas and
+is safe to read in order. **Using GET** is one page per route, each written for someone using that
+route and nothing else — the Python pages do not discuss Rust beyond noting that GET is implemented
+in it. **Extending GET** is for someone editing GET itself.
+
+**There is no `reference/` directory.** It held one page per file in `get/src/` and was removed
+2026-08-21: it documented eight functions that no longer existed and its `path:line` citations had
+drifted by as much as 250 lines, because nothing anchored them. The crate's own doc comments are
+the reference now.
 
 ---
 
@@ -81,7 +85,7 @@ Three consequences worth internalising before you edit anything:
 1. **The sidebar lives in one place.** `NAV` at the top of `assets/site.js` is the site map. A page
    that is not in `NAV` still renders, but has no sidebar entry and no prev/next links.
 2. **`data-page` on `<body>` is load-bearing.** It must be the page's path relative to
-   `documentation/` — `guide/sir.html`, `reference/config.html`, `index.html` — and it must match
+   `documentation/` — `guide/sir.html`, `guide/route-rust-cli.html`, `index.html` — and it must match
    its `NAV` entry byte for byte. It drives the depth calculation for every sidebar link, the
    active-page highlight, and the pager. Getting it wrong produces a page whose sidebar links all
    404.
@@ -142,10 +146,8 @@ Written 2026-08-12. **All 38 pages in `NAV` exist and the site is complete as sc
 | Shell | `assets/style.css`, `assets/site.js`, `_template.html`, `serve.sh` |
 | Landing | `index.html` |
 | Guide — concepts | `pipeline`, `graph`, `genomes`, `variation`, `fitness`, `sir`, `evolvers`, `reproducibility`, `output` |
-| Guide — using | `getting-started`, `glossary`, `configuration`, `python-api`, `performance`, `troubleshooting` |
-| Guide — extending | `extending`, `new-fitness`, `new-genome`, `new-evolver` |
-| Reference | `index` (module map), `lib`, `graph`, `genome-trait`, `sda`, `edge-edit`, `edge-edit-operations`, `evolver-common`, `generational`, `steady-state`, `fitness`, `sir`, `config`, `py-config`, `dispatch` |
-| Examples | `examples/index.html` — ten complete runnable experiments |
+| Guide — using | `route-python-objects`, `route-python-toml`, `route-rust-library`, `route-rust-cli` — one per route |
+| Guide — extending | `extending`, `new-fitness`, `new-genome`, `new-evolver`, `new-selection`, `new-crossover`, `new-mutation` |
 | Project | `status.html`, `design-notes.html` |
 
 Verified 2026-08-12: every `data-page` matches both its path and a `NAV` entry, every `NAV` entry
@@ -161,16 +163,16 @@ Honest gaps rather than bugs, for whoever extends this:
   an actual convergence plot and an actual evolved network would help more than another paragraph
   anywhere.
 - **Anchors were verified, prose was not cross-read.** Each page is internally accurate against the
-  code or the spec sheet, but nobody has read all 38 in one pass looking for places where two pages
-  say the same thing slightly differently.
-- **`reference/` has no page for `evolver/mod.rs` or `genomes/mod.rs`.** They are covered inside
-  `evolver-common.html` and `genome-trait.html` respectively, which is noted on the module map.
+  code or the spec sheet, but nobody has read them all in one pass looking for places where two
+  pages say the same thing slightly differently.
+- **The four route pages overlap on purpose.** Each is meant to be read alone, so the config
+  document and the seeding rule appear on more than one. Keep them in step.
 - **The Python config classes' mutability is stated conservatively.** Four of them are pyo3 complex
   enums whose variant fields carry no explicit accessor annotation; the pages say to treat those as
   read-only and rebuild the variant, rather than guessing. Worth verifying against pyo3 0.27 and
   then stating plainly.
-- **No search.** With 38 pages the sidebar is still enough. If it grows past about 60, a
-  build-free client-side index is the natural next step.
+- **No search.** At 23 pages the sidebar is enough. If it grows past about 60, a build-free
+  client-side index is the natural next step.
 
 ---
 
@@ -189,9 +191,10 @@ material, and their content is now in the reference pages. If you are continuing
 efficient shape is the same one that produced it:
 
 - Guide pages come from the spec sheet, which one agent can hold in context.
-- Reference pages come from reading the actual module, and parallelise well one-agent-per-subsystem.
-- Give agents the template, the CSS class list, the `data-page` rule, and the `planned` convention
-  — those four things are what keep independently-written pages looking like one site.
+- Route pages come from the runnable examples — `examples/*.py` and `get/examples/*.rs` — because a
+  page whose code is lifted from a program that CI runs cannot drift far from working.
+- Give agents the template, the CSS class list and the `data-page` rule; those are what keep
+  independently-written pages looking like one site.
 
 ### Verification
 
