@@ -500,3 +500,38 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   should just link here instead of restating anything, once this page is rewritten.
 
 *#operator-config-enums-added · filed 2026-08-19 23:13 — James.*
+
+## `SdaGenome` gained a chosen-automaton constructor and four accessors
+
+- **Pages:** `reference/sda.html` (chiefly), `reference/genome-trait.html`,
+  `guide/extending.html`.
+- **Now incomplete rather than wrong:** `reference/sda.html`'s "Constructors and helpers" section
+  lists only the random constructors. `SdaGenome::from_parts(init_char, transitions, responses,
+  max_resp_len)` is missing, and with it the four accessors — `init_char()`, `transitions()`,
+  `responses()`, `max_resp_len()` — that return exactly its arguments. A reader assembling a
+  population by hand currently cannot discover the only supported way to supply a chosen automaton,
+  or to feed a previous run's winner into a later run. Added in PR #146 (GitHub #121).
+- **Should say:** that `from_parts` validates the automaton and returns `Result`, and *why* each
+  check is there — every one converts a failure that would otherwise land mid-run. Worth stating
+  plainly that an **empty response does not panic, it hangs**: running the automaton makes progress
+  only by appending a response's characters, so it loops until the process is killed. The page
+  already explains, under `random`, that responses drawn from `1..=max_resp_len` are what
+  "guarantees the automaton terminates" — `from_parts` is where a hand-supplied automaton could
+  break that guarantee, so the two passages belong together. Also worth saying it deliberately does
+  *not* check the alphabet against a context's `max_edge_multiplicity`, because nothing at
+  construction knows which context the genome will meet; `express` asserts that pairing.
+- **Sequencing against Michael's queued entry — read both before sweeping this page.**
+  `mdube_edits.md`'s `#reference-pages-describe-the-pre-108-api` corrects `reference/sda.html:73`,
+  which shows `SdaGenome`'s four fields as `pub` when they are private. That correction and this
+  entry answer the same reader's question and should land together: on its own, Michael's leaves the
+  page saying the fields are private with no stated way to read them, which is now false.
+- **Same for the hand-assembly note:** `reference/genome-trait.html:280-289` tells a reader
+  assembling a population by hand that they need `EdgeEditOperators` for
+  `EdgeEditGenome::new_with_operators`. That is still true, but it is now one half of a pair —
+  SDA has an equivalent needing no operators type at all. The asymmetry the note implies is gone.
+- **Line references shift.** The insertion is roughly 120 lines into `genomes/sda.rs`, before the
+  test module, so most `src` markers on `reference/sda.html` pointing past `sda.rs:184` are now
+  short by about that much. GitHub #27 is the precedent for how easily these are missed.
+- **Badges:** none.
+
+*#sda-chosen-automaton-constructor · filed 2026-08-20 15:05 — James.*
