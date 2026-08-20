@@ -184,6 +184,126 @@ impl SdaGenome {
         }
     }
 
+    /// Build a genome from a *chosen* automaton rather than a random one.
+    ///
+    /// Almost every individual is minted at random by
+    /// [`SdaGenome::random_with_edge_multiplicity_cap`] instead, so this is the
+    /// path for the callers that need a known automaton: a hand-designed
+    /// fixture, or the automaton read back off a previous run's winner through
+    /// the accessors below. Without it the accessors would be readable with no
+    /// supported way to feed them back, which is the state
+    /// [`crate::genomes::EdgeEditGenome::new_with_operators`] exists to avoid
+    /// on the other representation.
+    ///
+    /// `transitions` is `[state][char] -> next state` and `responses` is
+    /// `[state][char] -> characters appended to the output`. Both are indexed
+    /// the same way, so both are `num_states` rows of `num_chars` entries. The
+    /// alphabet size is taken from the transition table's row width;
+    /// `max_resp_len` bounds only the responses a later mutation generates, and
+    /// does not constrain the ones supplied here.
+    ///
+    /// # Errors
+    ///
+    /// Every check here converts a failure that would otherwise happen during
+    /// the run, when it is far harder to attribute:
+    ///
+    /// - Dimensions outside what the storage types hold, ragged rows, or a
+    ///   `responses` table that is not the same shape as `transitions` — each
+    ///   panics on an out-of-bounds index at expression.
+    /// - A transition targeting a state that does not exist, a response
+    ///   character outside the alphabet, or an `init_char` outside it — the
+    ///   same, one step later.
+    /// - **An empty response** — this one does not panic, it hangs. Running the
+    ///   automaton makes progress only by appending a response's characters, so
+    ///   a run that reaches an empty one stops producing output and loops until
+    ///   the process is killed.
+    ///
+    /// It does **not** check the alphabet against a context's
+    /// `max_edge_multiplicity`; nothing here knows which context this genome
+    /// will be expressed against. [`Genome::express`] asserts that pairing, and
+    /// its own docs say what the mismatch would otherwise do.
+    pub fn from_parts(
+        init_char: u8,
+        transitions: Vec<Vec<u16>>,
+        responses: Vec<Vec<Vec<u8>>>,
+        max_resp_len: usize,
+    ) -> Result<Self, &'static str> {
+        let num_states = transitions.len();
+        if num_states == 0 || num_states > MAX_NUM_STATES {
+            return Err("num_states must be between 1 and 65536");
+        }
+        if responses.len() != num_states {
+            return Err("responses must have exactly as many rows as transitions");
+        }
+
+        let num_chars = transitions[0].len();
+        if num_chars == 0 || num_chars > MAX_NUM_CHARS {
+            return Err("num_chars must be between 1 and 256");
+        }
+        if max_resp_len == 0 {
+            return Err("max_resp_len must be at least 1");
+        }
+        if init_char as usize >= num_chars {
+            return Err("init_char must be a character in the alphabet");
+        }
+
+        for state in 0..num_states {
+            if transitions[state].len() != num_chars || responses[state].len() != num_chars {
+                return Err("every transition and response row must be num_chars wide");
+            }
+
+            for &target in &transitions[state] {
+                if target as usize >= num_states {
+                    return Err("every transition must target a state that exists");
+                }
+            }
+
+            for response in &responses[state] {
+                if response.is_empty() {
+                    return Err("every response must be at least one character long");
+                }
+                for &character in response {
+                    if character as usize >= num_chars {
+                        return Err("every response character must be in the alphabet");
+                    }
+                }
+            }
+        }
+
+        Ok(Self {
+            init_char,
+            transitions,
+            responses,
+            max_resp_len,
+        })
+    }
+
+    /// The character the automaton's output always starts with.
+    ///
+    /// This and the three accessors below are what make a run's winner
+    /// reusable: together they are exactly [`SdaGenome::from_parts`]'s
+    /// arguments, so an automaton can be read off one genome and handed to
+    /// another. [`Genome::print`] renders the same data for a human and is not
+    /// a substitute — it returns formatted text, not something that parses back.
+    pub fn init_char(&self) -> u8 {
+        self.init_char
+    }
+
+    /// `[state][char] -> next state`.
+    pub fn transitions(&self) -> &[Vec<u16>] {
+        &self.transitions
+    }
+
+    /// `[state][char] -> characters appended to the output buffer`.
+    pub fn responses(&self) -> &[Vec<Vec<u8>>] {
+        &self.responses
+    }
+
+    /// The bound on responses generated by a later mutation.
+    pub fn max_resp_len(&self) -> usize {
+        self.max_resp_len
+    }
+
     /// The alphabet size implied by the current transition table's row width.
     /// 0 if there are no states yet (`transitions` is empty).
     fn num_chars(&self) -> usize {
@@ -909,5 +1029,107 @@ mod tests {
 
         assert_eq!(left.init_char, left_before.init_char);
         assert_eq!(right.init_char, right_before.init_char);
+    }
+
+    /// The point of `from_parts` and the accessors together: an automaton can
+    /// leave one genome and arrive intact in another. Without both halves a
+    /// run's winner cannot be fed back into a later run, which is the gap the
+    /// edge-edit representation does not have.
+    #[test]
+    fn an_automaton_read_off_a_genome_rebuilds_an_identical_one() {
+        let mut rng = StdRng::seed_from_u64(7);
+        let original = SdaGenome::random_with_edge_multiplicity_cap(6, 1, 3, &mut rng).unwrap();
+
+        let rebuilt = SdaGenome::from_parts(
+            original.init_char(),
+            original.transitions().to_vec(),
+            original.responses().to_vec(),
+            original.max_resp_len(),
+        )
+        .expect("an automaton taken from a valid genome is valid");
+
+        assert_eq!(rebuilt, original);
+
+        // And it is not merely field-equal — it expresses to the same graph.
+        let context = express_context(8, 1);
+        assert_eq!(rebuilt.express(&context), original.express(&context));
+    }
+
+    #[test]
+    fn from_parts_accepts_a_hand_built_automaton() {
+        let built = SdaGenome::from_parts(
+            0,
+            vec![vec![1, 0], vec![0, 1]],
+            vec![vec![vec![0], vec![1]], vec![vec![1], vec![0]]],
+            1,
+        )
+        .expect("the same automaton the struct-literal helper builds");
+
+        assert_eq!(built, small_genome());
+        assert_eq!(built.run(0, 3), vec![0, 0, 1]);
+    }
+
+    /// The one rejection that is not preventing a panic: `run` makes progress
+    /// only by appending a response's characters, so reaching an empty one
+    /// would loop until the process is killed. A test that let it through
+    /// would hang the suite rather than fail it.
+    #[test]
+    fn from_parts_rejects_an_empty_response() {
+        let error = SdaGenome::from_parts(0, vec![vec![0, 0]], vec![vec![vec![0], Vec::new()]], 1)
+            .expect_err("an empty response never terminates");
+
+        assert!(error.contains("at least one character"), "{error}");
+    }
+
+    #[test]
+    fn from_parts_rejects_a_transition_to_a_state_that_does_not_exist() {
+        let error = SdaGenome::from_parts(0, vec![vec![0, 4]], vec![vec![vec![0], vec![0]]], 1)
+            .expect_err("state 4 does not exist in a one-state automaton");
+
+        assert!(error.contains("target a state that exists"), "{error}");
+    }
+
+    #[test]
+    fn from_parts_rejects_characters_outside_the_alphabet() {
+        let bad_response =
+            SdaGenome::from_parts(0, vec![vec![0, 0]], vec![vec![vec![9], vec![0]]], 1)
+                .expect_err("9 is not a character in a two-character alphabet");
+        assert!(
+            bad_response.contains("response character"),
+            "{bad_response}"
+        );
+
+        let bad_init = SdaGenome::from_parts(9, vec![vec![0, 0]], vec![vec![vec![0], vec![0]]], 1)
+            .expect_err("the same, for the initial character");
+        assert!(bad_init.contains("init_char"), "{bad_init}");
+    }
+
+    #[test]
+    fn from_parts_rejects_tables_that_are_not_rectangular() {
+        let ragged = SdaGenome::from_parts(
+            0,
+            vec![vec![0, 0], vec![0]],
+            vec![vec![vec![0], vec![0]], vec![vec![0], vec![0]]],
+            1,
+        )
+        .expect_err("the second transition row is one entry short");
+        assert!(ragged.contains("num_chars wide"), "{ragged}");
+
+        let mismatched = SdaGenome::from_parts(0, vec![vec![0, 0]], Vec::new(), 1)
+            .expect_err("no response rows at all");
+        assert!(
+            mismatched.contains("as many rows as transitions"),
+            "{mismatched}"
+        );
+    }
+
+    #[test]
+    fn from_parts_rejects_empty_dimensions() {
+        assert!(SdaGenome::from_parts(0, Vec::new(), Vec::new(), 1).is_err());
+        assert!(SdaGenome::from_parts(0, vec![Vec::new()], vec![Vec::new()], 1).is_err());
+        assert!(
+            SdaGenome::from_parts(0, vec![vec![0]], vec![vec![vec![0]]], 0).is_err(),
+            "max_resp_len of 0 leaves a later mutation nothing to generate"
+        );
     }
 }

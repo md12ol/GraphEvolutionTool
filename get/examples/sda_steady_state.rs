@@ -11,8 +11,17 @@
 //! outside the crate — see `edge_edit_generational.rs` for the grid.
 //!
 //! This one closes the fourth cell (SDA under steady-state; `library_route.rs`
-//! covers SDA under generational) and exercises the two shipped objectives the
-//! other programs do not:
+//! covers SDA under generational).
+//!
+//! It also builds a **chosen** SDA individual, not only random ones, through
+//! [`SdaGenome::from_parts`] — the counterpart to `EdgeEditGenome`'s
+//! `new_with_operators`. Writing this program is what found that SDA had no
+//! such route: every public constructor drew at random, and the automaton was
+//! unreadable besides `print`, so a previous run's winner could not be fed back
+//! in. The constructor and the accessors it pairs with were added with this
+//! example.
+//!
+//! And it exercises the two shipped objectives the other programs do not:
 //!
 //! - **`EpiProfMatch`** drives the run. It takes a target profile — how many
 //!   nodes are newly infected at each timestep — supplied inline here, where a
@@ -109,6 +118,22 @@ fn main() {
         .expect("SDA dimensions are within the genome's storage limits");
         population.push(genome);
     }
+
+    // A *chosen* individual alongside the random ones, built from an automaton
+    // written out here rather than drawn. This one emits nothing but 1s — the
+    // initial character and every response — so it expresses to the complete
+    // graph, whatever state it is in. A known extreme to start from, and the
+    // same shape a previous run's winner would take: `from_parts` is what the
+    // accessors on `SdaGenome` feed back into.
+    let mut transitions = Vec::with_capacity(NUM_STATES);
+    let mut responses = Vec::with_capacity(NUM_STATES);
+    for _ in 0..NUM_STATES {
+        // The alphabet is 0..=MAX_EDGE_MULTIPLICITY, so two characters here.
+        transitions.push(vec![0u16; 2]);
+        responses.push(vec![vec![1u8], vec![1u8]]);
+    }
+    population[0] = SdaGenome::from_parts(1, transitions, responses, MAX_RESP_LEN)
+        .expect("every transition targets state 0 and no response is empty");
 
     // 2. How an automaton becomes a graph, and which mutation the run applies.
     //    The two rates shape that mutation; `mutation` selects it.
