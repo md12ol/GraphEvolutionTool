@@ -8,7 +8,9 @@
 //! ```
 //!
 //! The last of four programs covering every genome × evolver combination from
-//! outside the crate — see `edge_edit_generational.rs` for the grid.
+//! outside the crate — see `library_route.rs` for the grid, and
+//! `edge_edit_generational.rs` for the audit of which `config.toml` settings
+//! have a route-3 equivalent.
 //!
 //! This one closes the fourth cell (SDA under steady-state; `library_route.rs`
 //! covers SDA under generational).

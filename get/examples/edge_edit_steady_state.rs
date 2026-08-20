@@ -7,8 +7,10 @@
 //! ```
 //!
 //! One of four programs covering every genome × evolver combination from
-//! outside the crate — see `edge_edit_generational.rs` for the grid, and for
-//! the edge-edit assembly this program does not re-explain.
+//! outside the crate — see `library_route.rs` for the grid, and
+//! `edge_edit_generational.rs` for both the edge-edit assembly this program
+//! does not re-explain and the audit of which `config.toml` settings have a
+//! route-3 equivalent.
 //!
 //! **This is the program that proves [`SteadyStateContext`] is reachable.**
 //! `Evolver::new` takes the strategy's own `TypeContext`, so a caller who

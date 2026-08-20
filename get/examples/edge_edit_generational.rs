@@ -14,6 +14,62 @@
 //! programs and nothing else, because nothing inside the crate calls the
 //! library route's front door.
 //!
+//! # Every `config.toml` setting, and its route-3 equivalent
+//!
+//! The direction most likely to turn up a miss, because the config layer is a
+//! private module: anything reachable only *through* a parsed config document
+//! is, by construction, unreachable from here. Kept beside a program that
+//! compiles so it cannot quietly stop being true.
+//!
+//! Shared settings, the top level of the document:
+//!
+//! | `config.toml` | route 3 |
+//! |---|---|
+//! | `population_size` | the length of the `Vec<G>` handed to `Evolver::new` — no context field carries it, because the population is the authority on its own size |
+//! | `network_size` | `SdaContext::num_nodes`, or for edge-edit the `num_nodes` of the base graph you build |
+//! | `max_edge_multiplicity` | `SdaContext::max_edge_multiplicity`, or `Graph::new`'s second argument |
+//! | `crossover_rate` | `SharedEvolutionContext::crossover_rate` |
+//! | `mutation_rate` | `SharedEvolutionContext::mutation_rate` |
+//! | `max_mutations` | `SharedEvolutionContext::max_mutations` |
+//!
+//! The four tagged blocks:
+//!
+//! | `config.toml` | route 3 |
+//! |---|---|
+//! | `[evolution] type` | the evolver you construct: `GenerationalEvolver` or `SteadyStateEvolver` |
+//! | `[evolution] num_generations`, `elite_count` | `GenerationalContext`'s two fields |
+//! | `[evolution] num_mating_events` | `SteadyStateContext`'s one field |
+//! | `[selection] type`, `tournament_size` | `Selection::Tournament { tournament_size }` |
+//! | `[crossover] type` | `SharedEvolutionContext::crossover`, a `Crossover` variant |
+//! | `[genome] type` | the genome type you populate the `Vec` with |
+//! | `[genome] gene_length` | the length passed to `EdgeEditGenome::random_with_operators`, or the length of the `Vec<u64>` passed to `new_with_operators` |
+//! | `[genome] operation_weights` | `EdgeEditOperationWeights`, compiled by `EdgeEditOperators::new` |
+//! | `[genome] mutation` | `EdgeEditContext::mutation` or `SdaContext::mutation` |
+//! | `[genome] num_states`, `max_resp_len` | arguments to `SdaGenome::random_with_edge_multiplicity_cap` |
+//! | `[genome] init_state` | `SdaContext::init_state` |
+//! | `[genome] init_char_mutation_rate`, `transition_vs_response_rate` | the matching `SdaContext` fields |
+//!
+//! Three things differ rather than map, and all three are deliberate:
+//!
+//! - **`[fitness]` has no route-3 equivalent at all, by design.** `Evolver::run`
+//!   is generic over the objective, so a library caller hands it a concrete
+//!   `F: Fitness` and never names a config variant. That is the whole reason a
+//!   user-supplied objective is kept out of the config schema: nothing
+//!   user-supplied is ever deserialized, so there is nothing new to validate.
+//!   All four shipped objectives are constructible directly — `EpiSpread` and
+//!   `EpiLength` here and in `edge_edit_steady_state.rs`, `EpiProfMatch` and
+//!   `StructMatch` in `sda_steady_state.rs`.
+//! - **`struct_match`'s `reference_folder` is a config-only convenience, and
+//!   route 3 has something more general.** From a document the folder is read
+//!   and reduced by a private module; from here you hand
+//!   `ReferenceStatistics::from_graphs` any `&[Graph]`, which need never have
+//!   been on disk. Nothing is lost, only spelled differently.
+//! - **The base graph is not a config key on either route.** From a config file
+//!   it arrives through the evolver's own setter, and here it is the
+//!   `EdgeEditContext::base_graph` built below.
+//!
+//! Nothing else in the schema is unreachable from here.
+//!
 //! Two things here that `library_route.rs` does not show:
 //!
 //! - **Edge-edit needs the most assembly of any genome.** The operation mix is
