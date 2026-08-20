@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "graph-evolution-tool"
-version = "0.1.0"
+version = "0.9.0"
 description = "Graph Evolution Tool — a genetic algorithm over graph representations"
 readme = "README.md"
 license = { file = "LICENSE" }
