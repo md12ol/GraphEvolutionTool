@@ -1161,6 +1161,150 @@ mod tests {
         );
     }
 
+    /// Capture every `UserWarning` a closure raises, the same way
+    /// `lib.rs`'s `warnings_from` does for the base-graph and
+    /// `load_reference_graphs` tests — duplicated locally because that one
+    /// is private to `lib.rs`'s own test module.
+    fn warnings_from(py: Python<'_>, body: impl FnOnce()) -> Vec<String> {
+        let scope = pyo3::types::PyDict::new(py);
+
+        py.run(
+            c"import warnings\n\
+              recorder = warnings.catch_warnings(record=True)\n\
+              caught = recorder.__enter__()\n\
+              warnings.simplefilter('always')",
+            None,
+            Some(&scope),
+        )
+        .expect("the recorder starts");
+
+        body();
+
+        py.run(
+            c"recorder.__exit__(None, None, None)\n\
+              messages = [str(entry.message) for entry in caught]",
+            None,
+            Some(&scope),
+        )
+        .expect("the recorder stops");
+
+        scope
+            .get_item("messages")
+            .expect("reading the collected messages")
+            .expect("the recorder left messages behind")
+            .extract()
+            .expect("they are strings")
+    }
+
+    /// A reference folder carrying all three `LoadWarning`s `graph_io`
+    /// produces, plus a clean file so the reduced set is non-empty and the
+    /// objective actually builds. Hands back the `[fitness]` block naming it.
+    fn struct_match_block_with_warnings(name: &str) -> String {
+        let folder = std::env::temp_dir().join(format!("get_struct_match_warn_{name}"));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("temp reference folder");
+
+        let files = [
+            // Repeated edge: (0, 1) appears twice. `struct_match_reference`
+            // hardcodes `max_edge_multiplicity = 1`, so both weights stay 1 —
+            // the duplicate is what's under test, not the weight cap.
+            ("a_duplicate.csv", "# nodes = 3\n0,1,1\n0,1,1\n1,2,1\n"),
+            // Zero-weight edge alongside a real one.
+            ("b_zero_weight.csv", "# nodes = 3\n0,1,0\n1,2,1\n"),
+            // No edges at all.
+            ("c_empty.csv", "# nodes = 2\n"),
+            ("d_clean.csv", "# nodes = 3\n0,1,1\n1,2,1\n0,2,1\n"),
+        ];
+        for (file_name, text) in files {
+            std::fs::write(folder.join(file_name), text).expect("temp reference file");
+        }
+
+        format!(
+            "[fitness]\ntype = \"struct_match\"\nreference_folder = {:?}\n\
+             degree_bins = 4\nclustering_bins = 2\nspectral_bins = 2\n",
+            folder.display().to_string()
+        )
+    }
+
+    #[test]
+    fn struct_match_reference_warns_through_python_for_every_load_warning() {
+        // GitHub #145: `struct_match_reference` used to call `to_graph`
+        // straight after `load_edge_folder` and never look at `.warnings`,
+        // so a reference folder built with, say, both directions of every
+        // undirected edge loaded clean through this path and loud through
+        // `load_reference_graphs` — the same kind of folder, two different
+        // front ends, one of them silent.
+        Python::attach(|py| {
+            let evolver = evolver_with(&struct_match_block_with_warnings("python"));
+
+            let messages = warnings_from(py, || {
+                evolver
+                    .objective(1, Some(py))
+                    .expect("a folder with warnings still yields a usable reference set");
+            });
+
+            assert!(
+                messages
+                    .iter()
+                    .any(|m| m.contains("appears more than once")),
+                "no duplicate-edge warning in {messages:?}"
+            );
+            assert!(
+                messages.iter().any(|m| m.contains("has weight 0")),
+                "no zero-weight warning in {messages:?}"
+            );
+            assert!(
+                messages.iter().any(|m| m.contains("holds no edges")),
+                "no empty-file warning in {messages:?}"
+            );
+            // Each warning names the file it came from, not just the folder,
+            // so the four rows above must produce at least four messages —
+            // three files with something to say and the folder itself never
+            // collapsing them into one.
+            assert!(
+                messages.iter().any(|m| m.contains("a_duplicate.csv")),
+                "{messages:?}"
+            );
+            assert!(
+                messages.iter().any(|m| m.contains("b_zero_weight.csv")),
+                "{messages:?}"
+            );
+            assert!(
+                messages.iter().any(|m| m.contains("c_empty.csv")),
+                "{messages:?}"
+            );
+        });
+    }
+
+    #[test]
+    fn struct_match_reference_only_the_oncelock_winner_warns() {
+        // The race `struct_match_reference` documents: a second call after
+        // the reference set is already cached must not re-read the folder or
+        // re-emit its warnings, because nothing about the cached call is
+        // using a fresh load.
+        Python::attach(|py| {
+            let evolver = evolver_with(&struct_match_block_with_warnings("cached"));
+
+            let messages = warnings_from(py, || {
+                evolver
+                    .objective(1, Some(py))
+                    .expect("first call loads and warns");
+                evolver
+                    .objective(2, Some(py))
+                    .expect("second call reuses the cached reference set");
+            });
+
+            let duplicate_edge_warnings = messages
+                .iter()
+                .filter(|m| m.contains("appears more than once"))
+                .count();
+            assert_eq!(
+                duplicate_edge_warnings, 1,
+                "the cached call must not re-warn: {messages:?}"
+            );
+        });
+    }
+
     #[test]
     fn the_sir_block_reaches_the_simulator_field_for_field() {
         // `config::SirParams` and `sir::SirSampleParams` are two types with
