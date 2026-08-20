@@ -32,8 +32,8 @@ use rayon::prelude::*;
 
 use crate::GraphEvolver;
 use crate::config::{
-    self, Config, CrossoverConfig, EdgeEditGenomeConfig, EvolutionConfig, FitnessConfig,
-    GenomeConfig, SdaGenomeConfig, SelectionConfig,
+    self, Config, CrossoverConfig, EdgeEditGenomeConfig, EdgeEditMutationConfig, EvolutionConfig,
+    FitnessConfig, GenomeConfig, SdaGenomeConfig, SdaMutationConfig, SelectionConfig,
 };
 use crate::evolver::common::{Crossover, Selection};
 use crate::evolver::{
@@ -43,8 +43,8 @@ use crate::evolver::{
 use crate::fitness::{EpiLength, EpiProfMatch, EpiSpread, Fitness, StructMatch};
 use crate::genomes::edge_edit::IDENTITY_GENE;
 use crate::genomes::{
-    EdgeEditContext, EdgeEditGenome, EdgeEditOperators, Genome, SdaContext, SdaDimensions,
-    SdaGenome,
+    EdgeEditContext, EdgeEditGenome, EdgeEditMutation, EdgeEditOperators, Genome, SdaContext,
+    SdaDimensions, SdaGenome, SdaMutation,
 };
 use crate::graph::Graph;
 use crate::graph_io;
@@ -454,6 +454,7 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
 
     let context = EdgeEditContext {
         base_graph: starting_graph,
+        mutation: edge_edit_mutation(&edge_edit.mutation),
     };
     Ok((context, population))
 }
@@ -515,6 +516,7 @@ pub(crate) fn sda_start<R: Rng + ?Sized>(
         max_edge_multiplicity: cap,
         init_char_mutation_rate: sda.init_char_mutation_rate,
         transition_vs_response_rate: sda.transition_vs_response_rate,
+        mutation: sda_mutation(&sda.mutation),
     };
     Ok((context, population))
 }
@@ -805,6 +807,23 @@ fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
 fn crossover(config: &CrossoverConfig) -> Crossover {
     match config {
         CrossoverConfig::TwoPoint => Crossover::TwoPoint,
+    }
+}
+
+/// Turn `[genome] mutation` into the operator an edge-edit run applies.
+///
+/// One per representation, unlike `crossover` above, because the operators are
+/// per representation — `EdgeEditMutation` says why.
+fn edge_edit_mutation(config: &EdgeEditMutationConfig) -> EdgeEditMutation {
+    match config {
+        EdgeEditMutationConfig::RerollGene => EdgeEditMutation::RerollGene,
+    }
+}
+
+/// Turn `[genome] mutation` into the operator an SDA run applies.
+fn sda_mutation(config: &SdaMutationConfig) -> SdaMutation {
+    match config {
+        SdaMutationConfig::RedrawOne => SdaMutation::RedrawOne,
     }
 }
 

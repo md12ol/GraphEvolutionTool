@@ -1,6 +1,6 @@
 use rand::Rng;
 
-use super::genome::{Genome, SdaContext};
+use super::genome::{Genome, SdaContext, SdaMutation};
 use crate::graph::Graph;
 
 /// Self-driving-automaton genome: a finite-state machine whose run emits the
@@ -225,6 +225,35 @@ impl SdaGenome {
 
         output
     }
+
+    /// The body of [`SdaMutation::RedrawOne`], split out so `mutate` above is
+    /// one match over the operator and nothing else.
+    fn redraw_one<R: Rng + ?Sized>(&mut self, context: &SdaContext, rng: &mut R) {
+        let num_states = self.transitions.len();
+        let num_chars = self.num_chars();
+        if num_states == 0 || num_chars == 0 {
+            return;
+        }
+
+        if rng.random_bool(context.init_char_mutation_rate) {
+            self.init_char = rng.random_range(0..num_chars) as u8;
+            return;
+        }
+
+        let state = rng.random_range(0..num_states);
+        let trans = rng.random_range(0..num_chars);
+
+        if rng.random_bool(context.transition_vs_response_rate) {
+            self.transitions[state][trans] = rng.random_range(0..num_states) as u16;
+        } else {
+            let resp_len = rng.random_range(1..=self.max_resp_len);
+            let mut response = Vec::with_capacity(resp_len);
+            for _ in 0..resp_len {
+                response.push(rng.random_range(0..num_chars) as u8);
+            }
+            self.responses[state][trans] = response;
+        }
+    }
 }
 
 impl Genome for SdaGenome {
@@ -338,29 +367,8 @@ impl Genome for SdaGenome {
     /// the same RNG state, so a seeded run does not reproduce output from
     /// before this change even at the default rates.
     fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R) {
-        let num_states = self.transitions.len();
-        let num_chars = self.num_chars();
-        if num_states == 0 || num_chars == 0 {
-            return;
-        }
-
-        if rng.random_bool(context.init_char_mutation_rate) {
-            self.init_char = rng.random_range(0..num_chars) as u8;
-            return;
-        }
-
-        let state = rng.random_range(0..num_states);
-        let trans = rng.random_range(0..num_chars);
-
-        if rng.random_bool(context.transition_vs_response_rate) {
-            self.transitions[state][trans] = rng.random_range(0..num_states) as u16;
-        } else {
-            let resp_len = rng.random_range(1..=self.max_resp_len);
-            let mut response = Vec::with_capacity(resp_len);
-            for _ in 0..resp_len {
-                response.push(rng.random_range(0..num_chars) as u8);
-            }
-            self.responses[state][trans] = response;
+        match context.mutation {
+            SdaMutation::RedrawOne => self.redraw_one(context, rng),
         }
     }
 
@@ -410,6 +418,7 @@ mod tests {
             max_edge_multiplicity,
             init_char_mutation_rate: DEFAULT_INIT_CHAR_MUTATION_RATE,
             transition_vs_response_rate: DEFAULT_TRANSITION_VS_RESPONSE_RATE,
+            mutation: Default::default(),
         }
     }
 
@@ -702,6 +711,7 @@ mod tests {
             max_edge_multiplicity: 1,
             init_char_mutation_rate,
             transition_vs_response_rate,
+            mutation: Default::default(),
         }
     }
 

@@ -270,10 +270,62 @@ pub trait Genome: Clone + Send + Sync {
 // change it", and anything variation cannot change belongs here rather than on
 // the genome. `SdaContext::init_state` below is the worked example.
 
+/// Which mutation an edge-edit genome performs.
+///
+/// **Per representation, not per run** — and that is the difference from
+/// [`crate::evolver::common::Crossover`], which is shared. Both genomes
+/// recombine the same way, so one enum describes the run; but what *one
+/// mutation* means differs completely between them, so each owns its own set
+/// and a config naming SDA's mutation under an edge-edit `[genome]` does not
+/// parse at all. That is the whole reason this is nested rather than
+/// top-level: the mismatch a shared enum would need validation to reject
+/// cannot be written down here.
+///
+/// # Adding one
+///
+/// 1. **This enum** — the variant, plus any parameters it reads.
+/// 2. **[`crate::genomes::EdgeEditGenome::mutate`]** — the arm performing it.
+///    The compiler finds it: the match is exhaustive.
+/// 3. **`config::EdgeEditMutationConfig`**, and its arm in
+///    `dispatch::edge_edit_start` that puts the choice on this context.
+/// 4. **`py_config`'s mirror** and **`config.example.toml`** — both optional,
+///    both the steps that decide whether anyone ever finds the operator.
+///
+/// Keep the **exactly one mutation** contract on [`Genome::mutate`]: a variant
+/// applying several makes the engine's `max_mutations` meaningless for this
+/// representation, and nothing reports the disagreement.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EdgeEditMutation {
+    /// Reroll one gene, its opcode drawn from the operation mix. What
+    /// edge-edit did before the operator was selectable.
+    #[default]
+    RerollGene,
+}
+
+/// Which mutation an SDA genome performs. Per representation, for the reason
+/// [`EdgeEditMutation`] gives.
+///
+/// The rates that *shape* a mutation stay on [`SdaContext`] rather than moving
+/// into a variant here. They predate this enum and are read by the one
+/// operator below; folding them in would rename two live config keys to buy
+/// nothing while a single operator ships.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SdaMutation {
+    /// Redraw exactly one of: the initial character, one transition's target
+    /// state, or that transition's response — chosen by the two rates on
+    /// [`SdaContext`]. What SDA did before the operator was selectable.
+    #[default]
+    RedrawOne,
+}
+
 /// Configuration used when an edge-edit genome modifies an initial graph.
 #[derive(Clone, Debug)]
 pub struct EdgeEditContext {
     pub base_graph: Graph,
+    /// Which mutation this run applies. Reaches [`Genome::mutate`] the same
+    /// way every other run-level setting does — the genome does not store it,
+    /// because variation cannot change it.
+    pub mutation: EdgeEditMutation,
 }
 
 /// Configuration used when an SDA genome generates a graph from scratch, and
@@ -299,4 +351,7 @@ pub struct SdaContext {
     /// redrawing a transition's target state; the remainder redraws that
     /// transition's response instead. `0.5` mutates the two equally often.
     pub transition_vs_response_rate: f64,
+    /// Which mutation this run applies. The two rates above shape it; this
+    /// selects it.
+    pub mutation: SdaMutation,
 }

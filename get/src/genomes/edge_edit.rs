@@ -7,7 +7,7 @@ use rand::distr::Distribution;
 use rand::distr::weighted::WeightedIndex;
 use serde::Deserialize;
 
-use super::genome::{EdgeEditContext, Genome};
+use super::genome::{EdgeEditContext, EdgeEditMutation, Genome};
 use crate::graph::Graph;
 
 mod operations;
@@ -273,13 +273,19 @@ impl Genome for EdgeEditGenome {
     /// *One mutation* is one gene, whatever that gene decodes to — replacing a
     /// `null` with a nine-vertex `swap` counts the same as replacing one
     /// `toggle` with another.
-    fn mutate<R: Rng + ?Sized>(&mut self, _context: &Self::Context, rng: &mut R) {
-        if self.genes.is_empty() {
-            return;
-        }
+    fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R) {
+        match context.mutation {
+            EdgeEditMutation::RerollGene => {
+                // Nothing to reroll, so nothing happens -- the empty-genome
+                // no-op the trait contract requires, rather than a panic.
+                if self.genes.is_empty() {
+                    return;
+                }
 
-        let gene_index = rng.random_range(0..self.genes.len());
-        self.genes[gene_index] = Self::generate_gene(rng, &self.operators.distribution);
+                let gene_index = rng.random_range(0..self.genes.len());
+                self.genes[gene_index] = Self::generate_gene(rng, &self.operators.distribution);
+            }
+        }
     }
 
     fn print(&self) -> String {
@@ -299,6 +305,7 @@ mod tests {
     fn mutation_context() -> EdgeEditContext {
         EdgeEditContext {
             base_graph: Graph::new(1, 1),
+            mutation: Default::default(),
         }
     }
 
@@ -408,7 +415,10 @@ mod tests {
         let mut base_graph = Graph::new(4, 5);
         base_graph.set_edge(0, 1, 2);
         let original = base_graph.clone();
-        let context = EdgeEditContext { base_graph };
+        let context = EdgeEditContext {
+            base_graph,
+            mutation: Default::default(),
+        };
         let genome = EdgeEditGenome::new_with_operators(
             vec![
                 encode_gene(3, [0, 1, 0, 0], 4),
@@ -430,7 +440,10 @@ mod tests {
     #[test]
     fn express_preserves_an_unweighted_base_graph_cap() {
         let base_graph = Graph::new(3, 1);
-        let context = EdgeEditContext { base_graph };
+        let context = EdgeEditContext {
+            base_graph,
+            mutation: Default::default(),
+        };
         let genome = EdgeEditGenome::new_with_operators(
             vec![
                 encode_gene(2, [0, 1, 0, 0], 3),
@@ -468,12 +481,14 @@ mod tests {
     fn empty_one_node_and_invalid_opcode_expressions_are_noops() {
         let empty_context = EdgeEditContext {
             base_graph: Graph::new(0, 5),
+            mutation: Default::default(),
         };
         let invalid = EdgeEditGenome::new_with_operators(vec![15], EdgeEditOperators::uniform());
         assert_eq!(invalid.express(&empty_context), Graph::new(0, 5));
 
         let one_node_context = EdgeEditContext {
             base_graph: Graph::new(1, 5),
+            mutation: Default::default(),
         };
         let add_self = EdgeEditGenome::new_with_operators(
             vec![encode_gene(2, [0, 0, 0, 0], 1)],
@@ -485,6 +500,7 @@ mod tests {
         base_graph.add_edge(0, 1);
         let context = EdgeEditContext {
             base_graph: base_graph.clone(),
+            mutation: Default::default(),
         };
         let invalid = EdgeEditGenome::new_with_operators(
             vec![encode_gene(15, [0, 1, 0, 0], 2)],

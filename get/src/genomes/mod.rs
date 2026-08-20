@@ -25,7 +25,7 @@ pub mod genome;
 pub mod sda;
 
 pub use edge_edit::{EdgeEditGenome, EdgeEditOperationWeights, EdgeEditOperators};
-pub use genome::{EdgeEditContext, Genome, SdaContext};
+pub use genome::{EdgeEditContext, EdgeEditMutation, Genome, SdaContext, SdaMutation};
 pub use sda::{SdaDimensions, SdaGenome};
 
 /// Draw two distinct cut points in `0..=shared_length` and return them in

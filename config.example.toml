@@ -122,6 +122,11 @@ gene_length = 256            # number of edit operations per genome
 # local_delete = 1.0
 # null         = 0.0        # e.g. drop the no-op so every gene does something
 
+# Which mutation edge-edit applies. Reroll-gene is the only one it ships, and
+# what it always did before this became selectable — omit the line for the
+# same effect.
+# mutation = { type = "reroll_gene" }
+
 # SDA alternative: a self-driving automaton that generates a graph from scratch.
 # There is no `num_chars`: the alphabet is derived as max_edge_multiplicity + 1,
 # so every character is a legal edge weight and none is ever clamped away.
@@ -138,6 +143,7 @@ gene_length = 256            # number of edit operations per genome
 # init_state                  = 0     # starting state; must be < num_states
 # init_char_mutation_rate     = 0.04
 # transition_vs_response_rate = 0.5
+# mutation                     = { type = "redraw_one" }  # the only one SDA ships; also the default
 
 # --- Fitness objective --------------------------------------------------------
 # Three objectives read the same SIR simulation over the expressed graph, and

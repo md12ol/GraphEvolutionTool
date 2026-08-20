@@ -267,11 +267,16 @@ pub enum PyGenomeConfig {
     /// type with its own defaults, not a scalar a `#[pyo3(constructor)]`
     /// default can hand back directly — contrast `Sda::init_state` below,
     /// where the default *is* a plain `usize` and needs no `Option`.
-    #[pyo3(constructor = (gene_length, operation_weights = None))]
+    #[pyo3(constructor = (gene_length, operation_weights = None, mutation = None))]
     EdgeEdit {
         gene_length: usize,
         /// Omitted entirely, every operation defaults to a weight of 1.0.
         operation_weights: Option<PyOperationWeights>,
+        /// Which mutation the run applies. `Option`-wrapped so an unset value
+        /// is left out of the TOML entirely and `config`'s own default
+        /// supplies it — writing the variant here would put the default in
+        /// two places. The variants are edge-edit's own; SDA has its own set.
+        mutation: Option<PyEdgeEditMutationConfig>,
     },
     /// No `num_chars`: the alphabet is derived as `max_edge_multiplicity + 1`,
     /// so every character is a legal edge weight (spec §3.2, GitHub #6).
@@ -281,6 +286,7 @@ pub enum PyGenomeConfig {
         init_state = 0,
         init_char_mutation_rate = None,
         transition_vs_response_rate = None,
+        mutation = None,
     ))]
     Sda {
         num_states: usize,
@@ -301,6 +307,10 @@ pub enum PyGenomeConfig {
         /// response, once the initial character was not chosen.
         /// `Option`-wrapped for the same reason.
         transition_vs_response_rate: Option<f64>,
+        /// Which mutation the run applies. `Option`-wrapped for the same
+        /// reason as the two rates above. SDA's own variants; edge-edit has
+        /// its own set.
+        mutation: Option<PySdaMutationConfig>,
     },
     // ADD A GENOME STEP 7 — the Python-side variant, if the representation
     // should be reachable from Python. Optional; leaving it out costs nothing
@@ -729,6 +739,69 @@ impl PyCrossoverConfig {
     }
 }
 
+/// Which mutation an edge-edit genome applies.
+///
+/// Mirrors [`crate::config::EdgeEditMutationConfig`], and lives here rather
+/// than beside [`PyCrossoverConfig`] because it is nested under
+/// `PyGenomeConfig::EdgeEdit` rather than given a section of its own — the
+/// same reason `EdgeEditMutationConfig` sits inside `EdgeEditGenomeConfig` in
+/// `config.rs`. Optional, like every mirror here.
+#[pyclass(name = "EdgeEditMutationConfig")]
+#[derive(Debug, Clone)]
+pub enum PyEdgeEditMutationConfig {
+    #[pyo3(constructor = ())]
+    RerollGene {},
+}
+
+/// Hand-written: `#[derive(Default)]` needs a unit variant, and pyo3 does not
+/// allow one in a complex enum. Same constraint as [`PyCrossoverConfig`].
+impl Default for PyEdgeEditMutationConfig {
+    fn default() -> Self {
+        PyEdgeEditMutationConfig::RerollGene {}
+    }
+}
+
+impl PyEdgeEditMutationConfig {
+    fn to_toml_value(&self) -> Value {
+        let mut table = Map::new();
+        match self {
+            PyEdgeEditMutationConfig::RerollGene {} => {
+                table.insert("type".to_string(), Value::String("reroll_gene".to_string()));
+            }
+        }
+        Value::Table(table)
+    }
+}
+
+/// Which mutation an SDA genome applies. Mirrors
+/// [`crate::config::SdaMutationConfig`]; see [`PyEdgeEditMutationConfig`] for
+/// why it is nested rather than top-level.
+#[pyclass(name = "SdaMutationConfig")]
+#[derive(Debug, Clone)]
+pub enum PySdaMutationConfig {
+    #[pyo3(constructor = ())]
+    RedrawOne {},
+}
+
+/// Hand-written for the same reason as [`PyEdgeEditMutationConfig::default`].
+impl Default for PySdaMutationConfig {
+    fn default() -> Self {
+        PySdaMutationConfig::RedrawOne {}
+    }
+}
+
+impl PySdaMutationConfig {
+    fn to_toml_value(&self) -> Value {
+        let mut table = Map::new();
+        match self {
+            PySdaMutationConfig::RedrawOne {} => {
+                table.insert("type".to_string(), Value::String("redraw_one".to_string()));
+            }
+        }
+        Value::Table(table)
+    }
+}
+
 impl PyGenomeConfig {
     fn to_toml_value(&self) -> PyResult<Value> {
         let mut table = Map::new();
@@ -736,6 +809,7 @@ impl PyGenomeConfig {
             PyGenomeConfig::EdgeEdit {
                 gene_length,
                 operation_weights,
+                mutation,
             } => {
                 table.insert("type".to_string(), Value::String("edge_edit".to_string()));
                 table.insert(
@@ -750,6 +824,11 @@ impl PyGenomeConfig {
                         Value::Table(weights.to_toml_table()),
                     );
                 }
+                // Left out when unset, so `config`'s own default supplies it
+                // rather than this naming it a second time.
+                if let Some(mutation) = mutation {
+                    table.insert("mutation".to_string(), mutation.to_toml_value());
+                }
             }
             PyGenomeConfig::Sda {
                 num_states,
@@ -757,6 +836,7 @@ impl PyGenomeConfig {
                 init_state,
                 init_char_mutation_rate,
                 transition_vs_response_rate,
+                mutation,
             } => {
                 table.insert("type".to_string(), Value::String("sda".to_string()));
                 table.insert(
@@ -781,6 +861,9 @@ impl PyGenomeConfig {
                         "transition_vs_response_rate".to_string(),
                         Value::Float(*rate),
                     );
+                }
+                if let Some(mutation) = mutation {
+                    table.insert("mutation".to_string(), mutation.to_toml_value());
                 }
             }
         }
@@ -907,8 +990,9 @@ mod tests {
     use super::*;
 
     use crate::config::{
-        Config, CrossoverConfig, EdgeEditGenomeConfig, EvolutionConfig, FitnessConfig,
-        GenomeConfig, SdaGenomeConfig, SelectionConfig, SirParams,
+        Config, CrossoverConfig, EdgeEditGenomeConfig, EdgeEditMutationConfig, EvolutionConfig,
+        FitnessConfig, GenomeConfig, SdaGenomeConfig, SdaMutationConfig, SelectionConfig,
+        SirParams,
     };
     use crate::genomes::EdgeEditOperationWeights;
 
@@ -930,6 +1014,7 @@ mod tests {
             PyGenomeConfig::EdgeEdit {
                 gene_length: 256,
                 operation_weights: None,
+                mutation: Some(PyEdgeEditMutationConfig::RerollGene {}),
             },
             PyFitnessConfig::EpiSpread {
                 sir: PySirParams::new(0.05, 30, None, 3, 5),
@@ -1006,10 +1091,15 @@ mod tests {
             GenomeConfig::EdgeEdit(EdgeEditGenomeConfig {
                 gene_length,
                 operation_weights,
+                mutation,
             }) => {
                 assert_eq!(gene_length, 256);
                 // Omitted from the document, so serde's default supplies it.
                 assert_eq!(operation_weights, EdgeEditOperationWeights::default());
+                // Likewise the mutation operator: the mirror never names one,
+                // so this pins that the default reaches a parsed config rather
+                // than only being spelled on the struct.
+                assert_eq!(mutation, EdgeEditMutationConfig::RerollGene);
             }
             other => panic!("expected edge_edit, got {other:?}"),
         }
@@ -1057,6 +1147,7 @@ mod tests {
             init_state: 3,
             init_char_mutation_rate: Some(0.1),
             transition_vs_response_rate: Some(0.25),
+            mutation: None,
         };
         config.max_edge_multiplicity = 5;
 
@@ -1079,7 +1170,9 @@ mod tests {
                 init_state,
                 init_char_mutation_rate,
                 transition_vs_response_rate,
+                mutation,
             }) => {
+                assert_eq!(mutation, SdaMutationConfig::RedrawOne);
                 assert_eq!(num_states, 12);
                 assert_eq!(max_resp_len, 4);
                 assert_eq!(init_state, 3);
@@ -1136,6 +1229,7 @@ mod tests {
                 swap: 2.0,
                 ..PyOperationWeights::default()
             }),
+            mutation: None,
         };
 
         let text = config.to_toml().expect("renders");

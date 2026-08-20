@@ -30,7 +30,7 @@ use get::evolver::{Evolver, GenerationalContext, GenerationalEvolver, SharedEvol
 use get::fitness::{Direction, Fitness};
 // `Genome` is imported for its `print` method at the end — a trait's methods
 // are only callable where the trait is in scope.
-use get::genomes::{Genome, SdaContext, SdaGenome};
+use get::genomes::{Genome, SdaContext, SdaGenome, SdaMutation};
 use get::graph::Graph;
 
 /// How many nodes sit at exactly `target_degree`. Larger is better.
@@ -97,6 +97,9 @@ fn main() {
         max_edge_multiplicity: MAX_EDGE_MULTIPLICITY,
         init_char_mutation_rate: 0.1,
         transition_vs_response_rate: 0.5,
+        // Which mutation to apply; the two rates above shape it. SDA ships
+        // exactly one, so this is the only choice today.
+        mutation: SdaMutation::RedrawOne,
     };
 
     // 3. What the engine owns: the two variation dice rolls and parent

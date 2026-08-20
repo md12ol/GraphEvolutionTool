@@ -159,6 +159,26 @@ pub struct EdgeEditGenomeConfig {
     /// omitted field by field, every operation defaults to a weight of 1.0.
     #[serde(default)]
     pub operation_weights: EdgeEditOperationWeights,
+    /// Which mutation this representation applies. Omitted, the one it
+    /// applied before the operator was selectable.
+    ///
+    /// Nested under `[genome]` rather than given a section of its own,
+    /// because the variants are edge-edit's alone — naming SDA's mutation
+    /// here is refused by `deny_unknown_fields` above rather than by any
+    /// check of ours. [`crate::genomes::EdgeEditMutation`] has the reasoning
+    /// and the steps for adding one.
+    #[serde(default)]
+    pub mutation: EdgeEditMutationConfig,
+}
+
+/// Which mutation an edge-edit genome applies. Mirrors
+/// [`crate::genomes::EdgeEditMutation`], mapped in `dispatch::edge_edit_start`.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EdgeEditMutationConfig {
+    /// Reroll one gene from the operation mix. The default.
+    #[default]
+    RerollGene,
 }
 
 /// Everything the sda genome takes from `[genome]`.
@@ -196,6 +216,22 @@ pub struct SdaGenomeConfig {
     /// are equally likely, as they were before this was configurable.
     #[serde(default = "default_transition_vs_response_rate")]
     pub transition_vs_response_rate: f64,
+    /// Which mutation this representation applies. Omitted, the one it
+    /// applied before the operator was selectable. The two rates above shape
+    /// it; this selects it.
+    #[serde(default)]
+    pub mutation: SdaMutationConfig,
+}
+
+/// Which mutation an SDA genome applies. Mirrors
+/// [`crate::genomes::SdaMutation`], mapped in `dispatch::sda_start`.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SdaMutationConfig {
+    /// Redraw the initial character, a transition target or a response,
+    /// chosen by the two rates above. The default.
+    #[default]
+    RedrawOne,
 }
 
 /// Fitness objective and its parameters.
@@ -1356,6 +1392,29 @@ num_epidemics  = 30
         config.validate().expect("and should validate");
     }
 
+    /// The same behaviour-preservation guarantee as `[crossover]`'s, but for
+    /// the per-genome mutation operator: a config naming neither representation's
+    /// mutation keeps running the one it always ran.
+    #[test]
+    fn a_config_naming_no_mutation_operator_gets_the_representations_default() {
+        let edge_edit = valid_config();
+        match &edge_edit.genome {
+            GenomeConfig::EdgeEdit(cfg) => {
+                assert_eq!(cfg.mutation, EdgeEditMutationConfig::RerollGene);
+            }
+            other => panic!("expected the fixture's edge_edit genome, got {other:?}"),
+        }
+
+        let sda =
+            Config::from_toml_str(&sda_config_text("")).expect("the sda fixture should parse");
+        match &sda.genome {
+            GenomeConfig::Sda(cfg) => {
+                assert_eq!(cfg.mutation, SdaMutationConfig::RedrawOne);
+            }
+            other => panic!("expected the fixture's sda genome, got {other:?}"),
+        }
+    }
+
     /// An operator GET does not ship is refused by name rather than ignored.
     ///
     /// The section is a tagged enum, so this is serde's rejection, not a check
@@ -1512,6 +1571,7 @@ num_epidemics  = 30
             init_state,
             init_char_mutation_rate: default_init_char_mutation_rate(),
             transition_vs_response_rate: default_transition_vs_response_rate(),
+            mutation: SdaMutationConfig::default(),
         })
     }
 
