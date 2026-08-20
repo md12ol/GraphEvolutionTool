@@ -44,16 +44,52 @@
 </table>
 </div>
 
-<h2>The three edits</h2>
+<h2>The six edits</h2>
 
-<ol>
-  <li><b>Implement the trait</b> in a new module under <code>evolver/</code>.</li>
-  <li><b>Add a config variant</b> for it under <code>[evolution]</code>, plus the mirrored Python
-      class, and any strategy-specific constraint in the evolution/selection validator.</li>
-  <li><b>Add one arm to the strategy match</b>, building your type context and calling
-      <code>Evolver::run</code>. That function is generic over the genome, so the genome match is
-      <b>not</b> touched.</li>
-</ol>
+<p>
+  Every location carries a literal marker in the source. Find the whole chain at once with
+  <code>git grep -n "ADD A STRATEGY STEP" get/src</code>, and jump to any one step by searching its
+  number. The steps are listed here in the order the markers number them.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>evolver/mod.rs</code></td>
+        <td>A new module beside the two that exist, plus its <code>pub mod</code> line, and the
+            <code>Evolver</code> implementation inside it.</td></tr>
+    <tr><td>2</td><td><code>config.rs</code></td>
+        <td>An <code>EvolutionConfig</code> variant carrying whatever stopping condition and
+            parameters your strategy reads.</td></tr>
+    <tr><td>3</td><td><code>config.rs</code></td>
+        <td>The constraint arm in <code>validate_evolution_and_selection</code> — anything your
+            strategy requires of the population, the scope, or selection.</td></tr>
+    <tr><td>4</td><td><code>dispatch.rs</code></td>
+        <td>One arm in the strategy match, building your <code>TypeContext</code> and calling
+            <code>Evolver::run</code>. The <b>genome</b> match is not touched — that function is
+            generic over the genome.</td></tr>
+    <tr><td>5</td><td><code>dispatch.rs</code></td>
+        <td><b>Usually nothing, and that is the point.</b> <code>erase</code> is generic over the
+            genome with no match on strategy inside it. Touch it only if your
+            <code>EvolutionOutcome</code> needs conversion the existing loop does not cover —
+            none of the shipped strategies do.</td></tr>
+    <tr><td>6</td><td><code>py_config.rs</code> — two sites</td>
+        <td><b>Optional.</b> The Python-side variant and its matching
+            <code>to_toml_value</code> arm, which writes <code>type = "my_strategy"</code> and the
+            fields under <code>[evolution]</code>. Leaving step 6 out costs nothing elsewhere; the
+            strategy is then TOML-only.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout">
+  <p>
+    <b>Step 3 is the one people skip.</b> The validator destructures the config irrefutably on
+    purpose, so adding a variant <i>stops compiling</i> there and forces you to answer whether your
+    strategy needs a constraint. If the answer is genuinely "none", the arm still has to say so.
+  </p>
+</div>
 
 <h2>The rules you must not break</h2>
 

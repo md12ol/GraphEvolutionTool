@@ -59,20 +59,53 @@
   compares two different things. See <a href="variation.html">Crossover &amp; mutation</a>.
 </div>
 
-<h2>The four edits</h2>
+<h2>The seven edits</h2>
 
-<ol>
-  <li><b>Implement the trait</b> in a new module under <code>genomes/</code>, alongside a
-      constructor that mints a random individual and any dimension validation it needs.</li>
-  <li><b>Add a config variant</b> for it, with its dimensions as fields, plus the mirrored Python
-      class and its serialization.</li>
-  <li><b>Add a startup function</b> beside the two that exist — the thing that validates the
-      dimensions, mints <code>population_size</code> individuals, and builds the context. Dispatch
-      builds the population precisely because this knowledge lives here.</li>
-  <li><b>Add one arm to the genome match</b> in dispatch, calling your startup function and handing
-      the population to the generic strategy function. The strategy match is <b>not</b>
-      touched.</li>
-</ol>
+<p>
+  Every location carries a literal marker in the source. Find the whole chain at once with
+  <code>git grep -n "ADD A GENOME STEP" get/src</code>, and jump to any one step by searching its
+  number. The steps are listed here in the order the markers number them.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>genomes/genome.rs</code></td>
+        <td>Implement <code>Genome</code> for your type — <code>express</code>,
+            <code>crossover</code>, <code>mutate</code>, <code>copy</code>, <code>print</code>.</td></tr>
+    <tr><td>2</td><td><code>genomes/genome.rs</code>, or beside your representation</td>
+        <td>Declare the <code>Context</code> type your genome named — the per-run data
+            <code>express</code> and <code>mutate</code> read.</td></tr>
+    <tr><td>3</td><td><code>genomes/mod.rs</code></td>
+        <td><code>pub mod</code> your module and re-export the type and its context, so callers
+            name them from <code>crate::genomes</code>.</td></tr>
+    <tr><td>4</td><td><code>config.rs</code> — two sites</td>
+        <td>A <code>GenomeConfig</code> variant plus the struct it carries, <i>and</i> its arm in
+            <code>validate_genome</code>. The variant name becomes
+            <code>type = "my_genome"</code> under <code>[genome]</code>.</td></tr>
+    <tr><td>5</td><td><code>dispatch.rs</code></td>
+        <td>A start builder beside <code>sda_start</code>: validate the dimensions, mint
+            <code>population_size</code> individuals, build the context.</td></tr>
+    <tr><td>6</td><td><code>dispatch.rs</code></td>
+        <td>One arm in the genome match, calling your step-5 builder. The <b>strategy</b> match is
+            not touched — it is generic over the genome.</td></tr>
+    <tr><td>7</td><td><code>py_config.rs</code> — two sites</td>
+        <td><b>Optional.</b> The Python-side variant and its <code>to_toml_value</code> arm, plus
+            one line in <code>python_attribute_path</code> per field step 4 validates by name.
+            Leaving step 7 out costs nothing elsewhere; the genome is then TOML-only.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout">
+  <p>
+    <b>Skipping step 7 half-way is the trap.</b> If step 4's validation raises a field by name and
+    <code>python_attribute_path</code> has no line for it, a Python caller gets an error naming a
+    TOML field they never wrote. The test
+    <code>every_validation_field_maps_to_a_python_attribute</code> is what catches it.
+  </p>
+</div>
 
 <p>Then add the keys to <code>config.example.toml</code>, which the test suite parses and validates
    — so a broken example fails the build.</p>

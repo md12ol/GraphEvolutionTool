@@ -17,6 +17,17 @@
   a Python callable, a native objective in the crate, or your own Rust type outside it.
 </p>
 
+<div class="callout">
+  <p>
+    <b>There is no <code>ADD AN OBJECTIVE STEP</code> chain in the source, and that is the point.</b>
+    Every other extension family — genome, strategy, selection, crossover, mutation, scope,
+    replacement — carries numbered markers because it has to be threaded through a match. The
+    objective is erased to a trait object <i>before</i> dispatch, so it never enters the
+    strategy × genome match and there is no chain to follow. If you grepped for one and found
+    nothing, nothing is missing.
+  </p>
+</div>
+
 <h2>Route 1 — a Python callable</h2>
 
 <p>
