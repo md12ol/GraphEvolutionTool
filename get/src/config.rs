@@ -57,6 +57,15 @@ pub struct Config {
 }
 
 /// Evolution strategy and its strategy-specific settings.
+///
+/// # Part of the chain that adds a strategy
+///
+/// This is where a new strategy becomes selectable by name from a config
+/// file — step 2 of the seven `crate::evolver::Evolver`'s doc walks, which is
+/// where step 1 lands the strategy itself. The step after this one is
+/// `validate_evolution_and_selection`, for any constraint the variant needs;
+/// the one after that is the arm in `dispatch::run_strategy` that constructs
+/// it. A variant added here and nowhere else is dead — nothing constructs it.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvolutionConfig {
@@ -69,6 +78,17 @@ pub enum EvolutionConfig {
     SteadyState {
         num_mating_events: usize,
     },
+    // ADD A STRATEGY STEP 2 — a variant here, carrying whatever stopping
+    // condition your strategy uses:
+    //
+    //     MyStrategy {
+    //         num_my_events: usize,
+    //     },
+    //
+    // The variant name becomes `type = "my_strategy"` under `[evolution]`, via
+    // the `rename_all` above. Constrain it in
+    // `validate_evolution_and_selection` — search `ADD A STRATEGY STEP 3` for
+    // that arm.
 }
 
 /// Parent-selection strategy. Maps onto [`crate::evolver::common::Selection`],
@@ -573,6 +593,11 @@ impl Config {
 
     /// Constraints that read the evolution strategy and the selection scheme
     /// together. Both live here because two of the three are strategy-specific.
+    ///
+    /// Step 3 of the chain that adds a strategy (`crate::evolver::Evolver`'s
+    /// doc has all seven): a new `EvolutionConfig` variant lands its own
+    /// constraints here, matched alongside `Generational` and `SteadyState`
+    /// below. Optional — a strategy with nothing to constrain adds no arm.
     fn validate_evolution_and_selection(&self) -> Result<(), ConfigError> {
         // Irrefutable today — one variant. If a second selection scheme is
         // added, this stops compiling, which is the right way to find out.
@@ -613,7 +638,19 @@ impl Config {
                         "must be at least 4 for the steady-state evolver",
                     ));
                 }
-            }
+            } // ADD A STRATEGY STEP 3 — the constraint arm for your variant,
+              // if it has one:
+              //
+              //     EvolutionConfig::MyStrategy { num_my_events, .. } => {
+              //         if *num_my_events == 0 {
+              //             return Err(invalid("num_my_events", "must be at least 1"));
+              //         }
+              //     }
+              //
+              // Optional — a strategy with nothing to constrain adds no arm.
+              // The step after this one is the arm in
+              // `dispatch::run_strategy` that constructs the evolver —
+              // search `ADD A STRATEGY STEP 4` for it.
         }
         Ok(())
     }

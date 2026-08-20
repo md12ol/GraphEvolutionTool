@@ -33,6 +33,19 @@ max_mutations = 1
 
 # --- Evolution strategy -------------------------------------------------------
 # Generational: replace the whole population each generation, keeping elites.
+#
+# ADD A STRATEGY STEP 7 — an example block for your strategy, here or as the
+# commented-out alternative below `[selection]` follows for steady-state:
+#
+#     [evolution]
+#     type          = "my_strategy"
+#     num_my_events = 100000
+#
+# A strategy missing from this example file still works — it is just one most
+# people never find, because this is the file they copy from.
+#
+# `crate::evolver::Evolver`'s doc comment in `get/src/evolver/mod.rs` walks
+# all seven steps in order.
 
 [evolution]
 type            = "generational"
