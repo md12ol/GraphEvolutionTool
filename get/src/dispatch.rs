@@ -718,7 +718,7 @@ pub(crate) fn run_replicates(
 /// 2 + 2 arms rather than 2 × 2.
 ///
 /// Step 4 of the chain that adds a strategy (`crate::evolver::Evolver`'s doc
-/// has all six): this match is where a `config::EvolutionConfig` variant
+/// has all seven): this match is where a `config::EvolutionConfig` variant
 /// becomes a running evolver — build the strategy's `TypeContext` from the
 /// variant's fields, construct it, and call `run`. `erase`, right below, is
 /// the step after this one, and for most strategies it is not a step at all.

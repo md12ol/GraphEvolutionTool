@@ -61,7 +61,7 @@ pub struct Config {
 /// # Part of the chain that adds a strategy
 ///
 /// This is where a new strategy becomes selectable by name from a config
-/// file — step 2 of the six `crate::evolver::Evolver`'s doc walks, which is
+/// file — step 2 of the seven `crate::evolver::Evolver`'s doc walks, which is
 /// where step 1 lands the strategy itself. The step after this one is
 /// `validate_evolution_and_selection`, for any constraint the variant needs;
 /// the one after that is the arm in `dispatch::run_strategy` that constructs
@@ -584,7 +584,7 @@ impl Config {
     /// together. Both live here because two of the three are strategy-specific.
     ///
     /// Step 3 of the chain that adds a strategy (`crate::evolver::Evolver`'s
-    /// doc has all six): a new `EvolutionConfig` variant lands its own
+    /// doc has all seven): a new `EvolutionConfig` variant lands its own
     /// constraints here, matched alongside `Generational` and `SteadyState`
     /// below. Optional — a strategy with nothing to constrain adds no arm.
     fn validate_evolution_and_selection(&self) -> Result<(), ConfigError> {

@@ -196,7 +196,7 @@ impl Default for PyOperationWeights {
 /// should be able to select it. The steps before it are the
 /// `EvolutionConfig` variant and its `validate_evolution_and_selection` and
 /// `dispatch::run_strategy` arms; `crate::evolver::Evolver`'s doc has all
-/// six.
+/// seven.
 #[pyclass(name = "EvolutionConfig")]
 #[derive(Debug, Clone)]
 pub enum PyEvolutionConfig {
