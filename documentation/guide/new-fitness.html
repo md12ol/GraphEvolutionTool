@@ -74,14 +74,11 @@ result = evolver.run(20260812)</code></pre>
         <td>Declared at registration — <code>"minimize"</code> or <code>"maximize"</code>,
             case-insensitive. Nothing can infer it from your function, and this is the only place
             it can be said.</td></tr>
-    <tr><td><b>Values</b></td>
-        <td>Any real number. <code>±inf</code> is allowed and is the usual way to say "this
-            individual is unusable" — it sorts to the losing end and never wins.
-            <b><code>NaN</code> stops the run</b> the moment it is scored: it is not skipped, not
-            treated as a loss, and not reported at the end. The message names the three arithmetic
-            slips that produce it — dividing by a count that can be zero,
-            <code>0.0/0.0</code>, and <code>inf - inf</code> — because a graph with no edges makes
-            all three reachable from otherwise reasonable code.</td></tr>
+    <tr><td><b>What you may return</b></td>
+        <td>Any real number, and <code>±inf</code> to mark an individual unusable.
+            <b><code>NaN</code> stops the run</b> — it is not skipped or scored as a loss. Watch
+            for a zero denominator, <code>0.0/0.0</code> and <code>inf - inf</code>: an empty graph
+            puts all three within reach.</td></tr>
   </tbody>
 </table>
 </div>

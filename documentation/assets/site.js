@@ -346,35 +346,6 @@
     });
   }
 
-  /* ---------- theme ----------------------------------------------------- */
-
-  function initTheme() {
-    var stored = null;
-    try { stored = localStorage.getItem("get-docs-theme"); } catch (e) {}
-    var prefersDark = window.matchMedia &&
-                      window.matchMedia("(prefers-color-scheme: dark)").matches;
-    var theme = stored || (prefersDark ? "dark" : "light");
-    document.documentElement.setAttribute("data-theme", theme);
-
-    var btn = document.createElement("button");
-    btn.className = "theme-toggle";
-    btn.type = "button";
-    btn.setAttribute("aria-label", "Toggle colour theme");
-    var paint = function () {
-      btn.textContent =
-        document.documentElement.getAttribute("data-theme") === "dark" ? "☀" : "☾";
-    };
-    paint();
-    btn.addEventListener("click", function () {
-      var next = document.documentElement.getAttribute("data-theme") === "dark"
-        ? "light" : "dark";
-      document.documentElement.setAttribute("data-theme", next);
-      try { localStorage.setItem("get-docs-theme", next); } catch (e) {}
-      paint();
-    });
-    document.body.appendChild(btn);
-  }
-
   /* ---------- mobile nav ------------------------------------------------ */
 
   function initNavToggle() {
@@ -419,7 +390,6 @@
     if (pager) main.appendChild(pager);
 
     decorateCode();
-    initTheme();
     initNavToggle();
   }
 
