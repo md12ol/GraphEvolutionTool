@@ -139,7 +139,8 @@ impl Crossover {
 /// 2. **`Selection::pick`** — the arm; the match is exhaustive.
 /// 3. **`config::SelectionConfig`** — what a user names under `[selection]`,
 ///    plus any parameter constraint in `validate_evolution_and_selection`.
-/// 4. **`dispatch::scope_and_selection`** — config variant onto this one.
+/// 4. **`dispatch::selection`** — config variant onto this one. Nothing here
+///    decides a scope: `[scope]` is its own block, with its own chain.
 /// 5. **`py_config::PySelectionConfig`** — optional; buys a Python caller the
 ///    ability to name it.
 /// 6. **`config.example.toml`** — optional, and the step people skip and then

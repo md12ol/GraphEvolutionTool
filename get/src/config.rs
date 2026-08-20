@@ -17,6 +17,7 @@
 
 use serde::Deserialize;
 
+use crate::evolver::steady_state::{MIN_SCOPE_SIZE, PARENTS_PER_EVENT, REPLACED_PER_EVENT};
 use crate::genomes::EdgeEditOperationWeights;
 
 /// Everything the genetic algorithm needs for a run.
@@ -48,7 +49,13 @@ pub struct Config {
     /// whether a child mutates, then how many mutations it takes.
     #[serde(default = "default_max_mutations")]
     pub max_mutations: usize,
-    /// Parent-selection strategy.
+    /// Which slice of the population one breeding event draws from.
+    ///
+    /// Required, and deliberately not defaulted per strategy: an implied scope
+    /// is what let a selection parameter size it, which is the coupling
+    /// `[selection]` was split to remove.
+    pub scope: ScopeConfig,
+    /// Parent-selection strategy, applied within that scope.
     pub selection: SelectionConfig,
     /// Recombination operator. Omitted, two-point — which is what every
     /// representation did before the operator became selectable, so an
@@ -82,6 +89,17 @@ pub enum EvolutionConfig {
     },
     SteadyState {
         num_mating_events: usize,
+        /// Which members of the scope a mating event's children overwrite.
+        ///
+        /// Steady-state's own, for the same reason `elite_count` is
+        /// generational's: it is how this strategy makes room for a child.
+        /// Generational builds a whole new population and displaces nobody, so
+        /// the field would mean nothing there.
+        ///
+        /// Defaulted, because `Worst` is what makes steady-state self-elitist
+        /// and a run that never says otherwise should keep that guarantee.
+        #[serde(default)]
+        replacement: ReplacementConfig,
     },
     // ADD A STRATEGY STEP 2 — a variant here, carrying whatever stopping
     // condition your strategy uses:
@@ -96,12 +114,67 @@ pub enum EvolutionConfig {
     // that arm.
 }
 
+/// The slice of the population one breeding event draws from. Maps onto
+/// [`crate::evolver::scope::Scope`], whose docs walk the three steps a new
+/// variant touches — this is step 3, and `dispatch::scope` constructs it.
+///
+/// `size` belongs to this block and to nothing else. Steady-state used to take
+/// it from `[selection]`'s `tournament_size`, which meant a scheme without a
+/// tournament had no way to say how large a scope it wanted.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ScopeConfig {
+    /// Every individual is a candidate.
+    Global,
+    /// `size` distinct individuals, drawn fresh for each breeding event.
+    RandomSubset { size: usize },
+    // ADD A SCOPE STEP 3 — the variant a user names under `[scope]`, mirroring
+    // the one added to `Scope`:
+    //
+    //     Neighbourhood { radius: usize },
+    //
+    // Give it parameters of its own rather than reading another block's. Then
+    // constrain them in `Config::validate_scope`, and add the arm building it —
+    // search `ADD A SCOPE STEP 4`. A field validated here also needs a line in
+    // `py_config::python_attribute_path`, or a Python caller sees an error
+    // naming a TOML field they never wrote.
+}
+
+/// Which members of a scope a mating event's children overwrite. Maps onto
+/// [`crate::evolver::replacement::Replacement`], whose docs walk the three
+/// steps a new policy touches.
+///
+/// Lives under `[evolution]` rather than in a block of its own because it is
+/// steady-state's, the way `elite_count` is generational's.
+#[derive(Debug, Default, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ReplacementConfig {
+    /// The least fit of the scope. The default, and what makes steady-state
+    /// self-elitist: the scope's best is never among those overwritten.
+    #[default]
+    Worst,
+    // ADD A REPLACEMENT STEP 3 — the variant a user names under
+    // `[evolution] replacement`, mirroring the one added to `Replacement`:
+    //
+    //     Random,
+    //
+    // Then the arm building it in `dispatch::replacement`. Say at the variant
+    // what the policy gives up: anything that can overwrite the scope's best
+    // removes the self-elitism the default guarantees.
+}
+
 /// Parent-selection strategy. Maps onto [`crate::evolver::common::Selection`],
 /// whose docs list every site a second scheme touches — this variant is step 3
-/// of six, and `dispatch::scope_and_selection` is the arm that constructs it.
+/// of six, and `dispatch::selection` is the arm that constructs it.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionConfig {
+    /// The fittest of the scope. What steady-state uses: its selection pressure
+    /// comes from the scope being small, not from a draw within it.
+    Best,
+    /// A tournament of `tournament_size`, sampled with replacement from the
+    /// scope. `tournament_size` sizes the tournament and nothing else — the
+    /// scope has its own `size` under `[scope]`.
     Tournament { tournament_size: usize },
     // ADD A SELECTION STEP 3 — the variant a user names under `[selection]`,
     // mirroring the one added to `Selection`:
@@ -646,6 +719,7 @@ impl Config {
     /// graph, which belongs to `set_base_graph`.
     pub fn validate(&self) -> Result<(), ConfigError> {
         self.validate_top_level()?;
+        self.validate_scope()?;
         self.validate_evolution_and_selection()?;
         self.validate_crossover()?;
         self.validate_genome()?;
@@ -691,20 +765,25 @@ impl Config {
     /// constraints here, matched alongside `Generational` and `SteadyState`
     /// below. Optional — a strategy with nothing to constrain adds no arm.
     fn validate_evolution_and_selection(&self) -> Result<(), ConfigError> {
-        // Irrefutable today — one variant. If a second selection scheme is
-        // added, this stops compiling, which is the right way to find out.
-        //
-        // What does *not* belong here any more is a scheme-by-strategy
-        // rejection. Every scheme now answers one question over whatever slice
-        // it is handed, so there is no pairing left that the engine cannot run;
-        // only a scheme's own parameters are checked below.
-        let SelectionConfig::Tournament { tournament_size } = self.selection;
-
-        if tournament_size > self.population_size {
-            return Err(invalid(
-                "population_size",
-                format!("must be at least tournament_size ({tournament_size})"),
-            ));
+        // A scheme's own parameters, and nothing else. There is no
+        // scheme-by-strategy rejection to make — every scheme answers one
+        // question over whatever slice it is handed — and nothing here reads a
+        // scope's size, which lives under `[scope]` and is checked in
+        // `validate_scope`.
+        match self.selection {
+            SelectionConfig::Best => {}
+            SelectionConfig::Tournament { tournament_size } => {
+                // No upper bound: a tournament samples the scope *with*
+                // replacement, so one larger than the scope simply draws some
+                // individuals twice. What must fit is the scope, and that is
+                // the scope's own constraint.
+                if tournament_size == 0 {
+                    return Err(invalid(
+                        "tournament_size",
+                        "must be at least 1: a tournament of nobody has no winner",
+                    ));
+                }
+            }
         }
 
         match self.evolution {
@@ -721,15 +800,23 @@ impl Config {
                 }
             }
             EvolutionConfig::SteadyState { .. } => {
-                // Steady-state reads `tournament_size` as the size of the scope
-                // each mating event draws, and needs two parents plus two
-                // distinct others to overwrite. Generational has no such floor —
-                // its scope is the whole population — so this cannot be a
-                // blanket check.
-                if tournament_size < 4 {
+                // Steady-state overwrites members of the scope it bred from, so
+                // the scope has to hold the parents and the replaced without
+                // overlap. Generational has no such floor — it builds a whole
+                // new population rather than displacing anyone — so this cannot
+                // be a blanket check.
+                let floor = MIN_SCOPE_SIZE;
+                if let ScopeConfig::RandomSubset { size } = self.scope
+                    && size < floor
+                {
                     return Err(invalid(
-                        "tournament_size",
-                        "must be at least 4 for the steady-state evolver",
+                        "size",
+                        format!(
+                            "must be at least {floor} for the steady-state evolver: \
+                             {} parents and the {} individuals they replace must be \
+                             distinct",
+                            PARENTS_PER_EVENT, REPLACED_PER_EVENT,
+                        ),
                     ));
                 }
             } // ADD A STRATEGY STEP 3 — the constraint arm for your variant,
@@ -745,6 +832,34 @@ impl Config {
               // The step after this one is the arm in
               // `dispatch::run_strategy` that constructs the evolver —
               // search `ADD A STRATEGY STEP 4` for it.
+        }
+        Ok(())
+    }
+
+    /// Constraints on the scope, which are its own and not any scheme's.
+    fn validate_scope(&self) -> Result<(), ConfigError> {
+        match self.scope {
+            // Every individual, so it is exactly as large as the population and
+            // there is nothing to check.
+            ScopeConfig::Global => {}
+            ScopeConfig::RandomSubset { size } => {
+                if size == 0 {
+                    return Err(invalid(
+                        "size",
+                        "must be at least 1: a scope of nobody has no parents to draw",
+                    ));
+                }
+                if size > self.population_size {
+                    return Err(invalid(
+                        "size",
+                        format!(
+                            "must be at most population_size ({}): a scope of distinct \
+                             individuals cannot be drawn from fewer",
+                            self.population_size
+                        ),
+                    ));
+                }
+            }
         }
         Ok(())
     }
@@ -1037,6 +1152,9 @@ mutation_rate   = 0.2
 [evolution]
 type            = "generational"
 num_generations = 500
+
+[scope]
+type = "global"
 
 [selection]
 type            = "tournament"
@@ -1593,11 +1711,68 @@ num_epidemics  = 30
     }
 
     #[test]
-    fn a_population_smaller_than_the_tournament_is_rejected() {
+    fn a_population_smaller_than_the_scope_is_rejected() {
+        // The scope draws *distinct* individuals, so it cannot exceed the
+        // population. It is the scope's `size` that is at fault here, not the
+        // population, and the error says so.
         let mut config = valid_config();
-        config.population_size = 3; // the fixture's tournament_size is 5
+        config.scope = ScopeConfig::RandomSubset { size: 8 };
+        config.population_size = 3;
 
-        assert_eq!(validation_field(&config), "population_size");
+        assert_eq!(validation_field(&config), "size");
+    }
+
+    #[test]
+    fn a_tournament_larger_than_the_population_is_fine() {
+        // It samples the scope *with* replacement, so an oversized tournament
+        // just draws some individuals twice. This used to be rejected, because
+        // one number was doing both jobs.
+        let mut config = valid_config();
+        config.selection = SelectionConfig::Tournament {
+            tournament_size: 500,
+        };
+        config.population_size = 10;
+
+        config
+            .validate()
+            .expect("a tournament may exceed the population it samples");
+    }
+
+    #[test]
+    fn a_steady_state_run_naming_no_replacement_gets_worst() {
+        // Absent means self-elitist, which is the guarantee a run that never
+        // thought about it should keep.
+        let text = config_text("").replace(
+            "type            = \"generational\"\nnum_generations = 500",
+            "type              = \"steady_state\"\nnum_mating_events = 1000",
+        );
+        let config = Config::from_toml_str(&text).expect("steady-state config should parse");
+
+        match config.evolution {
+            EvolutionConfig::SteadyState { replacement, .. } => match replacement {
+                ReplacementConfig::Worst => {}
+            },
+            other => panic!("expected steady_state, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_scope_size_and_the_tournament_size_are_independent() {
+        // The regression this whole split exists to prevent: one number sizing
+        // both the scope and the tournament. Steady-state needs a scope of at
+        // least four, and must not inherit that floor from a tournament it does
+        // not draw.
+        let mut config = valid_config();
+        config.evolution = EvolutionConfig::SteadyState {
+            num_mating_events: 1000,
+            replacement: ReplacementConfig::Worst,
+        };
+        config.scope = ScopeConfig::RandomSubset { size: 6 };
+        config.selection = SelectionConfig::Best;
+
+        config
+            .validate()
+            .expect("a scope of six with no tournament at all is valid");
     }
 
     #[test]
@@ -1614,19 +1789,22 @@ num_epidemics  = 30
     }
 
     #[test]
-    fn the_tournament_floor_of_four_applies_to_steady_state_only() {
+    fn the_scope_floor_of_four_applies_to_steady_state_only() {
+        // Four is two parents plus the two they replace, all distinct. It binds
+        // the scope, not any scheme, so a scheme's own size is irrelevant here.
         let mut config = valid_config();
-        config.selection = SelectionConfig::Tournament { tournament_size: 3 };
+        config.scope = ScopeConfig::RandomSubset { size: 3 };
 
-        // Generational has no such floor, so this must pass.
+        // Generational displaces nobody, so it has no such floor.
         config
             .validate()
-            .expect("generational imposes no tournament floor");
+            .expect("generational imposes no scope floor");
 
         config.evolution = EvolutionConfig::SteadyState {
             num_mating_events: 1000,
+            replacement: ReplacementConfig::Worst,
         };
-        assert_eq!(validation_field(&config), "tournament_size");
+        assert_eq!(validation_field(&config), "size");
     }
 
     #[test]
@@ -1885,6 +2063,7 @@ num_epidemics  = 30
             "population_size = 20\nnetwork_size = 30\ncrossover_rate = 0.9\n\
              mutation_rate = 0.2\nmax_edge_multiplicity = 1\n\
              \n[evolution]\ntype = \"generational\"\nnum_generations = 5\n\
+             \n[scope]\ntype = \"global\"\n\
              \n[selection]\ntype = \"tournament\"\ntournament_size = 3\n\
              \n[genome]\ntype = \"edge_edit\"\ngene_length = 32\n\n{block}"
         );
@@ -2021,6 +2200,9 @@ max_edge_multiplicity = 1
 type            = "generational"
 num_generations = 5
 
+[scope]
+type = "global"
+
 [selection]
 type            = "tournament"
 tournament_size = 3
@@ -2141,6 +2323,9 @@ max_edge_multiplicity = 1
 [evolution]
 type            = "generational"
 num_generations = 5
+
+[scope]
+type = "global"
 
 [selection]
 type            = "tournament"

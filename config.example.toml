@@ -52,10 +52,17 @@ type            = "generational"
 num_generations = 500
 elite_count     = 1          # best individuals carried forward (default 1)
 
-# Steady-state alternative: one mate-and-replace event at a time.
+# Steady-state alternative: one mate-and-replace event at a time. It pairs with
+# `[scope] type = "random_subset"` and `[selection] type = "best"` below —
+# together those are what "tournament selection" decomposes into.
+#
+# `replacement` names which of the scope the two children overwrite. Omitted, it
+# is "worst", which is what keeps the strategy self-elitist: the scope's best is
+# never among those replaced, whichever scheme picked the parents.
 # [evolution]
 # type              = "steady_state"
 # num_mating_events = 100000
+# replacement       = { type = "worst" }
 
 # --- Parent selection ---------------------------------------------------------
 # Tournament is the only scheme GET ships. Adding another means editing your own
@@ -63,14 +70,39 @@ elite_count     = 1          # best individuals carried forward (default 1)
 # or a genome it cannot be supplied from outside the crate. The `Selection` enum
 # in get/src/evolver/common.rs documents every site such a scheme touches.
 
+# --- Which slice of the population each breeding event draws from ------------
+# "global"        every individual is a candidate; what generational uses
+# "random_subset" a fresh draw of `size` distinct individuals per event; what
+#                 steady-state uses, and where its selection pressure comes from
+#
+# `size` belongs to this block alone. Steady-state needs at least 4 — two
+# parents and the two individuals they replace must be distinct.
+[scope]
+type = "global"
+
+# ADD A SCOPE STEP 6 — the last step, optional and the one people skip: a
+# commented-out block naming your variant, so someone copying this file can find
+# it. Give it its own parameters; nothing else's block should have to be read to
+# understand this one.
+#
+#     [scope]
+#     type   = "neighbourhood"
+#     radius = 2
+
+# --- Which of that slice becomes a parent ------------------------------------
+# "best"       the fittest of the scope; pressure comes from the scope's size
+# "tournament" a tournament of `tournament_size`, sampled with replacement
+#
+# A steady-state run pairs `[scope] type = "random_subset"` with
+# `type = "best"` here, which is what "tournament selection" decomposes into.
 [selection]
 type            = "tournament"
-tournament_size = 5          # larger = stronger selection pressure
+tournament_size = 5          # sizes the tournament only; the scope has its own
 
 # ADD A SELECTION STEP 6 — the last step, optional and the one people skip: a
 # commented-out block naming your scheme, so someone copying this file can find
-# it. Steady-state reads `tournament_size` as the size of the scope each mating
-# event draws and needs at least 4; generational has no such floor.
+# it. Only the scheme's own parameters belong here — the scope has its own
+# `size` under `[scope]`, and no scheme should need to size it.
 #
 #     [selection]
 #     type     = "roulette"

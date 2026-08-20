@@ -13,6 +13,29 @@ use super::{
 use crate::fitness::{Direction, Fitness};
 use crate::genomes::Genome;
 
+/// How many parents one mating event breeds from.
+///
+/// Two, because `Genome::crossover` recombines a pair. Not configurable: a
+/// third parent has nowhere to enter the trait.
+pub const PARENTS_PER_EVENT: usize = 2;
+
+/// How many individuals one mating event overwrites.
+///
+/// Two, because recombination yields two children and steady-state keeps both —
+/// discarding one would waste half of every crossover.
+pub const REPLACED_PER_EVENT: usize = 2;
+
+/// Smallest scope keeping the parents and the replaced disjoint.
+///
+/// Derived from the two counts above rather than written down: at three the
+/// scope's best still survives but the second parent is also replaced, and at
+/// two both parents are overwritten by their own children, so the scope's best
+/// is not carried forward and the strategy stops being self-elitist.
+///
+/// `Config::validate_evolution_and_selection` reads this so the config error and
+/// the construction backstop cannot drift apart.
+pub const MIN_SCOPE_SIZE: usize = PARENTS_PER_EVENT + REPLACED_PER_EVENT;
+
 /// Evolves a population one mate-and-replace event at a time for a fixed number
 /// of mating events.
 pub struct SteadyStateEvolver<G: Genome> {
@@ -26,13 +49,6 @@ pub struct SteadyStateEvolver<G: Genome> {
 }
 
 impl<G: Genome> SteadyStateEvolver<G> {
-    /// Smallest scope keeping the two parents and the two replaced disjoint.
-    ///
-    /// Three preserves the scope's best but makes the second parent one of the
-    /// replaced; two breaks the guarantee outright, both parents overwritten by
-    /// their own children, and the strategy stops being self-elitist.
-    const MIN_SCOPE_SIZE: usize = 4;
-
     /// Perform one mating event.
     ///
     /// Draws one scope of distinct individuals, breeds two parents from it into
@@ -55,10 +71,10 @@ impl<G: Genome> SteadyStateEvolver<G> {
             .scope
             .draw_into(self.population.len(), &mut self.scope_buffer, rng);
 
-        let parents = self
-            .shared
-            .selection
-            .pick(&self.scope_buffer, fitnesses, 2, rng);
+        let parents =
+            self.shared
+                .selection
+                .pick(&self.scope_buffer, fitnesses, PARENTS_PER_EVENT, rng);
 
         let mut first = self.population[parents[0]].clone();
         let mut second = self.population[parents[1]].clone();
@@ -72,10 +88,10 @@ impl<G: Genome> SteadyStateEvolver<G> {
 
         // Same scope as the parents: that is what keeps the scope's best out of
         // the replaced set whatever scheme picked them.
-        let worst = self
-            .context
-            .replacement
-            .pick(&self.scope_buffer, fitnesses, 2);
+        let worst =
+            self.context
+                .replacement
+                .pick(&self.scope_buffer, fitnesses, REPLACED_PER_EVENT);
 
         let mut children = children.into_iter();
         let mut scores = scores.into_iter();
@@ -158,10 +174,10 @@ impl<G: Genome> Evolver<G> for SteadyStateEvolver<G> {
         // enough whenever the population is.
         if let Scope::RandomSubset { size } = shared.scope {
             assert!(
-                size >= Self::MIN_SCOPE_SIZE,
+                size >= MIN_SCOPE_SIZE,
                 "steady-state needs a scope of at least {}, got {}: two parents \
                  and the two individuals they replace must be distinct",
-                Self::MIN_SCOPE_SIZE,
+                MIN_SCOPE_SIZE,
                 size,
             );
             assert!(

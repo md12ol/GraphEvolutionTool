@@ -47,6 +47,9 @@ def the_shipped_example():
         crossover_rate=0.9,
         mutation_rate=0.2,
         evolution=get.EvolutionConfig.Generational(num_generations=500, elite_count=1),
+        # Generational breeds from the whole population; the tournament is what
+        # applies the pressure.
+        scope=get.ScopeConfig.Global(),
         selection=get.SelectionConfig.Tournament(tournament_size=5),
         genome=get.GenomeConfig.EdgeEdit(gene_length=256),
         fitness=get.FitnessConfig.EpiSpread(
@@ -70,7 +73,12 @@ def a_weighted_multigraph_from_an_automaton():
         mutation_rate=0.2,
         max_mutations=3,
         evolution=get.EvolutionConfig.SteadyState(num_mating_events=100_000),
-        selection=get.SelectionConfig.Tournament(tournament_size=7),
+        # Steady-state's pressure comes from the scope being small, so the two
+        # parents are simply its best. `size` is the scope's own parameter and
+        # must be at least 4: two parents and the two they replace, all
+        # distinct.
+        scope=get.ScopeConfig.RandomSubset(size=7),
+        selection=get.SelectionConfig.Best(),
         genome=get.GenomeConfig.Sda(num_states=12, max_resp_len=4),
         fitness=get.FitnessConfig.EpiLength(
             sir=get.SirParams(

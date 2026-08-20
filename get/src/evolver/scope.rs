@@ -19,15 +19,24 @@ use rand::Rng;
 /// 1. **This enum** — the variant and its parameters.
 /// 2. **`Scope::draw_into`** — the arm filling the buffer; the match is
 ///    exhaustive, so the compiler finds it.
-/// 3. **`dispatch::scope_and_selection`** — only if a user should be able to
-///    choose it. There is no `[scope]` block today: scope is implied by the
-///    strategy, so a variant reachable only from Rust stops at step 2.
+/// 3. **`config::ScopeConfig`** — what a user names under `[scope]`, plus any
+///    constraint on its own parameters in `Config::validate_scope`.
+/// 4. **`dispatch::scope`** — the arm mapping that config variant onto this
+///    one. Steps 3 and 4 are one change split across two files.
+/// 5. **`py_config::PyScopeConfig`** — optional; buys a Python caller the
+///    ability to name it.
+/// 6. **`config.example.toml`** — optional, and the step people skip.
+///
+/// A variant's parameters are its own. `size` belongs to `[scope]` and nothing
+/// else reads it — steady-state used to take its scope size from
+/// `[selection]`'s `tournament_size`, which left a scheme with no tournament
+/// unable to say how large a scope it wanted.
 ///
 /// **Every step is marked at its own site.** Search the repo for
-/// `ADD A SCOPE STEP 2`, or any other number:
+/// `ADD A SCOPE STEP 3`, or any other number:
 ///
 /// ```text
-/// git grep -n "ADD A SCOPE STEP"    # all three, in one list
+/// git grep -n "ADD A SCOPE STEP"    # all six, in one list
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {
@@ -43,8 +52,10 @@ pub enum Scope {
     //     Neighbourhood { radius: usize },
     //
     // A grid neighbourhood is the obvious one: it makes every existing scheme
-    // and policy into a cellular GA without either of them changing. Then the
-    // arm drawing it, in `draw_into` below — search `ADD A SCOPE STEP 2`.
+    // and policy into a cellular GA without either of them changing. Give it
+    // its own parameters rather than reading another block's — that coupling is
+    // what this enum was split out to end. Then the arm drawing it, in
+    // `draw_into` below — search `ADD A SCOPE STEP 2`.
 }
 
 impl Scope {
