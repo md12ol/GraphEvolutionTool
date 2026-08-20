@@ -21,11 +21,34 @@ FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "testdata", "
 
 # What `tiny_tu/README.md` says the fixture holds, in graph order.
 EXPECTED = [
-    {"num_nodes": 4, "num_edges": 4, "sentinel": "no"},
-    {"num_nodes": 4, "num_edges": 3, "sentinel": "yes"},
-    {"num_nodes": 3, "num_edges": 0, "sentinel": "yes"},
-    {"num_nodes": 4, "num_edges": 3, "sentinel": "no"},
+    {"num_nodes": 4, "num_edges": 4},
+    {"num_nodes": 4, "num_edges": 3},
+    {"num_nodes": 3, "num_edges": 0},
+    {"num_nodes": 4, "num_edges": 3},
 ]
+
+
+def edge_rows(path):
+    """The `u,v,weight` lines of a converted file, header and blanks dropped."""
+    rows = []
+    with open(path) as handle:
+        for line in handle:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                rows.append(line)
+    return rows
+
+
+def stated_nodes(path):
+    """The count in the file's `# nodes = N` header, or None if it has none."""
+    with open(path) as handle:
+        for line in handle:
+            line = line.strip()
+            if line.startswith("#") and "=" in line:
+                key, value = line[1:].split("=", 1)
+                if key.strip().lower() == "nodes":
+                    return int(value.strip())
+    return None
 
 
 class ConversionTest(unittest.TestCase):
@@ -50,7 +73,6 @@ class ConversionTest(unittest.TestCase):
         for row, expected in zip(rows, EXPECTED):
             self.assertEqual(int(row["num_nodes"]), expected["num_nodes"], row["file"])
             self.assertEqual(int(row["num_edges"]), expected["num_edges"], row["file"])
-            self.assertEqual(row["sentinel"], expected["sentinel"], row["file"])
 
     def test_the_manifest_is_not_inside_the_folder(self):
         # `load_edge_folder` reads every regular file in the folder, so a
@@ -61,36 +83,46 @@ class ConversionTest(unittest.TestCase):
         # GET splits on ',' and rejects anything else. The issue text says
         # whitespace; the parser disagrees, and the parser is what runs.
         for name in sorted(os.listdir(self.output)):
-            with open(os.path.join(self.output, name)) as handle:
-                for number, line in enumerate(handle, start=1):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    self.assertEqual(
-                        len(line.split(",")), 3, "{} line {}".format(name, number)
-                    )
+            for number, row in enumerate(
+                edge_rows(os.path.join(self.output, name)), start=1
+            ):
+                self.assertEqual(
+                    len(row.split(",")), 3, "{} row {}".format(name, number)
+                )
+
+    def test_every_file_states_its_node_count(self):
+        # The header is the only place a node with no edges can appear, and GET
+        # refuses a file without one -- so this is what makes the output
+        # loadable at all, not merely accurate.
+        for name, expected in zip(sorted(os.listdir(self.output)), EXPECTED):
+            self.assertEqual(
+                stated_nodes(os.path.join(self.output, name)),
+                expected["num_nodes"],
+                name,
+            )
 
     def test_each_undirected_edge_appears_once(self):
         for name in sorted(os.listdir(self.output)):
             seen = set()
-            with open(os.path.join(self.output, name)) as handle:
-                for line in handle:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    low, high, _ = line.split(",")
-                    pair = (int(low), int(high))
-                    self.assertLess(pair[0], pair[1], name)
-                    self.assertNotIn(pair, seen, name)
-                    seen.add(pair)
+            for row in edge_rows(os.path.join(self.output, name)):
+                low, high, _ = row.split(",")
+                pair = (int(low), int(high))
+                self.assertLess(pair[0], pair[1], name)
+                self.assertNotIn(pair, seen, name)
+                seen.add(pair)
 
-    def test_the_isolated_node_graph_carries_a_zero_weight_sentinel(self):
-        # Graph 2 is a triangle plus a trailing isolated node. Without the
-        # sentinel it loads as 3 nodes; every reference histogram then shifts.
-        second = sorted(os.listdir(self.output))[1]
-        with open(os.path.join(self.output, second)) as handle:
-            lines = [line.strip() for line in handle if line.strip()]
-        self.assertEqual(lines[-1], "0,3,0")
+    def test_the_isolated_node_graph_states_four_nodes_and_writes_three_edges(self):
+        # Graph 2 is a triangle plus a trailing isolated node. The edges alone
+        # describe three nodes; the header is the only thing that says four,
+        # which is why an inferred count shifts every reference histogram.
+        second = os.path.join(self.output, sorted(os.listdir(self.output))[1])
+        self.assertEqual(stated_nodes(second), 4)
+        self.assertEqual(len(edge_rows(second)), 3)
+
+    def test_a_graph_with_no_edges_is_a_header_and_nothing_else(self):
+        third = os.path.join(self.output, sorted(os.listdir(self.output))[2])
+        self.assertEqual(stated_nodes(third), 3)
+        self.assertEqual(edge_rows(third), [])
 
 
 class MalformedInputTest(unittest.TestCase):
@@ -145,12 +177,15 @@ class MalformedInputTest(unittest.TestCase):
             converter.convert(source, os.path.join(self.workspace, "out"), quiet=True)
         self.assertIn("graph_indicator", str(caught.exception))
 
-    def test_a_one_node_graph_is_reported_as_unrepresentable(self):
-        # One node, no edges: a sentinel needs two endpoints, so the count
-        # cannot be carried. It must be reported, not silently written as empty.
-        rows, _ = self.convert("1\n2\n2\n", "2, 3\n3, 2\n")
+    def test_a_one_node_graph_is_expressible(self):
+        # A header needs no endpoints, so the case the zero-weight sentinel
+        # could not express is ordinary now: one node, no edges, stated.
+        rows, output = self.convert("1\n2\n2\n", "2, 3\n3, 2\n")
         self.assertEqual(rows[0]["num_nodes"], 1)
-        self.assertEqual(rows[0]["sentinel"], "no")
+
+        first = os.path.join(output, sorted(os.listdir(output))[0])
+        self.assertEqual(stated_nodes(first), 1)
+        self.assertEqual(edge_rows(first), [])
 
 
 class RoundTripTest(unittest.TestCase):
@@ -183,7 +218,7 @@ class RoundTripTest(unittest.TestCase):
 
         evolver = get.GraphEvolver(self.config)
         with warnings.catch_warnings():
-            # The sentinel is a zero-weight edge, which warns by design.
+            # A graph with no edges warns by design, and the fixture has one.
             warnings.simplefilter("ignore")
             return evolver.load_reference_graphs(self.output, 0)
 
@@ -191,33 +226,24 @@ class RoundTripTest(unittest.TestCase):
         self.assertEqual(len(self.load()), len(EXPECTED))
 
     def test_node_counts_survive_the_round_trip(self):
-        # This is the assertion the sentinel exists for. `load_reference_graphs`
-        # returns edges only, and GET sizes a graph as `highest index + 1` --
-        # exactly what the loaded edges are checked against here.
-        for (source, edges), expected in zip(self.load(), EXPECTED):
-            highest = -1
-            for low, high, _ in edges:
-                if high > highest:
-                    highest = high
-            self.assertEqual(
-                highest + 1, expected["num_nodes"], os.path.basename(source)
-            )
+        # The count GET reports is the file's header, so this is the assertion
+        # the header exists for: graph 2's fourth node is in no edge and would
+        # be lost by any count taken from the data.
+        for (source, num_nodes, _), expected in zip(self.load(), EXPECTED):
+            self.assertEqual(num_nodes, expected["num_nodes"], os.path.basename(source))
 
     def test_edge_counts_survive_the_round_trip(self):
-        for (source, edges), expected in zip(self.load(), EXPECTED):
-            real = 0
-            for _, _, weight in edges:
-                if weight > 0:
-                    real += 1
-            self.assertEqual(real, expected["num_edges"], os.path.basename(source))
+        for (source, _, edges), expected in zip(self.load(), EXPECTED):
+            self.assertEqual(
+                len(edges), expected["num_edges"], os.path.basename(source)
+            )
 
-    def test_the_sentinel_adds_no_edge(self):
-        # Weight 0 means `Graph::set_edge` writes 0 into the matrix and degree
-        # counts only weights above 0, so the padded node stays isolated.
-        for source, edges in self.load():
-            for low, high, weight in edges:
-                if weight == 0:
-                    self.assertEqual((low, weight), (0, 0), os.path.basename(source))
+    def test_no_zero_weight_rows_reach_get(self):
+        # Every row the converter writes is a real edge now. A zero-weight row
+        # would mean the sentinel had come back.
+        for source, _, edges in self.load():
+            for _, _, weight in edges:
+                self.assertGreater(weight, 0, os.path.basename(source))
 
 
 if __name__ == "__main__":

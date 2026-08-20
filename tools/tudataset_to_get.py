@@ -9,8 +9,9 @@ TUDataset ships one global edge file plus a node-to-graph map:
                              numbered across the entire dataset
     DS_graph_indicator.txt   line i names the graph that global node i is in
 
-GET wants the opposite shape: one file per graph, `u,v,weight` per line, each
-undirected edge once, node ids 0-based and local to that graph.
+GET wants the opposite shape: one file per graph, a `# nodes = N` header, then
+`u,v,weight` per line, each undirected edge once, node ids 0-based and local to
+that graph.
 
 Three things here are silent if wrong, so each is checked rather than assumed:
 
@@ -20,8 +21,9 @@ Three things here are silent if wrong, so each is checked rather than assumed:
     duplicate but still loads, so emitting both directions produces a
     silently-wrong reference set.
   * A graph's node count comes from the indicator file, never from the highest
-    edge index. A trailing isolated node has no edges at all, so edge-based
-    inference cannot see it -- see `pad_isolated_tail` for how it is carried.
+    edge index, and is written as the `# nodes = N` header GET requires. A
+    trailing isolated node has no edges at all, so nothing in the rows below
+    the header could carry it.
 """
 
 import argparse
@@ -200,37 +202,6 @@ def read_edges(path, node_graph, local_index):
     return edges_by_graph, self_loops, duplicate_rows
 
 
-def pad_isolated_tail(edges, num_nodes):
-    """Return the sentinel edge that makes `num_nodes` survive the format, if needed.
-
-    GET's edge format has no node-count field: `EdgeFile::to_graph` takes the
-    count to be `highest index + 1`, so a graph whose LAST nodes have no edges
-    loads short. That is not cosmetic -- all three reference histograms count
-    isolated nodes and normalize over the node count, so a missing one shifts
-    every distribution `struct_match` matches against.
-
-    A zero-weight row carries the count without adding an edge. GET keeps such
-    a row in the parsed edge list (it warns, and says "kept as given"), so it
-    raises the inferred count; but the weight it writes into the adjacency
-    matrix is 0, and degree counts only weights above 0. The node is therefore
-    present and genuinely isolated, which is exactly what the source says.
-
-    Returns `(0, num_nodes - 1, 0)` or None. Two nodes are needed: `u == v` is
-    rejected as a self-loop, so a one-node graph cannot be expressed at all.
-    """
-    highest = -1
-    for low, high in edges:
-        if high > highest:
-            highest = high
-
-    if highest + 1 >= num_nodes:
-        return None
-    if num_nodes < 2:
-        return None
-
-    return (0, num_nodes - 1, 0)
-
-
 def convert(dataset_dir, output_dir, manifest_path=None, quiet=False):
     """Convert one dataset. Returns the manifest rows, one per graph."""
     name, edge_path, indicator_path = find_dataset_files(dataset_dir)
@@ -249,27 +220,21 @@ def convert(dataset_dir, output_dir, manifest_path=None, quiet=False):
     width = len(str(len(graph_ids)))
 
     rows = []
-    unrepresentable = []
 
     for position, graph in enumerate(graph_ids):
         num_nodes = len(graph_nodes[graph])
         edges = edges_by_graph.get(graph, [])
 
-        sentinel = pad_isolated_tail(edges, num_nodes)
-
-        # A graph with no edges is still fine: the sentinel alone carries its
-        # size, and every node in it is isolated, which is what the source
-        # says. The single unrepresentable case is one node -- a sentinel needs
-        # two endpoints, because `u == v` is a self-loop.
-        if num_nodes == 1:
-            unrepresentable.append((graph, num_nodes))
-
+        # The header first, because it is the one thing the rows below cannot
+        # say: a node with no edges appears in none of them. A graph with no
+        # edges at all is a header and nothing else, which is a legal file --
+        # every node in it is isolated, which is what the source says. One node
+        # is legal too, unlike under the sentinel this replaced.
         filename = "graph_{}.txt".format(str(position + 1).zfill(width))
         with open(os.path.join(output_dir, filename), "w") as handle:
+            handle.write("# nodes = {}\n".format(num_nodes))
             for low, high in edges:
                 handle.write("{},{},1\n".format(low, high))
-            if sentinel is not None:
-                handle.write("{},{},{}\n".format(sentinel[0], sentinel[1], sentinel[2]))
 
         rows.append(
             {
@@ -277,7 +242,6 @@ def convert(dataset_dir, output_dir, manifest_path=None, quiet=False):
                 "graph_id": graph,
                 "num_nodes": num_nodes,
                 "num_edges": len(edges),
-                "sentinel": "yes" if sentinel is not None else "no",
             }
         )
 
@@ -290,61 +254,47 @@ def convert(dataset_dir, output_dir, manifest_path=None, quiet=False):
         )
 
     with open(manifest_path, "w") as handle:
-        handle.write("file,graph_id,num_nodes,num_edges,sentinel\n")
+        handle.write("file,graph_id,num_nodes,num_edges\n")
         for row in rows:
             handle.write(
-                "{},{},{},{},{}\n".format(
+                "{},{},{},{}\n".format(
                     row["file"],
                     row["graph_id"],
                     row["num_nodes"],
                     row["num_edges"],
-                    row["sentinel"],
                 )
             )
 
     if not quiet:
-        report(name, rows, manifest_path, self_loops, duplicate_rows, unrepresentable)
+        report(name, rows, manifest_path, self_loops, duplicate_rows)
 
     return rows
 
 
-def report(name, rows, manifest_path, self_loops, duplicate_rows, unrepresentable):
+def report(name, rows, manifest_path, self_loops, duplicate_rows):
     """Print what was converted, and everything the caller has to know about."""
     largest = 0
-    padded = 0
     for row in rows:
         if row["num_nodes"] > largest:
             largest = row["num_nodes"]
-        if row["sentinel"] == "yes":
-            padded += 1
 
     print("{}: {} graphs".format(name, len(rows)))
     print("manifest: {}".format(manifest_path))
     print("largest graph: {} nodes -- set network_size to at least this".format(largest))
 
     if duplicate_rows:
-        print("collapsed {} reversed or repeated rows".format(duplicate_rows))
+        # Every undirected edge appears twice in `DS_A.txt` by design, so this
+        # is about half the source rows on a healthy dataset. Named as the
+        # reverse directions they are, so a normal conversion does not read
+        # like a warning.
+        print(
+            "collapsed {} reverse directions and repeats (DS_A.txt stores both "
+            "directions, so about half of every dataset)".format(duplicate_rows)
+        )
     if self_loops:
         print(
             "DROPPED {} self-loops; GET rejects a file containing one, so the "
             "graphs holding them would not have loaded at all".format(self_loops)
-        )
-    if padded:
-        print(
-            "padded {} graphs with a zero-weight sentinel to carry a trailing "
-            "isolated node -- see pad_isolated_tail".format(padded)
-        )
-    if unrepresentable:
-        print(
-            "WARNING: {} graphs have exactly one node, which the format cannot "
-            "express -- a sentinel needs two endpoints, so these load as zero "
-            "nodes: {}".format(
-                len(unrepresentable),
-                ", ".join(
-                    "graph {} ({} nodes)".format(graph, count)
-                    for graph, count in unrepresentable[:5]
-                ),
-            )
         )
 
 

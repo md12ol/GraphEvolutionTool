@@ -6,8 +6,8 @@ converter has to get right, and every one of them is silent if wrong.
 | Graph | Global nodes | Nodes | Edges | What it is for |
 |---|---|---|---|---|
 | 1 | 1–4   | 4 | 4 | Ordinary. A 4-ring — checks renumbering and one-direction output |
-| 2 | 5–8   | 4 | 3 | Triangle on 5,6,7 with node **8 isolated and trailing**. Edge-based inference sees 3 nodes; the indicator says 4 |
-| 3 | 9–11  | 3 | 0 | No edges at all. The sentinel alone carries its size — every node isolated, which is what the source says |
+| 2 | 5–8   | 4 | 3 | Triangle on 5,6,7 with node **8 isolated and trailing**. Edge-based inference would see 3 nodes; the indicator says 4, and the header is what carries it |
+| 3 | 9–11  | 3 | 0 | No edges at all. The header alone carries its size — every node isolated, which is what the source says |
 | 4 | 12–15 | 4 | 3 | A path. Checks that a graph after the empty one is not knocked out of position |
 
 `tiny_tu_A.txt` carries **both directions** of every edge, as TUDataset does —

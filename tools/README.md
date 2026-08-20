@@ -28,35 +28,28 @@ Each is silent if wrong — the run completes and the numbers are wrong.
 3. **Write three comma-separated fields**, `u,v,1`. GET's parser splits on `,`
    and rejects anything else as a bad column count. *GitHub #137 describes the
    format as whitespace-separated; it is not, and the parser is what runs.*
-4. **Take the node count from the indicator file.** A graph whose last nodes
-   have no edges is invisible to edge-based inference, which is the one thing a
-   TUDataset-aware converter knows that GET's loader structurally cannot.
+4. **Take the node count from the indicator file** and write it as the
+   `# nodes = N` header. A graph whose last nodes have no edges is invisible to
+   edge-based inference, which is the one thing a TUDataset-aware converter
+   knows that GET's loader structurally cannot.
 
-### The zero-weight sentinel, and why it exists
+### The `# nodes = N` header
 
-GET's edge format has **no field for a node count** — `EdgeFile::to_graph` takes
-it to be `highest index + 1`. So a graph with a trailing isolated node loads one
-node short, and that is not cosmetic: all three reference histograms count
-isolated nodes as real observations and normalize over the node count, so a
-missing node shifts every distribution the evolver optimizes toward.
+Every file GET reads states its own node count on a `#` comment line, and the
+loader refuses a file without one. That is the whole reason a converter can be
+faithful here: a graph with a trailing isolated node loads at its real size
+rather than one node short, and short is not cosmetic — all three reference
+histograms count isolated nodes as real observations and normalize over the node
+count, so a lost node shifts every distribution the evolver optimizes toward.
 
-Where the indicator count exceeds the inferable one, the converter appends
-`0,<n-1>,0`. A zero-weight row is kept in the parsed edge list, so it raises the
-inferred count; the weight written into the adjacency matrix is 0, and degree
-counts only weights above 0. The node is present and genuinely isolated —
-exactly what the source says.
+The header is checked against the file's own edges (a count below them is an
+error, not a truncation) and against the count the run allows, so a typo is
+rejected rather than silently sizing a graph nobody can index.
 
-**This is a workaround, not the right answer.** It carries structural
-information on warning-level behaviour. Whether the format should gain an
-optional node count is a spec sheet question, raised for a joint meeting.
-
-Two consequences worth knowing:
-
-- A padded graph emits a `UserWarning` through `load_reference_graphs` and
-  **none at all** through `struct_match`, whose reference path does not emit
-  load warnings. The padding is invisible in the mode that consumes it.
-- A **one-node** graph cannot be expressed at all: a sentinel needs two
-  endpoints, and `u == v` is rejected as a self-loop. These are reported.
+**This replaced a zero-weight sentinel row**, `0,<n-1>,0`, which carried the
+count on warning-level behaviour and could not express a one-node graph at all —
+a sentinel needs two endpoints, and `u == v` is a self-loop. Both of those go
+away with the header: a one-node graph is a header and no rows.
 
 ### What it drops, and what it refuses
 
@@ -75,8 +68,9 @@ representation in GET's edge format.
 
 Written **beside** the output folder, never inside it — `load_edge_folder` reads
 every regular file in the folder and would reject a manifest as a bad edge file.
-It records `file,graph_id,num_nodes,num_edges,sentinel` per graph, and is the
-only place a graph's true node count is stated in full.
+It records `file,graph_id,num_nodes,num_edges` per graph — a human-readable
+record of the conversion, not something GET reads: the node count each graph
+loads at is in the file itself, as the header.
 
 ### Tests
 
