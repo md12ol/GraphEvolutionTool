@@ -790,14 +790,6 @@ fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
     }
 }
 
-/// Map the `[selection]` block onto the engine's own selection strategy.
-///
-/// One variant each today. Kept as a function rather than inlined so a second
-/// selection strategy is one arm here and touches neither evolver.
-///
-/// This arm is step 6 of the seven a new scheme touches;
-/// [`crate::evolver::common::Selection`] lists them all. Steps 5 and 6 are one
-/// change split across two files, so neither compiles without the other.
 /// Turn the `[crossover]` block into the operator the engine runs.
 ///
 /// Step 4 of the six on [`Crossover`], and the counterpart to `selection`
@@ -827,6 +819,14 @@ fn sda_mutation(config: &SdaMutationConfig) -> SdaMutation {
     }
 }
 
+/// Map the `[selection]` block onto the engine's own selection strategy.
+///
+/// One variant each today. Kept as a function rather than inlined so a second
+/// selection strategy is one arm here and touches neither evolver.
+///
+/// This arm is step 6 of the seven a new scheme touches;
+/// [`crate::evolver::common::Selection`] lists them all. Steps 5 and 6 are one
+/// change split across two files, so neither compiles without the other.
 fn selection(config: &SelectionConfig) -> Selection {
     match config {
         SelectionConfig::Tournament { tournament_size } => Selection::Tournament {
