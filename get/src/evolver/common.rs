@@ -58,6 +58,13 @@ use crate::graph::Graph;
 /// enum does not cover. `Genome::crossover` takes no context, deliberately, so
 /// an operator needing per-representation behaviour adds a trait method rather
 /// than a variant here.
+///
+/// **Every step above is marked at its own site in the code.** Search the
+/// repo for `ADD A CROSSOVER STEP 3`, or any other number:
+///
+/// ```text
+/// git grep -n "ADD A CROSSOVER STEP"    # all six, in one list
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Crossover {
     /// Two-point: swap one contiguous band between the parents, leaving
@@ -66,6 +73,13 @@ pub enum Crossover {
     /// SDA — and each decides how much shared structure it needs before
     /// crossing at all.
     TwoPoint,
+    // ADD A CROSSOVER STEP 1 — a variant here, plus any parameters it reads
+    // from the file:
+    //
+    //     MyCrossover { some_param: f64 },
+    //
+    // Then the arm performing it, in `Crossover::recombine` below — search
+    // `ADD A CROSSOVER STEP 2` for it.
 }
 
 impl Crossover {
@@ -85,6 +99,9 @@ impl Crossover {
             // dispatch to a second trait method, which is the point at which
             // `Genome` grows one.
             Crossover::TwoPoint => first.crossover(second, rng),
+            // ADD A CROSSOVER STEP 2 — the arm performing your variant. The
+            // step after this one is `config::CrossoverConfig` — search
+            // `ADD A CROSSOVER STEP 3` for it.
         }
     }
 }

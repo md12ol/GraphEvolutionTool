@@ -69,6 +69,16 @@ tournament_size = 5          # larger = stronger selection pressure
 # order. Note this section applies to WHICHEVER genome is selected, so an
 # operator that only some representations can perform has to be rejected in
 # `Config::validate_crossover` — nothing else pairs the two.
+#
+# ADD A CROSSOVER STEP 6 — an example block for your operator, here or as a
+# commented-out alternative the way [evolution]'s steady-state does:
+#
+#     [crossover]
+#     type       = "my_crossover"
+#     some_param = 0.5
+#
+# Optional, and the step people skip and then wonder why nobody uses the
+# operator: this file is what a new user copies from.
 
 [crossover]
 type = "two_point"

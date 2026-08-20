@@ -101,6 +101,15 @@ pub enum CrossoverConfig {
     /// every representation did before this was selectable.
     #[default]
     TwoPoint,
+    // ADD A CROSSOVER STEP 3 — a variant here, matching the one added to
+    // `Crossover`:
+    //
+    //     MyCrossover { some_param: f64 },
+    //
+    // Constrain it in `Config::validate_crossover` if only some genomes can
+    // honour it — search `ADD A CROSSOVER STEP 3` again for that arm. Then
+    // the arm in `dispatch::crossover` that maps it onto the operator —
+    // search `ADD A CROSSOVER STEP 4`.
 }
 
 /// Genome representation and the dimensions used to build random individuals.
@@ -700,6 +709,10 @@ impl Config {
             // decides for itself how much of one it needs before crossing.
             (CrossoverConfig::TwoPoint, GenomeConfig::EdgeEdit(_)) => Ok(()),
             (CrossoverConfig::TwoPoint, GenomeConfig::Sda(_)) => Ok(()),
+            // ADD A CROSSOVER STEP 3 — a pair per representation your
+            // operator can honour, `Err(invalid(..))` for any it cannot:
+            //
+            //     (CrossoverConfig::MyCrossover { .. }, GenomeConfig::Sda(_)) => Ok(()),
         }
     }
 

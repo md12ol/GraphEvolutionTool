@@ -799,6 +799,9 @@ fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
 fn crossover(config: &CrossoverConfig) -> Crossover {
     match config {
         CrossoverConfig::TwoPoint => Crossover::TwoPoint,
+        // ADD A CROSSOVER STEP 4 — the arm mapping your `CrossoverConfig`
+        // variant onto the matching `Crossover` one. The step after this one
+        // is optional — search `ADD A CROSSOVER STEP 5`.
     }
 }
 

@@ -236,6 +236,15 @@ pub enum PySelectionConfig {
 pub enum PyCrossoverConfig {
     #[pyo3(constructor = ())]
     TwoPoint {},
+    // ADD A CROSSOVER STEP 5 — the Python-side variant, if the operator
+    // should be reachable from Python. Optional; leaving it out costs
+    // nothing elsewhere.
+    //
+    //     #[pyo3(constructor = (some_param))]
+    //     MyCrossover { some_param: f64 },
+    //
+    // Then the matching arm in `to_toml_value` below — search
+    // `ADD A CROSSOVER STEP 5` again for it.
 }
 
 /// Hand-written rather than derived: `#[derive(Default)]` needs a *unit*
@@ -733,7 +742,7 @@ impl PyCrossoverConfig {
         match self {
             PyCrossoverConfig::TwoPoint {} => {
                 table.insert("type".to_string(), Value::String("two_point".to_string()));
-            }
+            } // ADD A CROSSOVER STEP 5 — the matching arm for your variant.
         }
         Ok(Value::Table(table))
     }
