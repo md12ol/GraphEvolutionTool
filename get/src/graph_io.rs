@@ -4,6 +4,20 @@
 //! caller whose data is not 0-indexed passes `min_node_index`, and every index
 //! is shifted to 0 here — once, on the way in.
 //!
+//! **A line starting with `#` is a comment, and every file must carry the one
+//! comment that is read: `# nodes = N`.** It states the graph's node count,
+//! which the edges cannot — a node with no edges is invisible to
+//! `highest index + 1`, so a count taken from the data is short by exactly the
+//! nodes hardest to notice, and short silently. It is required rather than
+//! optional on purpose: two ways to arrive at a node count means one that is
+//! right and one that is quietly wrong, chosen by whether whoever wrote the
+//! file remembered. The header is checked against the file's own indices and
+//! against the count the caller allows.
+//!
+//! Everything GET writes carries it — `RunResult::save_results` emits a
+//! loadable edge list — so a run's output is a file the loader will take back
+//! without editing.
+//!
 //! **Everything is validated before anything is built.** The whole text is
 //! checked first and the edge list is returned only if every row survives, so a
 //! rejected file leaves no half-built graph behind. That matters because
@@ -34,41 +48,40 @@ pub struct EdgeFile {
     pub warnings: Vec<LoadWarning>,
     /// What to call this in a message — a path, or a test's own label.
     pub source: String,
+    /// The node count the file stated in its `# nodes = N` header.
+    ///
+    /// Required, and there is deliberately no second way to arrive at it: a
+    /// trailing node with no edges is invisible to `highest index + 1`, so a
+    /// format accepting both spellings would have one that is right and one
+    /// that is quietly wrong by exactly the nodes hardest to notice.
+    pub num_nodes: usize,
 }
 
 impl EdgeFile {
     /// Build the graph these edges describe, sizing it from the data itself.
     ///
-    /// # Why the node count is inferred rather than passed
+    /// # Why the count is the file's own, not the loader's
     ///
     /// [`load_edge_folder`] takes **one** `num_nodes` for the whole folder,
     /// which suits a set of same-sized graphs and does not suit a reference
     /// set: those come from real data and differ in size, and the loader's
     /// `num_nodes` is an upper bound used to reject out-of-range indices, not
     /// a description of any one file. So a caller passes a generous cap to the
-    /// loader — which still catches a wild index — and gets each graph's real
-    /// size from here.
+    /// loader — which still catches a wild index — and each file states its
+    /// own size, which is what this builds from.
     ///
-    /// **The count is `highest index + 1`, so a trailing isolated node cannot
-    /// be seen.** Nothing in the file distinguishes "node 9 exists but has no
-    /// edges" from "there is no node 9". A file whose graph genuinely has one
-    /// is one node short, silently. Where the count is known from elsewhere —
-    /// TUDataset's `graph_indicator` file gives it exactly — prefer that and
-    /// use this as a check.
+    /// **The size comes from the file's `# nodes = N` header, always.** Edges
+    /// cannot supply it: nothing in them distinguishes "node 9 exists but has
+    /// no edges" from "there is no node 9", so a count inferred as
+    /// `highest index + 1` is short by exactly the trailing isolated nodes, and
+    /// short silently. That is not cosmetic for a reference set — the degree,
+    /// clustering and spectral histograms each count an isolated node as a real
+    /// observation and normalize over the node count, so a lost node shifts
+    /// every distribution consistently in one direction. `parse_edge_list` has
+    /// already checked the header against the indices the file uses and against
+    /// the count the caller allows, so this is a construction, not a decision.
     pub fn to_graph(&self, max_edge_multiplicity: u32) -> Graph {
-        // Indices are 0-based by the time they reach here, so a graph with no
-        // edges at all is the only one with no nodes.
-        let mut num_nodes = 0;
-        for &(u, v, _) in &self.edges {
-            if u + 1 > num_nodes {
-                num_nodes = u + 1;
-            }
-            if v + 1 > num_nodes {
-                num_nodes = v + 1;
-            }
-        }
-
-        let mut graph = Graph::new(num_nodes, max_edge_multiplicity);
+        let mut graph = Graph::new(self.num_nodes, max_edge_multiplicity);
         graph.set_edges(&self.edges);
         graph
     }
@@ -98,6 +111,18 @@ pub enum RowProblem {
     /// A weight above the configured `max_edge_multiplicity`. Carries the weight
     /// and the cap.
     WeightAboveCap { weight: i64, cap: u32 },
+    /// A `# nodes` header whose value is not a whole number of nodes.
+    NonNumericNodeCount,
+    /// A second `# nodes` header. One file states one node count; a second is a
+    /// contradiction rather than an override, and honouring either would be a
+    /// guess. Carries the line the first one was on.
+    RepeatedNodeCount { first: usize },
+    /// A `# nodes` header naming fewer nodes than the file's own edges use.
+    /// Carries the count and the smallest one that would fit the data.
+    NodeCountBelowIndices { declared: usize, needed: usize },
+    /// A `# nodes` header above the count this run allows — the header's
+    /// counterpart to [`RowProblem::NodeOutOfRange`]. Carries both.
+    NodeCountAboveCap { declared: usize, cap: usize },
 }
 
 impl std::fmt::Display for RowProblem {
@@ -131,6 +156,29 @@ impl std::fmt::Display for RowProblem {
                 "weight {weight} is above this config's max_edge_multiplicity of {cap}; \
                  raise the cap or lower the weight rather than having it silently clamped"
             ),
+            RowProblem::NonNumericNodeCount => write!(
+                f,
+                "the `# nodes` header is not a whole number of nodes; write it as \
+                 `# nodes = 200`"
+            ),
+            RowProblem::RepeatedNodeCount { first } => write!(
+                f,
+                "a second `# nodes` header, line {first} having already given one; a \
+                 file states one node count, and two is a contradiction rather than \
+                 an override"
+            ),
+            RowProblem::NodeCountBelowIndices { declared, needed } => write!(
+                f,
+                "the `# nodes` header says {declared}, but this file's own edges need \
+                 at least {needed}; the header is what the graph is sized from, so a \
+                 count below the data would drop edges without a word"
+            ),
+            RowProblem::NodeCountAboveCap { declared, cap } => write!(
+                f,
+                "the `# nodes` header says {declared}, above the {cap} this run allows; \
+                 an index that high is rejected row by row, and a header claiming one \
+                 is rejected for the same reason"
+            ),
         }
     }
 }
@@ -154,6 +202,12 @@ pub enum GraphLoadError {
         /// What was wrong with it.
         problem: RowProblem,
     },
+    /// No `# nodes = N` header. A file-level failure rather than a row one:
+    /// there is no line to point at, which is the whole problem.
+    MissingNodeCount {
+        /// The file that did not state its size.
+        path: String,
+    },
 }
 
 impl std::fmt::Display for GraphLoadError {
@@ -167,6 +221,13 @@ impl std::fmt::Display for GraphLoadError {
                 line,
                 problem,
             } => write!(f, "`{path}`, line {line}: {problem}"),
+            GraphLoadError::MissingNodeCount { path } => write!(
+                f,
+                "`{path}` has no `# nodes = N` header, and a node count cannot be read \
+                 from edges: a node with no edges is invisible there, so an inferred \
+                 count is short by exactly the nodes that were hardest to notice. \
+                 State it, e.g. `# nodes = 200`"
+            ),
         }
     }
 }
@@ -315,11 +376,55 @@ pub fn parse_edge_list(
 
     let mut parsed: Vec<SourcedEdge> = Vec::new();
     let mut warnings = Vec::new();
+    let mut declared_nodes: Option<(usize, usize)> = None;
 
     for (index, raw_line) in text.lines().enumerate() {
         let line = index + 1;
         let trimmed = raw_line.trim();
         if trimmed.is_empty() {
+            continue;
+        }
+
+        // A `#` line is a comment, and one spelling of comment is load-bearing:
+        // `# nodes = 200` is how a file states a size its edges cannot imply.
+        // Anything else after the `#` is ignored, so a file may carry its own
+        // provenance without the parser growing an opinion about it.
+        if let Some(comment) = trimmed.strip_prefix('#') {
+            let Some(value) = node_count_header(comment) else {
+                continue;
+            };
+
+            let count = match value.trim().parse::<i64>() {
+                Ok(count) if count >= 0 => count as usize,
+                _ => {
+                    return Err(GraphLoadError::Row {
+                        path: source.to_string(),
+                        line,
+                        problem: RowProblem::NonNumericNodeCount,
+                    });
+                }
+            };
+
+            if let Some((_, first)) = declared_nodes {
+                return Err(GraphLoadError::Row {
+                    path: source.to_string(),
+                    line,
+                    problem: RowProblem::RepeatedNodeCount { first },
+                });
+            }
+
+            if count > num_nodes {
+                return Err(GraphLoadError::Row {
+                    path: source.to_string(),
+                    line,
+                    problem: RowProblem::NodeCountAboveCap {
+                        declared: count,
+                        cap: num_nodes,
+                    },
+                });
+            }
+
+            declared_nodes = Some((count, line));
             continue;
         }
 
@@ -399,6 +504,35 @@ pub fn parse_edge_list(
         warnings.push(LoadWarning::EmptyFile);
     }
 
+    // Checked after the rows, not while reading them: the header may come last,
+    // and a file is not required to put it first for the check to mean anything.
+    let Some((count, header_line)) = declared_nodes else {
+        return Err(GraphLoadError::MissingNodeCount {
+            path: source.to_string(),
+        });
+    };
+
+    let mut needed = 0;
+    for edge in &parsed {
+        if edge.u + 1 > needed {
+            needed = edge.u + 1;
+        }
+        if edge.v + 1 > needed {
+            needed = edge.v + 1;
+        }
+    }
+
+    if count < needed {
+        return Err(GraphLoadError::Row {
+            path: source.to_string(),
+            line: header_line,
+            problem: RowProblem::NodeCountBelowIndices {
+                declared: count,
+                needed,
+            },
+        });
+    }
+
     let (edges, duplicates) = canonicalize(&parsed, min_node_index);
     warnings.extend(duplicates);
 
@@ -406,7 +540,24 @@ pub fn parse_edge_list(
         edges,
         warnings,
         source: source.to_string(),
+        num_nodes: count,
     })
+}
+
+/// The value of a `# nodes = N` header, or `None` for any other comment.
+///
+/// `comment` is what followed the `#`. The key is matched case-insensitively
+/// and the `=` is required, so `# nodes: 5` and `# 200 nodes` are prose and are
+/// skipped rather than half-read. A file that means to state a size and
+/// misspells it gets no count, which the caller sees as inference — the reason
+/// a malformed *value* is an error rather than a shrug.
+fn node_count_header(comment: &str) -> Option<&str> {
+    let (key, value) = comment.split_once('=')?;
+    if key.trim().eq_ignore_ascii_case("nodes") {
+        Some(value)
+    } else {
+        None
+    }
 }
 
 /// Read one field as a whole number, naming it if it is not one.
@@ -508,7 +659,19 @@ mod tests {
     use std::io::Write;
 
     /// Parse with the settings most tests want: 10 nodes, cap 3, 0-indexed.
+    ///
+    /// The `# nodes` header every file must carry is **appended**, not
+    /// prepended, so a fixture's own rows keep the line numbers its assertions
+    /// name. Tests about the header itself write their own and call
+    /// [`parse_edge_list`] directly.
     fn parse(text: &str) -> Result<EdgeFile, GraphLoadError> {
+        let body = text.trim_end_matches('\n');
+        parse_edge_list(&format!("{body}\n# nodes = 10\n"), "test", 10, 3, 0)
+    }
+
+    /// [`parse`]'s settings, but the text exactly as written — for the tests
+    /// about the header itself, which supply their own or deliberately none.
+    fn parse_raw(text: &str) -> Result<EdgeFile, GraphLoadError> {
         parse_edge_list(text, "test", 10, 3, 0)
     }
 
@@ -536,6 +699,108 @@ mod tests {
         let loaded = parse(" 0 , 1 , 2 \n\n1,2,1\r\n").expect("valid");
 
         assert_eq!(loaded.edges, vec![(0, 1, 2), (1, 2, 1)]);
+    }
+
+    /// The whole point of the header: a graph whose last nodes have no edges.
+    /// The edges cannot say so, which is why the count is stated and not
+    /// inferred.
+    #[test]
+    fn the_node_count_header_sizes_the_graph_past_its_highest_edge() {
+        let loaded = parse_raw("# nodes = 6\n0,1,1\n1,2,1\n").expect("valid");
+
+        assert_eq!(loaded.num_nodes, 6);
+        assert_eq!(loaded.to_graph(3).num_nodes, 6);
+        assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+
+        // Nodes 3, 4 and 5 are real and isolated: present in the graph, absent
+        // from every edge, and counted by anything that reads degrees.
+        let graph = loaded.to_graph(3);
+        assert_eq!(graph.degree(5), 0);
+    }
+
+    /// Missing is an error, not a fallback. The alternative — infer when the
+    /// header is absent — is two ways to reach a node count, one of which is
+    /// wrong by exactly the nodes nobody can see.
+    #[test]
+    fn a_file_that_does_not_state_its_size_is_rejected() {
+        match parse_raw("0,1,1\n1,2,1\n") {
+            Err(GraphLoadError::MissingNodeCount { path }) => assert_eq!(path, "test"),
+            other => panic!("expected a missing-header rejection, got {other:?}"),
+        }
+    }
+
+    /// Spelling the parser accepts, and prose it leaves alone. A comment that
+    /// is not a header must not be half-read, or a provenance note becomes a
+    /// silent resize.
+    #[test]
+    fn comments_are_skipped_and_only_the_nodes_key_is_read() {
+        let loaded =
+            parse_raw("# converted from MUTAG\n#NODES=7\n0,1,1\n# trailing note\n").expect("valid");
+
+        assert_eq!(loaded.num_nodes, 7);
+        assert_eq!(loaded.edges, vec![(0, 1, 1)]);
+
+        // Neither of these is a header, so the file states nothing and is
+        // rejected — a near-miss spelling must not be read as a count.
+        assert!(matches!(
+            parse_raw("# 7 nodes\n# nodes: 7\n0,1,1\n"),
+            Err(GraphLoadError::MissingNodeCount { .. })
+        ));
+    }
+
+    /// The header is a count, not an index, so `min_node_index` must not touch
+    /// it. A 1-indexed file of 5 nodes says 5, not 6 — and shifting it would be
+    /// the kind of off-by-one that produces a valid-looking graph.
+    #[test]
+    fn the_node_count_is_not_shifted_by_min_node_index() {
+        let loaded = parse_edge_list("# nodes = 5\n1,2,1\n2,3,1\n", "test", 10, 3, 1)
+            .expect("a 1-indexed file that states five nodes");
+
+        assert_eq!(loaded.num_nodes, 5);
+        assert_eq!(loaded.edges, vec![(0, 1, 1), (1, 2, 1)]);
+    }
+
+    #[test]
+    fn a_malformed_or_repeated_node_count_is_rejected() {
+        assert_eq!(
+            problem(parse_raw("# nodes = many\n0,1,1\n")),
+            (1, RowProblem::NonNumericNodeCount)
+        );
+        assert_eq!(
+            problem(parse_raw("# nodes = -4\n0,1,1\n")),
+            (1, RowProblem::NonNumericNodeCount)
+        );
+        assert_eq!(
+            problem(parse_raw("# nodes = 5\n0,1,1\n# nodes = 6\n")),
+            (3, RowProblem::RepeatedNodeCount { first: 1 })
+        );
+    }
+
+    /// Both directions the header can disagree with its surroundings: below the
+    /// file's own edges, and above what the caller allows.
+    #[test]
+    fn a_node_count_that_fits_neither_the_data_nor_the_cap_is_rejected() {
+        // The header is checked after the rows, so it is caught wherever it sits.
+        assert_eq!(
+            problem(parse_raw("0,1,1\n2,4,1\n# nodes = 3\n")),
+            (
+                3,
+                RowProblem::NodeCountBelowIndices {
+                    declared: 3,
+                    needed: 5,
+                }
+            )
+        );
+        assert_eq!(
+            problem(parse_raw("# nodes = 11\n0,1,1\n")),
+            (
+                1,
+                RowProblem::NodeCountAboveCap {
+                    declared: 11,
+                    cap: 10,
+                }
+            )
+        );
     }
 
     #[test]
@@ -666,7 +931,8 @@ mod tests {
 
     #[test]
     fn min_node_index_shifts_every_index_to_zero() {
-        let loaded = parse_edge_list("1,2,1\n2,3,2\n", "test", 3, 3, 1).expect("valid");
+        let loaded =
+            parse_edge_list("# nodes = 3\n1,2,1\n2,3,2\n", "test", 3, 3, 1).expect("valid");
 
         assert_eq!(loaded.edges, vec![(0, 1, 1), (1, 2, 2)]);
     }
@@ -690,15 +956,18 @@ mod tests {
 
     #[test]
     fn a_warning_names_the_indices_the_caller_wrote() {
-        // The user reads their own file, not our 0-based copy of it.
-        let loaded = parse_edge_list("1,2,1\n2,1,3\n", "test", 3, 3, 1).expect("valid");
+        // The user reads their own file, not our 0-based copy of it — and the
+        // line is the file's own line 3, header included, since that is the
+        // line they would go to.
+        let loaded =
+            parse_edge_list("# nodes = 3\n1,2,1\n2,1,3\n", "test", 3, 3, 1).expect("valid");
 
         assert_eq!(
             loaded.warnings,
             vec![LoadWarning::DuplicateEdge {
                 edge: (1, 2),
                 kept: 3,
-                line: Some(2),
+                line: Some(3),
             }]
         );
     }
@@ -714,6 +983,9 @@ mod tests {
     }
 
     /// Write `files` into a fresh temporary folder and hand back its path.
+    ///
+    /// Each file gains the `# nodes = 10` header the loader requires, appended
+    /// for the same reason [`parse`] appends it.
     fn folder_of(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
         let folder = std::env::temp_dir().join(format!("get_graph_io_{name}"));
         let _ = std::fs::remove_dir_all(&folder);
@@ -721,7 +993,8 @@ mod tests {
 
         for (file_name, text) in files {
             let mut file = std::fs::File::create(folder.join(file_name)).expect("temp file");
-            file.write_all(text.as_bytes()).expect("write");
+            file.write_all(format!("{text}# nodes = 10\n").as_bytes())
+                .expect("write");
         }
 
         folder
@@ -782,11 +1055,11 @@ mod tests {
     }
 
     #[test]
-    fn to_graph_sizes_each_file_from_its_own_highest_index() {
+    fn to_graph_sizes_each_file_from_its_own_header() {
         // The point of the method: one folder-wide `num_nodes` is an upper
-        // bound for validation, and each file's real size comes from its data.
-        let small = parse("0,1,1\n1,2,1").expect("a valid three-node file");
-        let large = parse("0,1,1\n1,5,1").expect("a valid six-node file");
+        // bound for validation, and each file's real size is its own business.
+        let small = parse_raw("# nodes = 3\n0,1,1\n1,2,1\n").expect("a three-node file");
+        let large = parse_raw("# nodes = 6\n0,1,1\n1,5,1\n").expect("a six-node file");
 
         assert_eq!(small.to_graph(1).num_nodes, 3);
         assert_eq!(large.to_graph(1).num_nodes, 6);
@@ -794,7 +1067,7 @@ mod tests {
 
     #[test]
     fn to_graph_carries_every_edge_across() {
-        let file = parse("0,1,1\n1,2,1\n0,2,1").expect("a valid triangle");
+        let file = parse_raw("# nodes = 3\n0,1,1\n1,2,1\n0,2,1\n").expect("a valid triangle");
 
         let graph = file.to_graph(1);
 
@@ -808,25 +1081,34 @@ mod tests {
         }
     }
 
+    /// A file with no edges is still a graph, and its header still says how
+    /// big: five nodes, none of them connected. Under an inferred count this
+    /// case was indistinguishable from an empty graph.
     #[test]
-    fn to_graph_of_an_edgeless_file_is_a_graph_with_no_nodes() {
-        let file = parse("").expect("an empty file is a valid empty edge list");
+    fn to_graph_of_an_edgeless_file_is_as_big_as_its_header_says() {
+        let file = parse_raw("# nodes = 5\n").expect("a header alone is a valid file");
 
-        assert_eq!(file.to_graph(1).num_nodes, 0);
+        let graph = file.to_graph(1);
+        assert_eq!(graph.num_nodes, 5);
+        assert_eq!(graph.degree(4), 0);
+        assert_eq!(file.warnings, vec![LoadWarning::EmptyFile]);
+
+        // Zero is expressible too, and means what it says.
+        let empty = parse_raw("# nodes = 0\n").expect("zero nodes is a valid claim");
+        assert_eq!(empty.to_graph(1).num_nodes, 0);
     }
 
+    /// The failure the header exists to remove, kept as a test of the new
+    /// behaviour rather than deleted: node 3 appears in no edge, and the file
+    /// is the only thing that can say it is there.
     #[test]
-    fn to_graph_cannot_see_a_trailing_isolated_node() {
-        // Documented limitation, pinned so it is a known cost rather than a
-        // surprise: nothing in the file says node 3 exists, so a graph whose
-        // real size is 4 with node 3 isolated comes back as 3 nodes. Where the
-        // count is known from elsewhere, pass it rather than inferring.
-        let file = parse("0,1,1\n1,2,1").expect("a valid file");
+    fn to_graph_sees_a_trailing_isolated_node_because_the_file_states_it() {
+        let file = parse_raw("# nodes = 4\n0,1,1\n1,2,1\n").expect("a valid file");
 
         assert_eq!(
             file.to_graph(1).num_nodes,
-            3,
-            "inference reports the nodes that appear in edges, and only those"
+            4,
+            "the header is the whole reason the fourth node survives the format"
         );
     }
 }

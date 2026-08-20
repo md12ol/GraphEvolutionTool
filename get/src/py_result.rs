@@ -88,6 +88,13 @@ pub struct PyRunResult {
     /// The best individual's expressed network, as `(u, v, multiplicity)`.
     #[pyo3(get)]
     pub best_edges: Vec<(usize, usize, u32)>,
+    /// How many nodes that network has, isolated ones included.
+    ///
+    /// Not derivable from `best_edges` — an isolated node appears in no edge —
+    /// which is the same reason a file has to state its size rather than have
+    /// it inferred.
+    #[pyo3(get)]
+    pub num_nodes: usize,
     /// The best individual's genome, via `Genome::print`.
     ///
     /// This is the record of *which* individual won, in a form the entry point
@@ -171,18 +178,22 @@ impl PyRunResult {
     /// alongside it at `{filename}.toml` — the provenance record §8 promises,
     /// derived rather than a second argument so callers cannot forget it.
     ///
-    /// Three sections: the best fitness, the winning genome's
-    /// `Genome::print()` string, and its expressed network as a weighted edge
-    /// list — §6.4's "best individual".
+    /// **The file is a loadable edge list**, not a report that happens to
+    /// contain one: the fitness, the genome string and the node count are `#`
+    /// comments, which `graph_io` skips, and the rows below them are the
+    /// `u,v,weight` the loader reads. So a run's winner goes straight back in
+    /// as the next run's base graph, or into a reference folder, with no
+    /// editing step in between — and the `# nodes` line the loader requires is
+    /// written from the graph rather than left for someone to count.
     pub fn save_results(&self, filename: &str) -> PyResult<()> {
         let mut file = File::create(filename)
             .map_err(|err| PyIOError::new_err(format!("could not create {filename}: {err}")))?;
 
-        writeln!(file, "best_fitness = {}", self.best_fitness)
+        writeln!(file, "# best_fitness = {}", self.best_fitness)
             .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
-        writeln!(file, "genome = {}", self.best_genome_repr)
+        writeln!(file, "# genome = {}", self.best_genome_repr)
             .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
-        writeln!(file, "\nedges (u,v,multiplicity):")
+        writeln!(file, "# nodes = {}", self.num_nodes)
             .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
         for &(u, v, weight) in &self.best_edges {
             writeln!(file, "{u},{v},{weight}").map_err(|err| {
@@ -229,6 +240,7 @@ impl PyRunResult {
         Self {
             best_fitness: outcome.best_fitness,
             best_edges: outcome.best_edges,
+            num_nodes: outcome.num_nodes,
             best_genome_repr: outcome.best_genome_repr,
             history,
             seed,
