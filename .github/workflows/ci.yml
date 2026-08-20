@@ -1,10 +1,16 @@
-# Runs the Rust checks that nothing else runs: the test suite and the two lint
-# gates. Until this existed, `get/src`'s unit tests ran only when a maintainer
-# remembered to run them locally, so the convention of committing each step
-# once its own check has passed rested on a gate nobody's push met.
+# Runs the Rust checks that nothing else runs: the test suite, the two lint
+# gates, and the `get/examples/` programs. Until this existed, `get/src`'s unit
+# tests ran only when a maintainer remembered to run them locally, so the
+# convention of committing each step once its own check has passed rested on a
+# gate nobody's push met.
+#
+# The examples are here for a different reason than the tests. They are the
+# only thing that exercises the Rust-library route — depend on the crate,
+# assemble the run yourself — and narrowing anything that route needs produces
+# no compile error inside `get` at all. Nothing in the crate calls that door.
 #
 # `get-run.yml` is the sibling job: it is the one that actually *runs* the
-# `cli`-gated binary against the shipped example. This workflow compiles and
+# `cli`-gated binary against the shipped config. This workflow compiles and
 # lints that binary but never executes it.
 
 name: ci
@@ -69,3 +75,34 @@ jobs:
 
       - name: cargo test
         run: cargo test -p get --features cli
+
+      # The examples are the only proof that the Rust-library route reaches
+      # what it promises. Narrowing something only an external caller needs
+      # produces no compile error anywhere inside `get`, so these programs are
+      # what fails instead — but only if something actually builds and runs
+      # them. `cargo test` does not: it builds an example's target but never
+      # executes its `main`, so a program that compiles and then panics on its
+      # first line would pass every check above.
+      #
+      # Globbed rather than named, so a fifth example is covered by existing
+      # here rather than by someone remembering to add a line. `--features cli`
+      # matches the two steps above so this reuses their build instead of
+      # triggering a fresh one.
+      - name: Run every example
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          found=0
+          for path in get/examples/*.rs; do
+            name="$(basename "$path" .rs)"
+            found=$((found + 1))
+            echo "::group::example ${name}"
+            cargo run -q -p get --features cli --example "$name"
+            echo "::endgroup::"
+          done
+          # A glob that matches nothing would make this step silently pass and
+          # report success for running no programs at all, which is the same
+          # blind spot the step exists to close.
+          test "$found" -gt 0 || { echo "::error::no examples found under get/examples/"; exit 1; }
+          echo "ran ${found} example(s)"
