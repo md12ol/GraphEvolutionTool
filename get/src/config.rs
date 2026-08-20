@@ -97,8 +97,8 @@ pub enum EvolutionConfig {
 }
 
 /// Parent-selection strategy. Maps onto [`crate::evolver::common::Selection`],
-/// whose docs list every site a second scheme touches — this variant is step 5
-/// of seven, and `dispatch::selection` is the arm that constructs it.
+/// whose docs list every site a second scheme touches — this variant is step 3
+/// of six, and `dispatch::scope_and_selection` is the arm that constructs it.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionConfig {
@@ -685,11 +685,10 @@ impl Config {
         // Irrefutable today — one variant. If a second selection scheme is
         // added, this stops compiling, which is the right way to find out.
         //
-        // It becomes a real match, and this function is also where a scheme is
-        // paired with a strategy: one that cannot supply
-        // `Selection::tournament_indices` is rejected here against steady-state,
-        // since that is the only strategy which calls it. `Selection`'s docs say
-        // which schemes those are and why.
+        // What does *not* belong here any more is a scheme-by-strategy
+        // rejection. Every scheme now answers one question over whatever slice
+        // it is handed, so there is no pairing left that the engine cannot run;
+        // only a scheme's own parameters are checked below.
         let SelectionConfig::Tournament { tournament_size } = self.selection;
 
         if tournament_size > self.population_size {
@@ -713,8 +712,11 @@ impl Config {
                 }
             }
             EvolutionConfig::SteadyState { .. } => {
-                // Steady-state only. Generational has no such floor, so this
-                // cannot be a blanket check (spec §7).
+                // Steady-state reads `tournament_size` as the size of the scope
+                // each mating event draws, and needs two parents plus two
+                // distinct others to overwrite. Generational has no such floor —
+                // its scope is the whole population — so this cannot be a
+                // blanket check.
                 if tournament_size < 4 {
                     return Err(invalid(
                         "tournament_size",

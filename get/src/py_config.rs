@@ -229,7 +229,7 @@ pub enum PyEvolutionConfig {
 /// rather than a bare integer so adding a second scheme does not change the
 /// shape of the Python API.
 ///
-/// This is step 7 of the eight a new scheme touches, and the only one nothing
+/// This is step 5 of the six a new scheme touches, and the only one nothing
 /// checks: [`crate::evolver::common::Selection`] lists them all. A variant
 /// missing here compiles and tests clean — the Rust side is complete and Python
 /// simply cannot name the scheme.

@@ -4,42 +4,36 @@ use rand::Rng;
 
 /// The candidates a single breeding event draws from.
 ///
-/// This is the "where" of an event, separate from who breeds within it
-/// ([`super::common::Selection`]) and who is replaced ([`super::replacement::Replacement`]).
-/// Splitting it out is what lets any selection scheme work with any strategy: a
-/// scheme picks parents from whatever slice it is handed and never needs an
-/// opinion about locality.
+/// The "where" of an event, separate from who breeds within it
+/// ([`super::common::Selection`]) and who is replaced
+/// ([`super::replacement::Replacement`]). Splitting it out is what lets any
+/// scheme work with any strategy: a scheme picks from whatever slice it is
+/// handed and needs no opinion about locality.
 ///
-/// It is also what makes steady-state self-elitist. Parents and replacements
-/// come from the *same* slice, so the slice's best is never among those
-/// overwritten — a guarantee that holds whichever scheme picked the parents.
+/// It is also what makes steady-state self-elitist — parents and replacements
+/// come from the *same* slice, so the slice's best is never overwritten, and
+/// that holds whichever scheme picked the parents.
 ///
-/// # Adding a variant
-///
-/// One arm in [`Scope::draw_into`], and `dispatch::scope` if it is to be
-/// reachable from a config file. Both matches are exhaustive, so the compiler
-/// finds them.
+/// A new variant is one arm in `Scope::draw_into`, plus
+/// `dispatch::scope_and_selection` to reach it from a config file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {
     /// Every individual is a candidate. Consumes no randomness.
     Global,
     /// `size` distinct individuals, drawn uniformly without replacement.
-    ///
-    /// Distinctness is required by any replacement policy that names "the worst
-    /// two members", which means nothing over a multiset.
+    /// Distinctness is what lets a replacement policy name "the worst two
+    /// members", which means nothing over a multiset.
     RandomSubset { size: usize },
 }
 
 impl Scope {
-    /// Fill `out` with the indices this event may touch.
+    /// Fill `out` with the indices this event may touch, unordered.
     ///
-    /// Writes into the caller's buffer rather than returning a new `Vec`: a
-    /// generational run draws a scope for every breeding pair, and an allocation
-    /// per pair would be a cost this abstraction has no reason to add.
-    ///
-    /// The indices are unordered. Anything needing them ranked sorts its own
-    /// copy, which for a small subset is cheaper than sorting a global scope
-    /// that nothing was going to read in order.
+    /// Writes into the caller's buffer rather than returning a new `Vec`:
+    /// generational draws a scope per breeding pair, and an allocation per pair
+    /// would be a cost this abstraction has no reason to add. Anything needing
+    /// them ranked sorts its own copy, which for a small subset beats sorting a
+    /// global scope nothing was going to read in order.
     pub(super) fn draw_into<R>(&self, population_len: usize, out: &mut Vec<usize>, rng: &mut R)
     where
         R: Rng + ?Sized,

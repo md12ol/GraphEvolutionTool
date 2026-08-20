@@ -1,5 +1,5 @@
 //! Steady-state evolution: each mating event breeds two children inside one
-//! tournament and replaces that tournament's two worst members, so most of the
+//! drawn scope and replaces two members of that same scope, so most of the
 //! population persists between events.
 
 use rand::{Rng, SeedableRng};
@@ -26,29 +26,26 @@ pub struct SteadyStateEvolver<G: Genome> {
 }
 
 impl<G: Genome> SteadyStateEvolver<G> {
-    /// Smallest scope that keeps the two parents and the two individuals they
-    /// replace disjoint.
+    /// Smallest scope keeping the two parents and the two replaced disjoint.
     ///
-    /// Three would still preserve the scope's best, but the second parent would
-    /// also be one of the replaced. Two breaks the guarantee outright: both
-    /// parents are replaced by their own children, so the scope's best is not
-    /// carried forward and the strategy stops being self-elitist.
+    /// Three preserves the scope's best but makes the second parent one of the
+    /// replaced; two breaks the guarantee outright, both parents overwritten by
+    /// their own children, and the strategy stops being self-elitist.
     const MIN_SCOPE_SIZE: usize = 4;
 
     /// Perform one mating event.
     ///
-    /// Draws a single scope of distinct individuals, breeds two parents from it
-    /// into two children, and overwrites two of its members. Because the scope's
-    /// best is never among the replaced, the population's best individual is
-    /// never discarded and no explicit elitism is needed.
+    /// Draws one scope of distinct individuals, breeds two parents from it into
+    /// two children, and overwrites two of its members. The scope's best is
+    /// never among the replaced, so the population's best is never discarded and
+    /// no explicit elitism is needed.
     ///
     /// Breeding goes through [`breed_pair`](super::common::breed_pair), which
-    /// owns the crossover roll and both mutation rolls, so this strategy and
-    /// generational cannot disagree about what they mean or draw from the RNG in
-    /// a different order.
+    /// owns the crossover roll and both mutation rolls, so the two strategies
+    /// cannot disagree about what they mean or draw them in a different order.
     ///
     /// Replacement is unconditional: a child takes its slot even if it scores
-    /// worse than the individual it displaces.
+    /// worse than what it displaces.
     fn mating_event<F, R>(&mut self, fitness: &F, fitnesses: &mut [f64], rng: &mut R)
     where
         F: Fitness,
@@ -73,8 +70,8 @@ impl<G: Genome> SteadyStateEvolver<G> {
         let children = [first, second];
         let (_, scores) = express_and_score(&children, &self.shared.genome_context, fitness);
 
-        // Drawn from the same scope as the parents, which is what keeps the
-        // scope's best out of the replaced set whatever scheme picked them.
+        // Same scope as the parents: that is what keeps the scope's best out of
+        // the replaced set whatever scheme picked them.
         let worst = self
             .context
             .replacement
@@ -154,17 +151,11 @@ impl<G: Genome> Evolver<G> for SteadyStateEvolver<G> {
         type_context: Self::TypeContext,
         population: Vec<G>,
     ) -> Self {
-        // Backstop. The config layer should reject these first, but the evolver
-        // is constructible directly (tests, embedding), so it checks rather than
-        // trusting its caller — and at construction rather than at the first
-        // mating event, which is the mid-run failure this avoids.
-        //
-        // There is deliberately no matching `elite_count` assert as generational
-        // has: steady-state carries no elites, because the scope's best is never
-        // among the two it replaces.
-        //
-        // A global scope needs neither check: it is every individual, so it is
-        // large enough by construction whenever the population is.
+        // Backstop. The config layer rejects these first, but the evolver is
+        // constructible directly (tests, embedding), and checking here rather
+        // than at the first mating event avoids a mid-run failure. A global
+        // scope needs neither check: it is every individual, so it is large
+        // enough whenever the population is.
         if let Scope::RandomSubset { size } = shared.scope {
             assert!(
                 size >= Self::MIN_SCOPE_SIZE,

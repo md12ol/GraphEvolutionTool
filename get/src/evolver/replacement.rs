@@ -5,34 +5,27 @@ use super::common::rank;
 /// Which members of a scope are replaced by the children bred within it.
 ///
 /// The counterpart to [`super::common::Selection`]: that answers who breeds,
-/// this answers who dies, and both work inside the slice
-/// [`super::scope::Scope`] drew. Keeping them apart is what stops a selection
-/// scheme from having to supply a replacement draw it has no theory for.
+/// this who dies, both inside the slice [`super::scope::Scope`] drew. Keeping
+/// them apart is what stops a scheme from having to supply a replacement draw
+/// it has no theory for.
 ///
-/// **Consumes no randomness.** Every policy here reads the scope's fitnesses
-/// and nothing else, which is why a strategy's replacement choice cannot shift
-/// a seeded run's RNG stream.
+/// **Consumes no randomness** — every policy reads the scope's fitnesses and
+/// nothing else, so a replacement choice cannot shift a seeded run's stream.
 ///
-/// # Adding a policy
-///
-/// One arm in [`Replacement::pick`], and `dispatch::replacement` if it is to be
-/// reachable from a config file. A policy needing anything the engine does not
-/// record per individual — an age, a lineage, a distance — needs that first;
-/// see `deferred.md`.
+/// A new policy is one arm in `Replacement::pick`. One needing anything the
+/// engine does not record per individual — an age, a lineage, a distance —
+/// needs that recorded first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Replacement {
-    /// The scope's least fit members, worst first.
-    ///
-    /// Never touches the scope's best, which is what makes a strategy using it
-    /// self-elitist whatever scheme chose the parents.
+    /// The scope's least fit members, worst first. Never the scope's best,
+    /// which is what makes a strategy using it self-elitist whatever scheme
+    /// chose the parents.
     Worst,
 }
 
 impl Replacement {
-    /// The `count` members of `scope` to overwrite, in the order children
-    /// should take their slots.
-    ///
-    /// Returns indices into the population, not into `scope`.
+    /// The `count` members of `scope` to overwrite, in the order children take
+    /// their slots. Indices into the population, not into `scope`.
     pub(super) fn pick(&self, scope: &[usize], fitnesses: &[f64], count: usize) -> Vec<usize> {
         assert!(
             count <= scope.len(),

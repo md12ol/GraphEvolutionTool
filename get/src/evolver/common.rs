@@ -110,53 +110,45 @@ impl Crossover {
 ///
 /// An enum rather than a trait, so a new mechanism is one variant plus one
 /// match arm, selectable by name from `config.toml` with no Rust at the call
-/// site. **This is the one extension point that cannot be reached from outside
-/// the crate** — `Fitness`, `Genome` and `Evolver` are traits a depending
-/// program implements for its own types, but a variant cannot be added to
-/// another crate's enum.
+/// site. **This is the one extension point unreachable from outside the crate**
+/// — `Fitness`, `Genome` and `Evolver` are traits a depending program
+/// implements, but a variant cannot be added to another crate's enum.
 ///
 /// # The contract every scheme keeps
 ///
-/// None of these is enforced by the signature, and breaking any of them changes
-/// the behaviour of every evolver at once rather than failing anywhere visible.
+/// None is enforced by the signature, and breaking any changes every evolver's
+/// behaviour at once rather than failing anywhere visible.
 ///
-/// - **Pick only from `scope`.** It is the whole of what this event may touch,
-///   and a scheme reaching past it breaks the guarantee that a strategy's best
-///   individual is never among those replaced.
-/// - **Sampling is with replacement.** The same individual may be returned more
-///   than once, and a caller wanting distinct parents enforces that itself. A
-///   scheme that quietly de-duplicates removes the pressure that comes from a
+/// - **Pick only from `scope`** — reaching past it breaks the guarantee that a
+///   strategy's best individual is never among those replaced.
+/// - **Sample with replacement.** A caller wanting distinct parents enforces
+///   that itself; quietly de-duplicating removes the pressure that comes from a
 ///   strong individual being drawn twice.
-/// - **Fitnesses arrive already oriented**, lower is better, so a scheme
-///   compares them directly and never consults a `Direction`. Re-checking the
-///   direction looks defensive and silently inverts every maximizing objective.
-///   Reach for [`rank`] rather than comparing floats by hand.
-/// - **All randomness comes from `rng`.** Nothing may reach for a thread RNG or
-///   the clock: two runs at one seed are required to agree, and a scheme is the
-///   easiest place to break that without any test noticing.
+/// - **Fitnesses arrive oriented**, lower is better, so compare them directly
+///   through `rank` and never consult a `Direction`. Re-checking it looks
+///   defensive and silently inverts every maximizing objective.
+/// - **All randomness comes from `rng`**, never a thread RNG or the clock, or
+///   two runs at one seed stop agreeing with nothing to report it.
 ///
-/// Nothing constrains *how* a scheme picks — pressure, and whether it reads
-/// fitness values or only their order, are its own business.
+/// How a scheme picks is its own business — pressure, and whether it reads
+/// fitness values or only their order.
 ///
 /// # Adding a scheme
 ///
-/// 1. **This enum** — the variant, plus any parameters it reads from the file.
-/// 2. **[`Selection::pick`]** — the arm. The match is exhaustive, so the
-///    compiler finds it.
-/// 3. **`config::SelectionConfig`** — the variant a user names under
-///    `[selection]`, and any constraint on its own parameters in
-///    `Config::validate_evolution_and_selection`.
-/// 4. **`dispatch::selection`** — the arm mapping that config variant onto this
-///    one.
-/// 5. **`py_config::PySelectionConfig`** — optional, and only buys a Python
-///    caller the ability to name it.
-/// 6. **`config.example.toml`** — also optional, and also the step people skip
-///    and then wonder why nobody uses the scheme.
+/// 1. **This enum** — the variant and its parameters.
+/// 2. **`Selection::pick`** — the arm; the match is exhaustive.
+/// 3. **`config::SelectionConfig`** — what a user names under `[selection]`,
+///    plus any parameter constraint in `validate_evolution_and_selection`.
+/// 4. **`dispatch::scope_and_selection`** — config variant onto this one.
+/// 5. **`py_config::PySelectionConfig`** — optional; buys a Python caller the
+///    ability to name it.
+/// 6. **`config.example.toml`** — optional, and the step people skip and then
+///    wonder why nobody uses the scheme.
 ///
-/// There is no step for locality or for replacement, and that is the point: a
-/// scheme works with every strategy because it only ever answers this one
-/// question. See [`super::scope::Scope`] and
-/// [`super::replacement::Replacement`] for the other two axes.
+/// No step here concerns locality or replacement, which is the point: a scheme
+/// works with every strategy because it answers only this one question. The
+/// other two axes are [`super::scope::Scope`] and
+/// [`super::replacement::Replacement`].
 pub enum Selection {
     /// The fittest members of the scope, best first. Consumes no randomness.
     ///

@@ -134,9 +134,9 @@ impl<G: Genome> Evolver<G> for GenerationalEvolver<G> {
         // kind: elites fill every slot, nothing breeds, and the run is a fixed
         // point that reads as a broken fitness function.
         //
-        // There is deliberately no matching `population.len() >= tournament_size`
-        // assert as steady-state has — generational samples with replacement
-        // (spec §6.1), so an oversized tournament still draws fine.
+        // There is deliberately no matching scope-size assert as steady-state
+        // has: generational's scope is the whole population and its tournaments
+        // sample with replacement, so no size can fail to draw.
         assert!(
             type_context.elite_count < population.len(),
             "elite_count {} must be smaller than the population of {}: every \
