@@ -11,6 +11,13 @@
 //! the `Fitness` trait, a genome, a context, and an evolver. There is no
 //! `Config`, no TOML, and no Python anywhere in it.
 //!
+//! **Nothing here writes a file until you say so.** An evolver hands back an
+//! `EvolutionOutcome` and stops; the config-driven routes write three files
+//! because their front end chose to. `OUTPUT_DIR` below is this program making
+//! the same choice, and `write_results` is the whole of what it takes — the
+//! same layout and the same two file formats `get-run` produces, so the
+//! winner it writes loads straight back in as another run's base graph.
+//!
 //! **The config-driven routes cannot be reached from here, and that is
 //! deliberate.** Turning a config document into concrete types is the job of a
 //! private module, so a library caller assembles the population and contexts
@@ -39,6 +46,9 @@
 //!
 //! `edge_edit_generational.rs` also carries the audit of which `config.toml`
 //! settings have a route-3 equivalent and which deliberately do not.
+
+use std::fs::File;
+use std::io::Write;
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -88,10 +98,82 @@ const MAX_EDGE_MULTIPLICITY: u32 = 1;
 const POPULATION_SIZE: usize = 60;
 const SEED: u64 = 20260817;
 
-fn main() {
-    // Everything random in the run comes from this one generator, so the whole
-    // example reproduces from SEED alone.
-    let mut rng = ChaCha8Rng::seed_from_u64(SEED);
+/// **Where this program writes its results. Change it to anywhere you like.**
+///
+/// Each run lands in `OUTPUT_DIR/<timestamp>-<seed>/`, and each replicate below
+/// gets a `run_<index>/` of its own inside that — the same layout `get-run`
+/// produces, through the same `get::run_output_dir`, so output from the two
+/// routes can be compared without translating a path.
+const OUTPUT_DIR: &str = "./output";
+
+/// How many replicates to run from `SEED`.
+///
+/// A library caller drives its own loop; there is no `n_runs` argument to a
+/// `run` call here, because the evolver runs once and hands back one outcome.
+/// Each replicate gets its own seed, derived from `SEED` so that a replicate's
+/// numbers do not change when you ask for more of them.
+const N_RUNS: usize = 2;
+
+/// Write one replicate's convergence log and winner into `directory`.
+///
+/// GET writes these files for you on the config-driven routes; a library caller
+/// has an `EvolutionOutcome` and decides for itself what to keep, which is what
+/// this function is. The formats are the ones GET reads back: the log is the
+/// same seven columns `save_logs` emits, and the edge list carries
+/// `# nodes = N`, so the winner here is a loadable base graph for the next run.
+///
+/// Every fitness written out is oriented first. Inside the engine lower is
+/// always better, whatever the objective computed, so writing the raw numbers
+/// would record a maximizing run's scores negated.
+fn write_results(
+    directory: &std::path::Path,
+    outcome: &get::evolver::EvolutionOutcome<SdaGenome>,
+    seed: u64,
+    run_index: usize,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(directory)?;
+
+    let mut log = File::create(directory.join("run_log.csv"))?;
+    writeln!(
+        log,
+        "iteration,best_fitness,mean_fitness,std_dev,ci_95,seed,run_index"
+    )?;
+    for row in &outcome.history {
+        writeln!(
+            log,
+            "{},{},{},{},{},{seed},{run_index}",
+            row.iteration,
+            outcome.direction.orient(row.best_fitness),
+            outcome.direction.orient(row.mean_fitness),
+            row.std_dev,
+            row.ci_95,
+        )?;
+    }
+
+    let mut best = File::create(directory.join("best_individual.txt"))?;
+    writeln!(
+        best,
+        "# best_fitness = {}",
+        outcome.direction.orient(outcome.best_fitness_engine)
+    )?;
+    writeln!(best, "# nodes = {NUM_NODES}")?;
+    for (u, v, weight) in outcome.best_graph.get_edge_list() {
+        writeln!(best, "{u},{v},{weight}")?;
+    }
+
+    Ok(())
+}
+
+/// One replicate, from its own derived seed.
+///
+/// Everything the run needs is built here rather than once outside the loop:
+/// the population is consumed by the evolver, and the contexts are cheap, so
+/// sharing them across replicates would buy nothing and make it easy to leak
+/// state from one run into the next.
+fn run_once(seed: u64) -> get::evolver::EvolutionOutcome<SdaGenome> {
+    // Everything random in this replicate comes from this one generator, so it
+    // reproduces from its seed alone.
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
 
     // 1. A starting population. The library caller sizes it; no context field
     //    carries the population size, because the population itself is the
@@ -146,31 +228,53 @@ fn main() {
     let fitness = Regularity { target_degree: 4 };
 
     let mut evolver = GenerationalEvolver::new(shared, strategy, population);
-    let outcome = evolver.run(&fitness, SEED);
+    evolver.run(&fitness, seed)
+}
 
-    // 5. Reading the result. Everything inside the engine is lower-is-better,
-    //    whatever the objective computed, so convert once on the way out —
-    //    otherwise a maximizing objective reports its scores negated.
-    let best = outcome.direction.orient(outcome.best_fitness_engine);
-    println!(
-        "target degree {} — {best} of {NUM_NODES} nodes reached it",
-        fitness.target_degree,
-    );
-    println!(
-        "best graph has {} edges",
-        outcome.best_graph.get_edge_list().len()
-    );
+fn main() {
+    // One stamp for the whole invocation, so every replicate lands under the
+    // same directory however long the runs take.
+    let stamp = get::utc_stamp();
 
-    let first = outcome.direction.orient(outcome.history[0].best_fitness);
-    let last_row = &outcome.history[outcome.history.len() - 1];
-    println!(
-        "best-of-generation went {first} -> {} over {} generations",
-        outcome.direction.orient(last_row.best_fitness),
-        last_row.iteration,
-    );
+    // One seed per replicate, derived the way every other route derives them.
+    let seeds = get::replicate_seeds(SEED, N_RUNS);
 
-    // The genome is here too, not just the graph it expressed to.
-    let repr = outcome.best_genome.print();
-    let head: String = repr.chars().take(60).collect();
-    println!("best genome: {head}...");
+    for (run_index, &run_seed) in seeds.iter().enumerate() {
+        let outcome = run_once(run_seed);
+
+        if N_RUNS > 1 {
+            println!("\n=== run_index {run_index}, of {N_RUNS} ===");
+        }
+
+        // 5. Reading the result. Everything inside the engine is lower-is-better,
+        //    whatever the objective computed, so convert once on the way out —
+        //    otherwise a maximizing objective reports its scores negated.
+        let best = outcome.direction.orient(outcome.best_fitness_engine);
+        println!("target degree 4 — {best} of {NUM_NODES} nodes reached it");
+        println!(
+            "best graph has {} edges",
+            outcome.best_graph.get_edge_list().len()
+        );
+
+        let first = outcome.direction.orient(outcome.history[0].best_fitness);
+        let last_row = &outcome.history[outcome.history.len() - 1];
+        println!(
+            "best-of-generation went {first} -> {} over {} generations",
+            outcome.direction.orient(last_row.best_fitness),
+            last_row.iteration,
+        );
+
+        // The genome is here too, not just the graph it expressed to.
+        let repr = outcome.best_genome.print();
+        let head: String = repr.chars().take(60).collect();
+        println!("best genome: {head}...");
+
+        // 6. Persisting it. Nothing above wrote a file — that is the library
+        //    route's default, and this is the caller deciding otherwise.
+        let directory = get::run_output_dir(Some(OUTPUT_DIR), &stamp, SEED, run_index, N_RUNS);
+        match write_results(&directory, &outcome, SEED, run_index) {
+            Ok(()) => println!("wrote {}", directory.display()),
+            Err(err) => eprintln!("warning: could not write {}: {err}", directory.display()),
+        }
+    }
 }

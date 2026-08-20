@@ -18,9 +18,7 @@
 //! nothing to tell apart.
 
 use std::env;
-use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// What the command line asked for.
 struct Args {
@@ -96,75 +94,6 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
     })
 }
 
-/// `YYYYmmdd-HHMMSS` in UTC, for naming a run's output directory.
-///
-/// UTC rather than local time, so directories from two machines sort into the
-/// order the runs actually happened. Converted here rather than through a date
-/// crate: one directory name does not justify a dependency, and the arithmetic
-/// below is the standard civil-from-days algorithm, exact for every date this
-/// program will ever see.
-fn utc_stamp() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_secs())
-        .unwrap_or(0);
-
-    let days = (secs / 86_400) as i64;
-    let time_of_day = secs % 86_400;
-
-    // Shift the epoch to 0000-03-01, which puts the leap day at the end of the
-    // year and makes the month arithmetic below a single linear formula.
-    let shifted = days + 719_468;
-    let era = shifted.div_euclid(146_097);
-    let day_of_era = shifted.rem_euclid(146_097);
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_index = (5 * day_of_year + 2) / 153;
-
-    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
-    let month = if month_index < 10 {
-        month_index + 3
-    } else {
-        month_index - 9
-    };
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
-
-    format!(
-        "{year:04}{month:02}{day:02}-{:02}{:02}{:02}",
-        time_of_day / 3_600,
-        (time_of_day % 3_600) / 60,
-        time_of_day % 60,
-    )
-}
-
-/// Where one replicate's files belong, creating the directory if needed.
-///
-/// `None` for `out_dir` keeps the historical behaviour — fixed names in the
-/// working directory — because the CI route check and every existing note about
-/// this binary expect them there.
-///
-/// `stamp` is passed in rather than read here: every replicate of one
-/// invocation belongs in the same timestamped directory, and reading the clock
-/// per replicate would scatter them the moment a run crossed a second boundary.
-fn output_dir(
-    out_dir: Option<&str>,
-    stamp: &str,
-    seed: u64,
-    run_index: usize,
-    n_runs: usize,
-) -> PathBuf {
-    let Some(root) = out_dir else {
-        return PathBuf::from(".");
-    };
-
-    let mut path = Path::new(root).join(format!("{stamp}-{seed}"));
-    if n_runs > 1 {
-        path = path.join(format!("run_{run_index}"));
-    }
-    path
-}
-
 fn main() -> ExitCode {
     let argv: Vec<String> = env::args().collect();
     let args = match parse_args(&argv) {
@@ -180,7 +109,7 @@ fn main() -> ExitCode {
         args.config_path, args.seed, args.n_runs
     );
 
-    let stamp = utc_stamp();
+    let stamp = get::utc_stamp();
 
     let summaries = match get::run_many_from_toml(&args.config_path, args.seed, args.n_runs) {
         Ok(summaries) => summaries,
@@ -217,7 +146,7 @@ fn main() -> ExitCode {
             );
         }
 
-        let directory = output_dir(
+        let directory = get::run_output_dir(
             args.out_dir.as_deref(),
             &stamp,
             args.seed,
