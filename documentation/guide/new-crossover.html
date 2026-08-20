@@ -57,7 +57,7 @@
 
 <h2>Steps 1 and 2 — the engine side</h2>
 
-<pre><code>// step 1 — in `enum Crossover`
+<pre><code class="language-rust">// step 1 — in `enum Crossover`
 MyCrossover { some_param: f64 },
 
 // step 2 — in `Crossover::recombine`
@@ -83,7 +83,7 @@ Crossover::MyCrossover { some_param } =&gt; { /* recombine `first` and `second` 
   chosen independently — so nothing but this match can catch an illegal combination:
 </p>
 
-<pre><code>// step 3a — in `config::CrossoverConfig`
+<pre><code class="language-rust">// step 3a — in `config::CrossoverConfig`
 MyCrossover { some_param: f64 },
 
 // step 3b — in the crossover/genome compatibility match
@@ -102,7 +102,7 @@ MyCrossover { some_param: f64 },
 
 <h2>Step 4 — dispatch</h2>
 
-<pre><code>CrossoverConfig::MyCrossover { some_param } =&gt; {
+<pre><code class="language-rust">CrossoverConfig::MyCrossover { some_param } =&gt; {
     Crossover::MyCrossover { some_param: *some_param }
 }</code></pre>
 
@@ -143,5 +143,6 @@ MyCrossover { some_param: f64 },
 </p>
 
 </main>
+<script src="../assets/site.js"></script>
 </body>
 </html>

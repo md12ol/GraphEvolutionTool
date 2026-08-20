@@ -67,7 +67,7 @@
   that performs it:
 </p>
 
-<pre><code>// step 1 — in `enum Selection`
+<pre><code class="language-rust">// step 1 — in `enum Selection`
 Roulette { pressure: f64 },
 
 // step 2 — in `Selection::pick`
@@ -103,7 +103,7 @@ Selection::Roulette { pressure } =&gt; {
 
 <p>One change, two files. The config variant, and the arm that maps it onto the engine variant:</p>
 
-<pre><code>// step 3 — in `config::SelectionConfig`
+<pre><code class="language-rust">// step 3 — in `config::SelectionConfig`
 Roulette { pressure: f64 },
 
 // step 4 — in `dispatch`'s selection mapping
@@ -157,5 +157,6 @@ SelectionConfig::Roulette { pressure } =&gt; {
 </p>
 
 </main>
+<script src="../assets/site.js"></script>
 </body>
 </html>

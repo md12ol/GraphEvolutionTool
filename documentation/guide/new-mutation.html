@@ -24,7 +24,7 @@
     <b>eight</b> markers: four for edge-edit and four for SDA, interleaved. Every marker names its
     half, so narrow the search to yours:
   </p>
-<pre><code>git grep -nE "ADD A MUTATION STEP . \(for EdgeEdit\)"   # edge-edit's four
+<pre><code class="language-bash">git grep -nE "ADD A MUTATION STEP . \(for EdgeEdit\)"   # edge-edit's four
 git grep -nE "ADD A MUTATION STEP . \(for SDA\)"        # SDA's four
 git grep -n  "ADD A MUTATION STEP"                      # both, all eight</code></pre>
   <p>
@@ -65,7 +65,7 @@ git grep -n  "ADD A MUTATION STEP"                      # both, all eight</code>
 </table>
 </div>
 
-<pre><code>// step 1 — in `enum EdgeEditMutation` (genomes/genome.rs)
+<pre><code class="language-rust">// step 1 — in `enum EdgeEditMutation` (genomes/genome.rs)
 MyMutation { some_param: f64 },
 
 // step 2 — in `EdgeEditGenome::mutate` (genomes/edge_edit.rs)
@@ -106,7 +106,7 @@ EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
 </table>
 </div>
 
-<pre><code>// step 1 — in `enum SdaMutation` (genomes/genome.rs)
+<pre><code class="language-rust">// step 1 — in `enum SdaMutation` (genomes/genome.rs)
 MyMutation { some_param: f64 },
 
 // step 2 — in `SdaGenome::mutate` (genomes/sda.rs)
@@ -165,5 +165,6 @@ SdaMutationConfig::MyMutation { some_param } =&gt; {
 </p>
 
 </main>
+<script src="../assets/site.js"></script>
 </body>
 </html>
