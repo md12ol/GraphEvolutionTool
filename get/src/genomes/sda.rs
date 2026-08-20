@@ -290,6 +290,17 @@ impl Genome for SdaGenome {
     /// genuinely exchange their starting behaviour.
     /// `EdgeEditGenome::crossover` declines at the same length, its genes
     /// having no equivalent passenger to carry.
+    ///
+    /// The obligations every crossover carries — both children kept, both
+    /// parents left valid for the representation, every draw from `rng` — are
+    /// stated once on [`Genome::crossover`]. Validity is a real constraint
+    /// here rather than a free one: a transition stores a *target state
+    /// index*, so a swapped band carries values that only mean anything
+    /// against a state table of the same size. What makes that safe is that
+    /// `num_states` is a config value fixed for the whole run, so every genome
+    /// in a population is built to it — not the `shared_length` bound below,
+    /// which guards the positions being indexed and could not fix a target
+    /// value pointing past a shorter automaton's end.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) {
         // States past the shorter automaton's length have no counterpart to swap.
         let shared_length = self.transitions.len().min(other.transitions.len());
@@ -314,6 +325,13 @@ impl Genome for SdaGenome {
     /// target state with probability `context.transition_vs_response_rate` and
     /// its response with the remainder. Callers that want more disruption per
     /// generation call this multiple times.
+    ///
+    /// Exactly one, per the [`Genome::mutate`] contract, which has the rest of
+    /// what a mutation owes: the engine's two dice rolls, why magnitudes are
+    /// not equalized across representations, and that every draw comes from
+    /// `rng`. The three outcomes above are one mutation between them, not
+    /// three — whichever branch is taken, the method returns having changed a
+    /// single thing.
     ///
     /// The second draw was a plain coin flip before the rates were
     /// configurable. `random_bool(0.5)` and `random::<bool>()` do not consume

@@ -243,6 +243,12 @@ impl Genome for EdgeEditGenome {
     /// crossover. `SdaGenome::crossover` does cross at that length, because
     /// its state 0 takes `init_char` with it and so has something further to
     /// exchange.
+    ///
+    /// The obligations every crossover carries — both children kept, both
+    /// parents left valid for the representation, every draw from `rng` — are
+    /// stated once on [`Genome::crossover`]. A gene is a self-contained
+    /// integer here, so leaving both sides valid costs nothing: swapping any
+    /// two decodable genes yields two decodable genomes.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) {
         let shared_length = self.genes.len().min(other.genes.len());
         if shared_length < 2 {
@@ -257,9 +263,16 @@ impl Genome for EdgeEditGenome {
 
     /// Reroll one gene, its opcode drawn from the operation mix.
     ///
-    /// Exactly one, per the [`Genome::mutate`] contract. This previously rolled
-    /// `1..=4` against a hardcoded `MAX_MUTATIONS`, which made the engine's
-    /// `max_mutations` mean nothing here; the count is the engine's to decide.
+    /// Exactly one, per the [`Genome::mutate`] contract, which has the rest of
+    /// what a mutation owes: the engine's two dice rolls, why magnitudes are
+    /// not equalized across representations, and that every draw comes from
+    /// `rng`. This previously rolled `1..=4` against a hardcoded
+    /// `MAX_MUTATIONS`, which made the engine's `max_mutations` mean nothing
+    /// here; the count is the engine's to decide.
+    ///
+    /// *One mutation* is one gene, whatever that gene decodes to — replacing a
+    /// `null` with a nine-vertex `swap` counts the same as replacing one
+    /// `toggle` with another.
     fn mutate<R: Rng + ?Sized>(&mut self, _context: &Self::Context, rng: &mut R) {
         if self.genes.is_empty() {
             return;
