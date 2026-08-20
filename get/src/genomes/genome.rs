@@ -284,11 +284,16 @@ pub trait Genome: Clone + Send + Sync {
 /// # Adding one
 ///
 /// Applies the same way to [`SdaMutation`] below, for whichever
-/// representation you are extending. **Every step is marked at its own site**
-/// — search the repo for `ADD A MUTATION STEP 3`, or any other number:
+/// representation you are extending — and this chain **exists twice**, once
+/// per genome, so every marker names which half it belongs to. Follow only the
+/// half you are extending: a step from the other one is a different enum in a
+/// different file, and applying it does nothing for your representation.
+/// **Every step is marked at its own site** — search the repo for
+/// `ADD A MUTATION STEP 3 (for EdgeEdit)`, or any other number:
 ///
 /// ```text
-/// git grep -n "ADD A MUTATION STEP"    # all four, in one list
+/// git grep -nE "ADD A MUTATION STEP . \(for EdgeEdit\)"   # this genome's four
+/// git grep -n  "ADD A MUTATION STEP"                     # both genomes, all eight
 /// ```
 ///
 /// 1. **This enum** — the variant, plus any parameters it reads.
@@ -308,12 +313,12 @@ pub enum EdgeEditMutation {
     /// edge-edit did before the operator was selectable.
     #[default]
     RerollGene,
-    // ADD A MUTATION STEP 1 — a variant here, plus any parameters it reads:
+    // ADD A MUTATION STEP 1 (for EdgeEdit) — a variant here, plus any parameters it reads:
     //
     //     MyMutation { some_param: f64 },
     //
     // Then the arm performing it, in `EdgeEditGenome::mutate` — search
-    // `ADD A MUTATION STEP 2` for it.
+    // `ADD A MUTATION STEP 2 (for EdgeEdit)` for it.
 }
 
 /// Which mutation an SDA genome performs. Per representation, for the reason
@@ -323,6 +328,15 @@ pub enum EdgeEditMutation {
 /// into a variant here. They predate this enum and are read by the one
 /// operator below; folding them in would rename two live config keys to buy
 /// nothing while a single operator ships.
+///
+/// # Adding one
+///
+/// The four steps [`EdgeEditMutation`] lists, in this genome's copy of the
+/// chain. Take the `(for SDA)` markers and none of the `(for EdgeEdit)` ones:
+///
+/// ```text
+/// git grep -nE "ADD A MUTATION STEP . \(for SDA\)"    # this genome's four
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SdaMutation {
     /// Redraw exactly one of: the initial character, one transition's target
@@ -330,12 +344,12 @@ pub enum SdaMutation {
     /// [`SdaContext`]. What SDA did before the operator was selectable.
     #[default]
     RedrawOne,
-    // ADD A MUTATION STEP 1 — a variant here, plus any parameters it reads:
+    // ADD A MUTATION STEP 1 (for SDA) — a variant here, plus any parameters it reads:
     //
     //     MyMutation { some_param: f64 },
     //
     // Then the arm performing it, in `SdaGenome::mutate` — search
-    // `ADD A MUTATION STEP 2` for it.
+    // `ADD A MUTATION STEP 2 (for SDA)` for it.
 }
 
 /// Configuration used when an edge-edit genome modifies an initial graph.

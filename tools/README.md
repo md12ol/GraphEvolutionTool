@@ -4,6 +4,32 @@ Nothing here is part of GET. These are standard-library Python scripts, run by
 hand, that prepare data for it or read what it produced. They are not a package,
 not an entry point in `pyproject.toml`, and not built into the wheel.
 
+## `graph_to_png.py`
+
+Draws a GET edge file as a PNG — a run's `best_individual.txt`, a base graph, a
+reference graph, anything carrying the `# nodes = N` header.
+
+```bash
+python3 tools/graph_to_png.py best_individual.txt              # -> best_individual.png
+python3 tools/graph_to_png.py best_individual.txt out/win.png  # -> out/win.png
+```
+
+One required argument, the graph file; an optional second says where the image
+goes, defaulting to the input path with a `.png` extension.
+
+Standard library only, like everything else here: the PNG is encoded with
+`zlib` and the layout is a plain force-directed one, so there is no matplotlib
+and no install step. It draws a readable diagram, not a publication figure —
+for the latter, read the edge list into whichever library you already use.
+
+Deterministic, with no seed to pass: the layout starts from a circle rather
+than from random positions, so two runs over one file produce byte-identical
+images and a picture is safe to check in beside a result.
+
+**It reads 0-indexed files, because that is what GET writes.** A 1-indexed file
+— `examples/base_graph.csv` is one — is rejected by name rather than shifted
+silently, since nothing in the file says which numbering produced it.
+
 ## `tudataset_to_get.py`
 
 Converts a [TUDataset](https://chrsmrrs.github.io/datasets/) collection into a

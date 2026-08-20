@@ -489,10 +489,10 @@ impl Genome for SdaGenome {
     fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R) {
         match context.mutation {
             SdaMutation::RedrawOne => self.redraw_one(context, rng),
-            // ADD A MUTATION STEP 2 — the arm performing your variant. Keep
+            // ADD A MUTATION STEP 2 (for SDA) — the arm performing your variant. Keep
             // the exactly-one-mutation contract this method's own doc states.
             // The step after this one is `config::SdaMutationConfig` —
-            // search `ADD A MUTATION STEP 3` for it.
+            // search `ADD A MUTATION STEP 3 (for SDA)` for it.
         }
     }
 

@@ -89,6 +89,29 @@ jobs:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
           path: dist
 
+  # One stable name for `main`'s ruleset to require.
+  #
+  # A required status check is matched by literal name, and `build` renders one
+  # name per matrix cell — `linux x86_64`, `macos aarch64`, and so on. Requiring
+  # those would pin five names into repo settings that no file here controls, so
+  # dropping a target or renaming a runner would leave the ruleset waiting on a
+  # check nothing produces, blocking every pull request until someone edited
+  # GitHub. This job's name never changes, whatever the matrix does.
+  #
+  # `if: always()` so it runs even when a cell failed — without it a failed
+  # matrix leaves this skipped, and a skipped required check blocks the merge
+  # with no explanation of what actually broke.
+  wheels-ok:
+    name: wheels ok
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every wheel built
+        run: |
+          echo "build result: ${{ needs.build.result }}"
+          test "${{ needs.build.result }}" = success
+
   publish-testpypi:
     name: publish to TestPyPI
     needs: build

@@ -160,7 +160,7 @@ pub enum ReplacementConfig {
     /// self-elitist: the scope's best is never among those overwritten.
     #[default]
     Worst,
-    // ADD A REPLACEMENT STEP 3 — the variant a user names under
+    // ADD A REPLACEMENT STEP 3 (for SteadyState) — the variant a user names under
     // `[evolution] replacement`, mirroring the one added to `Replacement`:
     //
     //     Random,
@@ -297,13 +297,13 @@ pub enum EdgeEditMutationConfig {
     /// Reroll one gene from the operation mix. The default.
     #[default]
     RerollGene,
-    // ADD A MUTATION STEP 3 — a variant here, matching the one added to
+    // ADD A MUTATION STEP 3 (for EdgeEdit) — a variant here, matching the one added to
     // `EdgeEditMutation`:
     //
     //     MyMutation { some_param: f64 },
     //
     // Then the arm in `dispatch::edge_edit_mutation` that maps it onto the
-    // operator — search `ADD A MUTATION STEP 3` again for that arm.
+    // operator — search `ADD A MUTATION STEP 3 (for EdgeEdit)` again for that arm.
 }
 
 /// Everything the sda genome takes from `[genome]`.
@@ -357,13 +357,13 @@ pub enum SdaMutationConfig {
     /// chosen by the two rates above. The default.
     #[default]
     RedrawOne,
-    // ADD A MUTATION STEP 3 — a variant here, matching the one added to
+    // ADD A MUTATION STEP 3 (for SDA) — a variant here, matching the one added to
     // `SdaMutation`:
     //
     //     MyMutation { some_param: f64 },
     //
     // Then the arm in `dispatch::sda_mutation` that maps it onto the
-    // operator — search `ADD A MUTATION STEP 3` again for that arm.
+    // operator — search `ADD A MUTATION STEP 3 (for SDA)` again for that arm.
 }
 
 /// Fitness objective and its parameters.
@@ -2023,84 +2023,15 @@ num_epidemics  = 30
         .expect("the shipped example config should load and validate");
     }
 
-    #[test]
-    fn the_examples_commented_struct_match_block_parses_and_matches_the_defaults() {
-        // `the_example_config_loads_and_validates_from_disk` only exercises the
-        // *active* [fitness] block, so every commented alternative in that file
-        // is unchecked prose. This uncomments the struct_match one, swaps it in
-        // for the active block, and validates it -- which also pins the
-        // documented defaults against the ones the code actually applies.
-        let text = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../config.example.toml"
-        ))
-        .expect("the shipped example config should be readable");
-
-        // Located by walking lines rather than by searching for a needle with
-        // an embedded "\n". `config.example.toml` has no `eol` attribute, so a
-        // checkout with `core.autocrlf=true` -- git's default on Windows, which
-        // is what both owners develop on -- gives it CRLF endings, and a needle
-        // containing a bare "\n" then matches nothing at all. The loop below was
-        // never exposed to this: `lines()` strips the "\r" itself. Only the
-        // search was, which is why the test failed while the parse it guards
-        // would have been fine.
-        let lines: Vec<&str> = text.lines().collect();
-        let mut found = None;
-        for i in 0..lines.len().saturating_sub(1) {
-            if lines[i] == "# [fitness]" && lines[i + 1].contains("\"struct_match\"") {
-                found = Some(i);
-                break;
-            }
-        }
-        let start = found.expect("the example should carry a commented struct_match block");
-
-        let mut block = String::new();
-        for line in &lines[start..] {
-            // The block ends at the first line that is not part of it.
-            let Some(rest) = line.strip_prefix("# ") else {
-                break;
-            };
-            block.push_str(rest);
-            block.push('\n');
-        }
-
-        // Everything above [fitness] in the fixture, with the example's block
-        // in place of the fixture's own.
-        let config_text = format!(
-            "population_size = 20\nnetwork_size = 30\ncrossover_rate = 0.9\n\
-             mutation_rate = 0.2\nmax_edge_multiplicity = 1\n\
-             \n[evolution]\ntype = \"generational\"\nnum_generations = 5\n\
-             \n[scope]\ntype = \"global\"\n\
-             \n[selection]\ntype = \"tournament\"\ntournament_size = 3\n\
-             \n[genome]\ntype = \"edge_edit\"\ngene_length = 32\n\n{block}"
-        );
-
-        let config = Config::from_toml_str(&config_text)
-            .expect("the example's struct_match block should parse once uncommented");
-        config
-            .validate()
-            .expect("and should validate, or the example documents an invalid config");
-
-        // The example writes the defaults out explicitly, so a default changed
-        // in code and not in the file is a silent documentation lie.
-        match &config.fitness {
-            FitnessConfig::StructMatch {
-                degree_bins,
-                clustering_bins,
-                spectral_bins,
-                degree_gamma,
-                density_weight,
-                ..
-            } => {
-                assert_eq!(*degree_bins, default_struct_bins());
-                assert_eq!(*clustering_bins, default_struct_bins());
-                assert_eq!(*spectral_bins, default_struct_bins());
-                assert_eq!(*degree_gamma, default_struct_gamma());
-                assert_eq!(*density_weight, default_struct_weight());
-            }
-            other => panic!("expected struct_match, got {other:?}"),
-        }
-    }
+    // `the_examples_commented_struct_match_block_parses_and_matches_the_defaults`
+    // was here. It uncommented the example's struct_match [fitness] block,
+    // parsed it, and pinned the defaults the file documented against the ones
+    // the code applies. The block is gone as of the joint meeting of
+    // 2026-08-20: no shipped example uses struct_match, because it needs
+    // reference data a new reader does not have. The defaults it guarded are
+    // now documented on the site rather than in the file, where no test can
+    // reach them -- which is a real loss, recorded here rather than left to be
+    // rediscovered.
 
     #[test]
     fn a_missing_config_file_is_an_io_error_rather_than_a_panic() {
@@ -2160,6 +2091,11 @@ num_epidemics  = 30
             let stripped = line.strip_prefix('#').map(|rest| rest.trim_start());
             match stripped {
                 Some("[genome]") => inside = true,
+                // A second table header ends the block. Setup B is commented
+                // out as a whole, `#` and all, so its blank separator lines are
+                // still comments and the run does not end at one -- without
+                // this the collector swallows [fitness] too.
+                Some(content) if inside && content.starts_with('[') => break,
                 Some(content) if inside => {
                     block.push_str(content);
                     block.push('\n');

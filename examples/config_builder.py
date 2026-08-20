@@ -1,21 +1,24 @@
-"""Building GET configurations from Python.
+"""Building and validating GET configurations from Python.
 
-The Python-side counterpart to `config.example.toml`: every configuration
-that file shows in TOML, built here as typed objects instead. Both routes
-converge on the same parser and the same validator (spec section 8), so
-anything one accepts the other accepts, and anything one rejects the other
-rejects with the same message.
+**This script does not evolve anything.** It builds configurations, validates
+them and prints them, which is all it is for — the object-building route to the
+same documents `config.example.toml` writes in TOML. Running it costs nothing
+and produces no files.
+
+For a Python program that actually runs an evolution, see its two neighbours,
+which are the two Python routes:
+
+    examples/python_inline.py        parameters written in the file itself
+    examples/python_from_config.py   parameters read from a config.toml
+
+Both routes converge on the same parser and the same validator, so anything one
+accepts the other accepts, and anything one rejects the other rejects with the
+same message.
 
 Run it after installing the extension module:
 
     maturin develop        # or: pip install .
     python examples/config_builder.py
-
-Every example below works today. `GraphEvolver.run()` works too, and returns a
-`RunResult` carrying `best_fitness`, `best_edges`, `best_genome_repr` and the
-convergence `history` — but this script deliberately stops at building,
-validating and printing configurations, so that running it costs nothing. The
-`evolve_with_a_custom_objective` example marks the one line that would evolve.
 """
 
 import os

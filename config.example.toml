@@ -1,180 +1,64 @@
 # Example configuration for the Graph Evolution Tool (GET).
 #
-# Copy to `config.toml` and adjust. Fields map onto `get::config::Config`.
-# Commented blocks show the alternative choices for each tagged section.
+# Copy to `config.toml` and adjust. It holds TWO complete setups: the first is
+# live, the second is commented out below it. To switch, comment the first out
+# and uncomment the second — no key here is edited in isolation, and no block
+# from one setup makes sense inside the other.
 #
-# There are two ways to reach a configuration, and this file is one of them.
-# `the_shipped_example()` in `examples/config_builder.py` builds this same one
-# as typed Python objects, so the two can be read side by side to see what a
-# TOML key looks like from the other route.
+#   Setup A (live)        edge-edit genome, generational strategy, epi_spread
+#   Setup B (commented)   SDA genome, steady-state strategy, epi_prof_match
 #
-# They match today, and nothing checks that they still do. That is deliberate:
-# they exist to show the two routes, not to be locked together, and a test that
-# failed whenever this file was edited alone would cost more than a drift does.
-
-# --- Shared evolution settings ------------------------------------------------
-
-population_size = 200        # number of individuals per generation
-network_size    = 100        # number of nodes in every expressed graph
-
-# Edge-weight cap. 1 = unweighted (the default if this line is omitted);
-# values up to 5 allow parallel edges / multigraphs.
-max_edge_multiplicity = 1
-
-crossover_rate = 0.9         # probability a selected pair is recombined
-mutation_rate  = 0.2         # probability a child is mutated
-
-# How many mutations a mutating child takes, drawn uniformly from 1..=max_mutations
-# (the default if this line is omitted is 1). `mutation_rate` decides whether a
-# child mutates at all; this decides how many mutations it then takes. Must be at
-# least 1. Note that one mutation is one gene for edge-edit and one transition for
-# SDA, so the same count is not the same disruption across representations.
-max_mutations = 1
-
-# --- Evolution strategy -------------------------------------------------------
-# Generational: replace the whole population each generation, keeping elites.
+# Every key, what it does and what else it can be, is on the documentation site.
+# This file is short on purpose: it is what you copy, not what you read.
 #
-# ADD A STRATEGY STEP 7 — an example block for your strategy, here or as the
-# commented-out alternative below `[selection]` follows for steady-state:
-#
-#     [evolution]
-#     type          = "my_strategy"
-#     num_my_events = 100000
-#
-# A strategy missing from this example file still works — it is just one most
-# people never find, because this is the file they copy from.
-#
-# `crate::evolver::Evolver`'s doc comment in `get/src/evolver/mod.rs` walks
-# all seven steps in order.
+# `examples/config_builder.py` builds setup A as typed Python objects, for the
+# route that constructs a config in code instead of reading one.
+
+
+# =============================================================================
+# SETUP A — edge-edit + generational + epi_spread
+# =============================================================================
+
+population_size       = 200
+network_size          = 100
+max_edge_multiplicity = 1     # 1 = unweighted; up to 5 allows parallel edges
+
+crossover_rate = 0.9          # chance a selected pair recombines
+mutation_rate  = 0.2          # chance a child mutates at all
+max_mutations  = 1            # how many mutations it then takes, from 1..=this
 
 [evolution]
 type            = "generational"
 num_generations = 500
-elite_count     = 1          # best individuals carried forward (default 1)
+elite_count     = 1
 
-# Steady-state alternative: one mate-and-replace event at a time. It pairs with
-# `[scope] type = "random_subset"` and `[selection] type = "best"` below —
-# together those are what "tournament selection" decomposes into.
-#
-# `replacement` names which of the scope the two children overwrite. Omitted, it
-# is "worst", which is what keeps the strategy self-elitist: the scope's best is
-# never among those replaced, whichever scheme picked the parents.
-# [evolution]
-# type              = "steady_state"
-# num_mating_events = 100000
-# replacement       = { type = "worst" }
-
-# --- Parent selection ---------------------------------------------------------
-# Tournament is the only scheme GET ships. Adding another means editing your own
-# copy of GET — selection is an enum rather than a trait, so unlike an objective
-# or a genome it cannot be supplied from outside the crate. The `Selection` enum
-# in get/src/evolver/common.rs documents every site such a scheme touches.
-
-# --- Which slice of the population each breeding event draws from ------------
-# "global"        every individual is a candidate; what generational uses
-# "random_subset" a fresh draw of `size` distinct individuals per event; what
-#                 steady-state uses, and where its selection pressure comes from
-#
-# `size` belongs to this block alone. Steady-state needs at least 4 — two
-# parents and the two individuals they replace must be distinct.
 [scope]
+# Which slice of the population one breeding event may touch.
 type = "global"
 
-# ADD A SCOPE STEP 6 — the last step, optional and the one people skip: a
-# commented-out block naming your variant, so someone copying this file can find
-# it. Give it its own parameters; nothing else's block should have to be read to
-# understand this one.
-#
-#     [scope]
-#     type   = "neighbourhood"
-#     radius = 2
-
-# --- Which of that slice becomes a parent ------------------------------------
-# "best"       the fittest of the scope; pressure comes from the scope's size
-# "tournament" a tournament of `tournament_size`, sampled with replacement
-#
-# A steady-state run pairs `[scope] type = "random_subset"` with
-# `type = "best"` here, which is what "tournament selection" decomposes into.
 [selection]
+# Which of that slice becomes a parent. `tournament_size` sizes the tournament
+# only; the scope has its own `size`.
 type            = "tournament"
-tournament_size = 5          # sizes the tournament only; the scope has its own
-
-# ADD A SELECTION STEP 6 — the last step, optional and the one people skip: a
-# commented-out block naming your scheme, so someone copying this file can find
-# it. Only the scheme's own parameters belong here — the scope has its own
-# `size` under `[scope]`, and no scheme should need to size it.
-#
-#     [selection]
-#     type     = "roulette"
-#     pressure = 1.5
-
-# --- Recombination operator ---------------------------------------------------
-# Two-point is the only operator GET ships, and it is what every representation
-# did before this section existed — so leaving the block out runs exactly as an
-# older config did. `crossover_rate` above is separate and still applies: it
-# decides WHETHER a pair recombines, this decides HOW.
-#
-# What two-point swaps depends on the representation: a band of genes for
-# edge-edit, a band of states for SDA. Each also decides how much overlap it
-# needs before crossing at all, and says so at its own `crossover`.
-#
-# Adding an operator of your own? This block is one of six places it has to
-# touch, and the `Crossover` enum in get/src/evolver/common.rs walks all six in
-# order. Note this section applies to WHICHEVER genome is selected, so an
-# operator that only some representations can perform has to be rejected in
-# `Config::validate_crossover` — nothing else pairs the two.
-#
-# ADD A CROSSOVER STEP 6 — an example block for your operator, here or as a
-# commented-out alternative the way [evolution]'s steady-state does:
-#
-#     [crossover]
-#     type       = "my_crossover"
-#     some_param = 0.5
-#
-# Optional, and the step people skip and then wonder why nobody uses the
-# operator: this file is what a new user copies from.
+tournament_size = 5
 
 [crossover]
 type = "two_point"
 
-# --- Genome representation ----------------------------------------------------
-# Edge-edit: an edit script applied to a base graph.
-#
-# The base graph itself is NOT a config value, and there is deliberately no key
-# for it here: it is either data you brought or the output of a previous run,
-# and neither belongs in a document that is meant to be the run's reproducible
-# record. It arrives through the evolver instead, either as a list you already
-# hold or as a file:
-#
-#     evolver.set_base_graph(100, edges)
-#     evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)
-#
-# The file is one edge per line, `start,end,weight`. `min_node_index` is where
-# your own node numbering starts — pass 1 for a 1-indexed file, and the results
-# come back 1-indexed too. Left unset, a run starts from an empty graph, which
-# leaves five of the nine edit operations inert until `add` or `toggle` have
-# built some structure. See `examples/config_builder.py`, `seeding_from_a_file`.
-
-# ADD A GENOME STEP 7 — a commented-out example block for your representation,
-# alongside the SDA one further down:
-#
-#   # [genome]
-#   # type           = "my_genome"
-#   # some_dimension = 12
-#
-# The last of the seven steps listed in `get/src/genomes/genome.rs`, which has
-# the other six. Optional and free to skip if the representation does not ship,
-# but this file is what people copy from, so one left out is one most people
-# never find.
 [genome]
 type        = "edge_edit"
-gene_length = 256            # number of edit operations per genome
+gene_length = 256
 
-# Relative probability of drawing each edit operation, used when generating and
-# mutating genes. Weights are relative, not percentages: all-equal is the same
-# distribution whether every value is 1.0 or 10.0. Omit the table to leave every
-# operation at 1.0, omit individual lines to leave just those at 1.0, or set an
-# operation to 0.0 to disable it outright. At least one must be positive.
+# The base graph is deliberately not a key here — it is data, not configuration.
+# Set it through the evolver: `set_base_graph(100, edges)`, or
+# `set_base_graph_from_file("base_graph.csv", min_node_index=0)`, where
+# `min_node_index` is where your own numbering starts and results come back in.
+# The file needs a `# nodes = N` header. Left unset, a run starts from an empty
+# graph, which leaves five of the nine edit operations inert until `add` or
+# `toggle` have built some structure.
+
+# Relative probability of drawing each edit operation. Omit the table to leave
+# every operation at 1.0; at least one must be positive.
 # [genome.operation_weights]
 # toggle       = 1.0
 # hop          = 1.0
@@ -184,168 +68,121 @@ gene_length = 256            # number of edit operations per genome
 # local_toggle = 1.0
 # local_add    = 1.0
 # local_delete = 1.0
-# null         = 0.0        # e.g. drop the no-op so every gene does something
+# null         = 0.0
 
-# Which mutation edge-edit applies. Reroll-gene is the only one it ships, and
-# what it always did before this became selectable — omit the line for the
-# same effect.
-# mutation = { type = "reroll_gene" }
+[fitness]
+type           = "epi_spread"
+infection_rate = 0.5          # high on purpose: at 0.05 an outbreak on a sparse
+                              # 100-node graph dies before topology matters, so
+                              # every individual scores alike and selection has
+                              # nothing to act on
+num_epidemics  = 30
+# patient_zero         = 0    # omit for a fresh random seed node per epidemic
+# min_epidemic_length  = 3    # outbreaks shorter than this are re-simulated,
+# max_epidemic_retries = 5    # up to this many times. Set length 1 to disable.
 
-# ADD A MUTATION STEP 4 — an example line for your edge-edit operator, here
-# alongside reroll-gene, e.g.:
-#
-#   mutation = { type = "my_mutation", some_param = 0.5 }
-#
-# Optional, and the step people skip and then wonder why nobody uses the
-# operator: this file is what a new user copies from.
+# No seed appears anywhere in this file. One master seed goes to `run()`, and
+# the population, evolution, epidemics and replicates all derive from it.
 
-# SDA alternative: a self-driving automaton that generates a graph from scratch.
-# There is no `num_chars`: the alphabet is derived as max_edge_multiplicity + 1,
-# so every character is a legal edge weight and none is ever clamped away.
+
+# =============================================================================
+# SETUP B — SDA + steady-state + epi_prof_match
+# =============================================================================
+# Uncomment everything below and comment out setup A above.
+
+# population_size       = 200
+# network_size          = 100
+# max_edge_multiplicity = 1
 #
-# One mutation redraws either the initial character, one transition's target
-# state, or one transition's response. The last two lines choose which: the
-# first is the chance of taking init_char, and the second splits what is left
-# between a target state and a response. Omit either to keep the value shown,
-# which is what SDA used before these were configurable.
+# crossover_rate = 0.9
+# mutation_rate  = 0.2
+# max_mutations  = 1
+#
+# [evolution]
+# type              = "steady_state"
+# num_mating_events = 100000
+# replacement       = { type = "worst" }   # the default; keeps the scope's best
+#
+# [scope]
+# # Steady-state needs at least 4 — two parents and the two they replace must
+# # be distinct. This `size` is where its selection pressure comes from.
+# type = "random_subset"
+# size = 6
+#
+# [selection]
+# # `random_subset` + `best` is what "tournament selection" decomposes into.
+# type = "best"
+#
+# [crossover]
+# type = "two_point"
+#
 # [genome]
+# # The alphabet is derived as max_edge_multiplicity + 1, so there is no
+# # `num_chars` and no character is ever clamped away.
 # type                        = "sda"
 # num_states                  = 12
 # max_resp_len                = 4
-# init_state                  = 0     # starting state; must be < num_states
+# init_state                  = 0
 # init_char_mutation_rate     = 0.04
 # transition_vs_response_rate = 0.5
-# mutation                     = { type = "redraw_one" }  # the only one SDA ships; also the default
-
-# ADD A MUTATION STEP 4 — an example line for your SDA operator, the same
-# way as edge-edit's above. Optional, for the same reason.
-
-# --- Fitness objective --------------------------------------------------------
-# Three objectives read the same SIR simulation over the expressed graph, and
-# share the parameter block below: epi_spread (total ever-infected, maximized),
-# epi_length (timesteps to burn out, maximized), and epi_prof_match (RMSE against
-# a target profile, minimized). Direction is fixed by the objective and is
-# deliberately not configurable.
 #
-# No seed appears anywhere in this file. One master seed is passed to `run()`
-# and the population, evolution, epidemics and replicate stream all derive from
-# it, so replicates differ in their epidemics as well as their evolution.
-#
-# Migrating an older config: delete its `seed` line. A leftover `seed` under
-# [fitness] is rejected by name — silently ignoring it would look like it still
-# controls the epidemics when it no longer does.
-#
-# `target_profile` is rejected the same way when the objective is not
-# epi_prof_match. These two keys are named checks, not a general unknown-key
-# sweep: any other unrecognized key under [fitness] is still ignored without a
-# word, so check spelling against this file.
-
-# Adding an objective of your own? This block is one of six places it has to
-# touch, and the module doc at the top of `get/src/fitness.rs` walks all six in
-# order. An objective missing from this example file still works — it is just
-# one most people never find, because this is the file they copy from.
-[fitness]
-type           = "epi_spread"
-infection_rate = 0.5         # per-edge transmission probability per timestep.
-                             # Chosen for a visible selection gradient, not for
-                             # realism: 0.05 is the plausible per-contact figure,
-                             # but on a 100-node sparse graph an outbreak dies
-                             # almost immediately whatever the topology, so every
-                             # individual scores alike and selection has nothing
-                             # to act on. Measured over 500 generations at 0.05,
-                             # best fitness wanders 1.20 -> 1.30 -> 1.27 -> 1.20
-                             # while edge count climbs 74 -> 116; at 0.5 it
-                             # climbs 11.5 -> 22 -> 52 -> 71.5. The first thing a
-                             # new user runs has to visibly do something.
-num_epidemics  = 30          # outbreaks averaged per evaluation
-# patient_zero = 0           # optional: pin the seed node; omit for a random one
-
-# Outbreaks shorter than min_epidemic_length are discarded and re-simulated, up
-# to max_epidemic_retries attempts; whatever the last attempt gives is kept. A
-# fizzled outbreak says the dice went badly, not that the network is poor. Both
-# default to the values shown, which are the legacy C++ constants. Set
-# min_epidemic_length = 1 to disable the re-roll. Note this is a biased resample,
-# not variance reduction — it is not interchangeable with raising num_epidemics.
-# min_epidemic_length  = 3
-# max_epidemic_retries = 5
-
-# Epidemic-length alternative: same parameters, different reading of the run.
 # [fitness]
-# type           = "epi_length"
-# infection_rate = 0.05
-# num_epidemics  = 30
-
-# Profile-matching alternative: adds a target profile to match against. The
-# profile is written here in full rather than pointed at, so this document alone
-# reproduces the run. It is compared verbatim — nothing is prepended for patient
-# zero and nothing is rescaled for the network size, unlike the legacy C++ loader,
-# so supply the curve you want at the size of the network you are building. One
-# element per timestep, all finite, and at least one of them. Whole numbers may
-# be written without a decimal point. The profile belongs to this objective
-# alone: leaving it behind after switching `type` back is an error, not a
-# silently discarded key.
-# [fitness]
+# # Compared verbatim: nothing is prepended for patient zero and nothing is
+# # rescaled, so supply the curve at the size of network you are building.
 # type           = "epi_prof_match"
 # infection_rate = 0.05
 # num_epidemics  = 30
 # target_profile = [1, 3, 8, 17, 24, 19, 11, 5, 2, 1]
 
-# Structure-matching alternative: score a graph on how closely its structure
-# resembles a folder of real reference graphs, one edge-list file per graph.
-# Minimized, and zero is a perfect match. Three size-invariant statistics are
-# compared — degree, clustering, and the normalized Laplacian spectrum — so
-# reference graphs of different sizes are all usable together.
-#
-# Unlike every other objective here the reference data is pointed at rather than
-# written inline: a set of graphs is far too large to embed. Two consequences.
-# The folder is NOT checked when the config is parsed, because validation does
-# no I/O — a mistyped path is reported when the run starts instead. And this
-# document no longer reproduces the run on its own; keep the reference folder
-# with it.
-#
-# Requires max_edge_multiplicity = 1. The statistics count neighbours rather
-# than summing weights, so a multigraph would be scored as though every parallel
-# edge were a single one; that is rejected rather than silently flattened.
-#
-# Every key but reference_folder has the default shown, so `type` and
-# reference_folder alone are a complete block.
-#
-# TWO WAYS A RUN CAN LOOK HEALTHY AND SEARCH NOTHING, both worth reading before
-# setting the weights:
-#
-#   - A family whose reference set cannot support it. Rings and paths have
-#     clustering coefficient 0 at every node, so a reference set drawn only from
-#     those leaves clustering_weight set while the family it weights contributes
-#     exactly nothing to any score. Nothing reports this. Set the weight to 0.0
-#     deliberately, or give the reference set graphs that vary in the statistic.
-#   - A gamma set too high. exp(-gamma * d^2) collapses to zero for every
-#     candidate, the whole population scores ~1.0, and there is no gradient to
-#     climb. Too high is the dangerous direction; start at 1.0 and lower it if
-#     scores cluster at the top.
-#
-# The degree axis has no key. It is the one statistic with no natural bound, and
-# its top is taken from the reference set — a value set too low would squash
-# every reference graph into the last bin and retire the whole degree family.
-# [fitness]
-# type             = "struct_match"
-# reference_folder = "reference_graphs"
-# # Everything below is optional; these are the defaults.
-# degree_bins       = 50
-# clustering_bins   = 50
-# spectral_bins     = 50
-# degree_gamma      = 1.0
-# clustering_gamma  = 1.0
-# spectral_gamma    = 1.0
-# degree_weight     = 1.0
-# clustering_weight = 1.0
-# spectral_weight   = 1.0
-# density_weight    = 1.0
 
-# Python fitness alternative: select "python" here, then call
-# `evolver.set_fitness_function(callable, direction)` from Python before `run()`.
-# The callable receives a batch and returns one float per graph, and declares its
-# own direction at registration:
-#   def fitness(batch):  # batch: list[(num_nodes, list[(u, v, weight)])]
-#       return [score(n, edges) for (n, edges) in batch]
-# [fitness]
-# type = "python"
+# =============================================================================
+# Extension points — the last step of each chain lives in this file
+# =============================================================================
+# Each is the step people skip and then wonder why nobody uses their addition:
+# this file is what a new user copies from. The rest of each chain is in the
+# code, findable with `git grep -n "ADD A <THING> STEP"`.
+
+# ADD A STRATEGY STEP 7 — a commented-out `[evolution]` block for your strategy,
+# the way setup B is one for steady-state.
+#
+# ADD A SCOPE STEP 6 — a commented-out `[scope]` block naming your variant, with
+# parameters of its own:
+#     [scope]
+#     type   = "neighbourhood"
+#     radius = 2
+#
+# ADD A SELECTION STEP 6 — a commented-out `[selection]` block naming your
+# scheme. Only the scheme's own parameters; the scope sizes itself.
+#
+# ADD A CROSSOVER STEP 6 — a commented-out `[crossover]` block. This section
+# applies to whichever genome is selected, so an operator only some
+# representations can perform must be rejected in `Config::validate_crossover`.
+#
+# ADD A GENOME STEP 7 — a commented-out `[genome]` block for your
+# representation, alongside edge-edit's and SDA's.
+#
+# ADD A MUTATION STEP 4 (for EdgeEdit) — a `mutation = { type = "..." }` line
+# under edge-edit's `[genome]`, alongside `reroll_gene`, which is the only one
+# it ships and the default.
+#
+# ADD A MUTATION STEP 4 (for SDA) — the same line under SDA's `[genome]`,
+# alongside `redraw_one`.
+#
+# An objective is the same shape of addition: the module doc at the top of
+# `get/src/fitness.rs` walks all six of its steps.
+
+
+# =============================================================================
+# Objectives this file does not show
+# =============================================================================
+# - "epi_length"   — same SIR parameters as epi_spread, read as timesteps to
+#                    burn out rather than nodes reached. Maximized.
+# - "struct_match" — scores a graph against a folder of real reference graphs.
+#                    Not shown as a working setup because it needs reference
+#                    data you do not have yet; every file in that folder must
+#                    carry a `# nodes = N` header. Requires
+#                    max_edge_multiplicity = 1.
+# - "python"       — select it here, then call
+#                    `evolver.set_fitness_function(callable, direction)` before
+#                    `run()`. The callable takes a batch and returns one float
+#                    per graph.

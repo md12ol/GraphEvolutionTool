@@ -29,7 +29,10 @@ use super::common::rank;
 /// change than a variant.
 ///
 /// **Every step is marked at its own site.** Search the repo for
-/// `ADD A REPLACEMENT STEP 2`, or any other number:
+/// `ADD A REPLACEMENT STEP 2 (for SteadyState)`, or any other number. Every
+/// marker carries `(for SteadyState)` because this axis is that strategy's
+/// alone — generational rebuilds its whole population and never asks who to
+/// overwrite, so a reader extending it has no step in this chain to take:
 ///
 /// ```text
 /// git grep -n "ADD A REPLACEMENT STEP"    # all three, in one list
@@ -40,14 +43,14 @@ pub enum Replacement {
     /// which is what makes a strategy using it self-elitist whatever scheme
     /// chose the parents.
     Worst,
-    // ADD A REPLACEMENT STEP 1 — a variant here, plus any parameters:
+    // ADD A REPLACEMENT STEP 1 (for SteadyState) — a variant here, plus any parameters:
     //
     //     Random,
     //
     // Note what a policy gives up: `Worst` is what makes a strategy using it
     // self-elitist, and one that can overwrite the scope's best removes that
     // guarantee. Say so at the variant rather than leaving it to be discovered.
-    // Then the arm choosing victims — search `ADD A REPLACEMENT STEP 2`.
+    // Then the arm choosing victims — search `ADD A REPLACEMENT STEP 2 (for SteadyState)`.
 }
 
 impl Replacement {
@@ -71,7 +74,7 @@ impl Replacement {
                     victims.push(ranked[ranked.len() - offset]);
                 }
                 victims
-            } // ADD A REPLACEMENT STEP 2 — the arm naming who the children
+            } // ADD A REPLACEMENT STEP 2 (for SteadyState) — the arm naming who the children
               // overwrite:
               //
               //     Replacement::Random => {
@@ -84,7 +87,7 @@ impl Replacement {
               // consumes randomness changes this signature and shifts every
               // seeded run's RNG stream — a real cost, not a formality. To make
               // it selectable from a config file, search
-              // `ADD A REPLACEMENT STEP 3`.
+              // `ADD A REPLACEMENT STEP 3 (for SteadyState)`.
         }
     }
 }

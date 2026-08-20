@@ -41,7 +41,9 @@ use crate::stats::ReferenceStatistics;
 use pyo3::exceptions::{PyUserWarning, PyValueError};
 use pyo3::prelude::*;
 use std::ffi::CString;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// One graph as a folder load hands it back: the file it was read from, and its
 /// edges as `(u, v, multiplicity)`.
@@ -964,6 +966,95 @@ impl RunSummary {
     }
 }
 
+/// One seed per replicate, derived from a master seed.
+///
+/// Re-exported from the private dispatch layer so every route derives them the
+/// same way: a replicate's seed depends on the master and on its own index, and
+/// never on how many replicates were asked for. That is what makes
+/// `(master, run_index)` the pair that reproduces a run — the derived seed
+/// cannot, since passing it back in would make the stream draw from *it*.
+///
+/// A library caller driving its own loop (see `examples/library_route.rs`)
+/// wants this rather than a seed per run of its own invention, or its replicates
+/// will not line up with the same master seed run through `get-run`.
+pub fn replicate_seeds(master: u64, n_runs: usize) -> Vec<u64> {
+    dispatch::replicate_seeds(master, n_runs)
+}
+
+/// `YYYYmmdd-HHMMSS` in UTC, for naming a run's output directory.
+///
+/// UTC rather than local time, so directories from two machines sort into the
+/// order the runs actually happened. Converted here rather than through a date
+/// crate: one directory name does not justify a dependency, and the arithmetic
+/// below is the standard civil-from-days algorithm, exact for every date this
+/// program will ever see.
+pub fn utc_stamp() -> String {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or(0);
+
+    let days = (secs / 86_400) as i64;
+    let time_of_day = secs % 86_400;
+
+    // Shift the epoch to 0000-03-01, which puts the leap day at the end of the
+    // year and makes the month arithmetic below a single linear formula.
+    let shifted = days + 719_468;
+    let era = shifted.div_euclid(146_097);
+    let day_of_era = shifted.rem_euclid(146_097);
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_index = (5 * day_of_year + 2) / 153;
+
+    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
+    let month = if month_index < 10 {
+        month_index + 3
+    } else {
+        month_index - 9
+    };
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+
+    format!(
+        "{year:04}{month:02}{day:02}-{:02}{:02}{:02}",
+        time_of_day / 3_600,
+        (time_of_day % 3_600) / 60,
+        time_of_day % 60,
+    )
+}
+
+/// Where one replicate's files belong, creating the directory if needed.
+///
+/// `None` for `out_dir` means the working directory under fixed names, which
+/// is what `get-run` did before it took an output folder and what its route
+/// check in CI still expects.
+///
+/// Public so every route lays its output out the same way. A library caller
+/// writing its own files (see `examples/library_route.rs`) gets the same
+/// `<root>/<stamp>-<seed>/run_<i>/` shape as `get-run` without copying the
+/// rule, which is how the four routes stay comparable.
+///
+/// `stamp` is passed in rather than read here: every replicate of one
+/// invocation belongs in the same timestamped directory, and reading the clock
+/// per replicate would scatter them the moment a run crossed a second boundary.
+pub fn run_output_dir(
+    out_dir: Option<&str>,
+    stamp: &str,
+    seed: u64,
+    run_index: usize,
+    n_runs: usize,
+) -> PathBuf {
+    let Some(root) = out_dir else {
+        return PathBuf::from(".");
+    };
+
+    let mut path = Path::new(root).join(format!("{stamp}-{seed}"));
+    if n_runs > 1 {
+        path = path.join(format!("run_{run_index}"));
+    }
+    path
+}
+
 /// Rust-native entry point: run a `config.toml` file with no Python
 /// interpreter (spec §5.3's "Rust route", used by the `get-run` binary,
 /// `src/bin/run.rs`).
@@ -980,6 +1071,37 @@ impl RunSummary {
 /// The config's own parse/validate error, or `[fitness] type = "python"`
 /// with nothing to call it.
 pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String> {
+    let mut summaries = run_many_from_toml(config_path, seed, 1)?;
+    Ok(summaries.remove(0))
+}
+
+/// The same run, `n_runs` times from one master seed.
+///
+/// Mirrors [`GraphEvolver::run`]'s replicate handling exactly, so the Rust and
+/// Python front ends produce the same numbers for the same `(seed, run_index)`
+/// pair: one master seed goes in, one seed per replicate comes out, and a
+/// replicate's seed therefore does not depend on how many were asked for. Each
+/// summary carries the **master** seed and its own index, which is the pair that
+/// reproduces it — the derived seed would draw a different run if it were passed
+/// back in, so recording it would look like provenance while being unusable as
+/// provenance.
+///
+/// Runs sequentially. The Python path spreads replicates across rayon because a
+/// caller there may be waiting on a notebook cell; a command-line run has
+/// nothing to overlap with, and a sequential loop keeps the objective's
+/// construction, which is fallible, on the calling thread.
+///
+/// # Errors
+///
+/// The config's own parse/validate error, or `[fitness] type = "python"` with
+/// nothing to call it. `n_runs` of zero yields an empty vector rather than an
+/// error — there is nothing wrong with asking for no runs, only with pretending
+/// one happened.
+pub fn run_many_from_toml(
+    config_path: &str,
+    seed: u64,
+    n_runs: usize,
+) -> Result<Vec<RunSummary>, String> {
     let text = std::fs::read_to_string(config_path)
         .map_err(|err| format!("failed to load config: {}", ConfigError::Io(err)))?;
     let config =
@@ -997,22 +1119,34 @@ pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String>
         config_toml: text.clone(),
     };
 
-    let fitness = evolver
-        .objective(seed, None)
-        .map_err(|err| err.to_string())?;
-    let outcome = dispatch::evolve(&evolver.config, &fitness, evolver.base_graph.as_ref(), seed)
+    let seeds = dispatch::replicate_seeds(seed, n_runs);
+
+    let mut summaries = Vec::with_capacity(n_runs);
+    for (run_index, &run_seed) in seeds.iter().enumerate() {
+        let fitness = evolver
+            .objective(run_seed, None)
+            .map_err(|err| err.to_string())?;
+        let outcome = dispatch::evolve(
+            &evolver.config,
+            &fitness,
+            evolver.base_graph.as_ref(),
+            run_seed,
+        )
         .map_err(|err| err.to_string())?;
 
-    Ok(RunSummary {
-        best_fitness: outcome.best_fitness,
-        best_edges: outcome.best_edges,
-        num_nodes: outcome.num_nodes,
-        best_genome_repr: outcome.best_genome_repr,
-        history: outcome.history,
-        seed,
-        run_index: 0,
-        config_toml: text,
-    })
+        summaries.push(RunSummary {
+            best_fitness: outcome.best_fitness,
+            best_edges: outcome.best_edges,
+            num_nodes: outcome.num_nodes,
+            best_genome_repr: outcome.best_genome_repr,
+            history: outcome.history,
+            seed,
+            run_index,
+            config_toml: text.clone(),
+        });
+    }
+
+    Ok(summaries)
 }
 
 #[pymodule]

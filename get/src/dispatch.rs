@@ -893,9 +893,9 @@ fn crossover(config: &CrossoverConfig) -> Crossover {
 fn edge_edit_mutation(config: &EdgeEditMutationConfig) -> EdgeEditMutation {
     match config {
         EdgeEditMutationConfig::RerollGene => EdgeEditMutation::RerollGene,
-        // ADD A MUTATION STEP 3 — the arm mapping your `EdgeEditMutationConfig`
+        // ADD A MUTATION STEP 3 (for EdgeEdit) — the arm mapping your `EdgeEditMutationConfig`
         // variant onto the matching `EdgeEditMutation` one. The step after
-        // this one is optional — search `ADD A MUTATION STEP 4`.
+        // this one is optional — search `ADD A MUTATION STEP 4 (for EdgeEdit)`.
     }
 }
 
@@ -903,9 +903,9 @@ fn edge_edit_mutation(config: &EdgeEditMutationConfig) -> EdgeEditMutation {
 fn sda_mutation(config: &SdaMutationConfig) -> SdaMutation {
     match config {
         SdaMutationConfig::RedrawOne => SdaMutation::RedrawOne,
-        // ADD A MUTATION STEP 3 — the arm mapping your `SdaMutationConfig`
+        // ADD A MUTATION STEP 3 (for SDA) — the arm mapping your `SdaMutationConfig`
         // variant onto the matching `SdaMutation` one. The step after this
-        // one is optional — search `ADD A MUTATION STEP 4`.
+        // one is optional — search `ADD A MUTATION STEP 4 (for SDA)`.
     }
 }
 
@@ -940,7 +940,7 @@ fn scope(config: &ScopeConfig) -> Scope {
 fn replacement(config: &ReplacementConfig) -> Replacement {
     match config {
         ReplacementConfig::Worst => Replacement::Worst,
-        // ADD A REPLACEMENT STEP 3 (second half) — the arm turning your config
+        // ADD A REPLACEMENT STEP 3 (for SteadyState, second half) — the arm turning your config
         // variant into the engine one:
         //
         //     ReplacementConfig::Random => Replacement::Random,

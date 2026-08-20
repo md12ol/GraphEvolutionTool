@@ -57,13 +57,17 @@
 //!   user-supplied objective is kept out of the config schema: nothing
 //!   user-supplied is ever deserialized, so there is nothing new to validate.
 //!   All four shipped objectives are constructible directly — `EpiSpread` and
-//!   `EpiLength` here and in `edge_edit_steady_state.rs`, `EpiProfMatch` and
-//!   `StructMatch` in `sda_steady_state.rs`.
+//!   `EpiLength` here and in `edge_edit_steady_state.rs`, `EpiProfMatch` in
+//!   `sda_steady_state.rs`, and `StructMatch` through
+//!   `ReferenceStatistics::from_graphs`, which no shipped example runs.
 //! - **`struct_match`'s `reference_folder` is a config-only convenience, and
 //!   route 3 has something more general.** From a document the folder is read
 //!   and reduced by a private module; from here you hand
 //!   `ReferenceStatistics::from_graphs` any `&[Graph]`, which need never have
-//!   been on disk. Nothing is lost, only spelled differently.
+//!   been on disk. Nothing is lost, only spelled differently. **No shipped
+//!   example uses it**, because it is the one objective that cannot be
+//!   demonstrated by running the program: it needs reference data the reader
+//!   does not have.
 //! - **The base graph is not a config key on either route.** From a config file
 //!   it arrives through the evolver's own setter, and here it is the
 //!   `EdgeEditContext::base_graph` built below.
