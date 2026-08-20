@@ -202,15 +202,28 @@ A future genome's crossover must state which of these two shapes it follows, or 
 
 **Crossover** is gated by `crossover_rate`, rolled once per pair. Both children are kept.
 
-Each genome offers **one** crossover operator, fixed: two-point over genes for edge-edit,
-two-point over states for SDA (§3).
+Each genome offers **one** crossover operator today, and both offer the *same* one: two-point, over
+genes for edge-edit and over states for SDA (§3).
 
-**Additional operators are out of scope until everything else in this sheet is implemented.** This
-is a sequencing decision, not a design limit: more operators per representation, and a config field
-selecting between them, are wanted — they come *after* the sheet is delivered, not alongside it.
-Until then there is nothing to select between, so no enum, no config field and no dispatch is built
-for crossover. When it does land it follows `Selection`: one new variant plus one match arm,
-mapping onto a `config.toml` field.
+**Operator selection is built, and it is deliberately asymmetric: crossover is shared, mutation is
+per genome.** Amended 2026-08-20 at the joint meeting. ~~Additional operators are out of scope until
+everything else in this sheet is implemented ... no enum, no config field and no dispatch is built
+for crossover.~~ That gate has lifted, and the shape it predicted turned out to be right for only
+half of variation:
+
+- **One `Crossover` enum, shared by both genomes.** Both ship the same two-point operator through one
+  helper, so a shared enum carries no variant that is meaningless for either. A third genome joining
+  states which of the two boundary shapes in §3 it follows, or names a third — and it selects from
+  the same enum.
+- **One mutation enum *per genome*.** Their mutations share no shape at all: edge-edit rerolls a
+  gene, SDA redraws `init_char` or a transition. A shared `MutationConfig` would therefore carry
+  variants that are dead for one genome from its first release, and a config would accept them.
+
+**"It follows `Selection`" was written about crossover and settles nothing about mutation.** That
+sentence was the whole textual basis for reading this section as demanding a single shared operator
+enum, and it was never meant to reach past the operator it described. Crossover does follow
+`Selection` — one new variant plus one match arm, mapping onto a `config.toml` field. Mutation
+follows it once per genome.
 
 **Mutation is two independent rolls, both owned by the engine, never by the genome:**
 
@@ -726,27 +739,58 @@ run history.
 algorithm may change between `rand` releases — which would defeat the entire purpose of a seed
 argument. The same seed must mean the same thing in both strategies.
 
-### 6.1 Selection
+### 6.1 Scope, selection and replacement
 
-Tournament selection, as an enum so a new mechanism is one variant plus one match arm. Ordering
-is by fitness, ties broken by **lower index**, so a tournament's outcome depends only on which
+**Amended 2026-08-20 at the joint meeting.** ~~Tournament selection, as an enum ... two draw
+methods, `select(count)` with replacement for generational and `tournament_indices()` without
+replacement for steady-state.~~ That contract had one method answering two questions at once —
+*who breeds* and *who dies* came out of a single draw — which is why `tournament_size` had to size
+a tournament, a replacement pool and a distinctness guarantee simultaneously, and why a scheme with
+no tournament had no way to say how large a pool it wanted.
+
+A breeding event is now **three independent choices**, each its own enum, each one variant plus one
+match arm to extend:
+
+| Axis | Question | Variants today |
+|---|---|---|
+| `Scope` | which individuals may this event touch at all? | `Global` · `RandomSubset { size }` |
+| `Selection` | which of them become parents? | `Best` · `Tournament { tournament_size }` |
+| `Replacement` | which of them do the children overwrite? | `Worst` |
+
+Every combination is legal; there is deliberately no scheme-by-strategy rejection table. The two
+shipped strategies are two points in that space:
+
+- **Generational** is `Global + Tournament{k}`, plus `elite_count`. Replacement does not arise —
+  the whole population is rebuilt.
+- **Steady-state** is `RandomSubset{k} + Best + Worst`. "Tournament selection with tournament-local
+  replacement" is what those three decompose into once the draw is a step of its own, and it is the
+  same algorithm as before the split: `d85364f` is +95/−0 with no type touched, and the seeded
+  reproduction tests are byte-identical across it, so the RNG stream is unchanged.
+
+Ordering is by fitness, ties broken by **lower index**, so an event's outcome depends only on which
 indices were drawn and not on the order the RNG produced them.
 
-Two draw methods, sampling **differently**, deliberately:
+**Each axis owns its own parameters.** `size` belongs to `[scope]`, `tournament_size` to
+`[selection]`, and neither reads the other. `elite_count` stays out of `Replacement`: "who survives
+untouched" is a different question from "who dies to make room", and generational is the only
+strategy that asks the first.
 
-| Method | Sampling | Used by |
-|---|---|---|
-| `select(count)` | **with** replacement | generational |
-| `tournament_indices()` | **without** replacement | steady-state |
+**`RandomSubset` draws distinct individuals; `Tournament` samples with replacement.** The
+distinctness is not a stylistic choice — a replacement policy naming "the worst two members" means
+nothing over a multiset. Within a scope, sampling with replacement is the textbook default and
+stands. The consequence for generational is unchanged: two picks can be the same individual, so
+crossover between a genome and its own clone does nothing but mutate. Steady-state cannot self-mate,
+because its scope is drawn distinct.
 
-`tournament_indices` has no choice — it feeds tournament-local replacement, and "the worst two
-members" is undefined over a multiset. `select` keeps the textbook default. The divergence means
-one `tournament_size` implies marginally different pressure per strategy (≈4.90 expected distinct
-entrants at `k=5`, population 100 — roughly 2%, noise against a stochastic run). Accepted
-2026-07-31.
+**The config takes the break rather than defaulting a scope per strategy.** Nothing is published
+yet, and an implied scope is precisely the defect that let one selection parameter size two
+independent things.
 
-Consequence for generational: two picks can be the same individual, so crossover between a genome
-and its own clone does nothing but mutate. Steady-state cannot self-mate by construction.
+**Arity is fixed at 2 parents, 2 children, 2 replaced.** What varies is the scope's floor, and it is
+*derived* from the arity — `PARENTS_PER_EVENT + REPLACED_PER_EVENT` — rather than written as a
+literal, so the floor tracks the numbers instead of restating them. Generalising the three would
+turn a clean scheme rejection into an arity rejection for combinations nobody has asked for; the
+obstacles to doing it later are recorded, not forgotten.
 
 ### 6.2 Generational
 
@@ -787,27 +831,50 @@ histories share an axis.
 
 One mate-and-replace event at a time; most of the population persists between events.
 
-**Each event draws a single tournament of distinct individuals. Its two best breed; the two
-children overwrite that same tournament's two worst.** Tournament-local, not global.
+**Each event draws a single scope of distinct individuals, selects two parents within it, and
+overwrites two of its members with the children.** Scope-local, not global. Amended 2026-08-20 to
+the three axes of §6.1: what was described here as "a tournament" is `RandomSubset { size }`, and
+the default configuration — `RandomSubset{k} + Best + Worst` — is exactly the tournament-local
+behaviour this section always specified. Everything below holds for that default; a different
+`Selection` or `Replacement` changes only the sentence it names.
 
-- **Self-elitist.** The tournament's best is never among the replaced, so the population's best
-  is never discarded and no explicit elitism is needed.
+- **Self-elitist.** Under `Replacement::Worst` the scope's best is never among the replaced, so the
+  population's best is never discarded and no explicit elitism is needed. This is the guarantee a
+  future policy that can overwrite the scope's best would give up, and it must say so at the variant.
 - **Diversity-preserving.** A globally poor individual survives until it happens to be drawn.
 - **Cheap** — `O(k log k)` per event rather than an `O(population)` scan for the global worst,
-  which matters at 100,000 events.
+  which matters at 100,000 events. Choosing `Scope::Global` here is legal and gives that cost back.
 - **Replacement is unconditional** — a child takes its slot even if it scores worse than what it
   displaces. The best-never-discarded guarantee comes from the tournament structure, not a
   comparison.
 
-**`tournament_size >= 4` is required**, and the population must be at least that large. Two
-parents and the two individuals they replace must be distinct: three still preserves the
-tournament's best but makes the second parent one of the replaced; two breaks self-elitism
-outright, since both parents are replaced by their own children. The constraint is
-**strategy-specific** — generational has no such floor.
+**A scope of at least four is required**, and the population must be at least that large. Two
+parents and the two individuals they replace must be distinct: three still preserves the scope's
+best but makes the second parent one of the replaced; two breaks self-elitism outright, since both
+parents are replaced by their own children. The floor is *derived* from the arity —
+`PARENTS_PER_EVENT + REPLACED_PER_EVENT` — not written as a literal. The constraint is
+**strategy-specific**: generational has no such floor, and the same `[scope] size` that is rejected
+here is accepted there.
 
 Scoring is incremental: only the two new children are evaluated per event, in one batch. Correct
 and cheap for a native objective; for a Python-backed one it means one FFI hop per *event*
 instead of per generation, which makes steady-state a poor fit for Python fitness.
+
+**An individual that is not replaced keeps the fitness it was born with, and that is intended for
+now.** Recorded 2026-08-20 at the joint meeting, which found this section silently doing the
+opposite of what §6.2 argues for. §6.2 rescores elites every generation on the grounds that the new
+number is a fresh sample of the same individual and that freezing the old one lets a lucky draw
+persist; here nothing but the two new children is ever rescored, so a score can stand for thousands
+of events — and the bias compounds in the worst available direction, since a lucky score makes an
+individual both likelier to be selected and less likely to be replaced.
+
+The reason it stands is cost, and it is the same reason this strategy draws a scope at all: rescoring
+per event is the `O(population)` work that scope-local replacement exists to avoid, and against a
+Python-backed objective it is one FFI hop per individual per event. **Both owners want both
+strategies to rescore**, in the narrow form — rescore the parents the event selected, two more
+evaluations rather than `O(population)` — and that change is deliberately not in this release: it
+alters the trajectory of every seeded steady-state run that exists, so it wants a version boundary.
+Until then this paragraph is what makes the sheet honest about the difference.
 
 **Logging cadence:** the starting population as iteration 0, then one row per `population_size`
 events — a "generation equivalent". So `history.len() == num_mating_events / population_size + 1`.
@@ -1212,6 +1279,30 @@ rejected outright and names the offending line, a repeated edge (canonicalized a
 `(min(u,v), max(u,v))`, so order never hides a duplicate) overwrites with a warning, a zero-weight
 edge warns, a negative weight is rejected, a missing file is a loud error, and an empty file is a
 warning with an empty graph. Floating-point weights are out of scope for now.
+
+**Every caller-supplied edge file carries `# nodes = N`, and there is no inference fallback.** Added
+2026-08-20 at the joint meeting. A line beginning `#` is a comment; only `nodes` is read from one, so
+every file that already existed stays syntactically valid and line 1 never becomes permanently
+special-cased. A file without the header is **rejected** — not inferred from `highest index + 1`,
+because two ways to reach a node count means one right and one quietly wrong by exactly the trailing
+isolated nodes, chosen by whether the file's author remembered. The header is checked against the
+file's own indices and against the cap the caller allows.
+
+The failure it prevents is silent and directional: §5.4's degree, clustering and spectral histograms
+each count an isolated node as a real observation and normalize over the node count, so a count short
+by one shifts every distribution the run optimizes toward, with nothing printed.
+
+Three consequences, all deliberate:
+
+- **A base-graph header disagreeing with `network_size` is a hard error.** The setter already caught
+  the reverse case; the gap the header closes is a file you believe is 200 nodes which is really 180,
+  loading happily as 200.
+- **A reference graph's size is never an error** and must not become one. Reference graphs are real
+  data of varying size, and §5.4 compares normalized distributions precisely so that they can be.
+- **GET writes the format it reads.** The run output of §6.4 is a loadable edge file, so a run's
+  winner is meant to go straight back in as the next run's base graph. It does not yet do so on
+  every route — the config-driven route has no entry point for a base graph at all, and a written
+  file does not record which `min_node_index` produced it. Both are known and neither is fixed here.
 
 ---
 
