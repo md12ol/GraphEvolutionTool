@@ -59,51 +59,144 @@
   compares two different things. See <a href="variation.html">Crossover &amp; Mutation</a>.
 </div>
 
+<h2>What the User Ends Up Writing</h2>
+
+<p>
+  A GET run is configured by a <b>TOML document</b> — see the
+  <a href="configuration.html">Configuration Reference</a> for its full shape, and
+  <a href="getting-started.html">Getting Started</a> for how to run one. The representation is the
+  <code>[genome]</code> section. Adding one called <code>MyGenome</code> is what makes this valid:
+</p>
+
+<pre><code class="language-toml">[genome]
+type           = "my_genome"
+some_dimension = 256</code></pre>
+
+<div class="callout">
+  <p>
+    <b>You never write the string <code>"my_genome"</code> anywhere in the code.</b> It is derived
+    from your variant's name, converted to snake_case. Name the variant and the config name follows;
+    the keys under it are your struct's field names, the same way.
+  </p>
+  <p>
+    This is not specific to the command-line route. The same document is read by the CLI and by the
+    Rust library, and a Python caller builds the same section through a config object instead of
+    typing it. Skipping the optional step 7 below is what makes a genome TOML-only.
+  </p>
+</div>
+
 <h2>The Seven Edits</h2>
 
 <p>
-  Every location carries a literal marker in the source. Find the whole chain at once with
-  <code>git grep -n "ADD A GENOME STEP" get/src</code>, and jump to any one step by searching its
-  number. The steps are listed here in the order the markers number them.
+  Every location carries a literal marker in the source, so you can jump to any step by searching
+  its number. The line numbers below were correct when this page was written; if one has moved, the
+  marker is the anchor that has not.
 </p>
+
+<pre><code class="language-bash">git grep -n "ADD A GENOME STEP" get/src    # all seven, in one list</code></pre>
 
 <div class="table-wrap">
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>genomes/genome.rs</code></td>
+    <tr><td>1</td><td><code>get/src/genomes/genome.rs:148</code></td>
         <td>Implement <code>Genome</code> for your type — <code>express</code>,
-            <code>crossover</code>, <code>mutate</code>, <code>copy</code>, <code>print</code>.</td></tr>
-    <tr><td>2</td><td><code>genomes/genome.rs</code>, or beside your representation</td>
-        <td>Declare the <code>Context</code> type your genome named — the per-run data
-            <code>express</code> and <code>mutate</code> read.</td></tr>
-    <tr><td>3</td><td><code>genomes/mod.rs</code></td>
-        <td><code>pub mod</code> your module and re-export the type and its context, so callers
-            name them from <code>crate::genomes</code>.</td></tr>
-    <tr><td>4</td><td><code>config.rs</code> — two sites</td>
+            <code>crossover</code>, <code>mutate</code>, <code>print</code>, and the
+            <code>Context</code> associated type. All five are required.</td></tr>
+    <tr><td>2</td><td><code>get/src/genomes/genome.rs:260</code></td>
+        <td>Declare the <code>Context</code> type your genome named.</td></tr>
+    <tr><td>3</td><td><code>get/src/genomes/mod.rs:16</code></td>
+        <td><code>pub mod</code> your module and re-export the type and its context.</td></tr>
+    <tr><td>4</td><td><code>get/src/config.rs:245</code> and <code>:939</code></td>
         <td>A <code>GenomeConfig</code> variant plus the struct it carries, <i>and</i> its arm in
-            <code>validate_genome</code>. The variant name becomes
-            <code>type = "my_genome"</code> under <code>[genome]</code>.</td></tr>
-    <tr><td>5</td><td><code>dispatch.rs</code></td>
-        <td>A start builder beside <code>sda_start</code>: validate the dimensions, mint
+            <code>validate_genome</code>.</td></tr>
+    <tr><td>5</td><td><code>get/src/dispatch.rs:386</code></td>
+        <td>A start builder beside <code>sda_start</code>: validate the dimensions once, mint
             <code>population_size</code> individuals, build the context.</td></tr>
-    <tr><td>6</td><td><code>dispatch.rs</code></td>
+    <tr><td>6</td><td><code>get/src/dispatch.rs:650</code></td>
         <td>One arm in the genome match, calling your step-5 builder. The <b>strategy</b> match is
             not touched — it is generic over the genome.</td></tr>
-    <tr><td>7</td><td><code>py_config.rs</code> — two sites</td>
+    <tr><td>7</td><td><code>get/src/py_config.rs:406</code> and <code>:665</code></td>
         <td><b>Optional.</b> The Python-side variant and its <code>to_toml_value</code> arm, plus
-            one line in <code>python_attribute_path</code> per field step 4 validates by name.
-            Leaving step 7 out costs nothing elsewhere; the genome is then TOML-only.</td></tr>
+            one line in <code>python_attribute_path</code> per field step 4 validates by name.</td></tr>
   </tbody>
 </table>
 </div>
 
+<h2>Steps 1 to 3 — the Representation</h2>
+
+<pre><code class="language-rust">// step 1 — genomes/genome.rs:148
+impl Genome for MyGenome {
+    type Context = MyContext;
+
+    fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph { ... }
+    fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R) { ... }
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, context: &amp;Self::Context, rng: &amp;mut R) { ... }
+    fn print(&amp;self) -&gt; String { ... }
+}
+
+// step 2 — genomes/genome.rs:260
+#[derive(Clone, Debug)]
+pub struct MyContext {
+    pub num_nodes: usize,
+    pub some_mutation_rate: f64,
+}
+
+// step 3 — genomes/mod.rs:16
+pub mod my_genome;
+pub use my_genome::MyGenome;</code></pre>
+
 <div class="callout">
   <p>
-    <b>Skipping step 7 half-way is the trap.</b> If step 4's validation raises a field by name and
+    <b>The context is run configuration only, never evolved state.</b> The test is "can variation
+    change it" — anything variation cannot change belongs on the context rather than on the genome.
+  </p>
+  <p>
+    <b><code>mutate</code> must make exactly one change per call.</b> The engine's
+    <code>max_mutations</code> counts calls, not changes, so a genome that applies several silently
+    makes the user's configured rate untrue and nothing reports it.
+  </p>
+</div>
+
+<h2>Steps 4 to 6 — Config and Dispatch</h2>
+
+<pre><code class="language-rust">// step 4a — config.rs:245
+MyGenome(MyGenomeConfig),
+
+// step 4b — config.rs:939
+GenomeConfig::MyGenome(mine) =&gt; {
+    if mine.some_dimension == 0 {
+        return Err(invalid("some_dimension", "must be at least 1"));
+    }
+}
+
+// step 5 — dispatch.rs:386
+pub(crate) fn my_genome_start&lt;R: Rng + ?Sized&gt;(
+    config: &amp;Config,
+    mine: &amp;MyGenomeConfig,
+    rng: &amp;mut R,
+) -&gt; PyResult&lt;(MyContext, Vec&lt;MyGenome&gt;)&gt; { ... }
+
+// step 6 — dispatch.rs:650
+GenomeConfig::MyGenome(mine) =&gt; {
+    let (genome_context, population) = my_genome_start(config, mine, &amp;mut rng)?;
+    ...
+}</code></pre>
+
+<h2>Step 7 — Python, and Optional</h2>
+
+<p>
+  Leaving it out costs nothing elsewhere; the genome is then configurable from a TOML file but
+  absent from the Python API. The variant goes at <code>get/src/py_config.rs:406</code>, and the
+  <code>python_attribute_path</code> lines at <code>:665</code>.
+</p>
+
+<div class="callout">
+  <p>
+    <b>Half-finishing step 7 is the trap.</b> If step 4's validation raises a field by name and
     <code>python_attribute_path</code> has no line for it, a Python caller gets an error naming a
-    TOML field they never wrote. The test
-    <code>every_validation_field_maps_to_a_python_attribute</code> is what catches it.
+    TOML field they never wrote. <code>every_validation_field_maps_to_a_python_attribute</code> is
+    the test that catches it.
   </p>
 </div>
 

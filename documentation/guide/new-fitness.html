@@ -28,6 +28,38 @@
   </p>
 </div>
 
+<h2>What the User Ends Up Writing</h2>
+
+<p>
+  A GET run is configured by a <b>TOML document</b> — see the
+  <a href="configuration.html">Configuration Reference</a> for its full shape, and
+  <a href="getting-started.html">Getting Started</a> for how to run one. The objective is the
+  <code>[fitness]</code> section. A Python callable is selected by name, and registered separately
+  through the evolver:
+</p>
+
+<pre><code class="language-toml">[fitness]
+type = "python"</code></pre>
+
+<p>A native objective added inside the crate is selected the same way its own variant is named:</p>
+
+<pre><code class="language-toml">[fitness]
+type           = "my_objective"
+some_parameter = 0.5</code></pre>
+
+<div class="callout">
+  <p>
+    <b>You never write that string in the code.</b> It is derived from your
+    <code>FitnessConfig</code> variant's name, converted to snake_case — the same rule every other
+    section follows. The keys under it are your struct's field names.
+  </p>
+  <p>
+    Route 1 is the exception worth knowing: <code>type = "python"</code> names no objective of its
+    own. It says "a callable will be registered", and a run that reaches scoring without one is
+    rejected rather than silently scoring nothing.
+  </p>
+</div>
+
 <h2>Route 1 — a Python Callable</h2>
 
 <p>
