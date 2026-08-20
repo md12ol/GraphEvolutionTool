@@ -267,3 +267,43 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   it is reversed, this entry goes with it — do not sweep these pages until the meeting has run.
 
 *#edge-files-state-their-node-count · filed 2026-08-20 09:40 — Michael.*
+
+## `Selection` is now three types — `Scope`, `Selection` and `Replacement`
+
+- **Pages:** `reference/evolver-common.html`, `reference/steady-state.html`,
+  `guide/evolvers.html`, `reference/dispatch.html`, `reference/index.html`, `status.html`,
+  `guide/glossary.html`.
+- **Now false:** every description of `Selection` as carrying **two draw methods**. It carries one,
+  `pick`, and `tournament_indices` no longer exists anywhere. What that method did — draw a set of
+  distinct individuals and read parents off the front, replacements off the back — is now three
+  independent things: `evolver::scope::Scope` (`Global` or `RandomSubset { size }`) decides which
+  slice of the population a breeding event touches, `Selection` (`Best` or `Tournament`) picks
+  parents within that slice, and `evolver::replacement::Replacement` (`Worst`) picks who they
+  overwrite. Any page saying a second selection scheme must supply a ranked distinct draw, or that
+  such a scheme is rejected against steady-state at config-parse time, is describing a restriction
+  that no longer exists — `Config::validate_evolution_and_selection` has no scheme-by-strategy
+  rejection left to make. The extension chain is **six steps across five files**, not eight across
+  six; `dispatch::selection` is now `dispatch::scope_and_selection`.
+- **Should say:** steady-state is `RandomSubset { size } + Best + Worst` and generational is
+  `Global + Tournament { size }`, which is a decomposition rather than a change — "tournament
+  selection" has always meant *draw k, take the best*, and the two halves now have names. Worth
+  stating explicitly that **self-elitism is unchanged but rests somewhere new**: it used to follow
+  from the selection scheme, and now follows from replacement taking the worst of the same scope
+  the parents came from, so it holds whichever scheme picked them. That is the whole reason the
+  split lets any scheme pair with any strategy.
+- **Not user-facing:** `config.example.toml` is untouched and `[selection] type = "tournament"`
+  with a `tournament_size` still parses and means the same thing — scope is implied by the strategy
+  and there is no `[scope]` block. Pages showing config or the Python API need no change on that
+  account, and `tournament_size`'s 9 and 10 occurrences in `reference/config.html` and
+  `reference/steady-state.html` are still correct as config text. What changed is only how
+  `steady-state` explains what it does with the number: it is the size of the scope each mating
+  event draws.
+- **Status row:** `status.html`'s "Selection, population scoring, logging statistics" row still
+  points at `evolver/common` and is still `built`, but now understates the module — the two new
+  modules `evolver/scope` and `evolver/replacement` sit beside it and have no row at all.
+- **Not yet agreed:** `collab.md` #110 puts the design to the next joint meeting, and
+  `official_spec_sheet.md` §6.1 and §6.3 are **not** amended — they still describe the two-method
+  contract. If the meeting reverses this, the entry goes with it; do not sweep these pages before
+  the meeting has run.
+
+*#selection-splits-into-scope-selection-replacement · filed 2026-08-20 17:22 — Michael.*
