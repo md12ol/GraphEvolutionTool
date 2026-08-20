@@ -980,6 +980,37 @@ impl RunSummary {
 /// The config's own parse/validate error, or `[fitness] type = "python"`
 /// with nothing to call it.
 pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String> {
+    let mut summaries = run_many_from_toml(config_path, seed, 1)?;
+    Ok(summaries.remove(0))
+}
+
+/// The same run, `n_runs` times from one master seed.
+///
+/// Mirrors [`GraphEvolver::run`]'s replicate handling exactly, so the Rust and
+/// Python front ends produce the same numbers for the same `(seed, run_index)`
+/// pair: one master seed goes in, one seed per replicate comes out, and a
+/// replicate's seed therefore does not depend on how many were asked for. Each
+/// summary carries the **master** seed and its own index, which is the pair that
+/// reproduces it — the derived seed would draw a different run if it were passed
+/// back in, so recording it would look like provenance while being unusable as
+/// provenance.
+///
+/// Runs sequentially. The Python path spreads replicates across rayon because a
+/// caller there may be waiting on a notebook cell; a command-line run has
+/// nothing to overlap with, and a sequential loop keeps the objective's
+/// construction, which is fallible, on the calling thread.
+///
+/// # Errors
+///
+/// The config's own parse/validate error, or `[fitness] type = "python"` with
+/// nothing to call it. `n_runs` of zero yields an empty vector rather than an
+/// error — there is nothing wrong with asking for no runs, only with pretending
+/// one happened.
+pub fn run_many_from_toml(
+    config_path: &str,
+    seed: u64,
+    n_runs: usize,
+) -> Result<Vec<RunSummary>, String> {
     let text = std::fs::read_to_string(config_path)
         .map_err(|err| format!("failed to load config: {}", ConfigError::Io(err)))?;
     let config =
@@ -997,22 +1028,34 @@ pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String>
         config_toml: text.clone(),
     };
 
-    let fitness = evolver
-        .objective(seed, None)
-        .map_err(|err| err.to_string())?;
-    let outcome = dispatch::evolve(&evolver.config, &fitness, evolver.base_graph.as_ref(), seed)
+    let seeds = dispatch::replicate_seeds(seed, n_runs);
+
+    let mut summaries = Vec::with_capacity(n_runs);
+    for (run_index, &run_seed) in seeds.iter().enumerate() {
+        let fitness = evolver
+            .objective(run_seed, None)
+            .map_err(|err| err.to_string())?;
+        let outcome = dispatch::evolve(
+            &evolver.config,
+            &fitness,
+            evolver.base_graph.as_ref(),
+            run_seed,
+        )
         .map_err(|err| err.to_string())?;
 
-    Ok(RunSummary {
-        best_fitness: outcome.best_fitness,
-        best_edges: outcome.best_edges,
-        num_nodes: outcome.num_nodes,
-        best_genome_repr: outcome.best_genome_repr,
-        history: outcome.history,
-        seed,
-        run_index: 0,
-        config_toml: text,
-    })
+        summaries.push(RunSummary {
+            best_fitness: outcome.best_fitness,
+            best_edges: outcome.best_edges,
+            num_nodes: outcome.num_nodes,
+            best_genome_repr: outcome.best_genome_repr,
+            history: outcome.history,
+            seed,
+            run_index,
+            config_toml: text.clone(),
+        });
+    }
+
+    Ok(summaries)
 }
 
 #[pymodule]
