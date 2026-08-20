@@ -24,6 +24,30 @@ use pyo3::prelude::*;
 
 use crate::dispatch::ErasedOutcome;
 
+/// Turn a value into `#` comment lines, **every** line of it.
+///
+/// `Genome::print` is free to return several lines — `SdaGenome`'s is a whole
+/// transition table — and a saved result is a loadable edge file, so a line
+/// that escaped the `#` would reach the parser as a malformed row. Commenting
+/// only the first line is exactly the bug this exists to prevent.
+pub(crate) fn as_comment(label: &str, value: &str) -> String {
+    let mut out = String::new();
+    let mut first = true;
+    for line in value.lines() {
+        if first {
+            out.push_str(&format!("# {label} = {line}\n"));
+            first = false;
+        } else {
+            out.push_str(&format!("# {line}\n"));
+        }
+    }
+    // An empty value still has to say the field was there.
+    if first {
+        out.push_str(&format!("# {label} =\n"));
+    }
+    out
+}
+
 /// One row of the convergence log.
 ///
 /// `iteration` counts generations under the generational strategy and mating
@@ -88,6 +112,13 @@ pub struct PyRunResult {
     /// The best individual's expressed network, as `(u, v, multiplicity)`.
     #[pyo3(get)]
     pub best_edges: Vec<(usize, usize, u32)>,
+    /// How many nodes that network has, isolated ones included.
+    ///
+    /// Not derivable from `best_edges` — an isolated node appears in no edge —
+    /// which is the same reason a file has to state its size rather than have
+    /// it inferred.
+    #[pyo3(get)]
+    pub num_nodes: usize,
     /// The best individual's genome, via `Genome::print`.
     ///
     /// This is the record of *which* individual won, in a form the entry point
@@ -171,18 +202,26 @@ impl PyRunResult {
     /// alongside it at `{filename}.toml` — the provenance record §8 promises,
     /// derived rather than a second argument so callers cannot forget it.
     ///
-    /// Three sections: the best fitness, the winning genome's
-    /// `Genome::print()` string, and its expressed network as a weighted edge
-    /// list — §6.4's "best individual".
+    /// **The file is a loadable edge list**, not a report that happens to
+    /// contain one: the fitness, the genome string and the node count are `#`
+    /// comments, which `graph_io` skips, and the rows below them are the
+    /// `u,v,weight` the loader reads. So a run's winner goes straight back in
+    /// as the next run's base graph, or into a reference folder, with no
+    /// editing step in between — and the `# nodes` line the loader requires is
+    /// written from the graph rather than left for someone to count.
     pub fn save_results(&self, filename: &str) -> PyResult<()> {
         let mut file = File::create(filename)
             .map_err(|err| PyIOError::new_err(format!("could not create {filename}: {err}")))?;
 
-        writeln!(file, "best_fitness = {}", self.best_fitness)
+        write!(
+            file,
+            "{}",
+            as_comment("best_fitness", &self.best_fitness.to_string())
+        )
+        .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
+        write!(file, "{}", as_comment("genome", &self.best_genome_repr))
             .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
-        writeln!(file, "genome = {}", self.best_genome_repr)
-            .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
-        writeln!(file, "\nedges (u,v,multiplicity):")
+        writeln!(file, "# nodes = {}", self.num_nodes)
             .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
         for &(u, v, weight) in &self.best_edges {
             writeln!(file, "{u},{v},{weight}").map_err(|err| {
@@ -229,11 +268,41 @@ impl PyRunResult {
         Self {
             best_fitness: outcome.best_fitness,
             best_edges: outcome.best_edges,
+            num_nodes: outcome.num_nodes,
             best_genome_repr: outcome.best_genome_repr,
             history,
             seed,
             run_index,
             config_toml,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::as_comment;
+
+    /// `SdaGenome::print` returns a transition table, several lines of it. A
+    /// saved result is a loadable edge file, so a line that escaped the `#`
+    /// would reach the parser as a malformed row — which is exactly what
+    /// commenting only the first line did.
+    #[test]
+    fn every_line_of_a_multi_line_value_is_commented() {
+        let genome = "init_char: 0\n0 + 0 -> 1 [ 1 1 1 ]\n0 + 1 -> 1 [ 0 1 ]";
+
+        let written = as_comment("genome", genome);
+
+        assert_eq!(
+            written,
+            "# genome = init_char: 0\n# 0 + 0 -> 1 [ 1 1 1 ]\n# 0 + 1 -> 1 [ 0 1 ]\n"
+        );
+        for line in written.lines() {
+            assert!(line.starts_with('#'), "escaped the comment: {line}");
+        }
+    }
+
+    #[test]
+    fn an_empty_value_still_names_its_field() {
+        assert_eq!(as_comment("genome", ""), "# genome =\n");
     }
 }

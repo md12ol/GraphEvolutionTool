@@ -74,6 +74,13 @@ pub(crate) struct ErasedOutcome {
     pub best_fitness: f64,
     /// The best individual's expressed network as `(u, v, multiplicity)`.
     pub best_edges: Vec<(usize, usize, u32)>,
+    /// How many nodes that network has.
+    ///
+    /// Carried rather than left to be counted from `best_edges`, because it
+    /// cannot be: a node with no edges appears nowhere in an edge list, and an
+    /// evolved graph acquires isolated nodes routinely. Every writer states it,
+    /// so a run's output loads back through `graph_io` unedited.
+    pub num_nodes: usize,
     /// The winning genome's `Genome::print()` string.
     ///
     /// The entry point is not generic over the genome, so this is the only way
@@ -782,6 +789,7 @@ fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
     ErasedOutcome {
         best_fitness: direction.orient(outcome.best_fitness_engine),
         best_edges: outcome.best_graph.get_edge_list(),
+        num_nodes: outcome.best_graph.num_nodes,
         best_genome_repr: outcome.best_genome.print(),
         history,
     }
@@ -900,10 +908,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&folder);
         std::fs::create_dir_all(&folder).expect("temp reference folder");
 
+        // Each file states its own size, as the loader requires. The two
+        // triangles are three nodes and the four-cycle is four, so the counts
+        // differ across the set — which is the normal case for real reference
+        // data and the reason nothing here is checked against `network_size`.
         let files = [
-            ("a.csv", "0,1,1\n1,2,1\n0,2,1\n"),
-            ("b.csv", "0,1,1\n1,2,1\n0,2,1\n"),
-            ("c.csv", "0,1,1\n1,2,1\n2,3,1\n0,3,1\n"),
+            ("a.csv", "# nodes = 3\n0,1,1\n1,2,1\n0,2,1\n"),
+            ("b.csv", "# nodes = 3\n0,1,1\n1,2,1\n0,2,1\n"),
+            ("c.csv", "# nodes = 4\n0,1,1\n1,2,1\n2,3,1\n0,3,1\n"),
         ];
         for (file_name, text) in files {
             std::fs::write(folder.join(file_name), text).expect("temp reference file");

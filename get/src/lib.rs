@@ -44,7 +44,7 @@ use std::sync::{Arc, OnceLock};
 
 /// One graph as a folder load hands it back: the file it was read from, and its
 /// edges as `(u, v, multiplicity)`.
-type NamedGraph = (String, Vec<(usize, usize, u32)>);
+type NamedGraph = (String, usize, Vec<(usize, usize, u32)>);
 
 /// Raise every warning a load produced through Python's `warnings` machinery.
 ///
@@ -482,7 +482,11 @@ impl GraphEvolver {
     /// [`set_base_graph`](GraphEvolver::set_base_graph)** — the file is checked
     /// against `network_size` directly, so the mistake that check existed to
     /// catch (a caller deriving the count from their config rather than their
-    /// data) cannot be made here.
+    /// data) cannot be made here. A file that states its own size in a
+    /// `# nodes = N` header is checked against `network_size` too, and a
+    /// disagreement is an error: the base graph and the graphs a run evolves
+    /// are the same size by definition. A file with no header is taken to be
+    /// `network_size` nodes, which is what it has always been taken to be.
     ///
     /// # Errors
     ///
@@ -529,6 +533,22 @@ impl GraphEvolver {
 
         emit_load_warnings(py, &loaded.source, &loaded.warnings)?;
 
+        // The file states its own size, and disagreeing with the run is the one
+        // mistake this path could not previously catch. The loader rejects a
+        // header above `network_size` as it rejects an index above it; below it
+        // is what lands here, and it is the interesting half — a file the caller
+        // believes is 200 nodes but which says 180 would otherwise load as 200,
+        // padded with isolated nodes nobody asked for. `set_base_graph` has
+        // rejected exactly this disagreement since it took `num_nodes`; a file
+        // could not say enough to be checked until the header existed.
+        if loaded.num_nodes != self.config.network_size {
+            return Err(PyValueError::new_err(format!(
+                "`{}` states `# nodes = {}` but [evolution] network_size is {}; \
+                 the graph an edit script is applied to must be the size the run evolves",
+                loaded.source, loaded.num_nodes, self.config.network_size,
+            )));
+        }
+
         let mut graph = Graph::new(self.config.network_size, self.config.max_edge_multiplicity);
         graph.set_edges(&loaded.edges);
         self.base_graph = Some(graph);
@@ -551,8 +571,14 @@ impl GraphEvolver {
     ///
     /// ```python
     /// graphs = evolver.load_reference_graphs("references/", min_node_index=1)
-    /// name, edges = graphs[0]
+    /// name, num_nodes, edges = graphs[0]
     /// ```
+    ///
+    /// **The node count is handed back beside the edges because it cannot be
+    /// recovered from them** — an isolated node appears in no edge, and a
+    /// reference graph with one is ordinary rather than exotic. Each file
+    /// states its own count in a `# nodes = N` header, which is where this
+    /// comes from.
     ///
     /// **Each graph comes back paired with the file it was read from, in sorted
     /// file-name order.** Directory order is not reproducible across machines
@@ -603,7 +629,7 @@ impl GraphEvolver {
         let mut graphs = Vec::with_capacity(loaded.len());
         for file in loaded {
             emit_load_warnings(py, &file.source, &file.warnings)?;
-            graphs.push((file.source, file.edges));
+            graphs.push((file.source, file.num_nodes, file.edges));
         }
 
         self.commit_min_node_index(min_node_index);
@@ -834,6 +860,9 @@ pub struct RunSummary {
     pub best_fitness: f64,
     /// The best individual's expressed network, as `(u, v, multiplicity)`.
     pub best_edges: Vec<(usize, usize, u32)>,
+    /// How many nodes that network has, isolated ones included. Stated rather
+    /// than counted from `best_edges`, which cannot see an isolated node.
+    pub num_nodes: usize,
     /// The best individual's genome, via `Genome::print`.
     pub best_genome_repr: String,
     /// The convergence log, one row per logged iteration.
@@ -887,9 +916,17 @@ impl RunSummary {
         use std::io::Write;
 
         let mut file = std::fs::File::create(filename)?;
-        writeln!(file, "best_fitness = {}", self.best_fitness)?;
-        writeln!(file, "genome = {}", self.best_genome_repr)?;
-        writeln!(file, "\nedges (u,v,multiplicity):")?;
+        write!(
+            file,
+            "{}",
+            py_result::as_comment("best_fitness", &self.best_fitness.to_string())
+        )?;
+        write!(
+            file,
+            "{}",
+            py_result::as_comment("genome", &self.best_genome_repr)
+        )?;
+        writeln!(file, "# nodes = {}", self.num_nodes)?;
         for &(u, v, weight) in &self.best_edges {
             writeln!(file, "{u},{v},{weight}")?;
         }
@@ -939,6 +976,7 @@ pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String>
     Ok(RunSummary {
         best_fitness: outcome.best_fitness,
         best_edges: outcome.best_edges,
+        num_nodes: outcome.num_nodes,
         best_genome_repr: outcome.best_genome_repr,
         history: outcome.history,
         seed,
@@ -1130,10 +1168,22 @@ mod tests {
             .expect("it is a genome config")
     }
 
-    /// Write `text` to a uniquely named file under the temp directory.
+    /// Write `text` to a uniquely named file under the temp directory,
+    /// appending the `# nodes` header the loader requires.
+    ///
+    /// Eight, because that is the `network_size` every fixture config here
+    /// uses, and a base-graph file that disagrees with the run is rejected.
+    /// Appended rather than prepended so a fixture's rows keep their line
+    /// numbers. [`file_holding_stating`] is for tests about that check itself.
     fn file_holding(name: &str, text: &str) -> std::path::PathBuf {
+        file_holding_stating(name, 8, text)
+    }
+
+    /// [`file_holding`], for a file that states some other node count.
+    fn file_holding_stating(name: &str, nodes: usize, text: &str) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!("get_lib_{name}.csv"));
-        std::fs::write(&path, text).expect("the fixture is written");
+        std::fs::write(&path, format!("{text}# nodes = {nodes}\n"))
+            .expect("the fixture is written");
         path
     }
 
@@ -1285,7 +1335,8 @@ mod tests {
             let folder = std::env::temp_dir().join("get_lib_mixed_numbering");
             let _ = std::fs::remove_dir_all(&folder);
             std::fs::create_dir_all(&folder).expect("temp folder");
-            std::fs::write(folder.join("a.csv"), "1,2,1\n").expect("the fixture is written");
+            std::fs::write(folder.join("a.csv"), "# nodes = 3\n1,2,1\n")
+                .expect("the fixture is written");
 
             // The case that used to pass silently and return edges numbered to
             // match neither input.
@@ -1372,7 +1423,10 @@ mod tests {
             let folder = std::env::temp_dir().join("get_lib_references");
             let _ = std::fs::remove_dir_all(&folder);
             std::fs::create_dir_all(&folder).expect("temp folder");
-            for (name, text) in [("b.csv", "2,3,1\n"), ("a.csv", "1,2,1\n")] {
+            for (name, text) in [
+                ("b.csv", "# nodes = 4\n2,3,1\n"),
+                ("a.csv", "# nodes = 3\n1,2,1\n"),
+            ] {
                 std::fs::write(folder.join(name), text).expect("the fixture is written");
             }
 
@@ -1385,8 +1439,11 @@ mod tests {
             assert!(graphs[1].0.ends_with("b.csv"), "{}", graphs[1].0);
             // Shifted on the way in like any other loaded graph, and nothing
             // shifts them back — a reference set is input only.
-            assert_eq!(graphs[0].1, vec![(0, 1, 1)]);
-            assert_eq!(graphs[1].1, vec![(1, 2, 1)]);
+            assert_eq!(graphs[0].2, vec![(0, 1, 1)]);
+            assert_eq!(graphs[1].2, vec![(1, 2, 1)]);
+            // Each file's own header, not the run's `network_size`: a
+            // reference set is real data and its graphs differ in size.
+            assert_eq!((graphs[0].1, graphs[1].1), (3, 4));
             // Nothing is stored: the caller is the reader until an objective is.
             assert!(evolver.base_graph.is_none());
 
@@ -1400,7 +1457,8 @@ mod tests {
             let folder = std::env::temp_dir().join("get_lib_ref_disagree");
             let _ = std::fs::remove_dir_all(&folder);
             std::fs::create_dir_all(&folder).expect("temp folder");
-            std::fs::write(folder.join("a.csv"), "1,2,1\n").expect("the fixture is written");
+            std::fs::write(folder.join("a.csv"), "# nodes = 3\n1,2,1\n")
+                .expect("the fixture is written");
 
             let mut evolver = evolver_with(PYTHON_FITNESS);
             let path = file_holding("ref_base", "1,2,1\n");
