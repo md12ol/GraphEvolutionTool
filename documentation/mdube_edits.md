@@ -57,14 +57,22 @@ Say **where**, **what is now false**, and **what it should say** — enough that
 have to re-derive it from the code.
 
 ```markdown
-## <YYYY-MM-DD HH:MM> — <author> — <short title>
+## <short title, stated as the change>
 
-- **Trigger:** what shipped, and the issue number.
-- **Files:** the pages and rough locations.
+- **Pages:** the pages and rough locations.
 - **Now false:** the claim the site currently makes.
 - **Should say:** what replaces it.
 - **Badges:** any `badge-planned` span, `.plan-note` callout or `status.html` row to remove.
+
+*#<slug> · filed <YYYY-MM-DD HH:MM> — <author>.*
 ```
+
+**Corrected 2026-08-20 — Michael.** This block used to prescribe a
+`## <YYYY-MM-DD HH:MM> — <author> — <short title>` heading with a `**Trigger:**` line, which no
+entry filed since 2026-08-18 has followed: the date and author migrated to a closing stamp and the
+heading became the change itself, which is what a sweeper scanning for "does this page appear
+anywhere" actually reads. The instructions were describing a practice nobody used, so they are
+corrected to the practice rather than the entries being rewritten to the instructions.
 
 Delete an entry when the sweep has applied it — this is a queue, not a log. What was changed and why
 belongs in `decisions.md`; this file only carries work that has not been done yet.
@@ -310,4 +318,4 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   contract. If the meeting reverses this, the entry goes with it; do not sweep these pages before
   the meeting has run.
 
-*#selection-splits-into-scope-selection-replacement · filed 2026-08-20 17:22, rewritten 2026-08-20 19:05 when the config block landed — Michael.*
+*#selection-splits-into-scope-selection-replacement · filed 2026-08-20 17:22, rewritten 2026-08-20 18:00 when the config block landed — Michael.*
