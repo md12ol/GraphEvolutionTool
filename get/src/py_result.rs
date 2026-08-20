@@ -24,6 +24,30 @@ use pyo3::prelude::*;
 
 use crate::dispatch::ErasedOutcome;
 
+/// Turn a value into `#` comment lines, **every** line of it.
+///
+/// `Genome::print` is free to return several lines — `SdaGenome`'s is a whole
+/// transition table — and a saved result is a loadable edge file, so a line
+/// that escaped the `#` would reach the parser as a malformed row. Commenting
+/// only the first line is exactly the bug this exists to prevent.
+pub(crate) fn as_comment(label: &str, value: &str) -> String {
+    let mut out = String::new();
+    let mut first = true;
+    for line in value.lines() {
+        if first {
+            out.push_str(&format!("# {label} = {line}\n"));
+            first = false;
+        } else {
+            out.push_str(&format!("# {line}\n"));
+        }
+    }
+    // An empty value still has to say the field was there.
+    if first {
+        out.push_str(&format!("# {label} =\n"));
+    }
+    out
+}
+
 /// One row of the convergence log.
 ///
 /// `iteration` counts generations under the generational strategy and mating
@@ -189,9 +213,13 @@ impl PyRunResult {
         let mut file = File::create(filename)
             .map_err(|err| PyIOError::new_err(format!("could not create {filename}: {err}")))?;
 
-        writeln!(file, "# best_fitness = {}", self.best_fitness)
-            .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
-        writeln!(file, "# genome = {}", self.best_genome_repr)
+        write!(
+            file,
+            "{}",
+            as_comment("best_fitness", &self.best_fitness.to_string())
+        )
+        .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
+        write!(file, "{}", as_comment("genome", &self.best_genome_repr))
             .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
         writeln!(file, "# nodes = {}", self.num_nodes)
             .map_err(|err| PyIOError::new_err(format!("could not write to {filename}: {err}")))?;
@@ -247,5 +275,34 @@ impl PyRunResult {
             run_index,
             config_toml,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::as_comment;
+
+    /// `SdaGenome::print` returns a transition table, several lines of it. A
+    /// saved result is a loadable edge file, so a line that escaped the `#`
+    /// would reach the parser as a malformed row — which is exactly what
+    /// commenting only the first line did.
+    #[test]
+    fn every_line_of_a_multi_line_value_is_commented() {
+        let genome = "init_char: 0\n0 + 0 -> 1 [ 1 1 1 ]\n0 + 1 -> 1 [ 0 1 ]";
+
+        let written = as_comment("genome", genome);
+
+        assert_eq!(
+            written,
+            "# genome = init_char: 0\n# 0 + 0 -> 1 [ 1 1 1 ]\n# 0 + 1 -> 1 [ 0 1 ]\n"
+        );
+        for line in written.lines() {
+            assert!(line.starts_with('#'), "escaped the comment: {line}");
+        }
+    }
+
+    #[test]
+    fn an_empty_value_still_names_its_field() {
+        assert_eq!(as_comment("genome", ""), "# genome =\n");
     }
 }

@@ -916,8 +916,16 @@ impl RunSummary {
         use std::io::Write;
 
         let mut file = std::fs::File::create(filename)?;
-        writeln!(file, "# best_fitness = {}", self.best_fitness)?;
-        writeln!(file, "# genome = {}", self.best_genome_repr)?;
+        write!(
+            file,
+            "{}",
+            py_result::as_comment("best_fitness", &self.best_fitness.to_string())
+        )?;
+        write!(
+            file,
+            "{}",
+            py_result::as_comment("genome", &self.best_genome_repr)
+        )?;
         writeln!(file, "# nodes = {}", self.num_nodes)?;
         for &(u, v, weight) in &self.best_edges {
             writeln!(file, "{u},{v},{weight}")?;
