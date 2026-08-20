@@ -240,6 +240,12 @@ pub trait Genome: Clone + Send + Sync {
     /// A genome with nothing to mutate (an empty gene list, a zero-state
     /// automaton) leaves itself unchanged rather than panicking.
     ///
+    /// **All randomness comes from `rng`**, the same obligation `crossover`
+    /// carries and for the same reason: one master seed reaches the
+    /// population, the evolution and the epidemics, so a single draw taken
+    /// from anywhere else makes two replicate runs at the same seed stop
+    /// agreeing.
+    ///
     /// `context` is the same run-level configuration `express` reads, passed
     /// so a representation can take its mutation probabilities from the run
     /// rather than from a private constant. A representation that keeps its
