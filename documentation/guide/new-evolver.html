@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Add a strategy · GET docs</title>
+<title>Add a Strategy · GET docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,13 +11,13 @@
 <main>
 
 <p class="page-kicker">Extending GET</p>
-<h1>Add a strategy</h1>
+<h1>Add a Strategy</h1>
 <p class="lede">
   A third evolution strategy — a different answer to "who breeds and who gets replaced". Three
   edits, and the genome match is untouched, because your evolver is generic over the representation.
 </p>
 
-<h2>What you have to implement</h2>
+<h2>What You Have to Implement</h2>
 
 <pre><code class="language-rust">pub trait Evolver&lt;G: Genome&gt; {
     type TypeContext;
@@ -44,7 +44,7 @@
 </table>
 </div>
 
-<h2>The six edits</h2>
+<h2>The Six Edits</h2>
 
 <p>
   Every location carries a literal marker in the source. Find the whole chain at once with
@@ -91,7 +91,7 @@
   </p>
 </div>
 
-<h2>The rules you must not break</h2>
+<h2>The Rules You Must Not Break</h2>
 
 <div class="warn">
   <b>1. Score through <code>express_and_score</code>, always.</b> The engine never calls
@@ -99,7 +99,7 @@
   function is both the direction conversion and the <code>NaN</code> gate. Calling the trait
   yourself produces values that compare backwards under a maximizing objective <i>and</i> lets a
   <code>NaN</code> through that will win every tournament it enters — and neither failure announces
-  itself. Detail on <a href="fitness.html#gate">Fitness &amp; orientation</a>.
+  itself. Detail on <a href="fitness.html#gate">Fitness &amp; Orientation</a>.
 </div>
 
 <div class="warn">
@@ -122,9 +122,9 @@
   strategies.
 </div>
 
-<h2>Decisions your strategy has to make</h2>
+<h2>Decisions Your Strategy Has to Make</h2>
 
-<h3>How much of the population turns over?</h3>
+<h3>How Much of the Population Turns Over?</h3>
 
 <p>
   This is the whole design space. Generational replaces everything but its elites each round;
@@ -153,7 +153,7 @@
   its documentation.
 </p>
 
-<h3>Where does elitism come from?</h3>
+<h3>Where Does Elitism Come From?</h3>
 
 <p>
   Generational is explicitly elitist via <code>elite_count</code>. Steady-state is
@@ -162,7 +162,7 @@
   which.
 </p>
 
-<h3>How often do you log?</h3>
+<h3>How Often Do You Log?</h3>
 
 <p>
   Once per meaningful unit of progress, and <b>log the starting population as iteration 0</b>. Both
@@ -171,7 +171,7 @@
   is not a log — pick an interval that makes your history readable at your largest realistic run.
 </p>
 
-<h3>What do you report as the best?</h3>
+<h3>What Do You Report as the Best?</h3>
 
 <p>
   <b>The best of the final population</b>, matching both existing strategies — not a running best
@@ -181,7 +181,7 @@
   a total order rather than an unwrapped partial comparison.
 </p>
 
-<h2>Constraints and validation</h2>
+<h2>Constraints and Validation</h2>
 
 <p>
   If your strategy needs something the others do not, put it in the validator, not in the evolver's
@@ -200,7 +200,7 @@
   engine.
 </div>
 
-<h2>Testing it</h2>
+<h2>Testing It</h2>
 
 <ul>
   <li><b>Run it twice from one seed</b> and compare the outcome and the whole history.</li>
@@ -217,7 +217,7 @@
       against both.</li>
 </ul>
 
-<h2>What you get for free</h2>
+<h2>What You Get for Free</h2>
 
 <p>
   Every representation, every objective, both front ends, orientation, <code>NaN</code> rejection,

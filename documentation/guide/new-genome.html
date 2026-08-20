@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Add a genome · GET docs</title>
+<title>Add a Genome · GET docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,13 +11,13 @@
 <main>
 
 <p class="page-kicker">Extending GET</p>
-<h1>Add a genome</h1>
+<h1>Add a Genome</h1>
 <p class="lede">
   A third representation — a different way of describing a graph compactly. Four edits, and the
   evolvers are untouched, because the strategy match is generic over the genome type.
 </p>
 
-<h2>What you have to implement</h2>
+<h2>What You Have to Implement</h2>
 
 <pre><code class="language-rust">pub trait Genome: Clone + Send + Sync {
     type Context: Send + Sync;
@@ -56,10 +56,10 @@
   <b>The one-mutation rule is a contract, not a convention.</b> A genome that rolls its own count
   internally makes <code>max_mutations</code> mean nothing for that representation — and nothing
   reports the disagreement, so a user comparing two representations at the same setting silently
-  compares two different things. See <a href="variation.html">Crossover &amp; mutation</a>.
+  compares two different things. See <a href="variation.html">Crossover &amp; Mutation</a>.
 </div>
 
-<h2>The seven edits</h2>
+<h2>The Seven Edits</h2>
 
 <p>
   Every location carries a literal marker in the source. Find the whole chain at once with
@@ -110,9 +110,9 @@
 <p>Then add the keys to <code>config.example.toml</code>, which the test suite parses and validates
    — so a broken example fails the build.</p>
 
-<h2>Design questions worth answering first</h2>
+<h2>Design Questions Worth Answering First</h2>
 
-<h3>Where does the size of the graph come from?</h3>
+<h3>Where Does the Size of the Graph Come From?</h3>
 
 <p>
   From your context, and from nowhere else. Config carries <code>network_size</code> and
@@ -121,7 +121,7 @@
   the authority during expression.
 </p>
 
-<h3>Does anything derive from the edge cap?</h3>
+<h3>Does Anything Derive From the Edge Cap?</h3>
 
 <p>
   It might. The <a href="genomes.html#alphabet">SDA alphabet</a> is derived as
@@ -142,7 +142,7 @@
   in the constructor rather than in a comment.
 </div>
 
-<h3>What is run configuration, and what is genome data?</h3>
+<h3>What Is Run Configuration, and What Is Genome Data?</h3>
 
 <p>
   If mutation and crossover never touch it, it belongs on the context, not in the genome. SDA's
@@ -150,7 +150,7 @@
   the genome would waste mutation budget on something that should not vary within a run.
 </p>
 
-<h3>Can expression fail?</h3>
+<h3>Can Expression Fail?</h3>
 
 <p>
   It cannot — <code>express</code> returns a graph, not a result. That is deliberate, and the
@@ -160,7 +160,7 @@
   mid-run.
 </p>
 
-<h3>Degenerate sizes</h3>
+<h3>Degenerate Sizes</h3>
 
 <p>
   Decide what your representation does at zero and one node before you find out by accident. Both
@@ -169,7 +169,7 @@
   runs there.
 </p>
 
-<h2>Testing it</h2>
+<h2>Testing It</h2>
 
 <ul>
   <li><b>Express twice, compare.</b> Determinism is the property everything else rests on.</li>
@@ -184,7 +184,7 @@
       because the evolver takes a population rather than minting one.</li>
 </ul>
 
-<h2>What you get for free</h2>
+<h2>What You Get for Free</h2>
 
 <p>
   Everything except expression. Selection, both evolution strategies, the whole

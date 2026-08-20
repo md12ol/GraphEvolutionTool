@@ -65,7 +65,7 @@
     </p>
     <p>
       These look like boilerplate and are not. Removing any one of them stops parallel expression
-      compiling — see <a href="../guide/pipeline.html">The pipeline</a> for the three bounds and why
+      compiling — see <a href="../guide/pipeline.html">The Pipeline</a> for the three bounds and why
       each is load-bearing.
     </p>
   </div>
@@ -210,7 +210,7 @@
 <p>
   The reason this is a trait-level contract rather than a per-representation choice is recorded in
   the source itself: it is "precisely how the two genomes here drifted apart before it was written
-  down". <a href="../guide/variation.html">Crossover &amp; mutation</a> has the fuller story,
+  down". <a href="../guide/variation.html">Crossover &amp; Mutation</a> has the fuller story,
   including the one-off change to seeded output that landing the contract caused.
 </p>
 
@@ -285,14 +285,14 @@
   <code>genomes::</code> re-export list. If you are assembling a population by hand from Rust rather
   than through config, you will need it for
   <code>EdgeEditGenome::new_with_operators</code>, and the short path will not find it. See
-  <a href="../guide/extending.html">Extension points</a>.
+  <a href="../guide/extending.html">Extension Points</a>.
 </div>
 
 <h2>Writing a third genome</h2>
 
 <p>
   Seven things in the genome's own file, six more to register it with the config-driven path. The
-  full checklist with line numbers is on <a href="../guide/new-genome.html">Add a genome</a>; the
+  full checklist with line numbers is on <a href="../guide/new-genome.html">Add a Genome</a>; the
   short version is that you implement the five trait items above plus a random constructor, and then
   add one arm to the <code>match</code> in <a href="dispatch.html">dispatch.rs</a>.
 </p>

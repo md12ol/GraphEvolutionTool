@@ -14,53 +14,53 @@
 
   var NAV = [
     {
-      title: "Start here",
+      title: "Start Here",
       items: [
         ["index.html",                    "Overview"],
-        ["guide/getting-started.html",    "Getting started"],
+        ["guide/getting-started.html",    "Getting Started"],
         ["guide/glossary.html",           "Glossary"]
       ]
     },
     {
-      title: "How it works",
+      title: "How It Works",
       items: [
-        ["guide/pipeline.html",           "The pipeline"],
-        ["guide/graph.html",              "The graph"],
+        ["guide/pipeline.html",           "The Pipeline"],
+        ["guide/graph.html",              "The Graph"],
         ["guide/genomes.html",            "Genomes"],
-        ["guide/variation.html",          "Crossover & mutation"],
-        ["guide/fitness.html",            "Fitness & orientation"],
-        ["guide/sir.html",                "The SIR model"],
-        ["guide/evolvers.html",           "Evolution strategies"],
-        ["guide/reproducibility.html",    "Seeds & reproducibility"],
-        ["guide/output.html",             "Logs & results"]
+        ["guide/variation.html",          "Crossover & Mutation"],
+        ["guide/fitness.html",            "Fitness & Orientation"],
+        ["guide/sir.html",                "The SIR Model"],
+        ["guide/evolvers.html",           "Evolution Strategies"],
+        ["guide/reproducibility.html",    "Seeds & Reproducibility"],
+        ["guide/output.html",             "Logs & Results"]
       ]
     },
     {
       title: "Using GET",
       items: [
-        ["guide/configuration.html",      "Configuration reference"],
+        ["guide/configuration.html",      "Configuration Reference"],
         ["guide/python-api.html",         "Python API"],
         ["examples/index.html",           "Examples"],
-        ["guide/performance.html",        "Performance & memory"],
+        ["guide/performance.html",        "Performance & Memory"],
         ["guide/troubleshooting.html",    "Troubleshooting"]
       ]
     },
     {
       title: "Extending GET",
       items: [
-        ["guide/extending.html",          "Extension points"],
-        ["guide/new-fitness.html",        "Add an objective"],
-        ["guide/new-genome.html",         "Add a genome"],
-        ["guide/new-evolver.html",        "Add a strategy"],
-        ["guide/new-selection.html",      "Add a selection scheme"],
-        ["guide/new-crossover.html",      "Add a crossover operator"],
-        ["guide/new-mutation.html",       "Add a mutation operator"]
+        ["guide/extending.html",          "Extension Points"],
+        ["guide/new-fitness.html",        "Add an Objective"],
+        ["guide/new-genome.html",         "Add a Genome"],
+        ["guide/new-evolver.html",        "Add a Strategy"],
+        ["guide/new-selection.html",      "Add a Selection Scheme"],
+        ["guide/new-crossover.html",      "Add a Crossover Operator"],
+        ["guide/new-mutation.html",       "Add a Mutation Operator"]
       ]
     },
     {
-      title: "Source reference",
+      title: "Source Reference",
       items: [
-        ["reference/index.html",              "Module map"],
+        ["reference/index.html",              "Module Map"],
         ["reference/lib.html",                "lib.rs"],
         ["reference/graph.html",              "graph.rs"],
         ["reference/genome-trait.html",       "genomes/genome.rs"],
@@ -80,8 +80,8 @@
     {
       title: "Project",
       items: [
-        ["status.html",                   "Implementation status"],
-        ["design-notes.html",             "Design notes"]
+        ["status.html",                   "Implementation Status"],
+        ["design-notes.html",             "Design Notes"]
       ]
     }
   ];
@@ -155,7 +155,7 @@
     toc.className = "toc";
     var title = document.createElement("div");
     title.className = "toc-title";
-    title.textContent = "On this page";
+    title.textContent = "On This Page";
     toc.appendChild(title);
 
     Array.prototype.forEach.call(heads, function (h) {

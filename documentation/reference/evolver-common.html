@@ -17,7 +17,7 @@
   result and log-row types, tournament selection, the mutation helper, and
   <code>express_and_score</code> — the one function every fitness value in GET passes through.
   For the gentle introduction to what an evolver <i>is</i>, read
-  <a href="../guide/evolvers.html">Evolution strategies</a> first; this page is the precise
+  <a href="../guide/evolvers.html">Evolution Strategies</a> first; this page is the precise
   companion to it.
 </p>
 
@@ -41,7 +41,7 @@
   run quietly runs backwards, and a single <code>NaN</code> becomes the best individual in every
   tournament it enters, filling the population with whatever produced it and leaving a run that
   looks converged. If you are writing a new strategy, this is the rule to get right first — see
-  <a href="../guide/new-evolver.html">Add a strategy</a>.
+  <a href="../guide/new-evolver.html">Add a Strategy</a>.
 </div>
 
 <h2>What lives where</h2>
@@ -92,7 +92,7 @@ pub use steady_state::SteadyStateEvolver;</div>
     <p>
       A genetic-algorithm evolution strategy over genome type <code>G</code>. Generic over the
       genome rather than using a trait object, because a <code>Genome</code> cannot be erased — see
-      <a href="../guide/pipeline.html#two-front-ends">The pipeline</a> for why the two dispatch axes
+      <a href="../guide/pipeline.html#two-front-ends">The Pipeline</a> for why the two dispatch axes
       are not symmetric.
     </p>
   </div>
@@ -149,7 +149,7 @@ where
     <p>
       Being generic over <code>F</code> is what makes the Rust extension route work without touching
       dispatch: if you already hold a concrete objective type, you instantiate an evolver with it
-      directly. See <a href="../guide/new-evolver.html">Add a strategy</a> and
+      directly. See <a href="../guide/new-evolver.html">Add a Strategy</a> and
       <a href="fitness.html">fitness.rs</a>.
     </p>
   </div>
@@ -262,7 +262,7 @@ where
   objective.</b> That is the stated cost of converting exactly twice per run instead of once per
   stats row. The field name says <code>_engine</code> so it cannot be mistaken, and
   <code>direction</code> is the fix. The Python boundary does this for you — see
-  <a href="../guide/fitness.html">Fitness &amp; orientation</a>.
+  <a href="../guide/fitness.html">Fitness &amp; Orientation</a>.
 </div>
 
 <h3>The log row</h3>
@@ -536,7 +536,7 @@ where
   — and a single missed site fails silently. This is the only place the whole batch is scored, so it
   is the only place "exactly once" can be <b>guaranteed</b> rather than remembered. Orientation and
   <code>NaN</code> rejection share one door by design. The full argument lives in
-  <a href="../guide/fitness.html">Fitness &amp; orientation</a>.
+  <a href="../guide/fitness.html">Fitness &amp; Orientation</a>.
 </p>
 
 <h2>Variation helpers</h2>
@@ -564,7 +564,7 @@ where
     <p>
       Note that "one mutation" is measured by <b>count, not strength</b>: one edge-edit gene out of
       256 is a far smaller perturbation than one SDA transition out of 24. See
-      <a href="../guide/variation.html">Crossover &amp; mutation</a>.
+      <a href="../guide/variation.html">Crossover &amp; Mutation</a>.
     </p>
     <p><b>Panics</b> if <code>max_mutations</code> is zero — <code>1..=0</code> is an empty range
       with no meaningful draw. This is a backstop; <code>Config::validate</code> rejects it first.</p>
@@ -578,7 +578,7 @@ where
   what the pre-<code>max_mutations</code> engine produced, even at the default. Skipping the draw at
   1 would restore the old sequence and is deliberately <i>not</i> done: a special case that changes
   the random stream based on a config value is a worse thing to own than a one-time change in seeded
-  output. See <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a>.
+  output. See <a href="../guide/reproducibility.html">Seeds &amp; Reproducibility</a>.
 </div>
 
 <div class="api-item">
@@ -658,18 +658,18 @@ where
 <h2>Related pages</h2>
 
 <ul>
-  <li><a href="../guide/evolvers.html">Evolution strategies</a> — the concepts, without the Rust</li>
+  <li><a href="../guide/evolvers.html">Evolution Strategies</a> — the concepts, without the Rust</li>
   <li><a href="generational.html">evolver/generational.rs</a> and
       <a href="steady-state.html">evolver/steady_state.rs</a> — the two implementations</li>
-  <li><a href="../guide/fitness.html">Fitness &amp; orientation</a> and
+  <li><a href="../guide/fitness.html">Fitness &amp; Orientation</a> and
       <a href="fitness.html">fitness.rs</a> — <code>Direction</code>, <code>orient</code>, and the
       <code>NaN</code> rule</li>
-  <li><a href="../guide/variation.html">Crossover &amp; mutation</a> — what the two rolls mean per
+  <li><a href="../guide/variation.html">Crossover &amp; Mutation</a> — what the two rolls mean per
       representation</li>
-  <li><a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a> — what a seed does and
+  <li><a href="../guide/reproducibility.html">Seeds &amp; Reproducibility</a> — what a seed does and
       does not fix</li>
-  <li><a href="../guide/output.html">Logs &amp; results</a> — the log format and the outcome</li>
-  <li><a href="../guide/new-evolver.html">Add a strategy</a> — the checklist a third evolver owes</li>
+  <li><a href="../guide/output.html">Logs &amp; Results</a> — the log format and the outcome</li>
+  <li><a href="../guide/new-evolver.html">Add a Strategy</a> — the checklist a third evolver owes</li>
   <li><a href="dispatch.html">dispatch.rs</a> — where contexts and populations are built</li>
 </ul>
 

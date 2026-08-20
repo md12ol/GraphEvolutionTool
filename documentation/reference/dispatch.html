@@ -277,7 +277,7 @@ which objective it is holding.</figcaption>
       numbers are negative in there; converting once at this boundary is what keeps that an
       engine-internal detail. The conversion is a negation, and negation is its own inverse — the
       same call that oriented the value on the way in undoes it on the way out. See
-      <a href="../guide/fitness.html">Fitness &amp; orientation</a>.
+      <a href="../guide/fitness.html">Fitness &amp; Orientation</a>.
     </p>
     <p>
       <code>best_edges</code> is the best individual's expressed network as
@@ -371,7 +371,7 @@ which objective it is holding.</figcaption>
 <p>
   The generator is a fixed algorithm chosen for exactly this reason rather than the library's
   default, whose algorithm may change between releases — which would defeat the entire purpose of a
-  seed argument. Details on <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a>.
+  seed argument. Details on <a href="../guide/reproducibility.html">Seeds &amp; Reproducibility</a>.
 </p>
 
 <h2>Designed but not yet here</h2>
@@ -419,7 +419,7 @@ which objective it is holding.</figcaption>
   roughly <code>network_size² × 4 bytes × population_size × min(max_cores, replicates)</code> — the
   three sizes <i>multiply</i>. Raising <code>max_cores</code> to exploit a bigger machine multiplies
   peak memory by the same factor and can exhaust hardware that handled the smaller setting
-  comfortably. See <a href="../guide/performance.html">Performance &amp; memory</a>.
+  comfortably. See <a href="../guide/performance.html">Performance &amp; Memory</a>.
 </div>
 
 <h3>The full result object</h3>
@@ -467,11 +467,11 @@ which objective it is holding.</figcaption>
     <tr><td>A fitness objective</td>
         <td><b>One arm</b> in <code>objective</code>, plus the config variant and its Python mirror.
             No genome and no strategy code is touched — that is the entire payoff of erasing the
-            objective first. See <a href="../guide/new-fitness.html">Add an objective</a>.</td></tr>
+            objective first. See <a href="../guide/new-fitness.html">Add an Objective</a>.</td></tr>
     <tr><td>A genome representation</td>
         <td>One arm in <code>evolve</code>'s genome match, plus a new <code>*_start</code> function
             beside the two existing ones. The strategy match is untouched, because it is generic
-            over the genome. See <a href="../guide/new-genome.html">Add a genome</a>.</td></tr>
+            over the genome. See <a href="../guide/new-genome.html">Add a Genome</a>.</td></tr>
     <tr><td>An evolution strategy</td>
         <td>One arm in <code>run_strategy</code>, building its type-specific context. The genome
             match is untouched. Add any strategy-specific constraint to
@@ -492,7 +492,7 @@ which objective it is holding.</figcaption>
   <li><a href="config.html">config.rs</a> — the schema this module consumes.</li>
   <li><a href="lib.html">lib.rs</a> — <code>GraphEvolver</code> and the <code>run</code> method that
       calls into here.</li>
-  <li><a href="../guide/pipeline.html">The pipeline</a> — the same story at guide altitude.</li>
+  <li><a href="../guide/pipeline.html">The Pipeline</a> — the same story at guide altitude.</li>
   <li><a href="evolver-common.html">evolver/common.rs</a> — the engine core this hands off to.</li>
   <li><a href="../status.html">Project status</a> — what is built and what is designed.</li>
 </ul>

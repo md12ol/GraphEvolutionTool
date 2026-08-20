@@ -52,7 +52,7 @@ pub mod sir;</div>
   as a crate, implement <a href="fitness.html#trait"><code>Fitness</code></a> for your own type, and
   drive an evolver directly — bypasses this file entirely, because
   <code>Evolver::run</code> is generic over the objective. Neither is a fallback for the other. See
-  <a href="../guide/extending.html">Extension points</a>.
+  <a href="../guide/extending.html">Extension Points</a>.
 </div>
 
 <h2>GraphEvolver</h2>
@@ -498,7 +498,7 @@ fn get(m: &amp;Bound&lt;'_, PyModule&gt;) -&gt; PyResult&lt;()&gt;</div>
 <div class="note">
   <b>Building the module.</b> It is a pyo3 extension built with
   <a href="https://www.maturin.rs">maturin</a> — <code>maturin develop</code> for a working copy, or
-  <code>pip install .</code>. See <a href="../guide/getting-started.html">Getting started</a>.
+  <code>pip install .</code>. See <a href="../guide/getting-started.html">Getting Started</a>.
 </div>
 
 <h2>A complete run, end to end</h2>
@@ -551,14 +551,14 @@ print(len(result.history), "rows of convergence log")</code></pre>
 
 <ul>
   <li><a href="../guide/python-api.html">Python API</a> — the same surface arranged by task.</li>
-  <li><a href="../guide/getting-started.html">Getting started</a> — building the module and running
+  <li><a href="../guide/getting-started.html">Getting Started</a> — building the module and running
       something.</li>
   <li><a href="py-config.html">py_config.rs</a> — the seven config builder classes.</li>
   <li><a href="config.html">config.rs</a> — the parsed config and every validation rule.</li>
   <li><a href="dispatch.html">dispatch.rs</a> — what <code>run</code> calls: objective erasure,
       then the strategy × genome match.</li>
   <li><a href="fitness.html">fitness.rs</a> — the objectives, and the Python callable contract.</li>
-  <li><a href="../status.html">Implementation status</a> — what is built, partial and planned
+  <li><a href="../status.html">Implementation Status</a> — what is built, partial and planned
       across the whole project.</li>
 </ul>
 

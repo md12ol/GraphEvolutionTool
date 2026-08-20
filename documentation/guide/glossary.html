@@ -51,7 +51,7 @@
             much and it converges on the first decent thing it finds.</td></tr>
     <tr><td><b>Crossover</b></td>
         <td>Combining two parents into two children. GET's crossover works in place and always
-            keeps both children. <a href="variation.html">Crossover &amp; mutation</a></td></tr>
+            keeps both children. <a href="variation.html">Crossover &amp; Mutation</a></td></tr>
     <tr><td><b>Mutation</b></td>
         <td>A small random change to one individual. GET applies <b>exactly one</b> per call, and
             the engine decides how many calls. <a href="variation.html">Crossover &amp;
@@ -62,7 +62,7 @@
             structurally.</td></tr>
     <tr><td><b>Fitness</b></td>
         <td>The single number that says how good a graph is.
-            <a href="fitness.html">Fitness &amp; orientation</a></td></tr>
+            <a href="fitness.html">Fitness &amp; Orientation</a></td></tr>
     <tr><td><b>Objective</b></td>
         <td>The function that computes fitness. Used interchangeably with "fitness function"
             here.</td></tr>
@@ -82,7 +82,7 @@
     <tr><td><b>Engine orientation</b></td>
         <td>The rule that inside GET, <b>lower fitness is always better</b>, whatever your
             objective does. Selection, elitism and replacement all assume it.
-            <a href="fitness.html">Fitness &amp; orientation</a></td></tr>
+            <a href="fitness.html">Fitness &amp; Orientation</a></td></tr>
     <tr><td><b>Your units</b></td>
         <td>Whatever your objective naturally returns — infected nodes, an RMSE, anything. Nothing
             is normalized or sign-flipped for you, and this is what you get back at the Python
@@ -99,7 +99,7 @@
     <tr><td><b>Dispatch</b></td>
         <td>The layer that turns a validated config into concrete types, builds the starting
             population, and runs the evolution.
-            <a href="pipeline.html">The pipeline</a></td></tr>
+            <a href="pipeline.html">The Pipeline</a></td></tr>
     <tr><td><b>Erasure</b></td>
         <td>Discarding a static type so a non-generic function can return the result. The objective
             is erased before dispatch; the genome type is erased before the outcome crosses into
@@ -107,7 +107,7 @@
     <tr><td><b>Replicate</b></td>
         <td>One of <code>n</code> runs at identical parameters and different seeds. The unit
             research actually reports.
-            <a href="reproducibility.html">Seeds &amp; reproducibility</a></td></tr>
+            <a href="reproducibility.html">Seeds &amp; Reproducibility</a></td></tr>
     <tr><td><b>Master seed</b></td>
         <td>The single number that reproduces an entire experiment. Everything derives from
             it.</td></tr>
@@ -132,7 +132,7 @@
   <tbody>
     <tr><td><b>Multigraph</b></td>
         <td>A graph where a pair of nodes can be joined by more than one edge. GET stores that as a
-            weight. <a href="graph.html">The graph</a></td></tr>
+            weight. <a href="graph.html">The Graph</a></td></tr>
     <tr><td><b>Edge multiplicity</b></td>
         <td>How many parallel edges join a pair — the "weight". <code>0</code> means no
             edge.</td></tr>
@@ -164,7 +164,7 @@
   <tbody>
     <tr><td><b>SIR</b></td>
         <td>Susceptible → Infectious → Recovered: the three states a node moves through, in that
-            order, never backwards. <a href="sir.html">The SIR model</a></td></tr>
+            order, never backwards. <a href="sir.html">The SIR Model</a></td></tr>
     <tr><td><b>Patient zero</b></td>
         <td>The node the outbreak starts at. Pin it, or let a fresh one be drawn per
             epidemic.</td></tr>
@@ -197,7 +197,7 @@
     <tr><td><b>Common random numbers (CRN)</b></td>
         <td>Giving every candidate the <i>same</i> random draws so differences between them reflect
             the candidates rather than the dice. Essential when the objective is noisy.
-            <a href="reproducibility.html">Seeds &amp; reproducibility</a></td></tr>
+            <a href="reproducibility.html">Seeds &amp; Reproducibility</a></td></tr>
     <tr><td><b>Seed stream</b></td>
         <td>Seeding one generator and using its output as a list of seeds. It is what makes run
             <code>i</code>'s seed independent of how many runs you asked for.</td></tr>

@@ -132,7 +132,7 @@
   maximizing objective a <code>NaN</code> sorts as the <i>best</i> individual in every tournament,
   and fills the population with whatever produced it. GET rejects <code>NaN</code> at the gate, so
   you will get a failure rather than this — but only for values that pass through the gate. See
-  <a href="fitness.html">Fitness &amp; orientation</a>.
+  <a href="fitness.html">Fitness &amp; Orientation</a>.
 </p>
 
 <h3>Every edge weight is 1 when I set the cap to 5</h3>
@@ -172,7 +172,7 @@
   Correct — they are different statistics. <code>ci_95</code> is <b>within-population, per
   iteration</b>: how tightly this generation is clustered around its own mean. The band on a
   published convergence plot is usually <b>across replicates</b>, computed when replicate logs are
-  aggregated. See <a href="output.html">Logs &amp; results</a>.
+  aggregated. See <a href="output.html">Logs &amp; Results</a>.
 </p>
 
 <h3><code>std_dev</code> and <code>ci_95</code> use different denominators</h3>
@@ -204,7 +204,7 @@
   Expected, and it is the least intuitive thing in GET. Each concurrently-executing replicate holds
   its own expressed population, and a graph is a dense <code>network_size²</code> matrix regardless
   of how sparse it is. Doubling the cores doubles peak memory. The arithmetic and a worked table
-  are on <a href="performance.html">Performance &amp; memory</a>.
+  are on <a href="performance.html">Performance &amp; Memory</a>.
 </p>
 
 <h3>A single steady-state run leaves my machine idle</h3>

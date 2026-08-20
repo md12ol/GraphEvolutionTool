@@ -96,7 +96,7 @@ evolver = get.GraphEvolver.from_config(config)    # renders, parses AND validate
     <p>
       The epidemic parameters shared by all three SIR objectives. Every field is readable and
       writable. Meanings are on <a href="configuration.html">Configuration</a>; the model itself is
-      on <a href="sir.html">The SIR model</a>.
+      on <a href="sir.html">The SIR Model</a>.
     </p>
   </div>
 </div>
@@ -158,7 +158,7 @@ evolver = get.GraphEvolver.from_config(config)</code></pre>
     <p>
       <b>One seed drives everything</b> — the starting population, the evolution loop, and the
       epidemics. The same seed and the same config give the same result, on any machine, forever.
-      See <a href="reproducibility.html">Seeds &amp; reproducibility</a>.
+      See <a href="reproducibility.html">Seeds &amp; Reproducibility</a>.
     </p>
     <p>
       <b>Nothing is cached on the evolver.</b> The result is the returned value and nowhere else,
@@ -215,7 +215,7 @@ for row in result.history:       # the convergence log
     <p>
       The two fitness columns are in your units; <code>std_dev</code> is left exactly as computed,
       because a spread reads the same whichever direction the objective runs in. It is the
-      <b>population</b> deviation — see <a href="output.html">Logs &amp; results</a>.
+      <b>population</b> deviation — see <a href="output.html">Logs &amp; Results</a>.
     </p>
   </div>
 </div>
@@ -232,7 +232,7 @@ for row in result.history:       # the convergence log
     <p>
       It refuses if the config did not select <code>type = "python"</code> — silently accepting a
       callable that will never be consulted is indistinguishable from success. Full guide on
-      <a href="new-fitness.html">Add an objective</a>.
+      <a href="new-fitness.html">Add an Objective</a>.
     </p>
   </div>
 </div>
@@ -281,7 +281,7 @@ print(best.best_fitness)</code></pre>
   <code>network_size × network_size</code> matrix however sparse it is. Raising
   <code>max_cores</code> to use a bigger machine multiplies peak memory by the same factor, and can
   exhaust it on hardware that handled the smaller setting comfortably. The arithmetic is on
-  <a href="performance.html">Performance &amp; memory</a>.
+  <a href="performance.html">Performance &amp; Memory</a>.
 </div>
 
 <div class="plan-note">
@@ -303,7 +303,7 @@ GraphEvolver.save_results(path)</div>
       Write the convergence log as CSV, and the best individual plus the generated TOML as the
       results record. Both convert fitness back into your units on the way out and leave
       <code>std_dev</code> and <code>ci_95</code> alone, since a spread is identical under
-      negation. Column list on <a href="output.html">Logs &amp; results</a>.
+      negation. Column list on <a href="output.html">Logs &amp; Results</a>.
     </p>
   </div>
 </div>
@@ -381,7 +381,7 @@ GraphEvolver.save_results(path)</div>
   objective is hot enough that Python arithmetic dominates the run, depend on <code>get</code> as
   a crate, implement <code>Fitness</code> for your own type, and drive an evolver directly. That
   path never touches dispatch or the config schema at all. See
-  <a href="new-fitness.html#rust-route">Add an objective</a>.
+  <a href="new-fitness.html#rust-route">Add an Objective</a>.
 </p>
 
 </main>

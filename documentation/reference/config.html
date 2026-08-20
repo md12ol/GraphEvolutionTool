@@ -44,8 +44,8 @@
   purpose: <code>SharedEvolutionContext</code> is generic over the genome and carries a
   non-deserializable associated type, so configuration is parsed into this plain shape first and
   mapped onto real engine types afterwards. The narrative version of this is on
-  <a href="../guide/pipeline.html">The pipeline</a>; the user-facing version is
-  <a href="../guide/configuration.html">Configuration reference</a>.
+  <a href="../guide/pipeline.html">The Pipeline</a>; the user-facing version is
+  <a href="../guide/configuration.html">Configuration Reference</a>.
 </p>
 
 <div class="note">
@@ -155,7 +155,7 @@
   <tbody>
     <tr><td><code>type</code></td><td><code>"generational"</code> | <code>"steady_state"</code></td>
         <td><b>required</b></td><td>Which strategy runs. See
-            <a href="../guide/evolvers.html">Evolution strategies</a>.</td>
+            <a href="../guide/evolvers.html">Evolution Strategies</a>.</td>
         <td>Must be one of the two.</td><td>parse error, "unknown variant"</td></tr>
     <tr><td><code>num_generations</code></td><td>integer</td><td><b>required</b> (generational)</td>
         <td>Generations to run.</td><td>Not checked; <code>0</code> is legal and means "score the
@@ -280,7 +280,7 @@
             <code>"python"</code></td>
         <td><b>required</b></td>
         <td>The objective. Its <b>direction</b> — maximize or minimize — comes with it and is never
-            configurable. See <a href="../guide/fitness.html">Fitness &amp; orientation</a>.</td>
+            configurable. See <a href="../guide/fitness.html">Fitness &amp; Orientation</a>.</td>
         <td>Must be one of the four.</td><td>parse error</td></tr>
     <tr><td><code>infection_rate</code></td><td>float</td><td><b>required</b> (SIR objectives)</td>
         <td>Per-edge transmission probability, per timestep.</td>
@@ -571,7 +571,7 @@ result = evolver.run(20260812)                  # one master seed drives everyth
         <td>A config written before the seed moved out of <code>[fitness]</code> still parses, and
             would run under a different seeding model than its author believes. There is now one
             master seed, supplied to the <code>run</code> call, and everything derives from it —
-            see <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a>.</td></tr>
+            see <a href="../guide/reproducibility.html">Seeds &amp; Reproducibility</a>.</td></tr>
     <tr><td><code>target_profile</code></td>
         <td>Someone who switches objective and forgets the profile behind would believe they are
             matching a curve while the run maximizes spread. So a profile under any objective other
@@ -665,7 +665,7 @@ result = evolver.run(20260812)                  # one master seed drives everyth
 <h2>See also</h2>
 
 <ul>
-  <li><a href="../guide/configuration.html">Configuration reference</a> — the same keys, arranged
+  <li><a href="../guide/configuration.html">Configuration Reference</a> — the same keys, arranged
       for someone setting up a run rather than reading the source.</li>
   <li><a href="py-config.html">py_config.rs</a> — the Python mirror of every type on this page.</li>
   <li><a href="dispatch.html">dispatch.rs</a> — where a validated config becomes running

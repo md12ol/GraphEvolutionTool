@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Add a mutation operator · GET docs</title>
+<title>Add a Mutation Operator · GET docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,11 +11,11 @@
 <main>
 
 <p class="page-kicker">Extending GET</p>
-<h1>Add a mutation operator</h1>
+<h1>Add a Mutation Operator</h1>
 <p class="lede">
   Four edits — but this chain <b>exists twice</b>, once per genome, and the two halves share no
-  code. Find your half first; a step from the other one is a different enum in a different file
-  and does nothing for your representation.
+  code. Find your half first; a step from the other one is a different enum in a different file and
+  does nothing for your representation.
 </p>
 
 <div class="callout">
@@ -29,54 +29,84 @@ git grep -nE "ADD A MUTATION STEP . \(for SDA\)"        # SDA's four
 git grep -n  "ADD A MUTATION STEP"                      # both, all eight</code></pre>
   <p>
     Unlike crossover, mutation is <b>per representation</b>: there is no shared
-    <code>Mutation</code> enum, and no compatibility match to extend. Adding an operator for one
+    <code>Mutation</code> enum and no compatibility match to extend. Adding an operator for one
     genome does not touch the other at all.
   </p>
 </div>
 
-<h2>The contract, whichever half you are on</h2>
+<h2>What the User Ends Up Writing</h2>
+
+<p>
+  A GET run is configured by a <b>TOML document</b> — see the
+  <a href="configuration.html">Configuration Reference</a> for its full shape, and
+  <a href="getting-started.html">Getting Started</a> for how to run one. Mutation is configured as
+  an inline table <i>inside</i> the genome's own section, because the operator belongs to the
+  representation — SDA's goes under its <code>[genome]</code> the same way, alongside
+  <code>redraw_one</code>:
+</p>
+
+<pre><code class="language-toml">[genome]
+type        = "edge_edit"
+gene_length = 256
+mutation    = { type = "my_mutation", some_param = 0.5 }</code></pre>
+
+<div class="callout">
+  <p>
+    <b>You never write the string <code>"my_mutation"</code> anywhere in the code.</b> It is derived
+    from your variant's name, converted to snake_case. Name the variant and the config name follows;
+    the keys under it are your struct's field names, the same way.
+  </p>
+  <p>
+    This is not specific to the command-line route. The same document is read by the CLI and by the
+    Rust library, and a Python caller builds the same section through a config object instead of
+    typing it. Skipping the optional Python step below is what makes an operator TOML-only.
+  </p>
+</div>
+
+<h2>The Contract, Whichever Half You Are On</h2>
 
 <div class="callout">
   <p>
     <b>Exactly one mutation per call.</b> The engine's <code>max_mutations</code> counts calls, not
     changes — so a variant that applies several makes that setting meaningless for the
-    representation, and <b>nothing reports the disagreement</b>. The run completes, the numbers
-    look plausible, and the mutation rate the user configured is not the one they got. This is the
-    single most expensive thing to get wrong on this page.
+    representation, and <b>nothing reports the disagreement</b>. The run completes, the numbers look
+    plausible, and the mutation rate the user configured is not the one they got. This is the single
+    most expensive thing to get wrong on this page.
   </p>
 </div>
 
-<h2 id="edge-edit">Edge-edit — the four edits</h2>
+<h2 id="edge-edit">Edge-Edit — the Four Edits</h2>
 
 <div class="table-wrap">
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>genomes/genome.rs</code></td>
-        <td>A variant on <code>EdgeEditMutation</code>, plus any parameters it reads.</td></tr>
-    <tr><td>2</td><td><code>genomes/edge_edit.rs</code></td>
+    <tr><td>1</td><td><code>get/src/genomes/genome.rs:316</code></td>
+        <td>A variant on <code>enum EdgeEditMutation</code>, plus any parameters it reads.</td></tr>
+    <tr><td>2</td><td><code>get/src/genomes/edge_edit.rs:287</code></td>
         <td>The arm in <code>EdgeEditGenome::mutate</code> that performs it.</td></tr>
-    <tr><td>3</td><td><code>config.rs</code> and <code>dispatch.rs</code></td>
-        <td>The mirrored <code>EdgeEditMutationConfig</code> variant, and the arm mapping it onto
-            the engine enum.</td></tr>
-    <tr><td>4</td><td><code>py_config.rs</code> — two sites</td>
-        <td><b>Optional.</b> The Python-side variant and its matching arm.</td></tr>
+    <tr><td>3</td><td><code>get/src/config.rs:300</code> and
+        <code>get/src/dispatch.rs:896</code></td>
+        <td>The mirrored variant on <code>enum EdgeEditMutationConfig</code>, and the arm mapping it
+            onto the engine enum.</td></tr>
+    <tr><td>4</td><td><code>get/src/py_config.rs:909</code> and <code>:935</code></td>
+        <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
   </tbody>
 </table>
 </div>
 
-<pre><code class="language-rust">// step 1 — in `enum EdgeEditMutation` (genomes/genome.rs)
+<pre><code class="language-rust">// step 1 — genomes/genome.rs:316
 MyMutation { some_param: f64 },
 
-// step 2 — in `EdgeEditGenome::mutate` (genomes/edge_edit.rs)
+// step 2 — genomes/edge_edit.rs:287
 EdgeEditMutation::MyMutation { some_param } =&gt; {
     // exactly one change to `self.genes`
 }
 
-// step 3a — in `config::EdgeEditMutationConfig`
+// step 3a — config.rs:300
 MyMutation { some_param: f64 },
 
-// step 3b — in dispatch's edge-edit mutation mapping
+// step 3b — dispatch.rs:896
 EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
     EdgeEditMutation::MyMutation { some_param: *some_param }
 }</code></pre>
@@ -84,38 +114,39 @@ EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
 <p>
   The shipped variant is <code>RerollGene</code> — reroll one gene, its opcode drawn from the
   operation mix. That is what edge-edit did before the operator became selectable, which is why it
-  is <code>#[default]</code>.
+  is the default.
 </p>
 
-<h2 id="sda">SDA — the four edits</h2>
+<h2 id="sda">SDA — the Four Edits</h2>
 
 <div class="table-wrap">
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>genomes/genome.rs</code></td>
-        <td>A variant on <code>SdaMutation</code>, plus any parameters it reads.</td></tr>
-    <tr><td>2</td><td><code>genomes/sda.rs</code></td>
+    <tr><td>1</td><td><code>get/src/genomes/genome.rs:347</code></td>
+        <td>A variant on <code>enum SdaMutation</code>, plus any parameters it reads.</td></tr>
+    <tr><td>2</td><td><code>get/src/genomes/sda.rs:492</code></td>
         <td>The arm in <code>SdaGenome::mutate</code> that performs it.</td></tr>
-    <tr><td>3</td><td><code>config.rs</code> and <code>dispatch.rs</code></td>
-        <td>The mirrored <code>SdaMutationConfig</code> variant, and the arm mapping it onto the
-            engine enum.</td></tr>
-    <tr><td>4</td><td><code>py_config.rs</code> — two sites</td>
-        <td><b>Optional.</b> The Python-side variant and its matching arm.</td></tr>
+    <tr><td>3</td><td><code>get/src/config.rs:360</code> and
+        <code>get/src/dispatch.rs:906</code></td>
+        <td>The mirrored variant on <code>enum SdaMutationConfig</code>, and the arm mapping it onto
+            the engine enum.</td></tr>
+    <tr><td>4</td><td><code>get/src/py_config.rs:949</code> and <code>:974</code></td>
+        <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
   </tbody>
 </table>
 </div>
 
-<pre><code class="language-rust">// step 1 — in `enum SdaMutation` (genomes/genome.rs)
+<pre><code class="language-rust">// step 1 — genomes/genome.rs:347
 MyMutation { some_param: f64 },
 
-// step 2 — in `SdaGenome::mutate` (genomes/sda.rs)
+// step 2 — genomes/sda.rs:492
 SdaMutation::MyMutation { some_param } =&gt; self.my_mutation(context, rng),
 
-// step 3a — in `config::SdaMutationConfig`
+// step 3a — config.rs:360
 MyMutation { some_param: f64 },
 
-// step 3b — in dispatch's SDA mutation mapping
+// step 3b — dispatch.rs:906
 SdaMutationConfig::MyMutation { some_param } =&gt; {
     SdaMutation::MyMutation { some_param: *some_param }
 }</code></pre>
@@ -123,7 +154,7 @@ SdaMutationConfig::MyMutation { some_param } =&gt; {
 <p>
   The shipped variant is <code>RedrawOne</code> — redraw one transition's target state, or that
   transition's response, chosen by the two rates on <code>SdaContext</code>. As with edge-edit, it
-  is what SDA did before the operator became selectable, hence <code>#[default]</code>.
+  is what SDA did before the operator became selectable, and it is the default.
 </p>
 
 <div class="callout">
@@ -134,17 +165,17 @@ SdaMutationConfig::MyMutation { some_param } =&gt; {
   </p>
 </div>
 
-<h2>Both halves, and what they do not share</h2>
+<h2>Both Halves, and What They Do Not Share</h2>
 
 <p>
-  The two chains are deliberately independent. There is no shared enum to unify them, because
-  what counts as "one mutation" differs by representation — a gene for edge-edit, a transition for
-  SDA — and a shared operator would have to branch on the genome to mean anything. If you want an
-  operator available to both representations, you add it twice, once per chain, and the two arms
-  will not look alike.
+  The two chains are deliberately independent. There is no shared enum to unify them, because what
+  counts as "one mutation" differs by representation — a gene for edge-edit, a transition for SDA —
+  and a shared operator would have to branch on the genome to mean anything. If you want an operator
+  available to both representations, you add it twice, once per chain, and the two arms will not
+  look alike.
 </p>
 
-<h2>Testing it</h2>
+<h2>Testing It</h2>
 
 <p>
   The property to pin is the contract: mutate a known genome under a fixed seed and assert that
@@ -157,11 +188,11 @@ SdaMutationConfig::MyMutation { some_param } =&gt; {
   — so a broken example fails the build.
 </p>
 
-<h2>If you wanted crossover instead</h2>
+<h2>If You Wanted Crossover Instead</h2>
 
 <p>
   Crossover is a single shared chain rather than one per genome, and it has a compatibility match
-  that mutation does not — see <a href="new-crossover.html">Add a crossover operator</a>.
+  that mutation does not — see <a href="new-crossover.html">Add a Crossover Operator</a>.
 </p>
 
 </main>

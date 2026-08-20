@@ -15,7 +15,7 @@
 <p class="lede">
   The generational strategy: replace the whole population every generation, carrying a configurable
   number of elites forward unchanged, and rescore everyone each time. This is the precise companion
-  to <a href="../guide/evolvers.html">Evolution strategies</a> — read that first if you want the
+  to <a href="../guide/evolvers.html">Evolution Strategies</a> — read that first if you want the
   concepts rather than the call sequence.
 </p>
 
@@ -233,7 +233,7 @@ where
   <b>That is correct, not a bug.</b> The new number is a fresh sample of the same individual.
   Freezing the old score instead would let one lucky draw persist for the rest of the run, and
   selection would then be chasing that luck rather than the graph. See
-  <a href="../guide/fitness.html">Fitness &amp; orientation</a> for what "stochastic objective" means
+  <a href="../guide/fitness.html">Fitness &amp; Orientation</a> for what "stochastic objective" means
   here.
 </div>
 
@@ -299,7 +299,7 @@ iterations:       0, 1, 2, 3, …, num_generations</code></pre>
   <code>get/src/dispatch.rs:411</code>) converts each row's two fitness columns out of engine
   orientation and carries the whole log out on the result object, so a config-driven run can read
   its own convergence log. The <code>ci_95</code> column and the per-row seed and run
-  index described in <a href="../guide/output.html">Logs &amp; results</a> are still not fields on
+  index described in <a href="../guide/output.html">Logs &amp; Results</a> are still not fields on
   <code>GenerationStats</code> yet. See <a href="../status.html">Status</a>.
 </div>
 
@@ -326,7 +326,7 @@ iterations:       0, 1, 2, 3, …, num_generations</code></pre>
   <code>express_and_score</code> — which for generational is <b>once per generation</b>. That is what
   makes generational the fair comparison: every individual in a generation faces the same epidemic
   dice. Steady-state advances the same counter once per <i>mating event</i>, which is a very
-  different rate. See <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a>.
+  different rate. See <a href="../guide/reproducibility.html">Seeds &amp; Reproducibility</a>.
 </div>
 
 <h2>A small run, narrated</h2>
@@ -423,17 +423,17 @@ iterations:       0, 1, 2, 3, …, num_generations</code></pre>
 <h2>Related pages</h2>
 
 <ul>
-  <li><a href="../guide/evolvers.html">Evolution strategies</a> — the concepts behind this page</li>
+  <li><a href="../guide/evolvers.html">Evolution Strategies</a> — the concepts behind this page</li>
   <li><a href="evolver-common.html">evolver/common.rs</a> — <code>Selection</code>,
       <code>express_and_score</code>, <code>mutate_child</code>, <code>generation_stats</code></li>
   <li><a href="steady-state.html">evolver/steady_state.rs</a> — the other strategy, step by step</li>
-  <li><a href="../guide/variation.html">Crossover &amp; mutation</a> ·
-      <a href="../guide/fitness.html">Fitness &amp; orientation</a> ·
-      <a href="../guide/output.html">Logs &amp; results</a> ·
-      <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a></li>
+  <li><a href="../guide/variation.html">Crossover &amp; Mutation</a> ·
+      <a href="../guide/fitness.html">Fitness &amp; Orientation</a> ·
+      <a href="../guide/output.html">Logs &amp; Results</a> ·
+      <a href="../guide/reproducibility.html">Seeds &amp; Reproducibility</a></li>
   <li><a href="config.html">config.rs</a> — the <code>[evolution]</code> block and its validation</li>
   <li><a href="dispatch.html">dispatch.rs</a> — where this evolver is constructed and run</li>
-  <li><a href="../guide/new-evolver.html">Add a strategy</a></li>
+  <li><a href="../guide/new-evolver.html">Add a Strategy</a></li>
 </ul>
 
 </main>

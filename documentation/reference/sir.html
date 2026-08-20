@@ -23,7 +23,7 @@
   Source: <code>get/src/sir.rs</code>, 701 lines, of which 392 are tests.
   <span class="badge badge-built">built</span> — implemented, and matching the spec sheet §5.2
   including the 2026-08-04 amendment about the burnout step. See
-  <a href="../guide/sir.html">The SIR model</a> for the modelling background and
+  <a href="../guide/sir.html">The SIR Model</a> for the modelling background and
   <a href="fitness.html">fitness.rs</a> for the three objectives that read its output.
 </p>
 
@@ -516,7 +516,7 @@ spread  = 1+1+2+1+0 = 5    all five nodes were reached</code></pre>
   <b>Where <code>batch_seed</code> comes from.</b> Not from here. It is handed down by
   <a href="fitness.html#epidemicscorer"><code>EpidemicScorer</code></a>, which derives one seed per
   batch of graphs from the run's master seed and an atomic counter. This file only consumes it. The
-  full chain is on <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a>.
+  full chain is on <a href="../guide/reproducibility.html">Seeds &amp; Reproducibility</a>.
 </div>
 
 <h2>Gotchas</h2>
@@ -554,13 +554,13 @@ spread  = 1+1+2+1+0 = 5    all five nodes were reached</code></pre>
 <h2>See also</h2>
 
 <ul>
-  <li><a href="../guide/sir.html">The SIR model</a> — the concept page, with the modelling
+  <li><a href="../guide/sir.html">The SIR Model</a> — the concept page, with the modelling
       background and how to choose <code>infection_rate</code> and <code>num_epidemics</code>.</li>
   <li><a href="fitness.html">fitness.rs</a> — the three objectives that read an
       <code>Epidemic</code>, and <code>EpidemicScorer</code>, which owns the batch seed.</li>
   <li><a href="graph.html">graph.rs</a> — the simulator reads the graph only through
       <code>weight</code>, and treats multiplicity as independent chances.</li>
-  <li><a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a> — the full seed chain
+  <li><a href="../guide/reproducibility.html">Seeds &amp; Reproducibility</a> — the full seed chain
       from the master seed down to one epidemic.</li>
   <li><a href="config.html">config.rs</a> — where the SIR parameters are validated.</li>
 </ul>

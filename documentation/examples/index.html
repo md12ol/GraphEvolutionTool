@@ -262,7 +262,7 @@ evolver = get.GraphEvolver.from_config(config)
 evolver.set_fitness_function(even_degrees, "minimize")  # direction is declared HERE
 result = evolver.run(1)</code></pre>
 
-<p>Full contract, and the traps, on <a href="../guide/new-fitness.html">Add an objective</a>.</p>
+<p>Full contract, and the traps, on <a href="../guide/new-fitness.html">Add an Objective</a>.</p>
 
 <h2>8. Stacking: SDA first, then edge-edit <span class="badge badge-planned">planned</span></h2>
 
@@ -346,7 +346,7 @@ evolver.save_logs("convergence.csv")      # or just let GET write it</code></pre
 <div class="tip">
   Asking for 50 runs later reproduces these first 30 <b>exactly</b> — run <code>i</code>'s seed is
   draw <code>i</code> from a stream seeded by the master, so it does not depend on how many runs you
-  requested. <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a>
+  requested. <a href="../guide/reproducibility.html">Seeds &amp; Reproducibility</a>
 </div>
 
 <div class="plan-note">

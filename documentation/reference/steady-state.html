@@ -16,7 +16,7 @@
   The steady-state strategy: one mate-and-replace event at a time. Each event draws a small
   tournament, breeds its two best, and overwrites that same tournament's two worst — so almost the
   whole population survives every event untouched. The concepts are in
-  <a href="../guide/evolvers.html">Evolution strategies</a>; this is the precise companion.
+  <a href="../guide/evolvers.html">Evolution Strategies</a>; this is the precise companion.
 </p>
 
 <p>
@@ -365,7 +365,7 @@ where
   a noisy objective rather than being a defect in the implementation: the alternatives — rescoring
   the population periodically, or freezing the seed across a generation equivalent — each swap it for
   a different distortion rather than removing it. It was accepted deliberately. See
-  <a href="../guide/fitness.html">Fitness &amp; orientation</a>.
+  <a href="../guide/fitness.html">Fitness &amp; Orientation</a>.
 </div>
 
 <h3 id="winner-graph">The winner's graph is re-expressed</h3>
@@ -418,7 +418,7 @@ iterations:       0, population_size, 2×population_size, …</code></pre>
   Python boundary (<code>dispatch::erase</code>, <code>get/src/dispatch.rs:411</code>) converts each
   row's two fitness columns out of engine orientation and carries the whole log out on the result
   object, so a config-driven run can read its own convergence log. The <code>ci_95</code> column and
-  the per-row seed and run index described in <a href="../guide/output.html">Logs &amp; results</a>
+  the per-row seed and run index described in <a href="../guide/output.html">Logs &amp; Results</a>
   are still not fields on <code>GenerationStats</code>. See <a href="../status.html">Status</a>.
 </div>
 
@@ -495,7 +495,7 @@ iterations:       0, population_size, 2×population_size, …</code></pre>
   genomes at a time, so its population-level parallelism is two-way no matter what you set
   <code>max_cores</code> to. Replicate runs are the only way to fill the cores — the same conclusion
   the FFI-cost argument reaches from the other direction. See
-  <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a> for how replicates are
+  <a href="../guide/reproducibility.html">Seeds &amp; Reproducibility</a> for how replicates are
   seeded.
 </div>
 
@@ -510,18 +510,18 @@ iterations:       0, population_size, 2×population_size, …</code></pre>
 <h2>Related pages</h2>
 
 <ul>
-  <li><a href="../guide/evolvers.html">Evolution strategies</a> — the concepts behind this page</li>
+  <li><a href="../guide/evolvers.html">Evolution Strategies</a> — the concepts behind this page</li>
   <li><a href="generational.html">evolver/generational.rs</a> — the other strategy, step by step</li>
   <li><a href="evolver-common.html">evolver/common.rs</a> — <code>Selection</code>,
       <code>express_and_score</code>, <code>mutate_child</code>, <code>generation_stats</code></li>
-  <li><a href="../guide/fitness.html">Fitness &amp; orientation</a> ·
-      <a href="../guide/variation.html">Crossover &amp; mutation</a> ·
-      <a href="../guide/output.html">Logs &amp; results</a> ·
-      <a href="../guide/reproducibility.html">Seeds &amp; reproducibility</a></li>
+  <li><a href="../guide/fitness.html">Fitness &amp; Orientation</a> ·
+      <a href="../guide/variation.html">Crossover &amp; Mutation</a> ·
+      <a href="../guide/output.html">Logs &amp; Results</a> ·
+      <a href="../guide/reproducibility.html">Seeds &amp; Reproducibility</a></li>
   <li><a href="config.html">config.rs</a> — the <code>[evolution]</code> and
       <code>[selection]</code> blocks and their validation</li>
   <li><a href="dispatch.html">dispatch.rs</a> — where this evolver is constructed and run</li>
-  <li><a href="../guide/new-evolver.html">Add a strategy</a></li>
+  <li><a href="../guide/new-evolver.html">Add a Strategy</a></li>
 </ul>
 
 </main>
