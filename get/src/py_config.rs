@@ -238,6 +238,18 @@ pub enum PyEvolutionConfig {
 pub enum PySelectionConfig {
     #[pyo3(constructor = (tournament_size))]
     Tournament { tournament_size: usize },
+    // ADD A SELECTION STEP 5 — optional, and the one nothing checks. Mirror the
+    // `config::SelectionConfig` variant so a Python caller can name the scheme:
+    //
+    //     #[pyo3(constructor = (pressure))]
+    //     Roulette { pressure: f64 },
+    //
+    // Then its arm in the conversion that writes the `[selection]` table, and —
+    // if step 3 added a validated field — that field's name in
+    // `python_attribute_path`, or the error a Python caller sees names a TOML
+    // field they never wrote. Skipping this file entirely still leaves the
+    // scheme usable from TOML and from Rust. The last step is the example
+    // config: search `ADD A SELECTION STEP 6` for it.
 }
 
 /// Recombination operator.

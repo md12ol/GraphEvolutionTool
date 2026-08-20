@@ -149,6 +149,13 @@ impl Crossover {
 /// works with every strategy because it answers only this one question. The
 /// other two axes are [`super::scope::Scope`] and
 /// [`super::replacement::Replacement`].
+///
+/// **Every step above is marked at its own site in the code.** Search the repo
+/// for `ADD A SELECTION STEP 3`, or any other number:
+///
+/// ```text
+/// git grep -n "ADD A SELECTION STEP"    # all six, in one list
+/// ```
 pub enum Selection {
     /// The fittest members of the scope, best first. Consumes no randomness.
     ///
@@ -158,6 +165,14 @@ pub enum Selection {
     Best,
     /// Sample `tournament_size` members of the scope per pick, keep the best.
     Tournament { tournament_size: usize },
+    // ADD A SELECTION STEP 1 — a variant here, plus any parameters the scheme
+    // reads out of the file:
+    //
+    //     Roulette { pressure: f64 },
+    //
+    // The variant name becomes `type = "roulette"` under `[selection]`, via the
+    // `rename_all` on `config::SelectionConfig`. Then the arm performing it, in
+    // `Selection::pick` below — search `ADD A SELECTION STEP 2` for it.
 }
 
 /// Order two individuals, better first, ties broken by lower index.
@@ -254,7 +269,20 @@ impl Selection {
                     ));
                 }
                 parents
-            }
+            } // ADD A SELECTION STEP 2 — the arm choosing parents your way:
+              //
+              //     Selection::Roulette { pressure } => {
+              //         let mut parents = Vec::with_capacity(count);
+              //         for _ in 0..count {
+              //             parents.push(spin(scope, fitnesses, *pressure, rng));
+              //         }
+              //         parents
+              //     }
+              //
+              // Pick only from `scope`, compare through `rank`, and take every
+              // random value from `rng` — the contract above says why each
+              // matters. The step after this is the config variant a user names —
+              // search `ADD A SELECTION STEP 3` for it.
         }
     }
 

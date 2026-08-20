@@ -12,15 +12,38 @@ use super::common::rank;
 /// **Consumes no randomness** — every policy reads the scope's fitnesses and
 /// nothing else, so a replacement choice cannot shift a seeded run's stream.
 ///
-/// A new policy is one arm in `Replacement::pick`. One needing anything the
-/// engine does not record per individual — an age, a lineage, a distance —
-/// needs that recorded first.
+/// # Adding a policy
+///
+/// 1. **This enum** — the variant and its parameters.
+/// 2. **`Replacement::pick`** — the arm; the match is exhaustive.
+/// 3. **`dispatch::run_strategy`** — only if a user should be able to choose
+///    it. There is no `[replacement]` block today, so a policy reachable only
+///    from Rust stops at step 2.
+///
+/// A policy needing anything the engine does not record per individual — an
+/// age, a lineage, a distance — needs that recorded first, which is a wider
+/// change than a variant.
+///
+/// **Every step is marked at its own site.** Search the repo for
+/// `ADD A REPLACEMENT STEP 2`, or any other number:
+///
+/// ```text
+/// git grep -n "ADD A REPLACEMENT STEP"    # all three, in one list
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Replacement {
     /// The scope's least fit members, worst first. Never the scope's best,
     /// which is what makes a strategy using it self-elitist whatever scheme
     /// chose the parents.
     Worst,
+    // ADD A REPLACEMENT STEP 1 — a variant here, plus any parameters:
+    //
+    //     Random,
+    //
+    // Note what a policy gives up: `Worst` is what makes a strategy using it
+    // self-elitist, and one that can overwrite the scope's best removes that
+    // guarantee. Say so at the variant rather than leaving it to be discovered.
+    // Then the arm choosing victims — search `ADD A REPLACEMENT STEP 2`.
 }
 
 impl Replacement {
@@ -44,7 +67,20 @@ impl Replacement {
                     victims.push(ranked[ranked.len() - offset]);
                 }
                 victims
-            }
+            } // ADD A REPLACEMENT STEP 2 — the arm naming who the children
+              // overwrite:
+              //
+              //     Replacement::Random => {
+              //         // needs an `rng` parameter; `pick` takes none today
+              //         // precisely because no shipped policy draws.
+              //     }
+              //
+              // Return indices into the *population*, not into `scope`, and in
+              // the order children should take the slots. Adding a policy that
+              // consumes randomness changes this signature and shifts every
+              // seeded run's RNG stream — a real cost, not a formality. To make
+              // it selectable from a config file, search
+              // `ADD A REPLACEMENT STEP 3`.
         }
     }
 }

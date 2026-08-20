@@ -14,8 +14,21 @@ use rand::Rng;
 /// come from the *same* slice, so the slice's best is never overwritten, and
 /// that holds whichever scheme picked the parents.
 ///
-/// A new variant is one arm in `Scope::draw_into`, plus
-/// `dispatch::scope_and_selection` to reach it from a config file.
+/// # Adding a variant
+///
+/// 1. **This enum** — the variant and its parameters.
+/// 2. **`Scope::draw_into`** — the arm filling the buffer; the match is
+///    exhaustive, so the compiler finds it.
+/// 3. **`dispatch::scope_and_selection`** — only if a user should be able to
+///    choose it. There is no `[scope]` block today: scope is implied by the
+///    strategy, so a variant reachable only from Rust stops at step 2.
+///
+/// **Every step is marked at its own site.** Search the repo for
+/// `ADD A SCOPE STEP 2`, or any other number:
+///
+/// ```text
+/// git grep -n "ADD A SCOPE STEP"    # all three, in one list
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {
     /// Every individual is a candidate. Consumes no randomness.
@@ -24,6 +37,14 @@ pub enum Scope {
     /// Distinctness is what lets a replacement policy name "the worst two
     /// members", which means nothing over a multiset.
     RandomSubset { size: usize },
+    // ADD A SCOPE STEP 1 — a variant here, plus whatever it needs to locate a
+    // slice:
+    //
+    //     Neighbourhood { radius: usize },
+    //
+    // A grid neighbourhood is the obvious one: it makes every existing scheme
+    // and policy into a cellular GA without either of them changing. Then the
+    // arm drawing it, in `draw_into` below — search `ADD A SCOPE STEP 2`.
 }
 
 impl Scope {
@@ -68,7 +89,21 @@ impl Scope {
                         out.push(candidate);
                     }
                 }
-            }
+            } // ADD A SCOPE STEP 2 — the arm filling `out` with the indices your
+              // scope covers:
+              //
+              //     Scope::Neighbourhood { radius } => {
+              //         let centre = rng.random_range(0..population_len);
+              //         for offset in 0..=(radius * 2) {
+              //             out.push((centre + offset) % population_len);
+              //         }
+              //     }
+              //
+              // Clear `out` first (done above, once, for every arm), leave the
+              // indices unordered, and keep them distinct if any replacement
+              // policy is to name "the worst two". If it should be selectable from
+              // a config file, search `ADD A SCOPE STEP 3`; if Rust-only, you are
+              // finished here.
         }
     }
 }

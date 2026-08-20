@@ -767,6 +767,11 @@ fn run_strategy<G: Genome, F: Fitness>(
             erase(evolver.run(fitness, seed))
         }
         EvolutionConfig::SteadyState { num_mating_events } => {
+            // ADD A REPLACEMENT STEP 3 — `Worst` is hard-coded because it is
+            // the only policy, and because it is what makes steady-state
+            // self-elitist. Making the choice a user's means a `[replacement]`
+            // block and a `ReplacementConfig` to read it, neither of which
+            // exists; a policy added for Rust callers only stops at step 2.
             let type_context = SteadyStateContext {
                 num_mating_events: *num_mating_events,
                 replacement: Replacement::Worst,
@@ -906,6 +911,32 @@ fn scope_and_selection(
                 },
             ),
         },
+        // ADD A SELECTION STEP 4 — the arm turning your config variant into the
+        // engine one, and choosing the scope each strategy pairs it with:
+        //
+        //     SelectionConfig::Roulette { pressure } => match evolution {
+        //         EvolutionConfig::SteadyState { .. } => (
+        //             Scope::RandomSubset { size: 4 },
+        //             Selection::Roulette { pressure: *pressure },
+        //         ),
+        //         EvolutionConfig::Generational { .. } => (
+        //             Scope::Global,
+        //             Selection::Roulette { pressure: *pressure },
+        //         ),
+        //     },
+        //
+        // Steps 3 and 4 are one change split across two files: a config variant
+        // nothing constructs is dead, and an arm for a variant that does not
+        // exist will not compile. The Python mirror is next, and optional —
+        // search `ADD A SELECTION STEP 5` for it.
+        //
+        // ADD A SCOPE STEP 3 — this function is also where a `Scope` variant
+        // becomes reachable from a config file, and doing so is a larger change
+        // than an arm: scope is currently *implied* by the strategy, so there
+        // is no `[scope]` block and no `ScopeConfig` to read from. Letting a
+        // user choose one means adding both, and deciding what happens when a
+        // scope and a strategy disagree about how many individuals an event
+        // needs. Until then a new variant is reached only from Rust.
     }
 }
 

@@ -67,6 +67,15 @@ elite_count     = 1          # best individuals carried forward (default 1)
 type            = "tournament"
 tournament_size = 5          # larger = stronger selection pressure
 
+# ADD A SELECTION STEP 6 — the last step, optional and the one people skip: a
+# commented-out block naming your scheme, so someone copying this file can find
+# it. Steady-state reads `tournament_size` as the size of the scope each mating
+# event draws and needs at least 4; generational has no such floor.
+#
+#     [selection]
+#     type     = "roulette"
+#     pressure = 1.5
+
 # --- Recombination operator ---------------------------------------------------
 # Two-point is the only operator GET ships, and it is what every representation
 # did before this section existed — so leaving the block out runs exactly as an

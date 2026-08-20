@@ -103,6 +103,15 @@ pub enum EvolutionConfig {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionConfig {
     Tournament { tournament_size: usize },
+    // ADD A SELECTION STEP 3 — the variant a user names under `[selection]`,
+    // mirroring the one added to `Selection`:
+    //
+    //     Roulette { pressure: f64 },
+    //
+    // Constrain its own parameters in `validate_evolution_and_selection` if it
+    // has any — there is deliberately no scheme-by-strategy check to extend,
+    // since every scheme works with every strategy. The arm mapping this onto
+    // the engine type is next: search `ADD A SELECTION STEP 4` for it.
 }
 
 /// Recombination operator. Maps onto [`crate::evolver::common::Crossover`],
