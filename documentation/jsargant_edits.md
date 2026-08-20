@@ -436,3 +436,67 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   than trusting the ones on the page.
 
 *#selection-extension-point-documented · filed 2026-08-19 21:55 — James.*
+
+## `documentation/status.html` — the "second crossover operator" non-goal row is half wrong now
+
+- **Trigger:** GitHub #102, PR #144 — the crossover/mutation operator enums.
+- **Files:** `status.html`, the non-goals table, the "A second crossover operator per
+  representation" row (currently around line 161-163).
+- **Now false:** "no config field is built for it." A `[crossover]` config field exists now
+  (`config::CrossoverConfig`, one variant, `TwoPoint`), and each genome's own `[genome]` block
+  gained a `mutation` field the same way (`EdgeEditMutationConfig`/`SdaMutationConfig`).
+- **Should say:** the field and the enum both exist and default to the operator every
+  representation always used; what remains true and unchanged is that only **one operator per
+  representation ships** — a *second* crossover or mutation operator is still the thing that is
+  "wanted, sequenced after the rest of the design," not the config plumbing to select one. Narrow
+  the row to that claim rather than dropping it outright.
+- **Badges:** none on this row currently (it's a plain non-goals table entry, not a `badge-planned`
+  span), so nothing to remove there — just the prose.
+
+*#operator-config-enums-added · filed 2026-08-19 23:13 — James.*
+
+## `documentation/reference/sda.html` — "one crossover operator, fixed" note is now false
+
+- **Trigger:** GitHub #102, PR #144.
+- **Files:** `reference/sda.html`, the `.note` div after the crossover section, currently around
+  line 413-417.
+- **Now false:** "There is no enum and no config field selecting between crossover styles, for
+  either genome." Both exist: `evolver::common::Crossover` and `config::CrossoverConfig`.
+- **Should say:** the enum and field exist, `TwoPoint` is the one variant either ships, and it's
+  selected the same way `[selection]` is — but with a link to how `[genome].mutation` works
+  differently (per-genome, not shared) since a reader here is the one most likely to assume the two
+  operators are symmetric. `guide/variation.html`'s sweep below covers the fuller explanation this
+  page should point at rather than duplicate.
+
+*#operator-config-enums-added · filed 2026-08-19 23:13 — James.*
+
+## `documentation/guide/variation.html` — the whole "no operator-selection setting" note needs rewriting, not correcting
+
+- **Trigger:** GitHub #102, PR #144.
+- **Files:** `guide/variation.html`, the `.note` div after the crossover comparison table,
+  currently lines 103-109 (`<b>There is no operator-selection setting, deliberately.</b>` through
+  "mapping onto a config field.").
+- **Now false, in full:** every sentence in this note describes the pre-#102 state — no enum, no
+  config field, no dispatch, sequenced strictly after the rest of the design. All three now exist
+  for crossover, and mutation gained its own (different-shaped) version.
+- **Should say — this is the one page that should carry the real design, not a corrected note:**
+  - Crossover is one **shared** `evolver::common::Crossover` enum, selected under `[crossover]`,
+    because both genomes' crossover is the same two-point operation.
+  - Mutation is **per-genome** — `EdgeEditMutation`/`SdaMutation`, selected inside each genome's
+    own `[genome]` block (`mutation = { type = "..." }`) rather than a shared section — because the
+    two genomes' mutations share no common shape, and a shared enum would let a config name an
+    operator meaningless for whichever genome isn't selected.
+  - Each ships exactly one variant, matching what every representation always did, so an existing
+    config with neither key set is unaffected — this is the page to state the equivalence
+    guarantee, since a reader here is deciding whether upgrading changes their run.
+  - What's genuinely still true and worth keeping: a *second* operator on either side is still
+    "wanted, sequenced after the rest of the design" — only the plumbing to select between
+    operators shipped, not a second operator itself.
+  - The GitHub #102 issue text has the shared-vs-per-genome reasoning in full if the sweep wants
+    the fuller argument; `decisions.md`'s `operator-config-built-ahead-of-the-gate` has the as-built
+    version.
+- **Badges:** none (plain `.note`, not `badge-planned`), but this note's entire framing is now
+  backwards — it is worth checking whether `reference/sda.html`'s note (filed separately above)
+  should just link here instead of restating anything, once this page is rewritten.
+
+*#operator-config-enums-added · filed 2026-08-19 23:13 — James.*
