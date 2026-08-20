@@ -33,6 +33,12 @@ max_mutations = 1
 
 # --- Evolution strategy -------------------------------------------------------
 # Generational: replace the whole population each generation, keeping elites.
+#
+# Adding a strategy of your own? This block is a step in the chain, and
+# `crate::evolver::Evolver`'s doc comment in `get/src/evolver/mod.rs` walks all
+# of them in order. A strategy missing from this example file still works —
+# it is just one most people never find, because this is the file they copy
+# from.
 
 [evolution]
 type            = "generational"
