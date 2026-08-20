@@ -211,6 +211,16 @@ pub enum PyEvolutionConfig {
     },
     #[pyo3(constructor = (num_mating_events))]
     SteadyState { num_mating_events: usize },
+    // ADD A STRATEGY STEP 6 — the Python-side variant, if the strategy should
+    // be reachable from Python. Optional; leaving it out costs nothing
+    // elsewhere.
+    //
+    //     #[pyo3(constructor = (num_my_events))]
+    //     MyStrategy { num_my_events: usize },
+    //
+    // Then add the matching arm to `PyEvolutionConfig::to_toml_value` below,
+    // which writes `type = "my_strategy"` and the fields under `[evolution]`
+    // — search `ADD A STRATEGY STEP 6` again for it.
 }
 
 /// Parent-selection strategy.
@@ -665,7 +675,19 @@ impl PyEvolutionConfig {
                     "num_mating_events".to_string(),
                     integer("num_mating_events", *num_mating_events)?,
                 );
-            }
+            } // ADD A STRATEGY STEP 6 — the matching arm for your Python-side
+              // variant:
+              //
+              //     PyEvolutionConfig::MyStrategy { num_my_events } => {
+              //         table.insert(
+              //             "type".to_string(),
+              //             Value::String("my_strategy".to_string()),
+              //         );
+              //         table.insert(
+              //             "num_my_events".to_string(),
+              //             integer("num_my_events", *num_my_events)?,
+              //         );
+              //     }
         }
         Ok(Value::Table(table))
     }

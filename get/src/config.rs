@@ -78,6 +78,17 @@ pub enum EvolutionConfig {
     SteadyState {
         num_mating_events: usize,
     },
+    // ADD A STRATEGY STEP 2 — a variant here, carrying whatever stopping
+    // condition your strategy uses:
+    //
+    //     MyStrategy {
+    //         num_my_events: usize,
+    //     },
+    //
+    // The variant name becomes `type = "my_strategy"` under `[evolution]`, via
+    // the `rename_all` above. Constrain it in
+    // `validate_evolution_and_selection` — search `ADD A STRATEGY STEP 3` for
+    // that arm.
 }
 
 /// Parent-selection strategy. Maps onto [`crate::evolver::common::Selection`],
@@ -627,7 +638,19 @@ impl Config {
                         "must be at least 4 for the steady-state evolver",
                     ));
                 }
-            }
+            } // ADD A STRATEGY STEP 3 — the constraint arm for your variant,
+              // if it has one:
+              //
+              //     EvolutionConfig::MyStrategy { num_my_events, .. } => {
+              //         if *num_my_events == 0 {
+              //             return Err(invalid("num_my_events", "must be at least 1"));
+              //         }
+              //     }
+              //
+              // Optional — a strategy with nothing to constrain adds no arm.
+              // The step after this one is the arm in
+              // `dispatch::run_strategy` that constructs the evolver —
+              // search `ADD A STRATEGY STEP 4` for it.
         }
         Ok(())
     }

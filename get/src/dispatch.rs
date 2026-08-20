@@ -756,7 +756,19 @@ fn run_strategy<G: Genome, F: Fitness>(
             };
             let mut evolver = SteadyStateEvolver::new(shared, type_context, population);
             erase(evolver.run(fitness, seed))
-        }
+        } // ADD A STRATEGY STEP 4 — one arm, building your `TypeContext` and
+          // calling your evolver's `new` and `run`:
+          //
+          //     EvolutionConfig::MyStrategy { num_my_events } => {
+          //         let type_context = MyStrategyContext {
+          //             num_my_events: *num_my_events,
+          //         };
+          //         let mut evolver = MyStrategyEvolver::new(shared, type_context, population);
+          //         erase(evolver.run(fitness, seed))
+          //     }
+          //
+          // `erase`, right below, is the step after this one — for most
+          // strategies it is not a step at all; search `ADD A STRATEGY STEP 5`.
     }
 }
 
@@ -778,6 +790,10 @@ fn run_strategy<G: Genome, F: Fitness>(
 /// `EvolutionOutcome<G>` needs no edit here at all. It only becomes a step if
 /// a strategy's outcome needs handling this conversion does not already give
 /// it, which none of the shipped strategies do.
+// ADD A STRATEGY STEP 5 — usually nothing, and that is the point: this
+// function is generic over `G` alone, with no match on strategy inside it.
+// Only touch it if your strategy's `EvolutionOutcome` needs converting in a
+// way the loop above does not already cover.
 fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
     let direction = outcome.direction;
 

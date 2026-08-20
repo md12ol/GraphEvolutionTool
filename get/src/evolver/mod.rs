@@ -18,6 +18,13 @@ pub(crate) mod test_support;
 pub use generational::GenerationalEvolver;
 pub use steady_state::SteadyStateEvolver;
 
+// ADD A STRATEGY STEP 1 — a new module beside these two, plus the `pub mod`
+// and re-export lines above:
+//
+//     pub mod my_strategy;
+//
+//     pub use my_strategy::MyStrategyEvolver;
+
 use crate::fitness::{Direction, Fitness};
 use crate::genomes::Genome;
 use crate::graph::Graph;
@@ -164,6 +171,15 @@ pub struct EvolutionOutcome<G: Genome> {
 /// - **You are editing your own copy of GET (route 4).** All seven steps below
 ///   are yours, and what that buys is a strategy selectable by name from
 ///   `config.toml` and runnable by `get-run`, with no Rust at the call site.
+///
+/// **Every step below is marked at its own site in the code.** Search the repo
+/// for `ADD A STRATEGY STEP 3` — or any other number — and you land on the
+/// exact place that step is made, next to a worked example of what to add
+/// there:
+///
+/// ```text
+/// git grep -n "ADD A STRATEGY STEP"    # all seven, in one list
+/// ```
 ///
 /// The steps, in the order you would walk them:
 ///
