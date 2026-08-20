@@ -75,8 +75,13 @@ result = evolver.run(20260812)</code></pre>
             case-insensitive. Nothing can infer it from your function, and this is the only place
             it can be said.</td></tr>
     <tr><td><b>Values</b></td>
-        <td>Finite or <code>±inf</code>. <b><code>NaN</code> is rejected</b> and will fail the
-            run.</td></tr>
+        <td>Any real number. <code>±inf</code> is allowed and is the usual way to say "this
+            individual is unusable" — it sorts to the losing end and never wins.
+            <b><code>NaN</code> stops the run</b> the moment it is scored: it is not skipped, not
+            treated as a loss, and not reported at the end. The message names the three arithmetic
+            slips that produce it — dividing by a count that can be zero,
+            <code>0.0/0.0</code>, and <code>inf - inf</code> — because a graph with no edges makes
+            all three reachable from otherwise reasonable code.</td></tr>
   </tbody>
 </table>
 </div>
