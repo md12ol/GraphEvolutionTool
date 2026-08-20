@@ -157,10 +157,10 @@ pub struct EvolutionOutcome<G: Genome> {
 ///   `get-run` binary, and [`common`]'s helpers are the only load-bearing
 ///   reuse available to you from outside — you still have to write your own
 ///   parent-selection call, your own mutation, your own scoring loop, using
-///   them. This does not weaken §5.3's obligation to keep [`Evolver::new`],
-///   [`Evolver::run`] and [`EvolutionOutcome`] public and usable from
-///   outside — that is what lets a route-3 caller drive one of the *shipped*
-///   strategies, which is the common case.
+///   them. [`Evolver::new`], [`Evolver::run`] and [`EvolutionOutcome`] stay
+///   public and usable from outside the crate regardless — that is what lets
+///   a route-3 caller drive one of the *shipped* strategies, which is the
+///   common case.
 /// - **You are editing your own copy of GET (route 4).** All seven steps below
 ///   are yours, and what that buys is a strategy selectable by name from
 ///   `config.toml` and runnable by `get-run`, with no Rust at the call site.
