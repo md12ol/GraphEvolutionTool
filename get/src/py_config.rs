@@ -760,6 +760,16 @@ impl PyCrossoverConfig {
 pub enum PyEdgeEditMutationConfig {
     #[pyo3(constructor = ())]
     RerollGene {},
+    // ADD A MUTATION STEP 4 — the Python-side variant, if the operator
+    // should be reachable from Python. Optional; leaving it out costs
+    // nothing elsewhere.
+    //
+    //     #[pyo3(constructor = (some_param))]
+    //     MyMutation { some_param: f64 },
+    //
+    // Then the matching arm in `to_toml_value` below, and an example line in
+    // `config.example.toml` under `[genome]` — search `ADD A MUTATION STEP 4`
+    // again for both.
 }
 
 /// Hand-written: `#[derive(Default)]` needs a unit variant, and pyo3 does not
@@ -776,7 +786,7 @@ impl PyEdgeEditMutationConfig {
         match self {
             PyEdgeEditMutationConfig::RerollGene {} => {
                 table.insert("type".to_string(), Value::String("reroll_gene".to_string()));
-            }
+            } // ADD A MUTATION STEP 4 — the matching arm for your variant.
         }
         Value::Table(table)
     }
@@ -790,6 +800,16 @@ impl PyEdgeEditMutationConfig {
 pub enum PySdaMutationConfig {
     #[pyo3(constructor = ())]
     RedrawOne {},
+    // ADD A MUTATION STEP 4 — the Python-side variant, if the operator
+    // should be reachable from Python. Optional; leaving it out costs
+    // nothing elsewhere.
+    //
+    //     #[pyo3(constructor = (some_param))]
+    //     MyMutation { some_param: f64 },
+    //
+    // Then the matching arm in `to_toml_value` below, and an example line in
+    // `config.example.toml` under `[genome]` — search `ADD A MUTATION STEP 4`
+    // again for both.
 }
 
 /// Hand-written for the same reason as [`PyEdgeEditMutationConfig::default`].
@@ -805,7 +825,7 @@ impl PySdaMutationConfig {
         match self {
             PySdaMutationConfig::RedrawOne {} => {
                 table.insert("type".to_string(), Value::String("redraw_one".to_string()));
-            }
+            } // ADD A MUTATION STEP 4 — the matching arm for your variant.
         }
         Value::Table(table)
     }

@@ -812,6 +812,9 @@ fn crossover(config: &CrossoverConfig) -> Crossover {
 fn edge_edit_mutation(config: &EdgeEditMutationConfig) -> EdgeEditMutation {
     match config {
         EdgeEditMutationConfig::RerollGene => EdgeEditMutation::RerollGene,
+        // ADD A MUTATION STEP 3 — the arm mapping your `EdgeEditMutationConfig`
+        // variant onto the matching `EdgeEditMutation` one. The step after
+        // this one is optional — search `ADD A MUTATION STEP 4`.
     }
 }
 
@@ -819,6 +822,9 @@ fn edge_edit_mutation(config: &EdgeEditMutationConfig) -> EdgeEditMutation {
 fn sda_mutation(config: &SdaMutationConfig) -> SdaMutation {
     match config {
         SdaMutationConfig::RedrawOne => SdaMutation::RedrawOne,
+        // ADD A MUTATION STEP 3 — the arm mapping your `SdaMutationConfig`
+        // variant onto the matching `SdaMutation` one. The step after this
+        // one is optional — search `ADD A MUTATION STEP 4`.
     }
 }
 

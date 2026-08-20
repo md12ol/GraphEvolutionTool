@@ -137,6 +137,14 @@ gene_length = 256            # number of edit operations per genome
 # same effect.
 # mutation = { type = "reroll_gene" }
 
+# ADD A MUTATION STEP 4 — an example line for your edge-edit operator, here
+# alongside reroll-gene, e.g.:
+#
+#   mutation = { type = "my_mutation", some_param = 0.5 }
+#
+# Optional, and the step people skip and then wonder why nobody uses the
+# operator: this file is what a new user copies from.
+
 # SDA alternative: a self-driving automaton that generates a graph from scratch.
 # There is no `num_chars`: the alphabet is derived as max_edge_multiplicity + 1,
 # so every character is a legal edge weight and none is ever clamped away.
@@ -154,6 +162,9 @@ gene_length = 256            # number of edit operations per genome
 # init_char_mutation_rate     = 0.04
 # transition_vs_response_rate = 0.5
 # mutation                     = { type = "redraw_one" }  # the only one SDA ships; also the default
+
+# ADD A MUTATION STEP 4 — an example line for your SDA operator, the same
+# way as edge-edit's above. Optional, for the same reason.
 
 # --- Fitness objective --------------------------------------------------------
 # Three objectives read the same SIR simulation over the expressed graph, and

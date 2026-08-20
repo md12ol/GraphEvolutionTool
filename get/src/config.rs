@@ -181,13 +181,20 @@ pub struct EdgeEditGenomeConfig {
 }
 
 /// Which mutation an edge-edit genome applies. Mirrors
-/// [`crate::genomes::EdgeEditMutation`], mapped in `dispatch::edge_edit_start`.
+/// [`crate::genomes::EdgeEditMutation`], mapped in `dispatch::edge_edit_mutation`.
 #[derive(Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EdgeEditMutationConfig {
     /// Reroll one gene from the operation mix. The default.
     #[default]
     RerollGene,
+    // ADD A MUTATION STEP 3 — a variant here, matching the one added to
+    // `EdgeEditMutation`:
+    //
+    //     MyMutation { some_param: f64 },
+    //
+    // Then the arm in `dispatch::edge_edit_mutation` that maps it onto the
+    // operator — search `ADD A MUTATION STEP 3` again for that arm.
 }
 
 /// Everything the sda genome takes from `[genome]`.
@@ -233,7 +240,7 @@ pub struct SdaGenomeConfig {
 }
 
 /// Which mutation an SDA genome applies. Mirrors
-/// [`crate::genomes::SdaMutation`], mapped in `dispatch::sda_start`.
+/// [`crate::genomes::SdaMutation`], mapped in `dispatch::sda_mutation`.
 #[derive(Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SdaMutationConfig {
@@ -241,6 +248,13 @@ pub enum SdaMutationConfig {
     /// chosen by the two rates above. The default.
     #[default]
     RedrawOne,
+    // ADD A MUTATION STEP 3 — a variant here, matching the one added to
+    // `SdaMutation`:
+    //
+    //     MyMutation { some_param: f64 },
+    //
+    // Then the arm in `dispatch::sda_mutation` that maps it onto the
+    // operator — search `ADD A MUTATION STEP 3` again for that arm.
 }
 
 /// Fitness objective and its parameters.

@@ -283,11 +283,19 @@ pub trait Genome: Clone + Send + Sync {
 ///
 /// # Adding one
 ///
+/// Applies the same way to [`SdaMutation`] below, for whichever
+/// representation you are extending. **Every step is marked at its own site**
+/// — search the repo for `ADD A MUTATION STEP 3`, or any other number:
+///
+/// ```text
+/// git grep -n "ADD A MUTATION STEP"    # all four, in one list
+/// ```
+///
 /// 1. **This enum** — the variant, plus any parameters it reads.
 /// 2. **[`crate::genomes::EdgeEditGenome::mutate`]** — the arm performing it.
 ///    The compiler finds it: the match is exhaustive.
 /// 3. **`config::EdgeEditMutationConfig`**, and its arm in
-///    `dispatch::edge_edit_start` that puts the choice on this context.
+///    `dispatch::edge_edit_mutation` that maps the choice onto this operator.
 /// 4. **`py_config`'s mirror** and **`config.example.toml`** — both optional,
 ///    both the steps that decide whether anyone ever finds the operator.
 ///
@@ -300,6 +308,12 @@ pub enum EdgeEditMutation {
     /// edge-edit did before the operator was selectable.
     #[default]
     RerollGene,
+    // ADD A MUTATION STEP 1 — a variant here, plus any parameters it reads:
+    //
+    //     MyMutation { some_param: f64 },
+    //
+    // Then the arm performing it, in `EdgeEditGenome::mutate` — search
+    // `ADD A MUTATION STEP 2` for it.
 }
 
 /// Which mutation an SDA genome performs. Per representation, for the reason
@@ -316,6 +330,12 @@ pub enum SdaMutation {
     /// [`SdaContext`]. What SDA did before the operator was selectable.
     #[default]
     RedrawOne,
+    // ADD A MUTATION STEP 1 — a variant here, plus any parameters it reads:
+    //
+    //     MyMutation { some_param: f64 },
+    //
+    // Then the arm performing it, in `SdaGenome::mutate` — search
+    // `ADD A MUTATION STEP 2` for it.
 }
 
 /// Configuration used when an edge-edit genome modifies an initial graph.
