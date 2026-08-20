@@ -239,7 +239,7 @@ pub enum PyEvolutionConfig {
 pub enum PyReplacementConfig {
     #[pyo3(constructor = ())]
     Worst {},
-    // ADD A REPLACEMENT STEP 3 (Python half) — optional, and nothing checks it:
+    // ADD A REPLACEMENT STEP 3 (for SteadyState, Python half) — optional, and nothing checks it:
     //
     //     #[pyo3(constructor = ())]
     //     Random {},
@@ -837,7 +837,7 @@ impl PyReplacementConfig {
         match self {
             PyReplacementConfig::Worst {} => {
                 table.insert("type".to_string(), Value::String("worst".to_string()));
-            } // ADD A REPLACEMENT STEP 3 — the matching arm for your variant.
+            } // ADD A REPLACEMENT STEP 3 (for SteadyState) — the matching arm for your variant.
         }
         Ok(Value::Table(table))
     }
@@ -906,7 +906,7 @@ impl PyCrossoverConfig {
 pub enum PyEdgeEditMutationConfig {
     #[pyo3(constructor = ())]
     RerollGene {},
-    // ADD A MUTATION STEP 4 — the Python-side variant, if the operator
+    // ADD A MUTATION STEP 4 (for EdgeEdit) — the Python-side variant, if the operator
     // should be reachable from Python. Optional; leaving it out costs
     // nothing elsewhere.
     //
@@ -914,7 +914,7 @@ pub enum PyEdgeEditMutationConfig {
     //     MyMutation { some_param: f64 },
     //
     // Then the matching arm in `to_toml_value` below, and an example line in
-    // `config.example.toml` under `[genome]` — search `ADD A MUTATION STEP 4`
+    // `config.example.toml` under `[genome]` — search `ADD A MUTATION STEP 4 (for EdgeEdit)`
     // again for both.
 }
 
@@ -932,7 +932,7 @@ impl PyEdgeEditMutationConfig {
         match self {
             PyEdgeEditMutationConfig::RerollGene {} => {
                 table.insert("type".to_string(), Value::String("reroll_gene".to_string()));
-            } // ADD A MUTATION STEP 4 — the matching arm for your variant.
+            } // ADD A MUTATION STEP 4 (for EdgeEdit) — the matching arm for your variant.
         }
         Value::Table(table)
     }
@@ -946,7 +946,7 @@ impl PyEdgeEditMutationConfig {
 pub enum PySdaMutationConfig {
     #[pyo3(constructor = ())]
     RedrawOne {},
-    // ADD A MUTATION STEP 4 — the Python-side variant, if the operator
+    // ADD A MUTATION STEP 4 (for SDA) — the Python-side variant, if the operator
     // should be reachable from Python. Optional; leaving it out costs
     // nothing elsewhere.
     //
@@ -954,7 +954,7 @@ pub enum PySdaMutationConfig {
     //     MyMutation { some_param: f64 },
     //
     // Then the matching arm in `to_toml_value` below, and an example line in
-    // `config.example.toml` under `[genome]` — search `ADD A MUTATION STEP 4`
+    // `config.example.toml` under `[genome]` — search `ADD A MUTATION STEP 4 (for SDA)`
     // again for both.
 }
 
@@ -971,7 +971,7 @@ impl PySdaMutationConfig {
         match self {
             PySdaMutationConfig::RedrawOne {} => {
                 table.insert("type".to_string(), Value::String("redraw_one".to_string()));
-            } // ADD A MUTATION STEP 4 — the matching arm for your variant.
+            } // ADD A MUTATION STEP 4 (for SDA) — the matching arm for your variant.
         }
         Value::Table(table)
     }

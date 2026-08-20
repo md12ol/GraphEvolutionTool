@@ -62,6 +62,25 @@ impl<G: Genome> SteadyStateEvolver<G> {
     ///
     /// Replacement is unconditional: a child takes its slot even if it scores
     /// worse than what it displaces.
+    ///
+    /// # Only the two children are scored, and an unreplaced score is frozen
+    ///
+    /// Nothing else in the population is re-evaluated, so an individual keeps
+    /// the number it was born with until something overwrites it — which over
+    /// 100,000 events on a population of 100 can be thousands of events. Under
+    /// a stochastic objective that number is one sample, and the error is
+    /// self-reinforcing: a lucky score makes an individual likelier to be
+    /// selected *and* less likely to be replaced.
+    ///
+    /// **This is intended for now, and it is a cost decision.** Rescoring the
+    /// whole population per event is the `O(population)` work that drawing a
+    /// scope exists to avoid, and against a Python-backed objective it is one
+    /// FFI hop per individual per event. The wanted change is the narrow one —
+    /// rescore the two parents this event selected — and it is deliberately not
+    /// in this release, because it alters the trajectory of every seeded run
+    /// that already exists. Generational takes the opposite trade and rescores
+    /// its elites every generation; the difference is real and neither side of
+    /// it is an oversight.
     fn mating_event<F, R>(&mut self, fitness: &F, fitnesses: &mut [f64], rng: &mut R)
     where
         F: Fitness,

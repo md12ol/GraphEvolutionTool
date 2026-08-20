@@ -160,7 +160,7 @@ pub enum ReplacementConfig {
     /// self-elitist: the scope's best is never among those overwritten.
     #[default]
     Worst,
-    // ADD A REPLACEMENT STEP 3 — the variant a user names under
+    // ADD A REPLACEMENT STEP 3 (for SteadyState) — the variant a user names under
     // `[evolution] replacement`, mirroring the one added to `Replacement`:
     //
     //     Random,
@@ -297,13 +297,13 @@ pub enum EdgeEditMutationConfig {
     /// Reroll one gene from the operation mix. The default.
     #[default]
     RerollGene,
-    // ADD A MUTATION STEP 3 — a variant here, matching the one added to
+    // ADD A MUTATION STEP 3 (for EdgeEdit) — a variant here, matching the one added to
     // `EdgeEditMutation`:
     //
     //     MyMutation { some_param: f64 },
     //
     // Then the arm in `dispatch::edge_edit_mutation` that maps it onto the
-    // operator — search `ADD A MUTATION STEP 3` again for that arm.
+    // operator — search `ADD A MUTATION STEP 3 (for EdgeEdit)` again for that arm.
 }
 
 /// Everything the sda genome takes from `[genome]`.
@@ -357,13 +357,13 @@ pub enum SdaMutationConfig {
     /// chosen by the two rates above. The default.
     #[default]
     RedrawOne,
-    // ADD A MUTATION STEP 3 — a variant here, matching the one added to
+    // ADD A MUTATION STEP 3 (for SDA) — a variant here, matching the one added to
     // `SdaMutation`:
     //
     //     MyMutation { some_param: f64 },
     //
     // Then the arm in `dispatch::sda_mutation` that maps it onto the
-    // operator — search `ADD A MUTATION STEP 3` again for that arm.
+    // operator — search `ADD A MUTATION STEP 3 (for SDA)` again for that arm.
 }
 
 /// Fitness objective and its parameters.
