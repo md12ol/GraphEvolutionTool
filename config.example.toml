@@ -67,6 +67,35 @@ elite_count     = 1          # best individuals carried forward (default 1)
 type            = "tournament"
 tournament_size = 5          # larger = stronger selection pressure
 
+# --- Recombination operator ---------------------------------------------------
+# Two-point is the only operator GET ships, and it is what every representation
+# did before this section existed — so leaving the block out runs exactly as an
+# older config did. `crossover_rate` above is separate and still applies: it
+# decides WHETHER a pair recombines, this decides HOW.
+#
+# What two-point swaps depends on the representation: a band of genes for
+# edge-edit, a band of states for SDA. Each also decides how much overlap it
+# needs before crossing at all, and says so at its own `crossover`.
+#
+# Adding an operator of your own? This block is one of six places it has to
+# touch, and the `Crossover` enum in get/src/evolver/common.rs walks all six in
+# order. Note this section applies to WHICHEVER genome is selected, so an
+# operator that only some representations can perform has to be rejected in
+# `Config::validate_crossover` — nothing else pairs the two.
+#
+# ADD A CROSSOVER STEP 6 — an example block for your operator, here or as a
+# commented-out alternative the way [evolution]'s steady-state does:
+#
+#     [crossover]
+#     type       = "my_crossover"
+#     some_param = 0.5
+#
+# Optional, and the step people skip and then wonder why nobody uses the
+# operator: this file is what a new user copies from.
+
+[crossover]
+type = "two_point"
+
 # --- Genome representation ----------------------------------------------------
 # Edge-edit: an edit script applied to a base graph.
 #
@@ -116,6 +145,19 @@ gene_length = 256            # number of edit operations per genome
 # local_delete = 1.0
 # null         = 0.0        # e.g. drop the no-op so every gene does something
 
+# Which mutation edge-edit applies. Reroll-gene is the only one it ships, and
+# what it always did before this became selectable — omit the line for the
+# same effect.
+# mutation = { type = "reroll_gene" }
+
+# ADD A MUTATION STEP 4 — an example line for your edge-edit operator, here
+# alongside reroll-gene, e.g.:
+#
+#   mutation = { type = "my_mutation", some_param = 0.5 }
+#
+# Optional, and the step people skip and then wonder why nobody uses the
+# operator: this file is what a new user copies from.
+
 # SDA alternative: a self-driving automaton that generates a graph from scratch.
 # There is no `num_chars`: the alphabet is derived as max_edge_multiplicity + 1,
 # so every character is a legal edge weight and none is ever clamped away.
@@ -132,6 +174,10 @@ gene_length = 256            # number of edit operations per genome
 # init_state                  = 0     # starting state; must be < num_states
 # init_char_mutation_rate     = 0.04
 # transition_vs_response_rate = 0.5
+# mutation                     = { type = "redraw_one" }  # the only one SDA ships; also the default
+
+# ADD A MUTATION STEP 4 — an example line for your SDA operator, the same
+# way as edge-edit's above. Optional, for the same reason.
 
 # --- Fitness objective --------------------------------------------------------
 # Three objectives read the same SIR simulation over the expressed graph, and

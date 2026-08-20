@@ -208,7 +208,7 @@ mod tests {
     use rand::SeedableRng;
     use rand::rngs::StdRng;
 
-    use crate::evolver::common::express_and_score;
+    use crate::evolver::common::{Crossover, express_and_score};
     use crate::evolver::test_support::{MostNodes, NodeCount, Val, Walk, best_of, mean_of};
 
     /// Steady-state's tournament size. Larger than generational's, because the
@@ -236,6 +236,7 @@ mod tests {
             mutation_rate,
             max_mutations: 1,
             selection: selection(),
+            crossover: Crossover::TwoPoint,
         };
         let context = SteadyStateContext {
             num_mating_events: 0,
@@ -255,6 +256,7 @@ mod tests {
             mutation_rate: 0.7,
             max_mutations: 1,
             selection: selection(),
+            crossover: Crossover::TwoPoint,
         };
         let context = SteadyStateContext {
             num_mating_events: events,
@@ -387,6 +389,7 @@ mod tests {
             mutation_rate: 0.5,
             max_mutations: 1,
             selection: Selection::Tournament { tournament_size: 3 },
+            crossover: Crossover::TwoPoint,
         };
         let context = SteadyStateContext {
             num_mating_events: 0,
@@ -403,6 +406,7 @@ mod tests {
             mutation_rate: 0.5,
             max_mutations: 1,
             selection: selection(),
+            crossover: Crossover::TwoPoint,
         };
         let context = SteadyStateContext {
             num_mating_events: 0,

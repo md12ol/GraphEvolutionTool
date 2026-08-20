@@ -25,12 +25,12 @@
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
-use get::evolver::common::Selection;
+use get::evolver::common::{Crossover, Selection};
 use get::evolver::{Evolver, GenerationalContext, GenerationalEvolver, SharedEvolutionContext};
 use get::fitness::{Direction, Fitness};
 // `Genome` is imported for its `print` method at the end — a trait's methods
 // are only callable where the trait is in scope.
-use get::genomes::{Genome, SdaContext, SdaGenome};
+use get::genomes::{Genome, SdaContext, SdaGenome, SdaMutation};
 use get::graph::Graph;
 
 /// How many nodes sit at exactly `target_degree`. Larger is better.
@@ -97,6 +97,9 @@ fn main() {
         max_edge_multiplicity: MAX_EDGE_MULTIPLICITY,
         init_char_mutation_rate: 0.1,
         transition_vs_response_rate: 0.5,
+        // Which mutation to apply; the two rates above shape it. SDA ships
+        // exactly one, so this is the only choice today.
+        mutation: SdaMutation::RedrawOne,
     };
 
     // 3. What the engine owns: the two variation dice rolls and parent
@@ -107,6 +110,9 @@ fn main() {
         mutation_rate: 0.9,
         max_mutations: 3,
         selection: Selection::Tournament { tournament_size: 7 },
+        // How a pair recombines, separately from `crossover_rate`'s decision
+        // of whether it does. Two-point is the only operator GET ships.
+        crossover: Crossover::TwoPoint,
     };
 
     // 4. The strategy's own configuration, and the run.

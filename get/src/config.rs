@@ -50,6 +50,11 @@ pub struct Config {
     pub max_mutations: usize,
     /// Parent-selection strategy.
     pub selection: SelectionConfig,
+    /// Recombination operator. Omitted, two-point — which is what every
+    /// representation did before the operator became selectable, so an
+    /// existing config keeps its behaviour by leaving `[crossover]` out.
+    #[serde(default)]
+    pub crossover: CrossoverConfig,
     /// Genome representation and its dimensions.
     pub genome: GenomeConfig,
     /// Fitness objective.
@@ -98,6 +103,33 @@ pub enum EvolutionConfig {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionConfig {
     Tournament { tournament_size: usize },
+}
+
+/// Recombination operator. Maps onto [`crate::evolver::common::Crossover`],
+/// whose docs list every site a second operator touches — this is step 3 of
+/// six, and `dispatch::crossover` is the arm that constructs it.
+///
+/// **Applies to whichever representation is selected**, so an operator only
+/// some genomes can honour is rejected by [`Config::validate_crossover`]
+/// rather than by the type system. The mutation operator is the other way
+/// round: it is chosen per genome, under `[genome]`, so a mismatch there
+/// cannot be written down at all.
+#[derive(Debug, Default, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CrossoverConfig {
+    /// Swap one contiguous band between the parents. The default, and what
+    /// every representation did before this was selectable.
+    #[default]
+    TwoPoint,
+    // ADD A CROSSOVER STEP 3 — a variant here, matching the one added to
+    // `Crossover`:
+    //
+    //     MyCrossover { some_param: f64 },
+    //
+    // Constrain it in `Config::validate_crossover` if only some genomes can
+    // honour it — search `ADD A CROSSOVER STEP 3` again for that arm. Then
+    // the arm in `dispatch::crossover` that maps it onto the operator —
+    // search `ADD A CROSSOVER STEP 4`.
 }
 
 /// Genome representation and the dimensions used to build random individuals.
@@ -156,6 +188,33 @@ pub struct EdgeEditGenomeConfig {
     /// omitted field by field, every operation defaults to a weight of 1.0.
     #[serde(default)]
     pub operation_weights: EdgeEditOperationWeights,
+    /// Which mutation this representation applies. Omitted, the one it
+    /// applied before the operator was selectable.
+    ///
+    /// Nested under `[genome]` rather than given a section of its own,
+    /// because the variants are edge-edit's alone — naming SDA's mutation
+    /// here is refused by `deny_unknown_fields` above rather than by any
+    /// check of ours. [`crate::genomes::EdgeEditMutation`] has the reasoning
+    /// and the steps for adding one.
+    #[serde(default)]
+    pub mutation: EdgeEditMutationConfig,
+}
+
+/// Which mutation an edge-edit genome applies. Mirrors
+/// [`crate::genomes::EdgeEditMutation`], mapped in `dispatch::edge_edit_mutation`.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EdgeEditMutationConfig {
+    /// Reroll one gene from the operation mix. The default.
+    #[default]
+    RerollGene,
+    // ADD A MUTATION STEP 3 — a variant here, matching the one added to
+    // `EdgeEditMutation`:
+    //
+    //     MyMutation { some_param: f64 },
+    //
+    // Then the arm in `dispatch::edge_edit_mutation` that maps it onto the
+    // operator — search `ADD A MUTATION STEP 3` again for that arm.
 }
 
 /// Everything the sda genome takes from `[genome]`.
@@ -193,6 +252,29 @@ pub struct SdaGenomeConfig {
     /// are equally likely, as they were before this was configurable.
     #[serde(default = "default_transition_vs_response_rate")]
     pub transition_vs_response_rate: f64,
+    /// Which mutation this representation applies. Omitted, the one it
+    /// applied before the operator was selectable. The two rates above shape
+    /// it; this selects it.
+    #[serde(default)]
+    pub mutation: SdaMutationConfig,
+}
+
+/// Which mutation an SDA genome applies. Mirrors
+/// [`crate::genomes::SdaMutation`], mapped in `dispatch::sda_mutation`.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SdaMutationConfig {
+    /// Redraw the initial character, a transition target or a response,
+    /// chosen by the two rates above. The default.
+    #[default]
+    RedrawOne,
+    // ADD A MUTATION STEP 3 — a variant here, matching the one added to
+    // `SdaMutation`:
+    //
+    //     MyMutation { some_param: f64 },
+    //
+    // Then the arm in `dispatch::sda_mutation` that maps it onto the
+    // operator — search `ADD A MUTATION STEP 3` again for that arm.
 }
 
 /// Fitness objective and its parameters.
@@ -556,6 +638,7 @@ impl Config {
     pub fn validate(&self) -> Result<(), ConfigError> {
         self.validate_top_level()?;
         self.validate_evolution_and_selection()?;
+        self.validate_crossover()?;
         self.validate_genome()?;
         self.validate_fitness()?;
         Ok(())
@@ -653,6 +736,35 @@ impl Config {
               // search `ADD A STRATEGY STEP 4` for it.
         }
         Ok(())
+    }
+
+    /// Pair the recombination operator with the selected representation.
+    ///
+    /// **Nothing to reject today, and the code says so by construction rather
+    /// than by being absent.** One operator ships, every representation can
+    /// perform it, so every pairing is legal. The `match` is written out in
+    /// full anyway: a second operator stops it compiling, which forces whoever
+    /// adds one to state which genomes can honour it instead of discovering
+    /// the answer during a run.
+    ///
+    /// This check exists because `[crossover]` is a *shared* section — it names
+    /// an operator for whichever genome is selected, and the two are chosen
+    /// independently, so nothing but this function can catch a combination that
+    /// makes no sense. The mutation operator needs no equivalent: it is chosen
+    /// inside `[genome]`, so a config naming SDA's mutation alongside
+    /// edge-edit's representation does not parse in the first place.
+    fn validate_crossover(&self) -> Result<(), ConfigError> {
+        match (&self.crossover, &self.genome) {
+            // Two-point is defined for every representation GET ships: both
+            // are linear sequences with a shared prefix to cut, and each
+            // decides for itself how much of one it needs before crossing.
+            (CrossoverConfig::TwoPoint, GenomeConfig::EdgeEdit(_)) => Ok(()),
+            (CrossoverConfig::TwoPoint, GenomeConfig::Sda(_)) => Ok(()),
+            // ADD A CROSSOVER STEP 3 — a pair per representation your
+            // operator can honour, `Err(invalid(..))` for any it cannot:
+            //
+            //     (CrossoverConfig::MyCrossover { .. }, GenomeConfig::Sda(_)) => Ok(()),
+        }
     }
 
     /// Constraints on the genome and its dimensions.
@@ -1307,6 +1419,81 @@ num_epidemics  = 30
         }
     }
 
+    /// The behaviour-preservation guarantee `[crossover]` was added under: a
+    /// config written before the operator was selectable names none, and has
+    /// to keep running exactly as it did.
+    ///
+    /// Asserted by parsing rather than by reading the `#[serde(default)]`
+    /// attribute, because the attribute is only half of it — a `Default` impl
+    /// pointing at a different variant would satisfy the attribute and break
+    /// every existing config.
+    #[test]
+    fn a_config_naming_no_operator_gets_two_point() {
+        // The fixture has no `[crossover]` table at all, which is exactly the
+        // shape of every config written before this section existed.
+        assert!(!config_text("").contains("[crossover]"));
+
+        let config = valid_config();
+        match config.crossover {
+            CrossoverConfig::TwoPoint => {}
+        }
+        config
+            .validate()
+            .expect("a config naming no operator should still validate");
+    }
+
+    /// Naming the default explicitly parses to the same thing as leaving it
+    /// out — so a user who writes the block to document their intent is not
+    /// quietly selecting something else.
+    #[test]
+    fn naming_two_point_explicitly_matches_leaving_the_block_out() {
+        let text = format!("{}\n[crossover]\ntype = \"two_point\"\n", config_text(""));
+        let config = Config::from_toml_str(&text).expect("an explicit operator should parse");
+
+        match config.crossover {
+            CrossoverConfig::TwoPoint => {}
+        }
+        config.validate().expect("and should validate");
+    }
+
+    /// The same behaviour-preservation guarantee as `[crossover]`'s, but for
+    /// the per-genome mutation operator: a config naming neither representation's
+    /// mutation keeps running the one it always ran.
+    #[test]
+    fn a_config_naming_no_mutation_operator_gets_the_representations_default() {
+        let edge_edit = valid_config();
+        match &edge_edit.genome {
+            GenomeConfig::EdgeEdit(cfg) => {
+                assert_eq!(cfg.mutation, EdgeEditMutationConfig::RerollGene);
+            }
+            other => panic!("expected the fixture's edge_edit genome, got {other:?}"),
+        }
+
+        let sda =
+            Config::from_toml_str(&sda_config_text("")).expect("the sda fixture should parse");
+        match &sda.genome {
+            GenomeConfig::Sda(cfg) => {
+                assert_eq!(cfg.mutation, SdaMutationConfig::RedrawOne);
+            }
+            other => panic!("expected the fixture's sda genome, got {other:?}"),
+        }
+    }
+
+    /// An operator GET does not ship is refused by name rather than ignored.
+    ///
+    /// The section is a tagged enum, so this is serde's rejection, not a check
+    /// of ours — pinned because the alternative failure is silent: an unknown
+    /// `type` that parsed would run the default operator while the file says
+    /// otherwise.
+    #[test]
+    fn an_unknown_operator_is_rejected() {
+        let text = format!("{}\n[crossover]\ntype = \"uniform\"\n", config_text(""));
+        assert!(
+            Config::from_toml_str(&text).is_err(),
+            "an operator GET does not ship should not parse",
+        );
+    }
+
     #[test]
     fn the_fixture_config_validates() {
         // Guards every test below: they all assume the fixture is valid before
@@ -1448,6 +1635,7 @@ num_epidemics  = 30
             init_state,
             init_char_mutation_rate: default_init_char_mutation_rate(),
             transition_vs_response_rate: default_transition_vs_response_rate(),
+            mutation: SdaMutationConfig::default(),
         })
     }
 

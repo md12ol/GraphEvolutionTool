@@ -1,6 +1,6 @@
 use rand::Rng;
 
-use super::genome::{Genome, SdaContext};
+use super::genome::{Genome, SdaContext, SdaMutation};
 use crate::graph::Graph;
 
 /// Self-driving-automaton genome: a finite-state machine whose run emits the
@@ -225,6 +225,35 @@ impl SdaGenome {
 
         output
     }
+
+    /// The body of [`SdaMutation::RedrawOne`], split out so `mutate` above is
+    /// one match over the operator and nothing else.
+    fn redraw_one<R: Rng + ?Sized>(&mut self, context: &SdaContext, rng: &mut R) {
+        let num_states = self.transitions.len();
+        let num_chars = self.num_chars();
+        if num_states == 0 || num_chars == 0 {
+            return;
+        }
+
+        if rng.random_bool(context.init_char_mutation_rate) {
+            self.init_char = rng.random_range(0..num_chars) as u8;
+            return;
+        }
+
+        let state = rng.random_range(0..num_states);
+        let trans = rng.random_range(0..num_chars);
+
+        if rng.random_bool(context.transition_vs_response_rate) {
+            self.transitions[state][trans] = rng.random_range(0..num_states) as u16;
+        } else {
+            let resp_len = rng.random_range(1..=self.max_resp_len);
+            let mut response = Vec::with_capacity(resp_len);
+            for _ in 0..resp_len {
+                response.push(rng.random_range(0..num_chars) as u8);
+            }
+            self.responses[state][trans] = response;
+        }
+    }
 }
 
 impl Genome for SdaGenome {
@@ -290,6 +319,17 @@ impl Genome for SdaGenome {
     /// genuinely exchange their starting behaviour.
     /// `EdgeEditGenome::crossover` declines at the same length, its genes
     /// having no equivalent passenger to carry.
+    ///
+    /// The obligations every crossover carries — both children kept, both
+    /// parents left valid for the representation, every draw from `rng` — are
+    /// stated once on [`Genome::crossover`]. Validity is a real constraint
+    /// here rather than a free one: a transition stores a *target state
+    /// index*, so a swapped band carries values that only mean anything
+    /// against a state table of the same size. What makes that safe is that
+    /// `num_states` is a config value fixed for the whole run, so every genome
+    /// in a population is built to it — not the `shared_length` bound below,
+    /// which guards the positions being indexed and could not fix a target
+    /// value pointing past a shorter automaton's end.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) {
         // States past the shorter automaton's length have no counterpart to swap.
         let shared_length = self.transitions.len().min(other.transitions.len());
@@ -315,34 +355,24 @@ impl Genome for SdaGenome {
     /// its response with the remainder. Callers that want more disruption per
     /// generation call this multiple times.
     ///
+    /// Exactly one, per the [`Genome::mutate`] contract, which has the rest of
+    /// what a mutation owes: the engine's two dice rolls, why magnitudes are
+    /// not equalized across representations, and that every draw comes from
+    /// `rng`. The three outcomes above are one mutation between them, not
+    /// three — whichever branch is taken, the method returns having changed a
+    /// single thing.
+    ///
     /// The second draw was a plain coin flip before the rates were
     /// configurable. `random_bool(0.5)` and `random::<bool>()` do not consume
     /// the same RNG state, so a seeded run does not reproduce output from
     /// before this change even at the default rates.
     fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R) {
-        let num_states = self.transitions.len();
-        let num_chars = self.num_chars();
-        if num_states == 0 || num_chars == 0 {
-            return;
-        }
-
-        if rng.random_bool(context.init_char_mutation_rate) {
-            self.init_char = rng.random_range(0..num_chars) as u8;
-            return;
-        }
-
-        let state = rng.random_range(0..num_states);
-        let trans = rng.random_range(0..num_chars);
-
-        if rng.random_bool(context.transition_vs_response_rate) {
-            self.transitions[state][trans] = rng.random_range(0..num_states) as u16;
-        } else {
-            let resp_len = rng.random_range(1..=self.max_resp_len);
-            let mut response = Vec::with_capacity(resp_len);
-            for _ in 0..resp_len {
-                response.push(rng.random_range(0..num_chars) as u8);
-            }
-            self.responses[state][trans] = response;
+        match context.mutation {
+            SdaMutation::RedrawOne => self.redraw_one(context, rng),
+            // ADD A MUTATION STEP 2 — the arm performing your variant. Keep
+            // the exactly-one-mutation contract this method's own doc states.
+            // The step after this one is `config::SdaMutationConfig` —
+            // search `ADD A MUTATION STEP 3` for it.
         }
     }
 
@@ -392,6 +422,7 @@ mod tests {
             max_edge_multiplicity,
             init_char_mutation_rate: DEFAULT_INIT_CHAR_MUTATION_RATE,
             transition_vs_response_rate: DEFAULT_TRANSITION_VS_RESPONSE_RATE,
+            mutation: Default::default(),
         }
     }
 
@@ -684,6 +715,7 @@ mod tests {
             max_edge_multiplicity: 1,
             init_char_mutation_rate,
             transition_vs_response_rate,
+            mutation: Default::default(),
         }
     }
 

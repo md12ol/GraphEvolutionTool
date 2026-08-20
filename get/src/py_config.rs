@@ -240,6 +240,42 @@ pub enum PySelectionConfig {
     Tournament { tournament_size: usize },
 }
 
+/// Recombination operator.
+///
+/// Mirrors [`crate::config::CrossoverConfig`], and is step 5 of the six on
+/// [`crate::evolver::common::Crossover`] — optional, like every mirror here.
+/// An operator missing from this enum compiles and tests clean; it simply
+/// cannot be named from Python, and still runs from TOML and from Rust.
+///
+/// A unit variant would be the natural spelling for an operator that takes no
+/// parameters, but pyo3 rejects one in a complex enum, so `TwoPoint` carries an
+/// empty struct body — the same constraint this module's header records for
+/// [`crate::config::FitnessConfig::Python`], hit here for a second time.
+#[pyclass(name = "CrossoverConfig")]
+#[derive(Debug, Clone)]
+pub enum PyCrossoverConfig {
+    #[pyo3(constructor = ())]
+    TwoPoint {},
+    // ADD A CROSSOVER STEP 5 — the Python-side variant, if the operator
+    // should be reachable from Python. Optional; leaving it out costs
+    // nothing elsewhere.
+    //
+    //     #[pyo3(constructor = (some_param))]
+    //     MyCrossover { some_param: f64 },
+    //
+    // Then the matching arm in `to_toml_value` below — search
+    // `ADD A CROSSOVER STEP 5` again for it.
+}
+
+/// Hand-written rather than derived: `#[derive(Default)]` needs a *unit*
+/// variant to mark, and pyo3 does not allow one in a complex enum, so the
+/// empty struct body above rules the derive out.
+impl Default for PyCrossoverConfig {
+    fn default() -> Self {
+        PyCrossoverConfig::TwoPoint {}
+    }
+}
+
 /// Genome representation and the dimensions used to build random individuals.
 ///
 /// Mirrors [`crate::config::GenomeConfig`].
@@ -260,11 +296,16 @@ pub enum PyGenomeConfig {
     /// type with its own defaults, not a scalar a `#[pyo3(constructor)]`
     /// default can hand back directly — contrast `Sda::init_state` below,
     /// where the default *is* a plain `usize` and needs no `Option`.
-    #[pyo3(constructor = (gene_length, operation_weights = None))]
+    #[pyo3(constructor = (gene_length, operation_weights = None, mutation = None))]
     EdgeEdit {
         gene_length: usize,
         /// Omitted entirely, every operation defaults to a weight of 1.0.
         operation_weights: Option<PyOperationWeights>,
+        /// Which mutation the run applies. `Option`-wrapped so an unset value
+        /// is left out of the TOML entirely and `config`'s own default
+        /// supplies it — writing the variant here would put the default in
+        /// two places. The variants are edge-edit's own; SDA has its own set.
+        mutation: Option<PyEdgeEditMutationConfig>,
     },
     /// No `num_chars`: the alphabet is derived as `max_edge_multiplicity + 1`,
     /// so every character is a legal edge weight (spec §3.2, GitHub #6).
@@ -274,6 +315,7 @@ pub enum PyGenomeConfig {
         init_state = 0,
         init_char_mutation_rate = None,
         transition_vs_response_rate = None,
+        mutation = None,
     ))]
     Sda {
         num_states: usize,
@@ -294,6 +336,10 @@ pub enum PyGenomeConfig {
         /// response, once the initial character was not chosen.
         /// `Option`-wrapped for the same reason.
         transition_vs_response_rate: Option<f64>,
+        /// Which mutation the run applies. `Option`-wrapped for the same
+        /// reason as the two rates above. SDA's own variants; edge-edit has
+        /// its own set.
+        mutation: Option<PySdaMutationConfig>,
     },
     // ADD A GENOME STEP 7 — the Python-side variant, if the representation
     // should be reachable from Python. Optional; leaving it out costs nothing
@@ -413,6 +459,11 @@ pub struct PyConfig {
     /// Parent-selection strategy.
     #[pyo3(get, set)]
     pub selection: PySelectionConfig,
+    /// Recombination operator. Defaulted, so an existing caller that never
+    /// passes one keeps the behaviour it had before the operator was
+    /// selectable.
+    #[pyo3(get, set)]
+    pub crossover: PyCrossoverConfig,
     /// Genome representation and its dimensions.
     #[pyo3(get, set)]
     pub genome: PyGenomeConfig,
@@ -440,8 +491,9 @@ impl PyConfig {
         fitness,
         max_edge_multiplicity = 1,
         max_mutations = 1,
+        crossover = None,
     ))]
-    #[allow(clippy::too_many_arguments)] // ten fields is the schema, not a smell
+    #[allow(clippy::too_many_arguments)] // eleven fields is the schema, not a smell
     pub fn new(
         evolution: PyEvolutionConfig,
         population_size: usize,
@@ -453,6 +505,12 @@ impl PyConfig {
         fitness: PyFitnessConfig,
         max_edge_multiplicity: u32,
         max_mutations: usize,
+        // `Option`-wrapped rather than defaulted in the signature, because the
+        // default is a whole pyclass instance and a `#[pyo3(signature)]`
+        // default has to be a constant expression. `None` means two-point,
+        // which is what every representation did before this was selectable —
+        // the same reading `[crossover]`'s absence has on the TOML side.
+        crossover: Option<PyCrossoverConfig>,
     ) -> Self {
         Self {
             evolution,
@@ -463,6 +521,7 @@ impl PyConfig {
             mutation_rate,
             max_mutations,
             selection,
+            crossover: crossover.unwrap_or_default(),
             genome,
             fitness,
         }
@@ -709,6 +768,101 @@ impl PySelectionConfig {
     }
 }
 
+impl PyCrossoverConfig {
+    fn to_toml_value(&self) -> PyResult<Value> {
+        let mut table = Map::new();
+        match self {
+            PyCrossoverConfig::TwoPoint {} => {
+                table.insert("type".to_string(), Value::String("two_point".to_string()));
+            } // ADD A CROSSOVER STEP 5 — the matching arm for your variant.
+        }
+        Ok(Value::Table(table))
+    }
+}
+
+/// Which mutation an edge-edit genome applies.
+///
+/// Mirrors [`crate::config::EdgeEditMutationConfig`], and lives here rather
+/// than beside [`PyCrossoverConfig`] because it is nested under
+/// `PyGenomeConfig::EdgeEdit` rather than given a section of its own — the
+/// same reason `EdgeEditMutationConfig` sits inside `EdgeEditGenomeConfig` in
+/// `config.rs`. Optional, like every mirror here.
+#[pyclass(name = "EdgeEditMutationConfig")]
+#[derive(Debug, Clone)]
+pub enum PyEdgeEditMutationConfig {
+    #[pyo3(constructor = ())]
+    RerollGene {},
+    // ADD A MUTATION STEP 4 — the Python-side variant, if the operator
+    // should be reachable from Python. Optional; leaving it out costs
+    // nothing elsewhere.
+    //
+    //     #[pyo3(constructor = (some_param))]
+    //     MyMutation { some_param: f64 },
+    //
+    // Then the matching arm in `to_toml_value` below, and an example line in
+    // `config.example.toml` under `[genome]` — search `ADD A MUTATION STEP 4`
+    // again for both.
+}
+
+/// Hand-written: `#[derive(Default)]` needs a unit variant, and pyo3 does not
+/// allow one in a complex enum. Same constraint as [`PyCrossoverConfig`].
+impl Default for PyEdgeEditMutationConfig {
+    fn default() -> Self {
+        PyEdgeEditMutationConfig::RerollGene {}
+    }
+}
+
+impl PyEdgeEditMutationConfig {
+    fn to_toml_value(&self) -> Value {
+        let mut table = Map::new();
+        match self {
+            PyEdgeEditMutationConfig::RerollGene {} => {
+                table.insert("type".to_string(), Value::String("reroll_gene".to_string()));
+            } // ADD A MUTATION STEP 4 — the matching arm for your variant.
+        }
+        Value::Table(table)
+    }
+}
+
+/// Which mutation an SDA genome applies. Mirrors
+/// [`crate::config::SdaMutationConfig`]; see [`PyEdgeEditMutationConfig`] for
+/// why it is nested rather than top-level.
+#[pyclass(name = "SdaMutationConfig")]
+#[derive(Debug, Clone)]
+pub enum PySdaMutationConfig {
+    #[pyo3(constructor = ())]
+    RedrawOne {},
+    // ADD A MUTATION STEP 4 — the Python-side variant, if the operator
+    // should be reachable from Python. Optional; leaving it out costs
+    // nothing elsewhere.
+    //
+    //     #[pyo3(constructor = (some_param))]
+    //     MyMutation { some_param: f64 },
+    //
+    // Then the matching arm in `to_toml_value` below, and an example line in
+    // `config.example.toml` under `[genome]` — search `ADD A MUTATION STEP 4`
+    // again for both.
+}
+
+/// Hand-written for the same reason as [`PyEdgeEditMutationConfig::default`].
+impl Default for PySdaMutationConfig {
+    fn default() -> Self {
+        PySdaMutationConfig::RedrawOne {}
+    }
+}
+
+impl PySdaMutationConfig {
+    fn to_toml_value(&self) -> Value {
+        let mut table = Map::new();
+        match self {
+            PySdaMutationConfig::RedrawOne {} => {
+                table.insert("type".to_string(), Value::String("redraw_one".to_string()));
+            } // ADD A MUTATION STEP 4 — the matching arm for your variant.
+        }
+        Value::Table(table)
+    }
+}
+
 impl PyGenomeConfig {
     fn to_toml_value(&self) -> PyResult<Value> {
         let mut table = Map::new();
@@ -716,6 +870,7 @@ impl PyGenomeConfig {
             PyGenomeConfig::EdgeEdit {
                 gene_length,
                 operation_weights,
+                mutation,
             } => {
                 table.insert("type".to_string(), Value::String("edge_edit".to_string()));
                 table.insert(
@@ -730,6 +885,11 @@ impl PyGenomeConfig {
                         Value::Table(weights.to_toml_table()),
                     );
                 }
+                // Left out when unset, so `config`'s own default supplies it
+                // rather than this naming it a second time.
+                if let Some(mutation) = mutation {
+                    table.insert("mutation".to_string(), mutation.to_toml_value());
+                }
             }
             PyGenomeConfig::Sda {
                 num_states,
@@ -737,6 +897,7 @@ impl PyGenomeConfig {
                 init_state,
                 init_char_mutation_rate,
                 transition_vs_response_rate,
+                mutation,
             } => {
                 table.insert("type".to_string(), Value::String("sda".to_string()));
                 table.insert(
@@ -761,6 +922,9 @@ impl PyGenomeConfig {
                         "transition_vs_response_rate".to_string(),
                         Value::Float(*rate),
                     );
+                }
+                if let Some(mutation) = mutation {
+                    table.insert("mutation".to_string(), mutation.to_toml_value());
                 }
             }
         }
@@ -875,6 +1039,7 @@ impl PyConfig {
         );
         table.insert("evolution".to_string(), self.evolution.to_toml_value()?);
         table.insert("selection".to_string(), self.selection.to_toml_value()?);
+        table.insert("crossover".to_string(), self.crossover.to_toml_value()?);
         table.insert("genome".to_string(), self.genome.to_toml_value()?);
         table.insert("fitness".to_string(), self.fitness.to_toml_value()?);
         Ok(table)
@@ -886,8 +1051,9 @@ mod tests {
     use super::*;
 
     use crate::config::{
-        Config, EdgeEditGenomeConfig, EvolutionConfig, FitnessConfig, GenomeConfig,
-        SdaGenomeConfig, SelectionConfig, SirParams,
+        Config, CrossoverConfig, EdgeEditGenomeConfig, EdgeEditMutationConfig, EvolutionConfig,
+        FitnessConfig, GenomeConfig, SdaGenomeConfig, SdaMutationConfig, SelectionConfig,
+        SirParams,
     };
     use crate::genomes::EdgeEditOperationWeights;
 
@@ -909,12 +1075,14 @@ mod tests {
             PyGenomeConfig::EdgeEdit {
                 gene_length: 256,
                 operation_weights: None,
+                mutation: Some(PyEdgeEditMutationConfig::RerollGene {}),
             },
             PyFitnessConfig::EpiSpread {
                 sir: PySirParams::new(0.05, 30, None, 3, 5),
             },
             1,
             1,
+            Some(PyCrossoverConfig::TwoPoint {}),
         )
     }
 
@@ -942,6 +1110,7 @@ mod tests {
             mutation_rate,
             max_mutations,
             selection,
+            crossover,
             genome,
             fitness,
         } = round_trip(&mirror());
@@ -952,6 +1121,14 @@ mod tests {
         assert_eq!(crossover_rate, 0.9);
         assert_eq!(mutation_rate, 0.2);
         assert_eq!(max_mutations, 1);
+
+        // Named explicitly by the fixture, which leaves nothing to a default,
+        // so this checks the mirror renders the operator rather than that the
+        // default fills it in — `a_config_naming_no_operator_gets_two_point`
+        // in `config` covers the other half.
+        match crossover {
+            CrossoverConfig::TwoPoint => {}
+        }
 
         match evolution {
             EvolutionConfig::Generational {
@@ -975,10 +1152,18 @@ mod tests {
             GenomeConfig::EdgeEdit(EdgeEditGenomeConfig {
                 gene_length,
                 operation_weights,
+                mutation,
             }) => {
                 assert_eq!(gene_length, 256);
                 // Omitted from the document, so serde's default supplies it.
                 assert_eq!(operation_weights, EdgeEditOperationWeights::default());
+                // Likewise the mutation operator: `mirror()` names it
+                // explicitly (it leaves nothing to a default), so this pins
+                // that the named choice round-trips through TOML rather than
+                // only being spelled on the struct.
+                // `a_config_naming_no_mutation_operator_gets_the_representations_default`
+                // covers the defaulting half.
+                assert_eq!(mutation, EdgeEditMutationConfig::RerollGene);
             }
             other => panic!("expected edge_edit, got {other:?}"),
         }
@@ -1026,6 +1211,7 @@ mod tests {
             init_state: 3,
             init_char_mutation_rate: Some(0.1),
             transition_vs_response_rate: Some(0.25),
+            mutation: None,
         };
         config.max_edge_multiplicity = 5;
 
@@ -1048,7 +1234,9 @@ mod tests {
                 init_state,
                 init_char_mutation_rate,
                 transition_vs_response_rate,
+                mutation,
             }) => {
+                assert_eq!(mutation, SdaMutationConfig::RedrawOne);
                 assert_eq!(num_states, 12);
                 assert_eq!(max_resp_len, 4);
                 assert_eq!(init_state, 3);
@@ -1105,6 +1293,7 @@ mod tests {
                 swap: 2.0,
                 ..PyOperationWeights::default()
             }),
+            mutation: None,
         };
 
         let text = config.to_toml().expect("renders");
