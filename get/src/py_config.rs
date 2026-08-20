@@ -187,6 +187,16 @@ impl Default for PyOperationWeights {
 /// Which evolution strategy to run, and its strategy-specific settings.
 ///
 /// Mirrors [`crate::config::EvolutionConfig`].
+///
+/// # Part of the chain that adds a strategy
+///
+/// This is the optional step: it is what lets a Python caller name the
+/// strategy. Skipping it costs nothing anywhere else — the strategy still
+/// runs from a TOML config and from Rust — so it is only needed if Python
+/// should be able to select it. The steps before it are the
+/// `EvolutionConfig` variant and its `validate_evolution_and_selection` and
+/// `dispatch::run_strategy` arms; `crate::evolver::Evolver`'s doc has all
+/// six.
 #[pyclass(name = "EvolutionConfig")]
 #[derive(Debug, Clone)]
 pub enum PyEvolutionConfig {
