@@ -106,82 +106,65 @@ impl Crossover {
     }
 }
 
-/// Parent-selection strategy.
+/// Parent-selection strategy: who breeds, within the scope an event drew.
 ///
-/// An enum rather than a trait, so a new mechanism (roulette-wheel, truncation,
-/// rank, ...) is one extra variant plus its match arms, and maps directly onto a
-/// `config.toml` field.
+/// An enum rather than a trait, so a new mechanism is one variant plus one
+/// match arm, selectable by name from `config.toml` with no Rust at the call
+/// site. **This is the one extension point that cannot be reached from outside
+/// the crate** — `Fitness`, `Genome` and `Evolver` are traits a depending
+/// program implements for its own types, but a variant cannot be added to
+/// another crate's enum.
 ///
-/// # Adding your own scheme
+/// # The contract every scheme keeps
 ///
-/// **This is the one extension point that cannot be reached from outside the
-/// crate.** The others — `Fitness`, `Genome`, `Evolver` — are traits, so a
-/// program that depends on GET implements them for its own types. A variant
-/// cannot be added to an enum from another crate, so a depending program's only
-/// schemes are the ones GET ships. Adding one means editing your own copy of
-/// GET, and what that buys is a scheme selectable by name from `config.toml`
-/// and runnable by the `get-run` binary, with no Rust at the call site. A
-/// reader expecting the trait pattern to hold here will go looking for a
-/// `Selection` trait that does not exist.
+/// None of these is enforced by the signature, and breaking any of them changes
+/// the behaviour of every evolver at once rather than failing anywhere visible.
 ///
-/// A scheme touches six files, in eight steps — `common.rs`, `config.rs` and
-/// `py_config.rs` each want more than one edit. In the order you would walk
-/// them:
+/// - **Pick only from `scope`.** It is the whole of what this event may touch,
+///   and a scheme reaching past it breaks the guarantee that a strategy's best
+///   individual is never among those replaced.
+/// - **Sampling is with replacement.** The same individual may be returned more
+///   than once, and a caller wanting distinct parents enforces that itself. A
+///   scheme that quietly de-duplicates removes the pressure that comes from a
+///   strong individual being drawn twice.
+/// - **Fitnesses arrive already oriented**, lower is better, so a scheme
+///   compares them directly and never consults a `Direction`. Re-checking the
+///   direction looks defensive and silently inverts every maximizing objective.
+///   Reach for [`rank`] rather than comparing floats by hand.
+/// - **All randomness comes from `rng`.** Nothing may reach for a thread RNG or
+///   the clock: two runs at one seed are required to agree, and a scheme is the
+///   easiest place to break that without any test noticing.
 ///
-/// 1. **This enum** — add the variant, carrying whatever parameters the scheme
-///    reads out of the file.
-/// 2. **`select`** — add its arm. This is the whole of parent selection and the
-///    only method every scheme must answer. Read its contract first: it governs
-///    replacement, orientation and where randomness may come from, and none of
-///    the three is enforced by the signature.
-/// 3. **`tournament_indices`** — add an arm, but **implement it only if the
-///    scheme is to be usable with steady-state**. It is deliberately not part of
-///    the general contract. It draws one ranked set of *distinct* individuals,
-///    from which [`super::steady_state`] takes both its parents and the
-///    individuals they replace — a replacement policy rather than a selection
-///    one, and one that only means something over a set. A scheme whose own
-///    theory has no such draw (roulette-wheel samples with replacement, and a
-///    distinct-sample variant of it is a different scheme wearing the name)
-///    writes an arm that panics, because step 5 rejects the pairing before a run
-///    can reach it. The match is exhaustive, so the arm itself is not optional —
-///    only what goes in it.
-/// 4. **`steady_state.rs`** — `SteadyStateEvolver::new` matches on the variant
-///    directly, to assert its tournament floor before a run starts rather than
-///    at the first mating event. A scheme that implemented step 3 states the
-///    equivalent guarantee here; one that did not panics here too, for the same
-///    reason and as the same backstop.
-/// 5. **`config.rs`** — three edits. Add a `SelectionConfig` variant holding
-///    what the scheme reads out of the file; add any constraint on its own
-///    parameters; and extend `validate_evolution_and_selection`, whose
-///    `let SelectionConfig::Tournament { .. } = self.selection;` is irrefutable
-///    only while there is one variant and becomes a real match with the second.
-///    That function is where a scheme is paired with a strategy, so it is where
-///    a scheme with no step 3 is rejected against steady-state — a config error
-///    naming the pair, rather than a run that quietly is not the scheme asked
-///    for.
-/// 6. **`dispatch.rs`** — add the arm to `selection()`, which turns the config
-///    variant into this enum. Steps 5 and 6 are one change split across two
-///    files: a variant nothing constructs is dead code, and an arm for a variant
-///    that does not exist will not compile.
-/// 7. **`py_config.rs`** — three edits, and all of them optional: leave the file
-///    alone and everything still works, a Python caller simply has no way to
-///    name the scheme. Add the `PySelectionConfig` variant with its constructor;
-///    add its arm to the conversion that writes the `[selection]` table; and if
-///    step 5's validation raises a new field name, add that name to
-///    `python_attribute_path`, or the error a Python caller sees will name a
-///    TOML field they never wrote. The test
-///    `every_validation_field_maps_to_a_python_attribute` catches a missing one;
-///    nothing catches a missing variant.
-/// 8. **`config.example.toml`** — add the `[selection]` block if the scheme
-///    ships. The example file is what a user copies from, so a scheme missing
-///    from it is one most people never find.
+/// Nothing constrains *how* a scheme picks — pressure, and whether it reads
+/// fitness values or only their order, are its own business.
 ///
-/// Steps 1 through 6 fail to compile if forgotten — every one of those matches
-/// is exhaustive, which is why steps 3 and 4 still need an arm from a scheme
-/// that cannot serve them. Steps 7 and 8 compile clean when skipped, and are the
-/// two to check by hand.
+/// # Adding a scheme
+///
+/// 1. **This enum** — the variant, plus any parameters it reads from the file.
+/// 2. **[`Selection::pick`]** — the arm. The match is exhaustive, so the
+///    compiler finds it.
+/// 3. **`config::SelectionConfig`** — the variant a user names under
+///    `[selection]`, and any constraint on its own parameters in
+///    `Config::validate_evolution_and_selection`.
+/// 4. **`dispatch::selection`** — the arm mapping that config variant onto this
+///    one.
+/// 5. **`py_config::PySelectionConfig`** — optional, and only buys a Python
+///    caller the ability to name it.
+/// 6. **`config.example.toml`** — also optional, and also the step people skip
+///    and then wonder why nobody uses the scheme.
+///
+/// There is no step for locality or for replacement, and that is the point: a
+/// scheme works with every strategy because it only ever answers this one
+/// question. See [`super::scope::Scope`] and
+/// [`super::replacement::Replacement`] for the other two axes.
 pub enum Selection {
-    /// Sample `tournament_size` individuals per pick and keep the best.
+    /// The fittest members of the scope, best first. Consumes no randomness.
+    ///
+    /// Truncation over a randomly drawn subset is what "tournament selection"
+    /// decomposes into once the draw is its own step, which is how steady-state
+    /// is expressed.
+    Best,
+    /// Sample `tournament_size` members of the scope per pick, keep the best.
     Tournament { tournament_size: usize },
 }
 
@@ -225,142 +208,77 @@ pub(super) fn best_index(fitnesses: &[f64]) -> usize {
 }
 
 impl Selection {
-    /// Select `count` parents from `population`.
+    /// Choose `count` parents from `scope`, returning indices into the
+    /// population.
     ///
-    /// # The contract every scheme keeps
-    ///
-    /// These bind new variants as much as the one that is here. None of the
-    /// three is enforced by the signature, and breaking any of them changes the
-    /// behaviour of every evolver at once rather than failing anywhere visible.
-    ///
-    /// **Sampling is with replacement.** The same individual may be returned
-    /// more than once, and a caller wanting distinct individuals enforces that
-    /// itself — `select` cannot know whether its output is a mating pair or an
-    /// unrelated batch. A scheme that quietly de-duplicates is not a stricter
-    /// version of this one: it removes the selection pressure that comes from a
-    /// strong individual being drawn twice.
-    ///
-    /// **Fitnesses arrive already oriented**, lower is better, so a scheme
-    /// compares them directly and never consults a `Direction` — see `rank`,
-    /// which is the ordering to reach for rather than comparing floats by hand.
-    /// This is the likeliest mistake a new scheme makes, because re-checking the
-    /// direction looks defensive and silently inverts every maximizing
-    /// objective.
-    ///
-    /// **All randomness comes from `rng`.** Nothing may reach for a thread RNG,
-    /// the clock, or the address of anything. Two replicate runs at one seed are
-    /// required to agree, and a scheme is the easiest place to break that
-    /// without any test noticing, since the run still completes and still looks
-    /// plausible.
-    ///
-    /// Nothing here constrains *how* a scheme picks — pressure, and whether it
-    /// looks at fitness values or only at their order, are the scheme's own
-    /// business.
-    pub(super) fn select<G, R>(
+    /// Indices rather than clones: the caller knows whether it wants a copy or
+    /// the slot number, and steady-state wants both.
+    pub(super) fn pick<R>(
         &self,
-        population: &[G],
+        scope: &[usize],
         fitnesses: &[f64],
         count: usize,
         rng: &mut R,
-    ) -> Vec<G>
+    ) -> Vec<usize>
     where
-        G: Genome,
         // `?Sized` lets callers pass a trait-object RNG (e.g. `&mut dyn RngCore`),
         // not just a concrete sized type — same reason on every `R: Rng` bound below.
         R: Rng + ?Sized,
     {
-        assert_eq!(
-            population.len(),
-            fitnesses.len(),
-            "every individual needs exactly one fitness",
-        );
-        assert!(
-            !population.is_empty(),
-            "cannot select from an empty population",
-        );
-
-        match self {
-            Selection::Tournament { tournament_size } => {
-                assert!(*tournament_size > 0, "tournament_size must be at least 1");
-
-                (0..count)
-                    .map(|_| {
-                        population[Self::tournament_winner(fitnesses, *tournament_size, rng)]
-                            .clone()
-                    })
-                    .collect()
-            }
+        assert!(!scope.is_empty(), "cannot select from an empty scope");
+        for &index in scope {
+            assert!(
+                index < fitnesses.len(),
+                "scope names individual {} but only {} were scored",
+                index,
+                fitnesses.len(),
+            );
         }
-    }
 
-    /// Draw one tournament of **distinct** individuals, ranked best first.
-    ///
-    /// Feeds tournament-local replacement: the front of the result are parents,
-    /// the back are the individuals they displace. Distinctness is required —
-    /// "the worst two members" means nothing over a multiset.
-    ///
-    /// # Not part of the selection contract
-    ///
-    /// Unlike `select`, this is **optional for a new scheme**, and the name is
-    /// the reason it looks otherwise: it says tournament because tournament is
-    /// the only scheme that has ever answered it.
-    ///
-    /// What it really returns is one sample serving two decisions at once —
-    /// who breeds and who dies — and steady-state's self-elitism depends on both
-    /// coming from the *same* draw, which is why the result is a ranking rather
-    /// than a set of parents. That makes it a replacement policy expressed as a
-    /// selection method, so a scheme whose own theory has no such draw has
-    /// nothing to write here. Proportional schemes are the clear case:
-    /// sampling distinct individuals proportionally is a different mechanism
-    /// from roulette-wheel, not a constrained one, and implementing it here to
-    /// satisfy the match would give a user a scheme that is not the one they
-    /// named, with nothing to report the substitution.
-    ///
-    /// Such a scheme is rejected against steady-state in `config.rs`'s
-    /// `validate_evolution_and_selection`, at config-parse time, and stays
-    /// usable with every strategy that only calls `select`. Its arm here is
-    /// still required — the match is exhaustive — and should panic rather than
-    /// improvise: reaching it means the config layer let through a pairing it
-    /// was supposed to reject, which is a bug to surface, not to paper over.
-    pub(super) fn tournament_indices<R>(&self, fitnesses: &[f64], rng: &mut R) -> Vec<usize>
-    where
-        R: Rng + ?Sized,
-    {
         match self {
-            Selection::Tournament { tournament_size } => {
-                assert!(*tournament_size > 0, "tournament_size must be at least 1");
+            Selection::Best => {
                 assert!(
-                    *tournament_size <= fitnesses.len(),
-                    "tournament_size {} exceeds population size {}",
-                    tournament_size,
-                    fitnesses.len(),
+                    count <= scope.len(),
+                    "cannot take {} best of a scope of {}",
+                    count,
+                    scope.len(),
                 );
 
-                // Rejection sampling. `tournament_size` is small, so the linear
-                // membership scan beats a hash set, and this avoids the
-                // O(population) buffer a shuffle would need on every event.
-                let mut entrants = Vec::with_capacity(*tournament_size);
-                while entrants.len() < *tournament_size {
-                    let candidate = rng.random_range(0..fitnesses.len());
-                    if !entrants.contains(&candidate) {
-                        entrants.push(candidate);
-                    }
-                }
+                let mut ranked = scope.to_vec();
+                ranked.sort_by(|&a, &b| rank(fitnesses, a, b));
+                ranked.truncate(count);
+                ranked
+            }
+            Selection::Tournament { tournament_size } => {
+                assert!(*tournament_size > 0, "tournament_size must be at least 1");
 
-                entrants.sort_by(|&a, &b| rank(fitnesses, a, b));
-                entrants
+                let mut parents = Vec::with_capacity(count);
+                for _ in 0..count {
+                    parents.push(Self::tournament_winner(
+                        scope,
+                        fitnesses,
+                        *tournament_size,
+                        rng,
+                    ));
+                }
+                parents
             }
         }
     }
 
-    /// Draw `tournament_size` individuals **with** replacement, best wins.
-    fn tournament_winner<R>(fitnesses: &[f64], tournament_size: usize, rng: &mut R) -> usize
+    /// Draw `tournament_size` members of `scope` **with** replacement, best wins.
+    fn tournament_winner<R>(
+        scope: &[usize],
+        fitnesses: &[f64],
+        tournament_size: usize,
+        rng: &mut R,
+    ) -> usize
     where
         R: Rng + ?Sized,
     {
-        let mut winner = rng.random_range(0..fitnesses.len());
+        let mut winner = scope[rng.random_range(0..scope.len())];
         for _ in 1..tournament_size {
-            let candidate = rng.random_range(0..fitnesses.len());
+            let candidate = scope[rng.random_range(0..scope.len())];
             if rank(fitnesses, candidate, winner) == Ordering::Less {
                 winner = candidate;
             }
@@ -673,6 +591,30 @@ mod tests {
         (0..size).map(IndexGenome::new).collect()
     }
 
+    /// The genomes a scheme picks over the whole population.
+    ///
+    /// Every scheme now picks within a scope and returns indices; these tests
+    /// predate that and read better in terms of individuals, so this puts the
+    /// global scope in and takes the genomes back out.
+    fn selected_from_all(
+        selection: &Selection,
+        population: &[IndexGenome],
+        fitnesses: &[f64],
+        count: usize,
+        rng: &mut impl Rng,
+    ) -> Vec<IndexGenome> {
+        let mut scope = Vec::with_capacity(population.len());
+        for index in 0..population.len() {
+            scope.push(index);
+        }
+
+        let mut chosen = Vec::with_capacity(count);
+        for index in selection.pick(&scope, fitnesses, count, rng) {
+            chosen.push(population[index].clone());
+        }
+        chosen
+    }
+
     /// Two-point recombination is *exactly* what `Genome::crossover` already
     /// did, and this pins both halves of that: the same children, and the same
     /// number of RNG draws consumed getting there.
@@ -909,7 +851,7 @@ mod tests {
         let fitnesses = vec![0.0; 8];
 
         let mut rng = StdRng::seed_from_u64(3);
-        let selected = selection.select(&population, &fitnesses, 20, &mut rng);
+        let selected = selected_from_all(&selection, &population, &fitnesses, 20, &mut rng);
 
         // Nothing to compare, so winners are the raw index stream.
         let mut mirror = StdRng::seed_from_u64(3);
@@ -929,7 +871,7 @@ mod tests {
         let fitnesses = vec![5.0, 9.0, 1.0, 4.0, 7.0, 3.0, 8.0, 1.0, 6.0, 2.0];
 
         let mut rng = StdRng::seed_from_u64(41);
-        let selected = selection.select(&population, &fitnesses, 50, &mut rng);
+        let selected = selected_from_all(&selection, &population, &fitnesses, 50, &mut rng);
 
         let mut mirror = StdRng::seed_from_u64(41);
         for winner in selected {
@@ -951,7 +893,7 @@ mod tests {
         let fitnesses = vec![2.5; 6];
 
         let mut rng = StdRng::seed_from_u64(17);
-        let selected = selection.select(&population, &fitnesses, 40, &mut rng);
+        let selected = selected_from_all(&selection, &population, &fitnesses, 40, &mut rng);
 
         let mut mirror = StdRng::seed_from_u64(17);
         for winner in selected {
@@ -969,7 +911,7 @@ mod tests {
         let mean_selected = |tournament_size: usize| -> f64 {
             let selection = Selection::Tournament { tournament_size };
             let mut rng = StdRng::seed_from_u64(97);
-            let picks = selection.select(&population, &fitnesses, 2_000, &mut rng);
+            let picks = selected_from_all(&selection, &population, &fitnesses, 2_000, &mut rng);
             picks.iter().map(|g| g.index as f64).sum::<f64>() / picks.len() as f64
         };
 
@@ -997,7 +939,7 @@ mod tests {
         let fitnesses = vec![10.0, f64::NAN, 20.0, 30.0];
 
         let mut rng = StdRng::seed_from_u64(5);
-        let selected = selection.select(&population, &fitnesses, 500, &mut rng);
+        let selected = selected_from_all(&selection, &population, &fitnesses, 500, &mut rng);
 
         let mut mirror = StdRng::seed_from_u64(5);
         for winner in selected {
@@ -1013,84 +955,19 @@ mod tests {
     }
 
     #[test]
-    fn a_tournament_of_the_whole_population_is_just_the_fitness_ordering() {
-        // Tournament == population: every index is drawn once, so the result
-        // cannot depend on the RNG. Ties at 1.0 and 3.0 pin the tie-break.
-        let fitnesses = vec![3.0, 1.0, 8.0, 2.0, 1.0, 3.0];
-        let selection = Selection::Tournament { tournament_size: 6 };
-
-        for seed in 0..8 {
-            let mut rng = StdRng::seed_from_u64(seed);
-            let drawn = selection.tournament_indices(&fitnesses, &mut rng);
-            assert_eq!(drawn, vec![1, 4, 3, 0, 5, 2], "seed {seed}");
-        }
-    }
-
-    #[test]
-    fn a_tournament_draws_distinct_individuals_ordered_best_first() {
-        let fitnesses = vec![5.0, 9.0, 1.0, 4.0, 7.0, 3.0, 8.0, 1.0, 6.0, 2.0];
-        let selection = Selection::Tournament { tournament_size: 4 };
-
-        let mut rng = StdRng::seed_from_u64(23);
-        for _ in 0..200 {
-            let drawn = selection.tournament_indices(&fitnesses, &mut rng);
-
-            assert_eq!(drawn.len(), 4);
-
-            let mut unique = drawn.clone();
-            unique.sort_unstable();
-            unique.dedup();
-            assert_eq!(unique.len(), 4, "tournament had duplicates: {drawn:?}");
-
-            for pair in drawn.windows(2) {
-                let (earlier, later) = (pair[0], pair[1]);
-                assert!(
-                    fitnesses[earlier] < fitnesses[later]
-                        || (fitnesses[earlier] == fitnesses[later] && earlier < later),
-                    "not best-first at {earlier} -> {later} in {drawn:?}",
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn a_nan_fitness_sorts_to_the_replaceable_end_of_a_tournament() {
-        // A poisoned slot must sort last, never into a parent position.
-        let fitnesses = vec![4.0, 7.0, f64::NAN, 1.0, 9.0];
-        let selection = Selection::Tournament { tournament_size: 5 };
-
-        let mut rng = StdRng::seed_from_u64(2);
-        let drawn = selection.tournament_indices(&fitnesses, &mut rng);
-
-        assert_eq!(
-            drawn,
-            vec![3, 0, 1, 4, 2],
-            "NaN should sort last, making it the first individual replaced",
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "exceeds population size")]
-    fn a_tournament_larger_than_the_population_is_rejected() {
-        let selection = Selection::Tournament { tournament_size: 7 };
-        let mut rng = StdRng::seed_from_u64(1);
-        selection.tournament_indices(&[0.0; 5], &mut rng);
-    }
-
-    #[test]
-    #[should_panic(expected = "every individual needs exactly one fitness")]
-    fn a_fitness_array_of_the_wrong_length_is_rejected() {
+    #[should_panic(expected = "scope names individual 2 but only 2 were scored")]
+    fn a_scope_reaching_past_the_scored_population_is_rejected() {
         let selection = Selection::Tournament { tournament_size: 2 };
         let mut rng = StdRng::seed_from_u64(1);
-        selection.select(&population(4), &[0.0, 1.0], 1, &mut rng);
+        selected_from_all(&selection, &population(4), &[0.0, 1.0], 1, &mut rng);
     }
 
     #[test]
-    #[should_panic(expected = "cannot select from an empty population")]
-    fn an_empty_population_is_rejected() {
+    #[should_panic(expected = "cannot select from an empty scope")]
+    fn an_empty_scope_is_rejected() {
         let selection = Selection::Tournament { tournament_size: 2 };
         let mut rng = StdRng::seed_from_u64(1);
-        selection.select::<IndexGenome, _>(&[], &[], 1, &mut rng);
+        selection.pick(&[], &[], 1, &mut rng);
     }
 
     #[test]
@@ -1098,7 +975,7 @@ mod tests {
     fn a_zero_sized_tournament_is_rejected() {
         let selection = Selection::Tournament { tournament_size: 0 };
         let mut rng = StdRng::seed_from_u64(1);
-        selection.select(&population(4), &[0.0; 4], 1, &mut rng);
+        selected_from_all(&selection, &population(4), &[0.0; 4], 1, &mut rng);
     }
 
     #[test]

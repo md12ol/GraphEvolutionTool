@@ -56,16 +56,18 @@ impl<G: Genome> GenerationalEvolver<G> {
             }
         }
 
-        // Then breed the rest. Selection samples with replacement (spec §6.1),
-        // so a pair can be one individual and its own clone — crossover then
-        // does nothing and only mutation moves the child.
+        // Then breed the rest. Selection samples with replacement, so a pair can
+        // be one individual and its own clone — crossover then does nothing and
+        // only mutation moves the child.
+        let mut scope = Vec::with_capacity(population_size);
         while next.len() < population_size {
-            let mut pair = self
-                .shared
-                .selection
-                .select(&self.population, fitnesses, 2, rng);
-            let mut second = pair.pop().expect("select returned two parents");
-            let mut first = pair.pop().expect("select returned two parents");
+            self.shared
+                .scope
+                .draw_into(population_size, &mut scope, rng);
+            let pair = self.shared.selection.pick(&scope, fitnesses, 2, rng);
+
+            let mut first = self.population[pair[0]].clone();
+            let mut second = self.population[pair[1]].clone();
 
             breed_pair(&mut first, &mut second, &self.shared, rng);
 
@@ -194,6 +196,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
     use crate::evolver::common::{Crossover, Selection};
+    use crate::evolver::scope::Scope;
     use crate::evolver::test_support::{MostNodes, NodeCount, Val, Walk, best_of, mean_of};
     use crate::graph::Graph;
 
@@ -253,6 +256,7 @@ mod tests {
             mutation_rate,
             max_mutations,
             selection: selection(),
+            scope: Scope::Global,
             crossover: Crossover::TwoPoint,
         };
         let context = GenerationalContext {
@@ -271,6 +275,7 @@ mod tests {
             mutation_rate: 0.7,
             max_mutations: 1,
             selection: selection(),
+            scope: Scope::Global,
             crossover: Crossover::TwoPoint,
         };
         let context = GenerationalContext {

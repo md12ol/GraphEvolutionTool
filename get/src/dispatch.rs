@@ -36,6 +36,8 @@ use crate::config::{
     FitnessConfig, GenomeConfig, SdaGenomeConfig, SdaMutationConfig, SelectionConfig,
 };
 use crate::evolver::common::{Crossover, Selection};
+use crate::evolver::replacement::Replacement;
+use crate::evolver::scope::Scope;
 use crate::evolver::{
     EvolutionOutcome, Evolver, GenerationStats, GenerationalContext, GenerationalEvolver,
     SharedEvolutionContext, SteadyStateContext, SteadyStateEvolver,
@@ -590,7 +592,7 @@ pub(crate) fn evolve<F: Fitness>(
     seed: u64,
 ) -> PyResult<ErasedOutcome> {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-    let selection = selection(&config.selection);
+    let (scope, selection) = scope_and_selection(&config.selection, &config.evolution);
 
     // Genome outside, strategy inside: `Genome` cannot be a trait object, so the
     // concrete type has to be settled before an evolver can be named at all.
@@ -602,6 +604,7 @@ pub(crate) fn evolve<F: Fitness>(
                 config,
                 genome_context,
                 population,
+                scope,
                 selection,
                 fitness,
                 rng.random::<u64>(),
@@ -613,6 +616,7 @@ pub(crate) fn evolve<F: Fitness>(
                 config,
                 genome_context,
                 population,
+                scope,
                 selection,
                 fitness,
                 rng.random::<u64>(),
@@ -735,6 +739,7 @@ fn run_strategy<G: Genome, F: Fitness>(
     config: &Config,
     genome_context: G::Context,
     population: Vec<G>,
+    scope: Scope,
     selection: Selection,
     fitness: &F,
     seed: u64,
@@ -745,6 +750,7 @@ fn run_strategy<G: Genome, F: Fitness>(
         mutation_rate: config.mutation_rate,
         max_mutations: config.max_mutations,
         selection,
+        scope,
         crossover: crossover(&config.crossover),
     };
 
@@ -763,6 +769,7 @@ fn run_strategy<G: Genome, F: Fitness>(
         EvolutionConfig::SteadyState { num_mating_events } => {
             let type_context = SteadyStateContext {
                 num_mating_events: *num_mating_events,
+                replacement: Replacement::Worst,
             };
             let mut evolver = SteadyStateEvolver::new(shared, type_context, population);
             erase(evolver.run(fitness, seed))
@@ -865,18 +872,39 @@ fn sda_mutation(config: &SdaMutationConfig) -> SdaMutation {
     }
 }
 
-/// Map the `[selection]` block onto the engine's own selection strategy.
+/// Map the `[selection]` block and the chosen strategy onto the engine's scope
+/// and selection scheme.
 ///
-/// One variant each today. Kept as a function rather than inlined so a second
-/// selection strategy is one arm here and touches neither evolver.
+/// The two are decided together because "tournament selection" means different
+/// mechanics to the two strategies, and always has. Generational draws a fresh
+/// tournament per parent from the whole population, so it is a global scope
+/// with a tournament scheme. Steady-state draws one set of distinct individuals
+/// per event and takes its parents from the front of it, so the tournament is
+/// the *scope* and the scheme picking within it is truncation.
 ///
-/// This arm is step 6 of the seven a new scheme touches;
-/// [`crate::evolver::common::Selection`] lists them all. Steps 5 and 6 are one
-/// change split across two files, so neither compiles without the other.
-fn selection(config: &SelectionConfig) -> Selection {
-    match config {
-        SelectionConfig::Tournament { tournament_size } => Selection::Tournament {
-            tournament_size: *tournament_size,
+/// `tournament_size` therefore lands in different places: the scheme's own
+/// parameter for generational, the scope's size for steady-state. That is what
+/// the engine already did — this only names the two halves.
+///
+/// A new scheme adds one arm here; a new scope variant adds one below.
+fn scope_and_selection(
+    selection: &SelectionConfig,
+    evolution: &EvolutionConfig,
+) -> (Scope, Selection) {
+    match selection {
+        SelectionConfig::Tournament { tournament_size } => match evolution {
+            EvolutionConfig::SteadyState { .. } => (
+                Scope::RandomSubset {
+                    size: *tournament_size,
+                },
+                Selection::Best,
+            ),
+            EvolutionConfig::Generational { .. } => (
+                Scope::Global,
+                Selection::Tournament {
+                    tournament_size: *tournament_size,
+                },
+            ),
         },
     }
 }
