@@ -73,8 +73,12 @@ mod tests {
         // Pairs (start, end) with start < end over 0..=LENGTH: 10 of them.
         const PAIRS: usize = (LENGTH + 1) * LENGTH / 2;
 
+        // Flat, indexed by `start * width + end`, so the counts can be read
+        // back by a pair of plain loops without indexing a slice by the loop
+        // variable itself.
+        let width = LENGTH + 1;
+        let mut counts = vec![0usize; width * width];
         let mut rng = StdRng::seed_from_u64(2026);
-        let mut counts = vec![vec![0usize; LENGTH + 1]; LENGTH + 1];
 
         for _ in 0..DRAWS {
             let (start, end) = two_distinct_cut_points(LENGTH, &mut rng);
@@ -83,14 +87,14 @@ mod tests {
                 "({start}, {end}) is not distinct and ascending"
             );
             assert!(end <= LENGTH, "({start}, {end}) leaves the shared prefix");
-            counts[start][end] += 1;
+            counts[start * width + end] += 1;
         }
 
         // 2 / (L * (L + 1)) each, so a tenth of the draws at L = 4.
         let expected = DRAWS / PAIRS;
         for start in 0..=LENGTH {
             for end in (start + 1)..=LENGTH {
-                let seen = counts[start][end];
+                let seen = counts[start * width + end];
                 assert!(
                     seen.abs_diff(expected) < expected / 5,
                     "({start}, {end}) drawn {seen} times, expected about {expected}"
