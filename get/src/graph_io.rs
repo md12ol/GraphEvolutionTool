@@ -30,9 +30,10 @@
 //! describes a graph: a repeated edge (the last occurrence wins) and a
 //! zero-weight edge (kept as given, which is no edge at all). Warnings are
 //! returned to the caller rather than printed here, which keeps this module
-//! testable without a Python interpreter: the Python boundary is what raises
-//! them, through `warnings`. There is no consumer on the Rust side — the
-//! `get-run` binary has no loader, so nothing there can produce one.
+//! testable without a Python interpreter: the Python boundary raises them as
+//! a `UserWarning`, through `warnings`, and the Rust-native route (`get-run`,
+//! which has no interpreter to raise one on) prints them to stderr instead —
+//! see `crate::emit_load_warnings_maybe`.
 
 use std::path::Path;
 
