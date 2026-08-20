@@ -247,3 +247,23 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   decision that only `status.html` names unbuilt work.
 
 *#reference-pages-describe-the-pre-108-api · filed 2026-08-18 15:05 — Michael.*
+
+## Edge files now require a `# nodes = N` header, and outputs carry one
+
+- **Pages:** `guide/getting-started.html`, `guide/python-api.html`, `guide/output.html`,
+  `examples/index.html`, `reference/lib.html`, `reference/dispatch.html`.
+- **Now false:** every page that describes an edge file as three comma-separated fields and
+  nothing else. A file must state its node count on a `#` comment line — `# nodes = 200` — and a
+  file without one is rejected with a message naming it. `#` lines are comments generally; only
+  the `nodes` key is read. `load_reference_graphs` now returns `(name, num_nodes, edges)` triples
+  rather than `(name, edges)` pairs, so every code sample unpacking two values is wrong. And
+  `save_results` writes a loadable edge file — the fitness, genome and node count are `#` comments
+  above the rows — where the pages describe a report with an `edges (u,v,multiplicity):` heading.
+- **Should say:** the header is required rather than optional, and why — a node with no edges is
+  invisible to any count taken from the edges, so an inferred count is short by exactly the nodes
+  hardest to notice. A base-graph file whose header disagrees with `network_size` is rejected; a
+  reference file's count is its own and is expected to differ across the set.
+- **Not yet agreed:** `collab.md` #98 and #101 put the format change to the next joint meeting. If
+  it is reversed, this entry goes with it — do not sweep these pages until the meeting has run.
+
+*#edge-files-state-their-node-count · filed 2026-08-20 09:40 — Michael.*
