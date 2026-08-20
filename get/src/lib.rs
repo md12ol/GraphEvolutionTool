@@ -598,6 +598,13 @@ impl GraphEvolver {
     /// a setter that stored one would be keeping data no objective would ever
     /// look at. The reader is the caller until an objective needs one.
     ///
+    /// **A reference graph may be larger than the network being evolved**, and
+    /// usually is — these are real data, matched on normalized distributions, so
+    /// their size does not have to relate to `network_size` at all. The only
+    /// ceiling is a sanity bound against a file indexed the wrong way, and it is
+    /// the one the objective itself applies, so anything a run can score against
+    /// can be read back here.
+    ///
     /// ```python
     /// graphs = evolver.load_reference_graphs("references/", min_node_index=1)
     /// name, num_nodes, edges = graphs[0]
@@ -647,9 +654,15 @@ impl GraphEvolver {
     ) -> PyResult<Vec<NamedGraph>> {
         self.check_min_node_index(min_node_index)?;
 
+        // The loader wants one node count for the whole folder, and reference
+        // graphs differ in size. This is an upper bound that still catches a
+        // wild index; the same bound the objective uses, so a folder a run
+        // scores against is a folder this can read back.
+        let index_cap = self.config.network_size.max(dispatch::MAX_REFERENCE_NODES);
+
         let loaded = graph_io::load_edge_folder(
             std::path::Path::new(&folder),
-            self.config.network_size,
+            index_cap,
             self.config.max_edge_multiplicity,
             min_node_index,
         )
@@ -1648,6 +1661,59 @@ mod tests {
             );
 
             std::fs::remove_file(&path).expect("cleanup");
+            std::fs::remove_dir_all(&folder).expect("cleanup");
+        });
+    }
+
+    /// GitHub #152: the objective reads a reference folder under a sanity
+    /// bound, not under `network_size`, and this call has to agree with it or a
+    /// set a run scores against cannot be inspected from Python.
+    #[test]
+    fn a_reference_graph_larger_than_network_size_is_read() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            let folder = std::env::temp_dir().join("get_lib_big_reference");
+            let _ = std::fs::remove_dir_all(&folder);
+            std::fs::create_dir_all(&folder).expect("temp folder");
+
+            // 50 against the fixtures' network_size of 8 — the ordinary case,
+            // since reference data is matched on normalized distributions.
+            std::fs::write(folder.join("a.csv"), "# nodes = 50\n0,49,1\n")
+                .expect("the fixture is written");
+
+            let graphs = evolver
+                .load_reference_graphs(py, folder.display().to_string(), 0)
+                .expect("a reference graph may be larger than the evolved network");
+
+            assert_eq!(graphs.len(), 1);
+            assert_eq!(graphs[0].1, 50, "the file's own node count comes back");
+
+            std::fs::remove_dir_all(&folder).expect("cleanup");
+        });
+    }
+
+    /// The other half of #152: raising the cap is not removing it. A file
+    /// indexed the wrong way — a global dataset index, say — still fails.
+    #[test]
+    fn a_reference_graph_above_the_sanity_bound_is_still_rejected() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            let folder = std::env::temp_dir().join("get_lib_absurd_reference");
+            let _ = std::fs::remove_dir_all(&folder);
+            std::fs::create_dir_all(&folder).expect("temp folder");
+
+            let nodes = dispatch::MAX_REFERENCE_NODES + 1;
+            std::fs::write(folder.join("a.csv"), format!("# nodes = {nodes}\n0,1,1\n"))
+                .expect("the fixture is written");
+
+            let err = evolver
+                .load_reference_graphs(py, folder.display().to_string(), 0)
+                .expect_err("above the sanity bound is still an error");
+            assert!(
+                err.to_string().contains(&nodes.to_string()),
+                "the message names the count it rejected: {err}"
+            );
+
             std::fs::remove_dir_all(&folder).expect("cleanup");
         });
     }
