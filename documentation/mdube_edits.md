@@ -318,4 +318,74 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
   contract. If the meeting reverses this, the entry goes with it; do not sweep these pages before
   the meeting has run.
 
+**Agreed, 2026-08-20 21:30 — Michael.** The joint meeting ratified the design and amended
+`official_spec_sheet.md` §6.1 and §6.3 to describe the three axes (PR #150). The "not yet agreed"
+paragraph above is spent: these pages are sweepable, and the sheet no longer contradicts them.
+
 *#selection-splits-into-scope-selection-replacement · filed 2026-08-20 17:22, rewritten 2026-08-20 18:00 when the config block landed — Michael.*
+
+## Every route takes a number of runs and an output folder, and the two Python routes have examples
+
+- **Pages:** every page that shows a route being run, plus whatever page lists what is in `examples/`
+  and `tools/`.
+- **Now wrong:** any page implying a run writes three files under fixed names into the working
+  directory as the only option, or that running N replicates means invoking the program N times.
+  Also anything claiming the Python route has no example programs — it had none until now.
+- **Should say:** `get-run` takes `--runs N` and `--out DIR`; a library caller sets `OUTPUT_DIR` and
+  `N_RUNS` at the top of `examples/library_route.rs`; the Python routes take `n_runs` on `run()` and
+  set `OUTPUT_DIR` at the top of their example. **Every route lays output out identically** —
+  `<root>/<YYYYmmdd-HHMMSS>-<seed>/`, with `run_<index>/` per replicate when there is more than one
+  — which is the point worth stating once rather than four times. With no output folder given,
+  `get-run` still writes the three fixed names into the working directory.
+- **New public API:** `get::run_many_from_toml`, `get::utc_stamp`, `get::run_output_dir`,
+  `get::replicate_seeds`.
+- **New files to list:** `examples/python_inline.py` (parameters in the file),
+  `examples/python_from_config.py` (parameters from a TOML), `examples/_output_layout.py` (helper),
+  `tools/graph_to_png.py`.
+- **`config_builder.py` is not a route.** It builds and validates configurations and evolves
+  nothing; any page presenting it as the Python route should point at the two above instead.
+- **One behaviour change to state plainly:** `run_from_toml` now derives a per-replicate seed from
+  the master, as the Python route always did, so a given seed produces different numbers on the Rust
+  route than it did before — and the same numbers as Python for the first time.
+
+*#every-route-takes-runs-and-an-output-folder · filed 2026-08-20 21:35 — Michael, from the joint meeting.*
+
+## `config.example.toml` is now two setups and almost no prose
+
+- **Pages:** any page quoting `config.example.toml`, and any page that relied on it as the reference
+  for what a key means.
+- **Now wrong:** every excerpt. The file went from 351 lines to two complete setups — edge-edit +
+  generational + `epi_spread` live, SDA + steady-state + `epi_prof_match` commented out beneath it —
+  and the prose explaining each key is gone from it.
+- **Should say:** switching setups is commenting one block out and uncommenting the other, not
+  editing scattered keys. **The prose that left the file has to land here**: a page per section of a
+  config, saying what each key does, what else it can be, and what it interacts with. That is the
+  substance of the comment left on GitHub #67 and it is the largest single item in this queue.
+- **`struct_match` is no longer offered as something to uncomment**, because it needs reference data
+  a new reader does not have. It is named among the objectives the file does not show, alongside
+  `epi_length` and `python`. Its defaults — bins, gammas, weights — were pinned by a test against
+  the file's comments; that test is deleted with the block, so the site is now the **only** record
+  of them and nothing checks it.
+- **No shipped example uses `struct_match` either.** `sda_steady_state.rs` scored its winner under
+  it and now uses `EpiSpread`; pages listing which example demonstrates which objective are wrong.
+
+*#config-example-becomes-two-setups · filed 2026-08-20 21:38 — Michael, from the joint meeting.*
+
+## Per-route environment setup instructions, and the branching extension markers
+
+- **Pages:** the getting-started pages, one per route; and every extension-chain page.
+- **Now wrong:** there are no environment setup instructions per route at all. A reader has to infer
+  from scattered notes that the Python route needs `ensurepip`, a venv, `maturin` and
+  `maturin develop`, and that the Rust CLI route needs a real Python on `PATH` because `cli` pulls
+  `pyo3/auto-initialize` — without which the run dies as exit 127 before printing a word.
+- **Should say:** for each of the four routes, the exact terminal commands in order. **Assume a bash
+  shell** — WSL, Ubuntu or macOS — and call out explicitly anywhere a platform differs rather than
+  leaving the reader to discover it. Also raised as a comment on GitHub #67.
+- **Extension-chain pages:** every marker in a chain that branches now names its branch —
+  `ADD A MUTATION STEP n (for EdgeEdit)` and `(for SDA)`, `ADD A REPLACEMENT STEP n (for
+  SteadyState)`. A page that lists the mutation chain as one chain of four steps is describing half
+  of two chains; there are eight markers, and a reader follows only their own genome's four. The
+  replacement chain is steady-state's alone, which is why its three carry a qualifier despite
+  existing once.
+
+*#per-route-setup-and-branch-qualified-markers · filed 2026-08-20 21:42 — Michael, from the joint meeting.*
