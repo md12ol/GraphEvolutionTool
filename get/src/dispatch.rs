@@ -33,9 +33,12 @@ use rayon::prelude::*;
 use crate::GraphEvolver;
 use crate::config::{
     self, Config, CrossoverConfig, EdgeEditGenomeConfig, EdgeEditMutationConfig, EvolutionConfig,
-    FitnessConfig, GenomeConfig, SdaGenomeConfig, SdaMutationConfig, SelectionConfig,
+    FitnessConfig, GenomeConfig, ReplacementConfig, ScopeConfig, SdaGenomeConfig,
+    SdaMutationConfig, SelectionConfig,
 };
 use crate::evolver::common::{Crossover, Selection};
+use crate::evolver::replacement::Replacement;
+use crate::evolver::scope::Scope;
 use crate::evolver::{
     EvolutionOutcome, Evolver, GenerationStats, GenerationalContext, GenerationalEvolver,
     SharedEvolutionContext, SteadyStateContext, SteadyStateEvolver,
@@ -614,6 +617,7 @@ pub(crate) fn evolve<F: Fitness>(
     seed: u64,
 ) -> PyResult<ErasedOutcome> {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    let scope = scope(&config.scope);
     let selection = selection(&config.selection);
 
     // Genome outside, strategy inside: `Genome` cannot be a trait object, so the
@@ -626,6 +630,7 @@ pub(crate) fn evolve<F: Fitness>(
                 config,
                 genome_context,
                 population,
+                scope,
                 selection,
                 fitness,
                 rng.random::<u64>(),
@@ -637,6 +642,7 @@ pub(crate) fn evolve<F: Fitness>(
                 config,
                 genome_context,
                 population,
+                scope,
                 selection,
                 fitness,
                 rng.random::<u64>(),
@@ -649,6 +655,7 @@ pub(crate) fn evolve<F: Fitness>(
           //             config,
           //             genome_context,
           //             population,
+          //             scope,
           //             selection,
           //             fitness,
           //             rng.random::<u64>(),
@@ -759,6 +766,7 @@ fn run_strategy<G: Genome, F: Fitness>(
     config: &Config,
     genome_context: G::Context,
     population: Vec<G>,
+    scope: Scope,
     selection: Selection,
     fitness: &F,
     seed: u64,
@@ -769,6 +777,7 @@ fn run_strategy<G: Genome, F: Fitness>(
         mutation_rate: config.mutation_rate,
         max_mutations: config.max_mutations,
         selection,
+        scope,
         crossover: crossover(&config.crossover),
     };
 
@@ -784,9 +793,13 @@ fn run_strategy<G: Genome, F: Fitness>(
             let mut evolver = GenerationalEvolver::new(shared, type_context, population);
             erase(evolver.run(fitness, seed))
         }
-        EvolutionConfig::SteadyState { num_mating_events } => {
+        EvolutionConfig::SteadyState {
+            num_mating_events,
+            replacement: replacement_config,
+        } => {
             let type_context = SteadyStateContext {
                 num_mating_events: *num_mating_events,
+                replacement: replacement(replacement_config),
             };
             let mut evolver = SteadyStateEvolver::new(shared, type_context, population);
             erase(evolver.run(fitness, seed))
@@ -796,10 +809,17 @@ fn run_strategy<G: Genome, F: Fitness>(
           //     EvolutionConfig::MyStrategy { num_my_events } => {
           //         let type_context = MyStrategyContext {
           //             num_my_events: *num_my_events,
+          //             // If your strategy displaces individuals, map its own
+          //             // policy here as steady-state does:
+          //             //     replacement: replacement(replacement_config),
           //         };
           //         let mut evolver = MyStrategyEvolver::new(shared, type_context, population);
           //         erase(evolver.run(fitness, seed))
           //     }
+          //
+          // `shared` already carries the scope and the selection scheme, built
+          // once above this match, so a strategy reads them without asking for
+          // them. Only what is *yours* goes in the `TypeContext`.
           //
           // `erase`, right below, is the step after this one — for most
           // strategies it is not a step at all; search `ADD A STRATEGY STEP 5`.
@@ -889,19 +909,68 @@ fn sda_mutation(config: &SdaMutationConfig) -> SdaMutation {
     }
 }
 
-/// Map the `[selection]` block onto the engine's own selection strategy.
+/// Map the `[scope]` block onto the slice each breeding event draws from.
 ///
-/// One variant each today. Kept as a function rather than inlined so a second
-/// selection strategy is one arm here and touches neither evolver.
+/// Independent of `[selection]`: the scope's size is its own parameter, so a
+/// scheme with no tournament can still say how large a scope it wants. This arm
+/// is the last step a new `Scope` variant needs — `crate::evolver::scope::Scope`
+/// walks all three.
+fn scope(config: &ScopeConfig) -> Scope {
+    match config {
+        ScopeConfig::Global => Scope::Global,
+        ScopeConfig::RandomSubset { size } => Scope::RandomSubset { size: *size },
+        // ADD A SCOPE STEP 4 — the arm turning your config variant into the
+        // engine one:
+        //
+        //     ScopeConfig::Neighbourhood { radius } => {
+        //         Scope::Neighbourhood { radius: *radius }
+        //     }
+        //
+        // Steps 3 and 4 are one change split across two files: a config variant
+        // nothing constructs is dead, and an arm for a variant that does not
+        // exist will not compile. The Python mirror is next, and optional —
+        // search `ADD A SCOPE STEP 5` for it.
+    }
+}
+
+/// Map `[evolution] replacement` onto the engine's own replacement policy.
 ///
-/// This arm is step 6 of the seven a new scheme touches;
-/// [`crate::evolver::common::Selection`] lists them all. Steps 5 and 6 are one
-/// change split across two files, so neither compiles without the other.
+/// Steady-state's, like `elite_count` is generational's — which is why it is
+/// read from the strategy's own table rather than a block of its own.
+fn replacement(config: &ReplacementConfig) -> Replacement {
+    match config {
+        ReplacementConfig::Worst => Replacement::Worst,
+        // ADD A REPLACEMENT STEP 3 (second half) — the arm turning your config
+        // variant into the engine one:
+        //
+        //     ReplacementConfig::Random => Replacement::Random,
+        //
+        // This and the config variant are one change split across two files.
+    }
+}
+
+/// Map the `[selection]` block onto the engine's own selection scheme.
+///
+/// Kept a function rather than inlined so a second scheme is one arm here and
+/// touches neither evolver.
 fn selection(config: &SelectionConfig) -> Selection {
     match config {
+        SelectionConfig::Best => Selection::Best,
         SelectionConfig::Tournament { tournament_size } => Selection::Tournament {
             tournament_size: *tournament_size,
         },
+        // ADD A SELECTION STEP 4 — the arm turning your config variant into the
+        // engine one:
+        //
+        //     SelectionConfig::Roulette { pressure } => {
+        //         Selection::Roulette { pressure: *pressure }
+        //     }
+        //
+        // Nothing here decides a scope: that is `[scope]`'s own block, and the
+        // reason this function no longer needs to know which strategy is
+        // running. Steps 3 and 4 are one change split across two files. The
+        // Python mirror is next, and optional — search
+        // `ADD A SELECTION STEP 5` for it.
     }
 }
 
@@ -966,6 +1035,9 @@ mod tests {
              [evolution]\n\
              type = \"generational\"\n\
              num_generations = 5\n\
+             \n\
+             [scope]\n\
+             type = \"global\"\n\
              \n\
              [selection]\n\
              type = \"tournament\"\n\
@@ -1375,6 +1447,9 @@ mod tests {
              [evolution]\n\
              type = \"generational\"\n\
              num_generations = 5\n\
+             \n\
+             [scope]\n\
+             type = \"global\"\n\
              \n\
              [selection]\n\
              type = \"tournament\"\n\
@@ -1847,6 +1922,9 @@ mod tests {
              mutation_rate = 0.5\n\
              \n\
              {evolution_block}\n\
+             [scope]\n\
+             type = \"global\"\n\
+             \n\
              [selection]\n\
              type = \"tournament\"\n\
              tournament_size = 4\n\
@@ -1878,6 +1956,9 @@ mod tests {
              mutation_rate = 0.0\n\
              \n\
              {evolution_block}\n\
+             [scope]\n\
+             type = \"global\"\n\
+             \n\
              [selection]\n\
              type = \"tournament\"\n\
              tournament_size = 4\n\
@@ -2378,6 +2459,9 @@ mod tests {
              type = \"generational\"\n\
              num_generations = 3\n\
              \n\
+             [scope]\n\
+             type = \"global\"\n\
+             \n\
              [selection]\n\
              type = \"tournament\"\n\
              tournament_size = 4\n\
@@ -2641,6 +2725,9 @@ mod tests {
              type = \"generational\"\n\
              num_generations = 3\n\
              \n\
+             [scope]\n\
+             type = \"global\"\n\
+             \n\
              [selection]\n\
              type = \"tournament\"\n\
              tournament_size = 4\n\
@@ -2713,6 +2800,9 @@ mod tests {
                  mutation_rate = 0.3\n\
                  \n\
                  {evolution}\n\
+                 [scope]\n\
+                 type = \"global\"\n\
+                 \n\
                  [selection]\n\
                  type = \"tournament\"\n\
                  tournament_size = 4\n\

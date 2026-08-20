@@ -33,8 +33,8 @@ use crate::graph::Graph;
 use crate::graph_io::{LoadWarning, SourcedEdge, canonicalize};
 use crate::py_config::{
     PyConfig, PyCrossoverConfig, PyEdgeEditMutationConfig, PyEvolutionConfig, PyFitnessConfig,
-    PyGenomeConfig, PyOperationWeights, PySdaMutationConfig, PySelectionConfig, PySirParams,
-    config_error_to_py,
+    PyGenomeConfig, PyOperationWeights, PyReplacementConfig, PyScopeConfig, PySdaMutationConfig,
+    PySelectionConfig, PySirParams, config_error_to_py,
 };
 use crate::py_result::{PyGenerationStats, PyRunResult};
 use crate::stats::ReferenceStatistics;
@@ -1022,6 +1022,8 @@ fn get(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // the `Py` prefix is a Rust-side disambiguator, not part of the API.
     m.add_class::<PyConfig>()?;
     m.add_class::<PyEvolutionConfig>()?;
+    m.add_class::<PyReplacementConfig>()?;
+    m.add_class::<PyScopeConfig>()?;
     m.add_class::<PySelectionConfig>()?;
     m.add_class::<PyCrossoverConfig>()?;
     m.add_class::<PyEdgeEditMutationConfig>()?;
@@ -1063,6 +1065,9 @@ mod tests {
              type = \"generational\"\n\
              num_generations = 5\n\
              elite_count = 1\n\
+             \n\
+             [scope]\n\
+             type = \"global\"\n\
              \n\
              [selection]\n\
              type = \"tournament\"\n\
@@ -1729,6 +1734,7 @@ mod tests {
             100,
             0.9,
             0.2,
+            PyScopeConfig::Global {},
             PySelectionConfig::Tournament { tournament_size: 5 },
             PyGenomeConfig::EdgeEdit {
                 gene_length: 256,

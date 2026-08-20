@@ -209,8 +209,14 @@ pub enum PyEvolutionConfig {
         /// Best individuals carried forward each generation.
         elite_count: usize,
     },
-    #[pyo3(constructor = (num_mating_events))]
-    SteadyState { num_mating_events: usize },
+    #[pyo3(constructor = (num_mating_events, replacement = None))]
+    SteadyState {
+        num_mating_events: usize,
+        /// Which members of the scope a mating event's children overwrite.
+        /// `None` means the least fit, which is what keeps steady-state
+        /// self-elitist — the same reading the TOML side gives an absent field.
+        replacement: Option<PyReplacementConfig>,
+    },
     // ADD A STRATEGY STEP 6 — the Python-side variant, if the strategy should
     // be reachable from Python. Optional; leaving it out costs nothing
     // elsewhere.
@@ -223,21 +229,77 @@ pub enum PyEvolutionConfig {
     // — search `ADD A STRATEGY STEP 6` again for it.
 }
 
+/// Which members of a scope a mating event's children overwrite.
+///
+/// Mirrors [`crate::config::ReplacementConfig`]. Carried on the steady-state
+/// strategy rather than at the top level, because that is the only strategy
+/// that displaces anyone.
+#[pyclass(name = "ReplacementConfig")]
+#[derive(Debug, Clone)]
+pub enum PyReplacementConfig {
+    #[pyo3(constructor = ())]
+    Worst {},
+    // ADD A REPLACEMENT STEP 3 (Python half) — optional, and nothing checks it:
+    //
+    //     #[pyo3(constructor = ())]
+    //     Random {},
+    //
+    // Then its arm in the conversion below. Skipped, the policy still works
+    // from TOML and from Rust.
+}
+
+/// The slice of the population one breeding event draws from.
+///
+/// Mirrors [`crate::config::ScopeConfig`]. `size` is this block's own parameter
+/// — a scheme with no tournament still needs a way to say how large a scope it
+/// wants, which is why it does not live under `[selection]`.
+#[pyclass(name = "ScopeConfig")]
+#[derive(Debug, Clone)]
+pub enum PyScopeConfig {
+    #[pyo3(constructor = ())]
+    Global {},
+    #[pyo3(constructor = (size))]
+    RandomSubset { size: usize },
+    // ADD A SCOPE STEP 5 — optional, and nothing checks it:
+    //
+    //     #[pyo3(constructor = (radius))]
+    //     Neighbourhood { radius: usize },
+    //
+    // Then its arm in the conversion writing the `[scope]` table below, and — if
+    // step 3 added a validated field — that field's name in
+    // `python_attribute_path`. Skipped, the variant still works from TOML and
+    // from Rust. The example config is last: search `ADD A SCOPE STEP 6`.
+}
+
 /// Parent-selection strategy.
 ///
 /// Mirrors [`crate::config::SelectionConfig`]. One variant today, and an enum
 /// rather than a bare integer so adding a second scheme does not change the
 /// shape of the Python API.
 ///
-/// This is step 7 of the eight a new scheme touches, and the only one nothing
+/// This is step 5 of the six a new scheme touches, and the only one nothing
 /// checks: [`crate::evolver::common::Selection`] lists them all. A variant
 /// missing here compiles and tests clean — the Rust side is complete and Python
 /// simply cannot name the scheme.
 #[pyclass(name = "SelectionConfig")]
 #[derive(Debug, Clone)]
 pub enum PySelectionConfig {
+    #[pyo3(constructor = ())]
+    Best {},
     #[pyo3(constructor = (tournament_size))]
     Tournament { tournament_size: usize },
+    // ADD A SELECTION STEP 5 — optional, and the one nothing checks. Mirror the
+    // `config::SelectionConfig` variant so a Python caller can name the scheme:
+    //
+    //     #[pyo3(constructor = (pressure))]
+    //     Roulette { pressure: f64 },
+    //
+    // Then its arm in the conversion that writes the `[selection]` table, and —
+    // if step 3 added a validated field — that field's name in
+    // `python_attribute_path`, or the error a Python caller sees names a TOML
+    // field they never wrote. Skipping this file entirely still leaves the
+    // scheme usable from TOML and from Rust. The last step is the example
+    // config: search `ADD A SELECTION STEP 6` for it.
 }
 
 /// Recombination operator.
@@ -456,7 +518,10 @@ pub struct PyConfig {
     /// `1..=max_mutations`.
     #[pyo3(get, set)]
     pub max_mutations: usize,
-    /// Parent-selection strategy.
+    /// Which slice of the population one breeding event draws from.
+    #[pyo3(get, set)]
+    pub scope: PyScopeConfig,
+    /// Parent-selection strategy, applied within that scope.
     #[pyo3(get, set)]
     pub selection: PySelectionConfig,
     /// Recombination operator. Defaulted, so an existing caller that never
@@ -486,6 +551,7 @@ impl PyConfig {
         network_size,
         crossover_rate,
         mutation_rate,
+        scope,
         selection,
         genome,
         fitness,
@@ -493,13 +559,14 @@ impl PyConfig {
         max_mutations = 1,
         crossover = None,
     ))]
-    #[allow(clippy::too_many_arguments)] // eleven fields is the schema, not a smell
+    #[allow(clippy::too_many_arguments)] // twelve fields is the schema, not a smell
     pub fn new(
         evolution: PyEvolutionConfig,
         population_size: usize,
         network_size: usize,
         crossover_rate: f64,
         mutation_rate: f64,
+        scope: PyScopeConfig,
         selection: PySelectionConfig,
         genome: PyGenomeConfig,
         fitness: PyFitnessConfig,
@@ -520,6 +587,7 @@ impl PyConfig {
             crossover_rate,
             mutation_rate,
             max_mutations,
+            scope,
             selection,
             crossover: crossover.unwrap_or_default(),
             genome,
@@ -585,6 +653,8 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         // On the strategy and selection objects.
         "elite_count" => Some("config.evolution.elite_count"),
         "tournament_size" => Some("config.selection.tournament_size"),
+        // On the scope object, which owns its own size.
+        "size" => Some("config.scope.size"),
         // On the genome object; each belongs to one variant.
         "operation_weights" => Some("config.genome.operation_weights"),
         "init_state" => Some("config.genome.init_state"),
@@ -725,7 +795,10 @@ impl PyEvolutionConfig {
                     integer("elite_count", *elite_count)?,
                 );
             }
-            PyEvolutionConfig::SteadyState { num_mating_events } => {
+            PyEvolutionConfig::SteadyState {
+                num_mating_events,
+                replacement,
+            } => {
                 table.insert(
                     "type".to_string(),
                     Value::String("steady_state".to_string()),
@@ -734,6 +807,12 @@ impl PyEvolutionConfig {
                     "num_mating_events".to_string(),
                     integer("num_mating_events", *num_mating_events)?,
                 );
+                // Omitted when absent, so the TOML the caller gets back is the
+                // one they would have written by hand — an explicit `worst`
+                // they never asked for reads as a choice they made.
+                if let Some(replacement) = replacement {
+                    table.insert("replacement".to_string(), replacement.to_toml_value()?);
+                }
             } // ADD A STRATEGY STEP 6 — the matching arm for your Python-side
               // variant:
               //
@@ -752,17 +831,52 @@ impl PyEvolutionConfig {
     }
 }
 
+impl PyReplacementConfig {
+    fn to_toml_value(&self) -> PyResult<Value> {
+        let mut table = Map::new();
+        match self {
+            PyReplacementConfig::Worst {} => {
+                table.insert("type".to_string(), Value::String("worst".to_string()));
+            } // ADD A REPLACEMENT STEP 3 — the matching arm for your variant.
+        }
+        Ok(Value::Table(table))
+    }
+}
+
+impl PyScopeConfig {
+    fn to_toml_value(&self) -> PyResult<Value> {
+        let mut table = Map::new();
+        match self {
+            PyScopeConfig::Global {} => {
+                table.insert("type".to_string(), Value::String("global".to_string()));
+            }
+            PyScopeConfig::RandomSubset { size } => {
+                table.insert(
+                    "type".to_string(),
+                    Value::String("random_subset".to_string()),
+                );
+                table.insert("size".to_string(), integer("size", *size)?);
+            } // ADD A SCOPE STEP 5 — the matching arm for your variant, writing
+              // its own parameters and no other block's.
+        }
+        Ok(Value::Table(table))
+    }
+}
+
 impl PySelectionConfig {
     fn to_toml_value(&self) -> PyResult<Value> {
         let mut table = Map::new();
         match self {
+            PySelectionConfig::Best {} => {
+                table.insert("type".to_string(), Value::String("best".to_string()));
+            }
             PySelectionConfig::Tournament { tournament_size } => {
                 table.insert("type".to_string(), Value::String("tournament".to_string()));
                 table.insert(
                     "tournament_size".to_string(),
                     integer("tournament_size", *tournament_size)?,
                 );
-            }
+            } // ADD A SELECTION STEP 5 — the matching arm for your variant.
         }
         Ok(Value::Table(table))
     }
@@ -1038,6 +1152,7 @@ impl PyConfig {
             integer("max_mutations", self.max_mutations)?,
         );
         table.insert("evolution".to_string(), self.evolution.to_toml_value()?);
+        table.insert("scope".to_string(), self.scope.to_toml_value()?);
         table.insert("selection".to_string(), self.selection.to_toml_value()?);
         table.insert("crossover".to_string(), self.crossover.to_toml_value()?);
         table.insert("genome".to_string(), self.genome.to_toml_value()?);
@@ -1052,8 +1167,8 @@ mod tests {
 
     use crate::config::{
         Config, CrossoverConfig, EdgeEditGenomeConfig, EdgeEditMutationConfig, EvolutionConfig,
-        FitnessConfig, GenomeConfig, SdaGenomeConfig, SdaMutationConfig, SelectionConfig,
-        SirParams,
+        FitnessConfig, GenomeConfig, ReplacementConfig, ScopeConfig, SdaGenomeConfig,
+        SdaMutationConfig, SelectionConfig, SirParams,
     };
     use crate::genomes::EdgeEditOperationWeights;
 
@@ -1071,6 +1186,7 @@ mod tests {
             100,
             0.9,
             0.2,
+            PyScopeConfig::RandomSubset { size: 7 },
             PySelectionConfig::Tournament { tournament_size: 5 },
             PyGenomeConfig::EdgeEdit {
                 gene_length: 256,
@@ -1109,6 +1225,7 @@ mod tests {
             crossover_rate,
             mutation_rate,
             max_mutations,
+            scope,
             selection,
             crossover,
             genome,
@@ -1141,8 +1258,17 @@ mod tests {
             other => panic!("expected generational, got {other:?}"),
         }
 
+        // Distinct numbers on purpose: 7 for the scope, 5 for the tournament.
+        // Equal values would let the two fields be swapped without any test
+        // noticing, which is the exact confusion this block was split to end.
+        match scope {
+            ScopeConfig::RandomSubset { size } => assert_eq!(size, 7),
+            other => panic!("expected a random subset, got {other:?}"),
+        }
+
         match selection {
             SelectionConfig::Tournament { tournament_size } => assert_eq!(tournament_size, 5),
+            other => panic!("expected a tournament, got {other:?}"),
         }
 
         match genome {
@@ -1204,6 +1330,7 @@ mod tests {
         let mut config = mirror();
         config.evolution = PyEvolutionConfig::SteadyState {
             num_mating_events: 100_000,
+            replacement: Some(PyReplacementConfig::Worst {}),
         };
         config.genome = PyGenomeConfig::Sda {
             num_states: 12,
@@ -1219,8 +1346,16 @@ mod tests {
 
         assert_eq!(parsed.max_edge_multiplicity, 5);
         match parsed.evolution {
-            EvolutionConfig::SteadyState { num_mating_events } => {
+            EvolutionConfig::SteadyState {
+                num_mating_events,
+                replacement,
+            } => {
                 assert_eq!(num_mating_events, 100_000);
+                // Named explicitly by the fixture, so this checks the mirror
+                // renders it rather than that the default filled it in.
+                match replacement {
+                    ReplacementConfig::Worst => {}
+                }
             }
             other => panic!("expected steady_state, got {other:?}"),
         }

@@ -6,6 +6,8 @@
 
 pub mod common;
 pub mod generational;
+pub mod replacement;
+pub mod scope;
 pub mod steady_state;
 
 // Test doubles both strategies' test modules share. Compiled out of the lib
@@ -30,6 +32,8 @@ use crate::genomes::Genome;
 use crate::graph::Graph;
 
 use common::{Crossover, Selection};
+use replacement::Replacement;
+use scope::Scope;
 
 /// Run-level configuration shared by every evolution strategy.
 ///
@@ -74,6 +78,14 @@ pub struct SharedEvolutionContext<G: Genome> {
     pub max_mutations: usize,
     /// Parent-selection strategy used by both evolution strategies.
     pub selection: Selection,
+    /// The slice of the population one breeding event draws from.
+    ///
+    /// Implied by the strategy rather than configured: generational breeds from
+    /// the whole population, steady-state from a small random subset. It is a
+    /// field rather than a constant because the two are genuinely independent —
+    /// a subset scope with a generational strategy is a cellular GA, and
+    /// nothing here forbids it.
+    pub scope: Scope,
     /// Recombination operator, applied to every pair that passes the
     /// `crossover_rate` roll.
     ///
@@ -96,6 +108,11 @@ pub struct GenerationalContext {
 pub struct SteadyStateContext {
     /// Number of mate-and-replace events to perform.
     pub num_mating_events: usize,
+    /// Which members of the scope a mating event's children overwrite.
+    ///
+    /// Steady-state's alone, for the same reason `elite_count` is
+    /// generational's: it is how this strategy makes room for a child.
+    pub replacement: Replacement,
 }
 
 /// A single row of the evolution log.

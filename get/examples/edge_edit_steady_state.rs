@@ -39,6 +39,8 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
 use get::evolver::common::{Crossover, Selection};
+use get::evolver::replacement::Replacement;
+use get::evolver::scope::Scope;
 use get::evolver::{Evolver, SharedEvolutionContext, SteadyStateContext, SteadyStateEvolver};
 use get::fitness::EpiLength;
 use get::genomes::{
@@ -52,7 +54,7 @@ const NUM_NODES: usize = 24;
 const MAX_EDGE_MULTIPLICITY: u32 = 1;
 const POPULATION_SIZE: usize = 40;
 const GENE_LENGTH: usize = 32;
-const TOURNAMENT_SIZE: usize = 6;
+const SCOPE_SIZE: usize = 6;
 const SEED: u64 = 20260820;
 
 /// A path: nodes joined in a line, with no edge closing it into a ring.
@@ -94,11 +96,13 @@ fn main() {
         crossover_rate: 0.8,
         mutation_rate: 0.5,
         max_mutations: 2,
-        // At least 4, and no larger than the population — `SteadyStateEvolver`
-        // asserts both, at construction rather than at the first mating event.
-        selection: Selection::Tournament {
-            tournament_size: TOURNAMENT_SIZE,
-        },
+        // The slice each mating event draws from. At least 4, and no larger
+        // than the population — `SteadyStateEvolver` asserts both, at
+        // construction rather than at the first mating event.
+        scope: Scope::RandomSubset { size: SCOPE_SIZE },
+        // The two fittest of that slice breed. Steady-state's pressure comes
+        // from the scope being small, not from a draw within it.
+        selection: Selection::Best,
         crossover: Crossover::TwoPoint,
     };
 
@@ -124,6 +128,10 @@ fn main() {
     // the history below has one row per that many events plus a row 0.
     let strategy = SteadyStateContext {
         num_mating_events: POPULATION_SIZE * 30,
+        // The two least fit of the same scope are overwritten. Because the
+        // scope's best is never among them, the population's best individual
+        // is never discarded and no explicit elitism is needed.
+        replacement: Replacement::Worst,
     };
 
     let mut evolver = SteadyStateEvolver::new(shared, strategy, population);

@@ -1,16 +1,40 @@
 //! Steady-state evolution: each mating event breeds two children inside one
-//! tournament and replaces that tournament's two worst members, so most of the
+//! drawn scope and replaces two members of that same scope, so most of the
 //! population persists between events.
 
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use super::common::{Selection, best_index, breed_pair, express_and_score, generation_stats};
+use super::common::{best_index, breed_pair, express_and_score, generation_stats};
+use super::scope::Scope;
 use super::{
     EvolutionOutcome, Evolver, GenerationStats, SharedEvolutionContext, SteadyStateContext,
 };
 use crate::fitness::{Direction, Fitness};
 use crate::genomes::Genome;
+
+/// How many parents one mating event breeds from.
+///
+/// Two, because `Genome::crossover` recombines a pair. Not configurable: a
+/// third parent has nowhere to enter the trait.
+pub const PARENTS_PER_EVENT: usize = 2;
+
+/// How many individuals one mating event overwrites.
+///
+/// Two, because recombination yields two children and steady-state keeps both —
+/// discarding one would waste half of every crossover.
+pub const REPLACED_PER_EVENT: usize = 2;
+
+/// Smallest scope keeping the parents and the replaced disjoint.
+///
+/// Derived from the two counts above rather than written down: at three the
+/// scope's best still survives but the second parent is also replaced, and at
+/// two both parents are overwritten by their own children, so the scope's best
+/// is not carried forward and the strategy stops being self-elitist.
+///
+/// `Config::validate_evolution_and_selection` reads this so the config error and
+/// the construction backstop cannot drift apart.
+pub const MIN_SCOPE_SIZE: usize = PARENTS_PER_EVENT + REPLACED_PER_EVENT;
 
 /// Evolves a population one mate-and-replace event at a time for a fixed number
 /// of mating events.
@@ -19,41 +43,41 @@ pub struct SteadyStateEvolver<G: Genome> {
     context: SteadyStateContext,
     population: Vec<G>,
     history: Vec<GenerationStats>,
+    /// Reused across events so a 100,000-event run allocates one scope, not one
+    /// per event.
+    scope_buffer: Vec<usize>,
 }
 
 impl<G: Genome> SteadyStateEvolver<G> {
-    /// Smallest tournament that keeps the two parents and the two individuals
-    /// they replace disjoint.
-    ///
-    /// Three would still preserve the tournament's best, but the second parent
-    /// would also be one of the replaced. Two breaks the guarantee outright:
-    /// both parents are replaced by their own children, so the tournament's
-    /// best is not carried forward and the strategy stops being self-elitist.
-    const MIN_TOURNAMENT_SIZE: usize = 4;
-
     /// Perform one mating event.
     ///
-    /// Draws a single tournament of distinct individuals, breeds its two best
-    /// into two children, and overwrites its two worst. Because the tournament's
-    /// best is never among the replaced, the population's best individual is
-    /// never discarded and no explicit elitism is needed.
+    /// Draws one scope of distinct individuals, breeds two parents from it into
+    /// two children, and overwrites two of its members. The scope's best is
+    /// never among the replaced, so the population's best is never discarded and
+    /// no explicit elitism is needed.
     ///
     /// Breeding goes through [`breed_pair`](super::common::breed_pair), which
-    /// owns the crossover roll and both mutation rolls, so this strategy and
-    /// generational cannot disagree about what they mean or draw from the RNG in
-    /// a different order.
+    /// owns the crossover roll and both mutation rolls, so the two strategies
+    /// cannot disagree about what they mean or draw them in a different order.
     ///
     /// Replacement is unconditional: a child takes its slot even if it scores
-    /// worse than the individual it displaces.
+    /// worse than what it displaces.
     fn mating_event<F, R>(&mut self, fitness: &F, fitnesses: &mut [f64], rng: &mut R)
     where
         F: Fitness,
         R: Rng + ?Sized,
     {
-        let tournament = self.shared.selection.tournament_indices(fitnesses, rng);
+        self.shared
+            .scope
+            .draw_into(self.population.len(), &mut self.scope_buffer, rng);
 
-        let mut first = self.population[tournament[0]].clone();
-        let mut second = self.population[tournament[1]].clone();
+        let parents =
+            self.shared
+                .selection
+                .pick(&self.scope_buffer, fitnesses, PARENTS_PER_EVENT, rng);
+
+        let mut first = self.population[parents[0]].clone();
+        let mut second = self.population[parents[1]].clone();
 
         breed_pair(&mut first, &mut second, &self.shared, rng);
 
@@ -62,10 +86,13 @@ impl<G: Genome> SteadyStateEvolver<G> {
         let children = [first, second];
         let (_, scores) = express_and_score(&children, &self.shared.genome_context, fitness);
 
-        let worst = [
-            tournament[tournament.len() - 1],
-            tournament[tournament.len() - 2],
-        ];
+        // Same scope as the parents: that is what keeps the scope's best out of
+        // the replaced set whatever scheme picked them.
+        let worst =
+            self.context
+                .replacement
+                .pick(&self.scope_buffer, fitnesses, REPLACED_PER_EVENT);
+
         let mut children = children.into_iter();
         let mut scores = scores.into_iter();
         for &slot in &worst {
@@ -90,7 +117,7 @@ impl<G: Genome> SteadyStateEvolver<G> {
         F: Fitness,
         R: Rng + ?Sized,
     {
-        // Non-zero: `new` asserts the population is at least MIN_TOURNAMENT_SIZE,
+        // Non-zero: `new` asserts the population is at least MIN_SCOPE_SIZE,
         // and steady-state only ever replaces individuals, never removes them.
         let log_interval = self.population.len();
 
@@ -140,38 +167,26 @@ impl<G: Genome> Evolver<G> for SteadyStateEvolver<G> {
         type_context: Self::TypeContext,
         population: Vec<G>,
     ) -> Self {
-        // Backstop. The config layer should reject these before we get here, but
-        // the evolver is constructible directly (tests, embedding), so it checks
-        // rather than trusting its caller. Both checks belong at construction:
-        // `tournament_indices` would catch the second one too, but not until the
-        // first mating event, which is exactly the mid-run failure this avoids.
-        //
-        // There is deliberately no matching `elite_count` assert as generational
-        // has — steady-state carries no elites, because the tournament's best is
-        // never among the two it replaces.
-        //
-        // A second selection scheme has to extend this match too — it is the one
-        // site outside `common.rs` that reads the variant, and nothing points at
-        // it from the config layer. A scheme that cannot serve
-        // `tournament_indices` is unusable here and its arm says so, though the
-        // config layer should have rejected the pairing first.
-        match shared.selection {
-            Selection::Tournament { tournament_size } => {
-                assert!(
-                    tournament_size >= Self::MIN_TOURNAMENT_SIZE,
-                    "steady-state needs tournament_size >= {}, got {}: two parents \
-                     and the two individuals they replace must be distinct",
-                    Self::MIN_TOURNAMENT_SIZE,
-                    tournament_size,
-                );
-                assert!(
-                    population.len() >= tournament_size,
-                    "population of {} is smaller than tournament_size {}: a \
-                     tournament of distinct individuals cannot be drawn",
-                    population.len(),
-                    tournament_size,
-                );
-            }
+        // Backstop. The config layer rejects these first, but the evolver is
+        // constructible directly (tests, embedding), and checking here rather
+        // than at the first mating event avoids a mid-run failure. A global
+        // scope needs neither check: it is every individual, so it is large
+        // enough whenever the population is.
+        if let Scope::RandomSubset { size } = shared.scope {
+            assert!(
+                size >= MIN_SCOPE_SIZE,
+                "steady-state needs a scope of at least {}, got {}: two parents \
+                 and the two individuals they replace must be distinct",
+                MIN_SCOPE_SIZE,
+                size,
+            );
+            assert!(
+                population.len() >= size,
+                "population of {} is smaller than the scope of {}: a scope of \
+                 distinct individuals cannot be drawn",
+                population.len(),
+                size,
+            );
         }
 
         Self {
@@ -179,6 +194,7 @@ impl<G: Genome> Evolver<G> for SteadyStateEvolver<G> {
             context: type_context,
             population,
             history: Vec::new(),
+            scope_buffer: Vec::new(),
         }
     }
 
@@ -208,17 +224,17 @@ mod tests {
     use rand::SeedableRng;
     use rand::rngs::StdRng;
 
-    use crate::evolver::common::{Crossover, express_and_score};
+    use crate::evolver::common::{Crossover, Selection, express_and_score, rank};
+    use crate::evolver::replacement::Replacement;
     use crate::evolver::test_support::{MostNodes, NodeCount, Val, Walk, best_of, mean_of};
 
-    /// Steady-state's tournament size. Larger than generational's, because the
-    /// two parents and the two individuals they replace must be distinct.
-    const TOURNAMENT_SIZE: usize = 5;
+    /// Steady-state's scope size. Larger than generational's tournament,
+    /// because the two parents and the two individuals they replace must be
+    /// distinct.
+    const SCOPE_SIZE: usize = 5;
 
-    fn selection() -> Selection {
-        Selection::Tournament {
-            tournament_size: TOURNAMENT_SIZE,
-        }
+    fn scope() -> Scope {
+        Scope::RandomSubset { size: SCOPE_SIZE }
     }
 
     /// Population of `size` individuals with distinct values, and their scores.
@@ -235,11 +251,13 @@ mod tests {
             crossover_rate,
             mutation_rate,
             max_mutations: 1,
-            selection: selection(),
+            selection: Selection::Best,
+            scope: scope(),
             crossover: Crossover::TwoPoint,
         };
         let context = SteadyStateContext {
             num_mating_events: 0,
+            replacement: Replacement::Worst,
         };
 
         (
@@ -255,11 +273,13 @@ mod tests {
             crossover_rate: 0.7,
             mutation_rate: 0.7,
             max_mutations: 1,
-            selection: selection(),
+            selection: Selection::Best,
+            scope: scope(),
             crossover: Crossover::TwoPoint,
         };
         let context = SteadyStateContext {
             num_mating_events: events,
+            replacement: Replacement::Worst,
         };
         let population = (0..size).map(|i| Walk(i + 20)).collect();
         SteadyStateEvolver::new(shared, context, population)
@@ -272,7 +292,10 @@ mod tests {
     /// membership a test needs to know.
     fn tournament_for(fitnesses: &[f64], seed: u64) -> Vec<usize> {
         let mut mirror = StdRng::seed_from_u64(seed);
-        selection().tournament_indices(fitnesses, &mut mirror)
+        let mut drawn = Vec::new();
+        scope().draw_into(fitnesses.len(), &mut drawn, &mut mirror);
+        drawn.sort_by(|&a, &b| rank(fitnesses, a, b));
+        drawn
     }
 
     #[test]
@@ -285,10 +308,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(seed);
         evolver.mating_event(&NodeCount, &mut fitnesses, &mut rng);
 
-        let replaced = [
-            tournament[TOURNAMENT_SIZE - 1],
-            tournament[TOURNAMENT_SIZE - 2],
-        ];
+        let replaced = [tournament[SCOPE_SIZE - 1], tournament[SCOPE_SIZE - 2]];
         for (slot, original) in before.iter().enumerate() {
             if !replaced.contains(&slot) {
                 assert_eq!(
@@ -366,10 +386,7 @@ mod tests {
         evolver.mating_event(&NodeCount, &mut fitnesses, &mut rng);
 
         // No crossover, mutation always: each child is its parent plus 100.
-        let replaced = [
-            tournament[TOURNAMENT_SIZE - 1],
-            tournament[TOURNAMENT_SIZE - 2],
-        ];
+        let replaced = [tournament[SCOPE_SIZE - 1], tournament[SCOPE_SIZE - 2]];
         assert_eq!(
             evolver.population[replaced[0]].0,
             before[tournament[0]].0 + 100
@@ -381,35 +398,39 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "tournament_size >= 4")]
-    fn a_tournament_too_small_to_separate_roles_is_rejected_at_construction() {
+    #[should_panic(expected = "scope of at least 4")]
+    fn a_scope_too_small_to_separate_roles_is_rejected_at_construction() {
         let shared = SharedEvolutionContext {
             genome_context: (),
             crossover_rate: 0.5,
             mutation_rate: 0.5,
             max_mutations: 1,
-            selection: Selection::Tournament { tournament_size: 3 },
+            selection: Selection::Best,
+            scope: Scope::RandomSubset { size: 3 },
             crossover: Crossover::TwoPoint,
         };
         let context = SteadyStateContext {
             num_mating_events: 0,
+            replacement: Replacement::Worst,
         };
         SteadyStateEvolver::new(shared, context, (0..10).map(Val).collect());
     }
 
     #[test]
-    #[should_panic(expected = "is smaller than tournament_size")]
-    fn a_population_smaller_than_the_tournament_is_rejected_at_construction() {
+    #[should_panic(expected = "is smaller than the scope")]
+    fn a_population_smaller_than_the_scope_is_rejected_at_construction() {
         let shared = SharedEvolutionContext {
             genome_context: (),
             crossover_rate: 0.5,
             mutation_rate: 0.5,
             max_mutations: 1,
-            selection: selection(),
+            selection: Selection::Best,
+            scope: scope(),
             crossover: Crossover::TwoPoint,
         };
         let context = SteadyStateContext {
             num_mating_events: 0,
+            replacement: Replacement::Worst,
         };
         SteadyStateEvolver::new(shared, context, (0..3).map(Val).collect());
     }
@@ -563,5 +584,47 @@ mod tests {
         // The direction is what makes the value recoverable at the boundary.
         assert_eq!(outcome.direction, Direction::Maximize);
         assert_eq!(outcome.direction.orient(outcome.best_fitness_engine), 28.0);
+    }
+
+    /// Pins a whole seeded run, slot by slot.
+    ///
+    /// This is a regression oracle, not a behaviour test: it exists so that a
+    /// refactor which reorders what the RNG is asked for — or how many times —
+    /// fails loudly instead of quietly producing a different search. Nothing
+    /// here asserts the numbers are *good*, only that they are what a run at
+    /// this seed has always produced.
+    #[test]
+    fn a_seeded_run_reproduces_slot_for_slot() {
+        let mut evolver = walk_evolver(8, 40);
+        let outcome = evolver.run(&NodeCount, 20_260_820);
+
+        let mut values = Vec::with_capacity(evolver.population.len());
+        for individual in &evolver.population {
+            values.push(individual.0);
+        }
+        assert_eq!(
+            values,
+            vec![11, 10, 11, 11, 11, 11, 11, 10],
+            "final population"
+        );
+
+        let mut log = Vec::with_capacity(outcome.history.len());
+        for row in &outcome.history {
+            log.push((row.iteration, row.best_fitness, row.mean_fitness));
+        }
+        assert_eq!(
+            log,
+            vec![
+                (0, 21.0, 24.5),
+                (8, 20.0, 21.25),
+                (16, 19.0, 19.5),
+                (24, 16.0, 18.0),
+                (32, 12.0, 13.625),
+                (40, 11.0, 11.75)
+            ],
+            "history"
+        );
+
+        assert_eq!(outcome.best_fitness_engine, 11.0, "best fitness");
     }
 }

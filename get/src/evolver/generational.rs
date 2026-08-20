@@ -56,16 +56,18 @@ impl<G: Genome> GenerationalEvolver<G> {
             }
         }
 
-        // Then breed the rest. Selection samples with replacement (spec §6.1),
-        // so a pair can be one individual and its own clone — crossover then
-        // does nothing and only mutation moves the child.
+        // Then breed the rest. Selection samples with replacement, so a pair can
+        // be one individual and its own clone — crossover then does nothing and
+        // only mutation moves the child.
+        let mut scope = Vec::with_capacity(population_size);
         while next.len() < population_size {
-            let mut pair = self
-                .shared
-                .selection
-                .select(&self.population, fitnesses, 2, rng);
-            let mut second = pair.pop().expect("select returned two parents");
-            let mut first = pair.pop().expect("select returned two parents");
+            self.shared
+                .scope
+                .draw_into(population_size, &mut scope, rng);
+            let pair = self.shared.selection.pick(&scope, fitnesses, 2, rng);
+
+            let mut first = self.population[pair[0]].clone();
+            let mut second = self.population[pair[1]].clone();
 
             breed_pair(&mut first, &mut second, &self.shared, rng);
 
@@ -132,9 +134,9 @@ impl<G: Genome> Evolver<G> for GenerationalEvolver<G> {
         // kind: elites fill every slot, nothing breeds, and the run is a fixed
         // point that reads as a broken fitness function.
         //
-        // There is deliberately no matching `population.len() >= tournament_size`
-        // assert as steady-state has — generational samples with replacement
-        // (spec §6.1), so an oversized tournament still draws fine.
+        // There is deliberately no matching scope-size assert as steady-state
+        // has: generational's scope is the whole population and its tournaments
+        // sample with replacement, so no size can fail to draw.
         assert!(
             type_context.elite_count < population.len(),
             "elite_count {} must be smaller than the population of {}: every \
@@ -194,6 +196,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
     use crate::evolver::common::{Crossover, Selection};
+    use crate::evolver::scope::Scope;
     use crate::evolver::test_support::{MostNodes, NodeCount, Val, Walk, best_of, mean_of};
     use crate::graph::Graph;
 
@@ -253,6 +256,7 @@ mod tests {
             mutation_rate,
             max_mutations,
             selection: selection(),
+            scope: Scope::Global,
             crossover: Crossover::TwoPoint,
         };
         let context = GenerationalContext {
@@ -271,6 +275,7 @@ mod tests {
             mutation_rate: 0.7,
             max_mutations: 1,
             selection: selection(),
+            scope: Scope::Global,
             crossover: Crossover::TwoPoint,
         };
         let context = GenerationalContext {
@@ -514,5 +519,58 @@ mod tests {
 
         assert_eq!(outcome.direction, Direction::Maximize);
         assert_eq!(outcome.direction.orient(outcome.best_fitness_engine), 28.0);
+    }
+
+    /// Pins a whole seeded run, slot by slot.
+    ///
+    /// This is a regression oracle, not a behaviour test: it exists so that a
+    /// refactor which reorders what the RNG is asked for — or how many times —
+    /// fails loudly instead of quietly producing a different search. Nothing
+    /// here asserts the numbers are *good*, only that they are what a run at
+    /// this seed has always produced.
+    #[test]
+    fn a_seeded_run_reproduces_slot_for_slot() {
+        let mut evolver = walk_evolver(8, 20);
+        let outcome = evolver.run(&NodeCount, 20_260_820);
+
+        let mut values = Vec::with_capacity(evolver.population.len());
+        for individual in &evolver.population {
+            values.push(individual.0);
+        }
+        assert_eq!(values, vec![7, 9, 9, 8, 7, 7, 7, 6], "final population");
+
+        let mut log = Vec::with_capacity(outcome.history.len());
+        for row in &outcome.history {
+            log.push((row.iteration, row.best_fitness, row.mean_fitness));
+        }
+        assert_eq!(
+            log,
+            vec![
+                (0, 21.0, 24.5),
+                (1, 20.0, 22.125),
+                (2, 19.0, 20.875),
+                (3, 18.0, 19.875),
+                (4, 17.0, 18.75),
+                (5, 17.0, 17.75),
+                (6, 16.0, 16.625),
+                (7, 15.0, 16.375),
+                (8, 15.0, 15.75),
+                (9, 14.0, 15.5),
+                (10, 14.0, 15.125),
+                (11, 14.0, 14.625),
+                (12, 13.0, 13.875),
+                (13, 12.0, 13.5),
+                (14, 12.0, 13.125),
+                (15, 11.0, 11.875),
+                (16, 11.0, 11.375),
+                (17, 10.0, 10.75),
+                (18, 9.0, 10.5),
+                (19, 8.0, 9.375),
+                (20, 7.0, 8.5)
+            ],
+            "history"
+        );
+
+        assert_eq!(outcome.best_fitness_engine, 7.0, "best fitness");
     }
 }

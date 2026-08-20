@@ -90,6 +90,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
 use get::evolver::common::{Crossover, Selection};
+use get::evolver::scope::Scope;
 use get::evolver::{Evolver, GenerationalContext, GenerationalEvolver, SharedEvolutionContext};
 use get::fitness::EpiSpread;
 use get::genomes::edge_edit::IDENTITY_GENE;
@@ -173,12 +174,16 @@ fn main() {
     };
 
     // 4. What the engine owns: the two variation dice rolls, how a pair
-    //    recombines, and parent selection. A strategy never rolls these itself.
+    //    recombines, which slice of the population an event draws from, and
+    //    parent selection. A strategy never rolls these itself.
     let shared = SharedEvolutionContext {
         genome_context,
         crossover_rate: 0.8,
         mutation_rate: 0.5,
         max_mutations: 2,
+        // Generational breeds from the whole population, so the tournament is
+        // what applies the pressure.
+        scope: Scope::Global,
         selection: Selection::Tournament { tournament_size: 7 },
         crossover: Crossover::TwoPoint,
     };
