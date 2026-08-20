@@ -716,6 +716,12 @@ pub(crate) fn run_replicates(
 /// Generic over `G`, so both genomes share this body instead of the strategy
 /// match being written once per genome. That is the whole reason dispatch is
 /// 2 + 2 arms rather than 2 × 2.
+///
+/// Step 4 of the chain that adds a strategy (`crate::evolver::Evolver`'s doc
+/// has all six): this match is where a `config::EvolutionConfig` variant
+/// becomes a running evolver — build the strategy's `TypeContext` from the
+/// variant's fields, construct it, and call `run`. `erase`, right below, is
+/// the step after this one, and for most strategies it is not a step at all.
 fn run_strategy<G: Genome, F: Fitness>(
     config: &Config,
     genome_context: G::Context,
@@ -765,6 +771,13 @@ fn run_strategy<G: Genome, F: Fitness>(
 /// columns. `std_dev` and `ci_95` are left exactly as the engine computed them,
 /// because a spread is identical under negation. Orienting either would be a
 /// silent defect: the number stays positive, so nothing looks wrong.
+///
+/// **The last step of the chain that adds a strategy is usually nothing, and
+/// this function is why.** It is generic over `G` alone — no match on
+/// strategy inside it — so a new strategy that returns a normal
+/// `EvolutionOutcome<G>` needs no edit here at all. It only becomes a step if
+/// a strategy's outcome needs handling this conversion does not already give
+/// it, which none of the shipped strategies do.
 fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
     let direction = outcome.direction;
 
