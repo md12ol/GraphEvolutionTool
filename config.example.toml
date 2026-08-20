@@ -54,6 +54,25 @@ elite_count     = 1          # best individuals carried forward (default 1)
 type            = "tournament"
 tournament_size = 5          # larger = stronger selection pressure
 
+# --- Recombination operator ---------------------------------------------------
+# Two-point is the only operator GET ships, and it is what every representation
+# did before this section existed — so leaving the block out runs exactly as an
+# older config did. `crossover_rate` above is separate and still applies: it
+# decides WHETHER a pair recombines, this decides HOW.
+#
+# What two-point swaps depends on the representation: a band of genes for
+# edge-edit, a band of states for SDA. Each also decides how much overlap it
+# needs before crossing at all, and says so at its own `crossover`.
+#
+# Adding an operator of your own? This block is one of six places it has to
+# touch, and the `Crossover` enum in get/src/evolver/common.rs walks all six in
+# order. Note this section applies to WHICHEVER genome is selected, so an
+# operator that only some representations can perform has to be rejected in
+# `Config::validate_crossover` — nothing else pairs the two.
+
+[crossover]
+type = "two_point"
+
 # --- Genome representation ----------------------------------------------------
 # Edge-edit: an edit script applied to a base graph.
 #

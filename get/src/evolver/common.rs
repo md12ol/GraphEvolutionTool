@@ -14,6 +14,81 @@ use crate::fitness::Fitness;
 use crate::genomes::Genome;
 use crate::graph::Graph;
 
+/// Recombination operator, chosen once per run.
+///
+/// An enum rather than a trait, and for the same reason as [`Selection`] below:
+/// a second operator is one extra variant plus one match arm, selectable by
+/// name from `config.toml` with no Rust at the call site.
+///
+/// # Why this is engine-level and shared, while the mutation operator is not
+///
+/// Both shipped representations recombine the *same* way — two-point, over
+/// whatever their linear unit is, drawing cut points from one shared helper —
+/// so `TwoPoint` is a truthful name for both and there is one enum for the
+/// run. Mutation is the opposite: what one mutation *does* differs completely
+/// between representations, so the mutation operator is selected per genome,
+/// under `[genome]`, and its variants live beside the representation they
+/// belong to. See `crate::genomes::EdgeEditMutation` and
+/// `crate::genomes::SdaMutation`.
+///
+/// The practical consequence is that a variant added here is offered for
+/// *every* representation. One that only some genomes can honour has to be
+/// rejected by `Config`'s validation, since nothing in the type system pairs
+/// this enum with the selected genome.
+///
+/// # Adding an operator
+///
+/// 1. **This enum** — the variant, plus any parameters it reads from the file.
+/// 2. **[`Crossover::recombine`]** — the arm that performs it. The compiler
+///    finds this one for you: the match is exhaustive.
+/// 3. **`config::CrossoverConfig`** — the variant a user names under
+///    `[crossover]`, and any constraint it needs in
+///    `Config::validate_crossover`, which is also where an operator no genome
+///    can honour is refused.
+/// 4. **`dispatch::crossover`** — the arm mapping that config variant onto this
+///    one.
+/// 5. **`py_config::PyCrossoverConfig`** — optional, and only buys a Python
+///    caller the ability to name it. Skipped, the operator still runs from TOML
+///    and from Rust.
+/// 6. **`config.example.toml`** — also optional, and also the step people skip
+///    and then wonder why nobody uses the operator: that file is what a new
+///    user copies from.
+///
+/// A `Genome::crossover` that cannot express the operator is the case this
+/// enum does not cover. `Genome::crossover` takes no context, deliberately, so
+/// an operator needing per-representation behaviour adds a trait method rather
+/// than a variant here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Crossover {
+    /// Two-point: swap one contiguous band between the parents, leaving
+    /// everything outside it untouched on both sides. What the band is made of
+    /// is the representation's own business — genes for edge-edit, states for
+    /// SDA — and each decides how much shared structure it needs before
+    /// crossing at all.
+    TwoPoint,
+}
+
+impl Crossover {
+    /// Recombine one pair in place, both children kept.
+    ///
+    /// The caller has already rolled `crossover_rate` and decided this pair
+    /// breeds; this only chooses *how*.
+    pub fn recombine<G, R>(&self, first: &mut G, second: &mut G, rng: &mut R)
+    where
+        G: Genome,
+        R: Rng + ?Sized,
+    {
+        match self {
+            // Two-point is what `Genome::crossover` already means for every
+            // representation, so this arm is the trait call itself rather than
+            // an implementation. A second variant would not be — it would
+            // dispatch to a second trait method, which is the point at which
+            // `Genome` grows one.
+            Crossover::TwoPoint => first.crossover(second, rng),
+        }
+    }
+}
+
 /// Parent-selection strategy.
 ///
 /// An enum rather than a trait, so a new mechanism (roulette-wheel, truncation,
@@ -358,7 +433,7 @@ pub fn breed_pair<G, R>(
     R: Rng + ?Sized,
 {
     if rng.random_bool(shared.crossover_rate) {
-        first.crossover(second, rng);
+        shared.crossover.recombine(first, second, rng);
     }
     mutate_child(
         first,
@@ -579,6 +654,55 @@ mod tests {
 
     fn population(size: usize) -> Vec<IndexGenome> {
         (0..size).map(IndexGenome::new).collect()
+    }
+
+    /// Two-point recombination is *exactly* what `Genome::crossover` already
+    /// did, and this pins both halves of that: the same children, and the same
+    /// number of RNG draws consumed getting there.
+    ///
+    /// The draw count is the half that would otherwise rot silently. A run is
+    /// reproducible only if every strategy pulls from the seeded stream in the
+    /// same sequence, so an operator layer that consumed one extra value would
+    /// still produce valid children while changing every seeded result in the
+    /// project — which is why the check is "the next draw agrees", not just
+    /// "the genomes agree".
+    #[test]
+    fn two_point_recombine_is_exactly_the_genomes_own_crossover() {
+        use std::sync::Arc;
+
+        use crate::genomes::{EdgeEditGenome, EdgeEditOperationWeights, EdgeEditOperators};
+
+        let operators = EdgeEditOperators::new(EdgeEditOperationWeights::default())
+            .expect("an all-default operation mix is valid");
+
+        // Two pairs built from one seed, so both paths start from identical
+        // parents rather than merely similar ones.
+        let mut build = StdRng::seed_from_u64(7);
+        let first = EdgeEditGenome::random_with_operators(32, Arc::clone(&operators), &mut build);
+        let second = EdgeEditGenome::random_with_operators(32, Arc::clone(&operators), &mut build);
+
+        let (mut direct_a, mut direct_b) = (first.clone(), second.clone());
+        let mut direct_rng = StdRng::seed_from_u64(99);
+        direct_a.crossover(&mut direct_b, &mut direct_rng);
+
+        let (mut routed_a, mut routed_b) = (first, second);
+        let mut routed_rng = StdRng::seed_from_u64(99);
+        Crossover::TwoPoint.recombine(&mut routed_a, &mut routed_b, &mut routed_rng);
+
+        assert_eq!(
+            direct_a.genes, routed_a.genes,
+            "routing through Crossover changed the first child",
+        );
+        assert_eq!(
+            direct_b.genes, routed_b.genes,
+            "routing through Crossover changed the second child",
+        );
+        assert_eq!(
+            direct_rng.random::<u64>(),
+            routed_rng.random::<u64>(),
+            "the two paths consumed different amounts of the RNG stream, so \
+             every seeded run in the project would shift",
+        );
     }
 
     /// What a tournament should pick, written independently of `rank`.

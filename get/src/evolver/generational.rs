@@ -193,7 +193,7 @@ mod tests {
 
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
-    use crate::evolver::common::Selection;
+    use crate::evolver::common::{Crossover, Selection};
     use crate::evolver::test_support::{MostNodes, NodeCount, Val, Walk, best_of, mean_of};
     use crate::graph::Graph;
 
@@ -253,6 +253,7 @@ mod tests {
             mutation_rate,
             max_mutations,
             selection: selection(),
+            crossover: Crossover::TwoPoint,
         };
         let context = GenerationalContext {
             num_generations,
@@ -270,6 +271,7 @@ mod tests {
             mutation_rate: 0.7,
             max_mutations: 1,
             selection: selection(),
+            crossover: Crossover::TwoPoint,
         };
         let context = GenerationalContext {
             num_generations,

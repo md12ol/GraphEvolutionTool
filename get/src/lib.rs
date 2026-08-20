@@ -32,8 +32,8 @@ use crate::fitness::{Direction, PyFitness};
 use crate::graph::Graph;
 use crate::graph_io::{LoadWarning, SourcedEdge, canonicalize};
 use crate::py_config::{
-    PyConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig, PyOperationWeights,
-    PySelectionConfig, PySirParams, config_error_to_py,
+    PyConfig, PyCrossoverConfig, PyEvolutionConfig, PyFitnessConfig, PyGenomeConfig,
+    PyOperationWeights, PySelectionConfig, PySirParams, config_error_to_py,
 };
 use crate::py_result::{PyGenerationStats, PyRunResult};
 use crate::stats::ReferenceStatistics;
@@ -955,6 +955,7 @@ fn get(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyConfig>()?;
     m.add_class::<PyEvolutionConfig>()?;
     m.add_class::<PySelectionConfig>()?;
+    m.add_class::<PyCrossoverConfig>()?;
     m.add_class::<PyGenomeConfig>()?;
     m.add_class::<PyFitnessConfig>()?;
     m.add_class::<PySirParams>()?;
@@ -1648,6 +1649,7 @@ mod tests {
             },
             1,
             1,
+            None,
         )
     }
 

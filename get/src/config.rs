@@ -50,6 +50,11 @@ pub struct Config {
     pub max_mutations: usize,
     /// Parent-selection strategy.
     pub selection: SelectionConfig,
+    /// Recombination operator. Omitted, two-point — which is what every
+    /// representation did before the operator became selectable, so an
+    /// existing config keeps its behaviour by leaving `[crossover]` out.
+    #[serde(default)]
+    pub crossover: CrossoverConfig,
     /// Genome representation and its dimensions.
     pub genome: GenomeConfig,
     /// Fitness objective.
@@ -78,6 +83,24 @@ pub enum EvolutionConfig {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionConfig {
     Tournament { tournament_size: usize },
+}
+
+/// Recombination operator. Maps onto [`crate::evolver::common::Crossover`],
+/// whose docs list every site a second operator touches — this is step 3 of
+/// six, and `dispatch::crossover` is the arm that constructs it.
+///
+/// **Applies to whichever representation is selected**, so an operator only
+/// some genomes can honour is rejected by [`Config::validate_crossover`]
+/// rather than by the type system. The mutation operator is the other way
+/// round: it is chosen per genome, under `[genome]`, so a mismatch there
+/// cannot be written down at all.
+#[derive(Debug, Default, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CrossoverConfig {
+    /// Swap one contiguous band between the parents. The default, and what
+    /// every representation did before this was selectable.
+    #[default]
+    TwoPoint,
 }
 
 /// Genome representation and the dimensions used to build random individuals.
@@ -536,6 +559,7 @@ impl Config {
     pub fn validate(&self) -> Result<(), ConfigError> {
         self.validate_top_level()?;
         self.validate_evolution_and_selection()?;
+        self.validate_crossover()?;
         self.validate_genome()?;
         self.validate_fitness()?;
         Ok(())
@@ -616,6 +640,31 @@ impl Config {
             }
         }
         Ok(())
+    }
+
+    /// Pair the recombination operator with the selected representation.
+    ///
+    /// **Nothing to reject today, and the code says so by construction rather
+    /// than by being absent.** One operator ships, every representation can
+    /// perform it, so every pairing is legal. The `match` is written out in
+    /// full anyway: a second operator stops it compiling, which forces whoever
+    /// adds one to state which genomes can honour it instead of discovering
+    /// the answer during a run.
+    ///
+    /// This check exists because `[crossover]` is a *shared* section — it names
+    /// an operator for whichever genome is selected, and the two are chosen
+    /// independently, so nothing but this function can catch a combination that
+    /// makes no sense. The mutation operator needs no equivalent: it is chosen
+    /// inside `[genome]`, so a config naming SDA's mutation alongside
+    /// edge-edit's representation does not parse in the first place.
+    fn validate_crossover(&self) -> Result<(), ConfigError> {
+        match (&self.crossover, &self.genome) {
+            // Two-point is defined for every representation GET ships: both
+            // are linear sequences with a shared prefix to cut, and each
+            // decides for itself how much of one it needs before crossing.
+            (CrossoverConfig::TwoPoint, GenomeConfig::EdgeEdit(_)) => Ok(()),
+            (CrossoverConfig::TwoPoint, GenomeConfig::Sda(_)) => Ok(()),
+        }
     }
 
     /// Constraints on the genome and its dimensions.
@@ -1268,6 +1317,58 @@ num_epidemics  = 30
             Err(other) => panic!("expected a validation error, got {other:?}"),
             Ok(()) => panic!("expected the config to be rejected, but it validated"),
         }
+    }
+
+    /// The behaviour-preservation guarantee `[crossover]` was added under: a
+    /// config written before the operator was selectable names none, and has
+    /// to keep running exactly as it did.
+    ///
+    /// Asserted by parsing rather than by reading the `#[serde(default)]`
+    /// attribute, because the attribute is only half of it — a `Default` impl
+    /// pointing at a different variant would satisfy the attribute and break
+    /// every existing config.
+    #[test]
+    fn a_config_naming_no_operator_gets_two_point() {
+        // The fixture has no `[crossover]` table at all, which is exactly the
+        // shape of every config written before this section existed.
+        assert!(!config_text("").contains("[crossover]"));
+
+        let config = valid_config();
+        match config.crossover {
+            CrossoverConfig::TwoPoint => {}
+        }
+        config
+            .validate()
+            .expect("a config naming no operator should still validate");
+    }
+
+    /// Naming the default explicitly parses to the same thing as leaving it
+    /// out — so a user who writes the block to document their intent is not
+    /// quietly selecting something else.
+    #[test]
+    fn naming_two_point_explicitly_matches_leaving_the_block_out() {
+        let text = format!("{}\n[crossover]\ntype = \"two_point\"\n", config_text(""));
+        let config = Config::from_toml_str(&text).expect("an explicit operator should parse");
+
+        match config.crossover {
+            CrossoverConfig::TwoPoint => {}
+        }
+        config.validate().expect("and should validate");
+    }
+
+    /// An operator GET does not ship is refused by name rather than ignored.
+    ///
+    /// The section is a tagged enum, so this is serde's rejection, not a check
+    /// of ours — pinned because the alternative failure is silent: an unknown
+    /// `type` that parsed would run the default operator while the file says
+    /// otherwise.
+    #[test]
+    fn an_unknown_operator_is_rejected() {
+        let text = format!("{}\n[crossover]\ntype = \"uniform\"\n", config_text(""));
+        assert!(
+            Config::from_toml_str(&text).is_err(),
+            "an operator GET does not ship should not parse",
+        );
     }
 
     #[test]

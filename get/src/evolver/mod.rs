@@ -22,7 +22,7 @@ use crate::fitness::{Direction, Fitness};
 use crate::genomes::Genome;
 use crate::graph::Graph;
 
-use common::Selection;
+use common::{Crossover, Selection};
 
 /// Run-level configuration shared by every evolution strategy.
 ///
@@ -67,6 +67,13 @@ pub struct SharedEvolutionContext<G: Genome> {
     pub max_mutations: usize,
     /// Parent-selection strategy used by both evolution strategies.
     pub selection: Selection,
+    /// Recombination operator, applied to every pair that passes the
+    /// `crossover_rate` roll.
+    ///
+    /// Shared across representations, unlike the mutation operator, which is
+    /// selected per genome and reaches [`Genome::mutate`] through
+    /// `genome_context`. [`common::Crossover`] says why they differ.
+    pub crossover: Crossover,
 }
 
 /// Extra configuration specific to the generational strategy.

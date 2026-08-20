@@ -220,6 +220,33 @@ pub enum PySelectionConfig {
     Tournament { tournament_size: usize },
 }
 
+/// Recombination operator.
+///
+/// Mirrors [`crate::config::CrossoverConfig`], and is step 5 of the six on
+/// [`crate::evolver::common::Crossover`] — optional, like every mirror here.
+/// An operator missing from this enum compiles and tests clean; it simply
+/// cannot be named from Python, and still runs from TOML and from Rust.
+///
+/// A unit variant would be the natural spelling for an operator that takes no
+/// parameters, but pyo3 rejects one in a complex enum, so `TwoPoint` carries an
+/// empty struct body — the same constraint this module's header records for
+/// [`crate::config::FitnessConfig::Python`], hit here for a second time.
+#[pyclass(name = "CrossoverConfig")]
+#[derive(Debug, Clone)]
+pub enum PyCrossoverConfig {
+    #[pyo3(constructor = ())]
+    TwoPoint {},
+}
+
+/// Hand-written rather than derived: `#[derive(Default)]` needs a *unit*
+/// variant to mark, and pyo3 does not allow one in a complex enum, so the
+/// empty struct body above rules the derive out.
+impl Default for PyCrossoverConfig {
+    fn default() -> Self {
+        PyCrossoverConfig::TwoPoint {}
+    }
+}
+
 /// Genome representation and the dimensions used to build random individuals.
 ///
 /// Mirrors [`crate::config::GenomeConfig`].
@@ -393,6 +420,11 @@ pub struct PyConfig {
     /// Parent-selection strategy.
     #[pyo3(get, set)]
     pub selection: PySelectionConfig,
+    /// Recombination operator. Defaulted, so an existing caller that never
+    /// passes one keeps the behaviour it had before the operator was
+    /// selectable.
+    #[pyo3(get, set)]
+    pub crossover: PyCrossoverConfig,
     /// Genome representation and its dimensions.
     #[pyo3(get, set)]
     pub genome: PyGenomeConfig,
@@ -420,8 +452,9 @@ impl PyConfig {
         fitness,
         max_edge_multiplicity = 1,
         max_mutations = 1,
+        crossover = None,
     ))]
-    #[allow(clippy::too_many_arguments)] // ten fields is the schema, not a smell
+    #[allow(clippy::too_many_arguments)] // eleven fields is the schema, not a smell
     pub fn new(
         evolution: PyEvolutionConfig,
         population_size: usize,
@@ -433,6 +466,12 @@ impl PyConfig {
         fitness: PyFitnessConfig,
         max_edge_multiplicity: u32,
         max_mutations: usize,
+        // `Option`-wrapped rather than defaulted in the signature, because the
+        // default is a whole pyclass instance and a `#[pyo3(signature)]`
+        // default has to be a constant expression. `None` means two-point,
+        // which is what every representation did before this was selectable —
+        // the same reading `[crossover]`'s absence has on the TOML side.
+        crossover: Option<PyCrossoverConfig>,
     ) -> Self {
         Self {
             evolution,
@@ -443,6 +482,7 @@ impl PyConfig {
             mutation_rate,
             max_mutations,
             selection,
+            crossover: crossover.unwrap_or_default(),
             genome,
             fitness,
         }
@@ -677,6 +717,18 @@ impl PySelectionConfig {
     }
 }
 
+impl PyCrossoverConfig {
+    fn to_toml_value(&self) -> PyResult<Value> {
+        let mut table = Map::new();
+        match self {
+            PyCrossoverConfig::TwoPoint {} => {
+                table.insert("type".to_string(), Value::String("two_point".to_string()));
+            }
+        }
+        Ok(Value::Table(table))
+    }
+}
+
 impl PyGenomeConfig {
     fn to_toml_value(&self) -> PyResult<Value> {
         let mut table = Map::new();
@@ -843,6 +895,7 @@ impl PyConfig {
         );
         table.insert("evolution".to_string(), self.evolution.to_toml_value()?);
         table.insert("selection".to_string(), self.selection.to_toml_value()?);
+        table.insert("crossover".to_string(), self.crossover.to_toml_value()?);
         table.insert("genome".to_string(), self.genome.to_toml_value()?);
         table.insert("fitness".to_string(), self.fitness.to_toml_value()?);
         Ok(table)
@@ -854,8 +907,8 @@ mod tests {
     use super::*;
 
     use crate::config::{
-        Config, EdgeEditGenomeConfig, EvolutionConfig, FitnessConfig, GenomeConfig,
-        SdaGenomeConfig, SelectionConfig, SirParams,
+        Config, CrossoverConfig, EdgeEditGenomeConfig, EvolutionConfig, FitnessConfig,
+        GenomeConfig, SdaGenomeConfig, SelectionConfig, SirParams,
     };
     use crate::genomes::EdgeEditOperationWeights;
 
@@ -883,6 +936,7 @@ mod tests {
             },
             1,
             1,
+            Some(PyCrossoverConfig::TwoPoint {}),
         )
     }
 
@@ -910,6 +964,7 @@ mod tests {
             mutation_rate,
             max_mutations,
             selection,
+            crossover,
             genome,
             fitness,
         } = round_trip(&mirror());
@@ -920,6 +975,14 @@ mod tests {
         assert_eq!(crossover_rate, 0.9);
         assert_eq!(mutation_rate, 0.2);
         assert_eq!(max_mutations, 1);
+
+        // Named explicitly by the fixture, which leaves nothing to a default,
+        // so this checks the mirror renders the operator rather than that the
+        // default fills it in — `a_config_naming_no_operator_gets_two_point`
+        // in `config` covers the other half.
+        match crossover {
+            CrossoverConfig::TwoPoint => {}
+        }
 
         match evolution {
             EvolutionConfig::Generational {

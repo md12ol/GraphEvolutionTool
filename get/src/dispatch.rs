@@ -32,10 +32,10 @@ use rayon::prelude::*;
 
 use crate::GraphEvolver;
 use crate::config::{
-    self, Config, EdgeEditGenomeConfig, EvolutionConfig, FitnessConfig, GenomeConfig,
-    SdaGenomeConfig, SelectionConfig,
+    self, Config, CrossoverConfig, EdgeEditGenomeConfig, EvolutionConfig, FitnessConfig,
+    GenomeConfig, SdaGenomeConfig, SelectionConfig,
 };
-use crate::evolver::common::Selection;
+use crate::evolver::common::{Crossover, Selection};
 use crate::evolver::{
     EvolutionOutcome, Evolver, GenerationStats, GenerationalContext, GenerationalEvolver,
     SharedEvolutionContext, SteadyStateContext, SteadyStateEvolver,
@@ -730,6 +730,7 @@ fn run_strategy<G: Genome, F: Fitness>(
         mutation_rate: config.mutation_rate,
         max_mutations: config.max_mutations,
         selection,
+        crossover: crossover(&config.crossover),
     };
 
     match &config.evolution {
@@ -795,6 +796,18 @@ fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
 /// This arm is step 6 of the seven a new scheme touches;
 /// [`crate::evolver::common::Selection`] lists them all. Steps 5 and 6 are one
 /// change split across two files, so neither compiles without the other.
+/// Turn the `[crossover]` block into the operator the engine runs.
+///
+/// Step 4 of the six on [`Crossover`], and the counterpart to `selection`
+/// below. A variant added to `config::CrossoverConfig` and not here does not
+/// compile, which is the whole reason the mapping is a match rather than a
+/// blanket conversion.
+fn crossover(config: &CrossoverConfig) -> Crossover {
+    match config {
+        CrossoverConfig::TwoPoint => Crossover::TwoPoint,
+    }
+}
+
 fn selection(config: &SelectionConfig) -> Selection {
     match config {
         SelectionConfig::Tournament { tournament_size } => Selection::Tournament {

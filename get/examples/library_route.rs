@@ -25,7 +25,7 @@
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
-use get::evolver::common::Selection;
+use get::evolver::common::{Crossover, Selection};
 use get::evolver::{Evolver, GenerationalContext, GenerationalEvolver, SharedEvolutionContext};
 use get::fitness::{Direction, Fitness};
 // `Genome` is imported for its `print` method at the end — a trait's methods
@@ -107,6 +107,9 @@ fn main() {
         mutation_rate: 0.9,
         max_mutations: 3,
         selection: Selection::Tournament { tournament_size: 7 },
+        // How a pair recombines, separately from `crossover_rate`'s decision
+        // of whether it does. Two-point is the only operator GET ships.
+        crossover: Crossover::TwoPoint,
     };
 
     // 4. The strategy's own configuration, and the run.
