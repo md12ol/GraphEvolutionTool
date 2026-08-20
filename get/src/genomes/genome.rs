@@ -179,6 +179,39 @@ pub trait Genome: Clone + Send + Sync {
     /// Recombine two parents in place, leaving the resulting children in
     /// `self` and `other`.
     ///
+    /// **In place, and both children are kept.** Recombination inherently
+    /// produces two children, so neither parent is preserved and neither child
+    /// is discarded — an engine that kept only one would waste half of every
+    /// crossover. The caller has already decided this pair recombines;
+    /// `crossover_rate` is rolled once per pair by
+    /// [`crate::evolver::common::breed_pair`], never here.
+    ///
+    /// **Both parents must still be valid for the representation when this
+    /// returns.** Nothing checks it, and that is the whole hazard: an operator
+    /// that can leave a genome `express` rejects breaks a run mid-flight, deep
+    /// inside a generic, rather than at config time where a user could act on
+    /// it. Whatever invariant the representation's own constructors maintain —
+    /// a state index below `num_states`, a response length within
+    /// `max_resp_len`, a gene the operation mix can decode — this has to
+    /// maintain too, on *both* sides.
+    ///
+    /// **All randomness comes from `rng`.** A representation reaching for a
+    /// thread RNG or a clock breaks replicate reproducibility, which is
+    /// GET's whole seeding model: one master seed reaches the population, the
+    /// evolution and the epidemics, and a single unseeded draw anywhere in the
+    /// chain makes two runs at the same seed disagree.
+    ///
+    /// # An operator chooses how much shared structure it needs
+    ///
+    /// The two shipped operators are both two-point and they answer this
+    /// differently, which is the point: [`crate::genomes::EdgeEditGenome`]
+    /// declines to cross below two shared genes, because a one-gene exchange
+    /// is not choosing anything, while [`crate::genomes::SdaGenome`] does cross
+    /// at one shared state, because `init_char` travels with state 0 and so
+    /// there is genuinely something more to exchange. Each states its own
+    /// answer at its `crossover`. A third representation makes the same choice
+    /// explicitly rather than inheriting either.
+    ///
     /// `R: Rng + ?Sized` (rather than a plain `Rng` type) lets callers pass
     /// either a concrete RNG or a trait object like `&mut dyn RngCore`
     /// through the same parameter; `?Sized` opts out of Rust's default
