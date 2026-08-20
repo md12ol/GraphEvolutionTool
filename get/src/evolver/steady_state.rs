@@ -564,4 +564,46 @@ mod tests {
         assert_eq!(outcome.direction, Direction::Maximize);
         assert_eq!(outcome.direction.orient(outcome.best_fitness_engine), 28.0);
     }
+
+    /// Pins a whole seeded run, slot by slot.
+    ///
+    /// This is a regression oracle, not a behaviour test: it exists so that a
+    /// refactor which reorders what the RNG is asked for — or how many times —
+    /// fails loudly instead of quietly producing a different search. Nothing
+    /// here asserts the numbers are *good*, only that they are what a run at
+    /// this seed has always produced.
+    #[test]
+    fn a_seeded_run_reproduces_slot_for_slot() {
+        let mut evolver = walk_evolver(8, 40);
+        let outcome = evolver.run(&NodeCount, 20_260_820);
+
+        let mut values = Vec::with_capacity(evolver.population.len());
+        for individual in &evolver.population {
+            values.push(individual.0);
+        }
+        assert_eq!(
+            values,
+            vec![11, 10, 11, 11, 11, 11, 11, 10],
+            "final population"
+        );
+
+        let mut log = Vec::with_capacity(outcome.history.len());
+        for row in &outcome.history {
+            log.push((row.iteration, row.best_fitness, row.mean_fitness));
+        }
+        assert_eq!(
+            log,
+            vec![
+                (0, 21.0, 24.5),
+                (8, 20.0, 21.25),
+                (16, 19.0, 19.5),
+                (24, 16.0, 18.0),
+                (32, 12.0, 13.625),
+                (40, 11.0, 11.75)
+            ],
+            "history"
+        );
+
+        assert_eq!(outcome.best_fitness_engine, 11.0, "best fitness");
+    }
 }
