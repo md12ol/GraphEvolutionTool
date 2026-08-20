@@ -13,7 +13,7 @@
 <p class="page-kicker">Extending GET</p>
 <h1>Extension points</h1>
 <p class="lede">
-  Four things you can add, and they cost wildly different amounts. Knowing which axis you are on
+  Seven things you can add, and they cost wildly different amounts. Knowing which axis you are on
   before you start saves the most time of anything on this page.
 </p>
 
@@ -33,11 +33,24 @@
     <tr><td><b><a href="new-evolver.html">Strategy</a></b></td>
         <td>One config variant, one arm in the strategy match, one trait implementation.</td>
         <td>The genome match is untouched, for the same reason in reverse.</td></tr>
-    <tr><td><b>Selection scheme</b></td>
-        <td>One enum variant and one match arm.</td>
-        <td>Selection is already an enum for exactly this reason. Note that the validation function
-            destructures it irrefutably on purpose, so adding a variant <i>stops compiling</i>
-            there and forces you to answer the "does this need a constraint?" question.</td></tr>
+    <tr><td><b><a href="new-selection.html">Selection scheme</a></b></td>
+        <td>Six steps, four files — two of them optional.</td>
+        <td>Selection is already an enum for exactly this reason, and it answers only "who
+            breeds", so no strategy or genome is touched.</td></tr>
+    <tr><td><b><a href="new-crossover.html">Crossover operator</a></b></td>
+        <td>Five steps — and one is a compatibility pair per genome.</td>
+        <td><code>[crossover]</code> is a shared section, so the operator has to declare which
+            representations can honour it. The match is exhaustive on purpose: adding a variant
+            stops it compiling until you do.</td></tr>
+    <tr><td><b><a href="new-mutation.html">Mutation operator</a></b></td>
+        <td>Four steps — <b>per genome</b>, and the chain exists twice.</td>
+        <td>What counts as "one mutation" differs by representation, so there is no shared enum.
+            Adding one for edge-edit does not touch SDA.</td></tr>
+    <tr><td><b>Scope</b> · <b>Replacement</b></td>
+        <td>Six and three steps respectively.</td>
+        <td>The other two axes beside selection — who is eligible, and who gets overwritten.
+            No guide page yet; follow <code>git grep -n "ADD A SCOPE STEP"</code> or
+            <code>"ADD A REPLACEMENT STEP"</code>, which carry the full procedure inline.</td></tr>
   </tbody>
 </table>
 </div>

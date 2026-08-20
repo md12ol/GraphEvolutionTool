@@ -51,7 +51,10 @@
         ["guide/extending.html",          "Extension points"],
         ["guide/new-fitness.html",        "Add an objective"],
         ["guide/new-genome.html",         "Add a genome"],
-        ["guide/new-evolver.html",        "Add a strategy"]
+        ["guide/new-evolver.html",        "Add a strategy"],
+        ["guide/new-selection.html",      "Add a selection scheme"],
+        ["guide/new-crossover.html",      "Add a crossover operator"],
+        ["guide/new-mutation.html",       "Add a mutation operator"]
       ]
     },
     {

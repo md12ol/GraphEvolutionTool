@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add a selection scheme · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/new-selection.html">
+<main>
+
+<p class="page-kicker">Extending GET</p>
+<h1>Add a selection scheme</h1>
+<p class="lede">
+  Choosing which members of a scope become parents. Six edits, four files, and no strategy or
+  genome is touched — selection is one of three independent axes, and it answers only this
+  question.
+</p>
+
+<h2>The one question a scheme answers</h2>
+
+<p>
+  Selection takes a <b>scope</b> — a list of population indices someone else chose — and returns
+  <code>count</code> parent indices drawn from it. It does not decide who is eligible
+  (<code>[scope]</code> does that) and it does not decide who dies
+  (<code>[replacement]</code> does that). That separation is why every scheme works with every
+  strategy, and why there is deliberately no scheme-by-strategy compatibility check to extend.
+</p>
+
+<h2>The six edits</h2>
+
+<p>
+  Every location carries a literal marker in the source. Find the whole chain at once with
+  <code>git grep -n "ADD A SELECTION STEP" get/src</code>, and jump to any one step by searching
+  its number. The steps below are in the order the markers number them.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>evolver/common.rs</code></td>
+        <td>A <code>Selection</code> variant, carrying any parameters the scheme reads out of the
+            file.</td></tr>
+    <tr><td>2</td><td><code>evolver/common.rs</code></td>
+        <td>The arm in <code>Selection::pick</code> that actually chooses parents.</td></tr>
+    <tr><td>3</td><td><code>config.rs</code></td>
+        <td>The mirrored <code>SelectionConfig</code> variant — the one a user names under
+            <code>[selection]</code>.</td></tr>
+    <tr><td>4</td><td><code>dispatch.rs</code></td>
+        <td>The arm mapping your config variant onto the engine variant. Steps 3 and 4 are one
+            change split across two files.</td></tr>
+    <tr><td>5</td><td><code>py_config.rs</code> — two sites</td>
+        <td><b>Optional.</b> The Python-side variant and its matching arm.</td></tr>
+    <tr><td>6</td><td><code>py_config.rs</code></td>
+        <td><b>Optional.</b> The <code>to_toml_value</code> arm that writes
+            <code>type = "my_scheme"</code> and its fields under <code>[selection]</code>.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Steps 1 and 2 — the engine side</h2>
+
+<p>
+  <code>Selection</code> lives in <code>evolver/common.rs</code>. Add the variant, then the arm
+  that performs it:
+</p>
+
+<pre><code>// step 1 — in `enum Selection`
+Roulette { pressure: f64 },
+
+// step 2 — in `Selection::pick`
+Selection::Roulette { pressure } =&gt; {
+    let mut parents = Vec::with_capacity(count);
+    for _ in 0..count {
+        parents.push(spin(scope, fitnesses, *pressure, rng));
+    }
+    parents
+}</code></pre>
+
+<p>
+  The variant name becomes <code>type = "roulette"</code> under <code>[selection]</code>, via the
+  <code>rename_all</code> on <code>config::SelectionConfig</code> — you do not write that string
+  anywhere.
+</p>
+
+<div class="callout">
+  <p><b>Three contracts your arm must honour, none of which the compiler checks:</b></p>
+  <ul>
+    <li><b>Pick only from <code>scope</code>.</b> Returning a population index that is not in the
+        scope silently ignores the <code>[scope]</code> block the user configured.</li>
+    <li><b>Compare through <code>rank</code>.</b> It orders better-first with ties broken by lower
+        index, which is what keeps a run reproducible when two individuals score identically.
+        Comparing the raw <code>f64</code> yourself reintroduces the tie.</li>
+    <li><b>Take every random value from <code>rng</code>.</b> Any other source of randomness breaks
+        seeded reproducibility, and it breaks it in the way that is hardest to notice: the run still
+        works, it just cannot be repeated.</li>
+  </ul>
+</div>
+
+<h2>Steps 3 and 4 — the config side</h2>
+
+<p>One change, two files. The config variant, and the arm that maps it onto the engine variant:</p>
+
+<pre><code>// step 3 — in `config::SelectionConfig`
+Roulette { pressure: f64 },
+
+// step 4 — in `dispatch`'s selection mapping
+SelectionConfig::Roulette { pressure } =&gt; {
+    Selection::Roulette { pressure: *pressure }
+}</code></pre>
+
+<p>
+  If your scheme has parameters that can be wrong — a pressure that must be positive, a size that
+  must be at least one — constrain them in <code>validate_evolution_and_selection</code>. There is
+  no scheme-by-strategy check to extend there, only your own parameters.
+</p>
+
+<h2>Steps 5 and 6 — Python, and optional</h2>
+
+<p>
+  Leaving these out costs nothing elsewhere; the scheme is then reachable from TOML but not from
+  Python. Step 5 is the mirrored <code>PySelectionConfig</code> variant and its arm; step 6 is the
+  <code>to_toml_value</code> arm that writes the block back out.
+</p>
+
+<div class="callout">
+  <p>
+    <b>Step 5 is the one nothing checks.</b> The source says so at the marker. A scheme that is
+    missing its Python mirror does not fail to compile and does not fail a test — it is simply
+    absent from the Python API, and the first person to notice is a user who cannot find it.
+  </p>
+</div>
+
+<h2>Testing it</h2>
+
+<p>
+  Selection is unusually easy to test directly: it is a pure function from a scope, a fitness
+  slice and an RNG to a list of indices. Assert that every returned index is in the scope, that a
+  fixed seed gives a fixed answer, and that a population with one obviously-best member selects it
+  more often than chance.
+</p>
+
+<p>
+  Then add the keys to <code>config.example.toml</code>, which the test suite parses and validates
+  — so a broken example fails the build.
+</p>
+
+<h2>The other two axes</h2>
+
+<p>
+  If what you actually want is to change <i>who is eligible</i> or <i>who gets overwritten</i>,
+  you want a different chain: <code>git grep -n "ADD A SCOPE STEP"</code> or
+  <code>git grep -n "ADD A REPLACEMENT STEP"</code>. Both are separate axes for the same reason
+  selection is — so that adding one does not constrain the others.
+</p>
+
+</main>
+</body>
+</html>
