@@ -91,13 +91,6 @@ result = evolver.run(20260812)</code></pre>
   your function body remains.
 </div>
 
-<div class="tip">
-  The interface is modelled on <b>pymoo's <code>Problem._evaluate</code></b> — a batch of
-  solutions in, an array of objective values out, vectorized in numpy. That idiom is already
-  familiar to the audience, and it is the shape the performance argument demands, so the ergonomic
-  choice and the fast choice agree.
-</div>
-
 <h3>Vectorising It Properly</h3>
 
 <pre><code class="language-python">import numpy as np

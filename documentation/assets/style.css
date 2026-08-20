@@ -349,7 +349,7 @@ th {
 tbody tr:hover { background: var(--bg-sunken); }
 td code { white-space: nowrap; }
 
-.note, .warn, .tip, .plan-note {
+.callout, .note, .warn, .tip, .plan-note {
   border: 1px solid var(--border);
   border-left: 3px solid var(--border-firm);
   border-radius: var(--radius);
@@ -358,13 +358,17 @@ td code { white-space: nowrap; }
   background: var(--bg-raised);
   font-size: .93rem;
 }
-.note > :last-child, .warn > :last-child,
+.callout > :last-child, .note > :last-child, .warn > :last-child,
 .tip > :last-child, .plan-note > :last-child { margin-bottom: 0; }
 .note  { border-left-color: var(--accent); background: var(--accent-soft); }
 .warn  { border-left-color: var(--warn);   background: var(--warn-soft); }
 .tip   { border-left-color: var(--good);   background: var(--good-soft); }
 .plan-note { border-left-color: var(--plan); background: var(--plan-soft); }
-.note b, .warn b, .tip b, .plan-note b { font-weight: 650; }
+/* Neutral by design: a callout marks something worth stopping on without
+   claiming it is a warning. Left border only, no tinted fill. */
+.callout { border-left-color: var(--border-firm); }
+.callout ul { margin-bottom: 0; }
+.callout b, .note b, .warn b, .tip b, .plan-note b { font-weight: 650; }
 
 .badge {
   display: inline-block;
