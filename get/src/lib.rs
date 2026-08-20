@@ -76,6 +76,32 @@ fn emit_load_warnings(py: Python<'_>, source: &str, warnings: &[LoadWarning]) ->
     Ok(())
 }
 
+/// Raise every warning a load produced, on whichever route has no GIL to
+/// raise a `UserWarning` on.
+///
+/// `struct_match`'s reference-set loader (`dispatch::struct_match_reference`)
+/// is reachable from `GraphEvolver::run_from_toml` (spec §5.3 route 4), which
+/// never acquires the GIL, as well as from the ordinary Python-driven `run`.
+/// `emit_load_warnings` needs a `Python<'_>` token either way, so this is the
+/// one seam both routes call through: `Some(py)` uses it, `None` prints the
+/// same `{source}: {warning}` text to stderr — the only sink route 4 has,
+/// since there is no `warnings.simplefilter` to route it through there.
+pub(crate) fn emit_load_warnings_maybe(
+    py: Option<Python<'_>>,
+    source: &str,
+    warnings: &[LoadWarning],
+) -> PyResult<()> {
+    match py {
+        Some(py) => emit_load_warnings(py, source, warnings),
+        None => {
+            for warning in warnings {
+                eprintln!("{source}: {warning}");
+            }
+            Ok(())
+        }
+    }
+}
+
 /// Python-facing entry point to the graph-evolution engine.
 ///
 /// Constructed from a `config.toml` path; [`GraphEvolver::run`] dispatches on
@@ -714,6 +740,7 @@ impl GraphEvolver {
     #[pyo3(signature = (seed, n_runs = 1, max_cores = None))]
     pub fn run(
         &mut self,
+        py: Python<'_>,
         seed: u64,
         n_runs: usize,
         max_cores: Option<usize>,
@@ -749,7 +776,7 @@ impl GraphEvolver {
         // callable registered is reported before any population is built.
         let mut objectives = Vec::with_capacity(n_runs);
         for &run_seed in &seeds {
-            objectives.push(self.objective(run_seed)?);
+            objectives.push(self.objective(run_seed, Some(py))?);
         }
 
         // The GIL is held on entry to any `#[pymethods]` function, and holding it
@@ -970,7 +997,9 @@ pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String>
         config_toml: text.clone(),
     };
 
-    let fitness = evolver.objective(seed).map_err(|err| err.to_string())?;
+    let fitness = evolver
+        .objective(seed, None)
+        .map_err(|err| err.to_string())?;
     let outcome = dispatch::evolve(&evolver.config, &fitness, evolver.base_graph.as_ref(), seed)
         .map_err(|err| err.to_string())?;
 
@@ -1231,7 +1260,7 @@ mod tests {
                 .set_fitness_function(&objective, "maximize")
                 .expect("registering a callable on a python config");
 
-            let results = evolver.run(1, 1, Some(1)).expect("the run completes");
+            let results = evolver.run(py, 1, 1, Some(1)).expect("the run completes");
             let edges = &results[0].best_edges;
 
             assert!(!edges.is_empty(), "an edge-maximizing run found no edges");

@@ -147,7 +147,17 @@ impl GraphEvolver {
     /// is what keeps a new objective to a single arm rather than one arm per
     /// strategy and genome combination. `crate::fitness`'s module doc has the
     /// whole chain.
-    pub(crate) fn objective(&self, run_seed: u64) -> PyResult<Box<dyn Fitness>> {
+    ///
+    /// `py` is the GIL token to report a `struct_match` reference folder's
+    /// `LoadWarning`s through, when one is held — `None` on the Rust-native
+    /// route (`GraphEvolver::run_from_toml`, spec §5.3 route 4), which has no
+    /// Python interpreter to raise a `UserWarning` on, so those warnings go to
+    /// stderr instead. See `struct_match_reference`.
+    pub(crate) fn objective(
+        &self,
+        run_seed: u64,
+        py: Option<Python<'_>>,
+    ) -> PyResult<Box<dyn Fitness>> {
         match &self.config.fitness {
             FitnessConfig::EpiSpread { sir } => {
                 Ok(Box::new(EpiSpread::new(sir_sample_params(sir), run_seed)))
@@ -180,7 +190,7 @@ impl GraphEvolver {
                 // Shared, not rebuilt: this arm runs once per replicate, and
                 // the reduced reference set is immutable. See
                 // `GraphEvolver::struct_match_reference`.
-                let reference = self.struct_match_reference()?;
+                let reference = self.struct_match_reference(py)?;
 
                 let objective = StructMatch::new(
                     reference,
@@ -227,7 +237,16 @@ impl GraphEvolver {
     /// histogram into the last bin and silently retire the whole family.
     /// A candidate above the top lands in the last bin, which is the honest
     /// reading: more connected than anything in the reference set.
-    fn struct_match_reference(&self) -> PyResult<Arc<ReferenceStatistics>> {
+    ///
+    /// # Warnings
+    ///
+    /// Reported the same way `GraphEvolver::load_reference_graphs` reports
+    /// them for a base-graph reference set: a repeated edge, a zero-weight
+    /// edge, and a file with no edges, each naming the file it came from.
+    /// Only the caller whose load wins the `OnceLock` race below reports —
+    /// a losing caller's graphs are discarded in favour of the winner's, so
+    /// its warnings would describe a reference set nobody is using.
+    fn struct_match_reference(&self, py: Option<Python<'_>>) -> PyResult<Arc<ReferenceStatistics>> {
         if let Some(cached) = self.struct_match_reference.get() {
             return Ok(Arc::clone(cached));
         }
@@ -301,7 +320,12 @@ impl GraphEvolver {
         // If another caller won the race, take theirs, so every replicate in a
         // run shares exactly one reduced reference set.
         match self.struct_match_reference.set(Arc::clone(&shared)) {
-            Ok(()) => Ok(shared),
+            Ok(()) => {
+                for file in &loaded {
+                    crate::emit_load_warnings_maybe(py, &file.source, &file.warnings)?;
+                }
+                Ok(shared)
+            }
             Err(_) => {
                 Ok(Arc::clone(self.struct_match_reference.get().expect(
                     "set failed only because a value is already present",
@@ -1030,7 +1054,7 @@ mod tests {
         for (block, expected) in cases {
             let evolver = evolver_with(&block);
             let objective = evolver
-                .objective(7)
+                .objective(7, None)
                 .unwrap_or_else(|err| panic!("{block} should build an objective: {err}"));
 
             assert_eq!(
@@ -1050,8 +1074,12 @@ mod tests {
         // them must not.
         let evolver = evolver_with(&struct_match_block("shared"));
 
-        let first = evolver.objective(1).expect("first replicate's objective");
-        let second = evolver.objective(2).expect("second replicate's objective");
+        let first = evolver
+            .objective(1, None)
+            .expect("first replicate's objective");
+        let second = evolver
+            .objective(2, None)
+            .expect("second replicate's objective");
 
         // Same reference set means the same score for the same graph.
         let mut candidate = Graph::new(3, 1);
@@ -1080,7 +1108,7 @@ mod tests {
         // the top is 2.
         let evolver = evolver_with(&struct_match_block("axis"));
 
-        evolver.objective(1).expect("an objective");
+        evolver.objective(1, None).expect("an objective");
 
         let axes = evolver
             .struct_match_reference
@@ -1101,7 +1129,7 @@ mod tests {
                      reference_folder = \"no_such_reference_folder_anywhere\"\n";
         let evolver = evolver_with(block);
 
-        let text = match evolver.objective(1) {
+        let text = match evolver.objective(1, None) {
             Err(error) => error.to_string(),
             Ok(_) => panic!("a missing folder must not build an objective"),
         };
@@ -1128,7 +1156,7 @@ mod tests {
         let evolver = evolver_with(&block);
 
         assert!(
-            evolver.objective(1).is_err(),
+            evolver.objective(1, None).is_err(),
             "an empty reference set must not build an objective"
         );
     }
@@ -1179,8 +1207,8 @@ mod tests {
         // Sharing one lets thread scheduling decide which run sees which seed.
         let evolver = evolver_with(SIR_FITNESS);
 
-        let first = evolver.objective(1).expect("first objective");
-        let second = evolver.objective(1).expect("second objective");
+        let first = evolver.objective(1, None).expect("first objective");
+        let second = evolver.objective(1, None).expect("second objective");
 
         // Same seed, so the two agree — what matters is that both are live at
         // once, which a shared or moved-out instance could not manage.
@@ -1496,8 +1524,7 @@ mod tests {
             "[genome]\ntype = \"sda\"\nnum_states = 4\nmax_resp_len = 3\ninit_state = 9\n",
         );
 
-        let err = evolver
-            .run(1, 1, None)
+        let err = Python::attach(|py| evolver.run(py, 1, 1, None))
             .expect_err("init_state 9 with num_states 4 must be rejected");
 
         let message = err.to_string();
@@ -1634,7 +1661,7 @@ mod tests {
         let evolver = evolver_with(PYTHON_FITNESS);
 
         let err = evolver
-            .objective(1)
+            .objective(1, None)
             .map(|_| ())
             .expect_err("a python config with no callable cannot build an objective");
 
@@ -1958,7 +1985,11 @@ mod tests {
             let seeds = replicate_seeds(11, 3);
             let mut objectives = Vec::with_capacity(seeds.len());
             for &seed in &seeds {
-                objectives.push(evolver.objective(seed).expect("objective per run"));
+                objectives.push(
+                    evolver
+                        .objective(seed, Some(py))
+                        .expect("objective per run"),
+                );
             }
 
             // `max_cores` is deliberately generous: under the python arm it is
@@ -2142,7 +2173,9 @@ mod tests {
         // replicates different targets, and the run would still look fine.
         let evolver = evolver_with(&struct_match_block("replicates"));
         let run = |seed: u64| {
-            let objective = evolver.objective(seed).expect("an objective per replicate");
+            let objective = evolver
+                .objective(seed, None)
+                .expect("an objective per replicate");
             evolve(&evolver.config, &objective, None, seed).expect("run completes")
         };
 
@@ -2225,9 +2258,7 @@ mod tests {
         };
 
         let [result] = <[_; 1]>::try_from(
-            evolver
-                .run(8, 1, None)
-                .expect("a full config run completes"),
+            Python::attach(|py| evolver.run(py, 8, 1, None)).expect("a full config run completes"),
         )
         .expect("one run returns exactly one result");
 
@@ -2274,11 +2305,9 @@ mod tests {
         // results across the two caps is that cross-talk not happening.
         let mut evolver = replicate_evolver();
 
-        let sequential = evolver
-            .run(20260813, 4, Some(1))
+        let sequential = Python::attach(|py| evolver.run(py, 20260813, 4, Some(1)))
             .expect("four replicates, one at a time");
-        let concurrent = evolver
-            .run(20260813, 4, Some(8))
+        let concurrent = Python::attach(|py| evolver.run(py, 20260813, 4, Some(8)))
             .expect("four replicates, up to eight at a time");
 
         assert_eq!(sequential.len(), 4, "one result per requested run");
@@ -2307,8 +2336,8 @@ mod tests {
         // replicates and wants five keeps the three they had.
         let mut evolver = replicate_evolver();
 
-        let three = evolver.run(99, 3, Some(2)).expect("three replicates");
-        let five = evolver.run(99, 5, Some(2)).expect("five replicates");
+        let three = Python::attach(|py| evolver.run(py, 99, 3, Some(2))).expect("three replicates");
+        let five = Python::attach(|py| evolver.run(py, 99, 5, Some(2))).expect("five replicates");
 
         assert_eq!(five.len(), 5, "the larger request runs all five");
         for (index, (small, large)) in three.iter().zip(&five).enumerate() {
@@ -2331,7 +2360,7 @@ mod tests {
         // answer" assertion would still pass.
         let mut evolver = replicate_evolver();
 
-        let results = evolver.run(7, 4, Some(2)).expect("four replicates");
+        let results = Python::attach(|py| evolver.run(py, 7, 4, Some(2))).expect("four replicates");
 
         let first = &results[0];
         let all_identical = results
@@ -2350,7 +2379,8 @@ mod tests {
         // can be separated again.
         let mut evolver = replicate_evolver();
 
-        let results = evolver.run(4242, 3, None).expect("three replicates");
+        let results =
+            Python::attach(|py| evolver.run(py, 4242, 3, None)).expect("three replicates");
 
         for (index, result) in results.iter().enumerate() {
             assert_eq!(result.seed, 4242, "the master seed, not the per-run draw");
@@ -2372,13 +2402,18 @@ mod tests {
             config_toml: String::new(),
         };
 
-        let [first] = <[_; 1]>::try_from(evolver.run(4, 1, None).expect("first run"))
-            .expect("one run returns exactly one result");
-        let [second] = <[_; 1]>::try_from(evolver.run(5, 1, None).expect("second run"))
-            .expect("one run returns exactly one result");
-        let [first_again] =
-            <[_; 1]>::try_from(evolver.run(4, 1, None).expect("first run, repeated"))
-                .expect("one run returns exactly one result");
+        let [first] = <[_; 1]>::try_from(
+            Python::attach(|py| evolver.run(py, 4, 1, None)).expect("first run"),
+        )
+        .expect("one run returns exactly one result");
+        let [second] = <[_; 1]>::try_from(
+            Python::attach(|py| evolver.run(py, 5, 1, None)).expect("second run"),
+        )
+        .expect("one run returns exactly one result");
+        let [first_again] = <[_; 1]>::try_from(
+            Python::attach(|py| evolver.run(py, 4, 1, None)).expect("first run, repeated"),
+        )
+        .expect("one run returns exactly one result");
 
         // Seed 4 reproduces exactly, after seed 5 has run through the same
         // evolver — so nothing the second run did survived into the third.
@@ -2411,8 +2446,7 @@ mod tests {
                 config_toml: String::new(),
             };
             let [result] = <[_; 1]>::try_from(
-                evolver
-                    .run(3, 1, None)
+                Python::attach(|py| evolver.run(py, 3, 1, None))
                     .expect("a full config run completes"),
             )
             .expect("one run returns exactly one result");
@@ -2485,9 +2519,7 @@ mod tests {
             config_toml: config_toml.clone(),
         };
         let [result] = <[_; 1]>::try_from(
-            evolver
-                .run(7, 1, None)
-                .expect("a full config run completes"),
+            Python::attach(|py| evolver.run(py, 7, 1, None)).expect("a full config run completes"),
         )
         .expect("one run returns exactly one result");
 
