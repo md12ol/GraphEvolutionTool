@@ -212,7 +212,7 @@ never replays the exact draws that just built its population.</figcaption>
         <td>No — and it should not. The seed means "the same dice", not "the same run".</td></tr>
     <tr><td>Same seed, one config value changed</td>
         <td>No. Every downstream draw shifts.</td></tr>
-    <tr><td>Same seed, a <a href="new-fitness.html">Python objective</a> that is itself
+    <tr><td>Same seed, a <a href="new-fitness.html">Python Objective</a> that is itself
         random</td>
         <td><b>No.</b> GET cannot seed your callable. If you want reproducibility, seed it
             yourself from something deterministic.</td></tr>

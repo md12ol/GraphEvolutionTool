@@ -28,6 +28,7 @@
 
   --sidebar-w: 17.5rem;
   --toc-w: 15rem;
+  --layout-max: 96rem;
   --radius: 8px;
 
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
@@ -212,6 +213,11 @@ pre code { background: none; border: 0; padding: 0; font-size: 1em; }
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   min-height: 100vh;
+  /* Past this width the whole page centres rather than growing: the sidebar
+     stops drifting away from the text, and the reading column stays put
+     instead of sliding left as the window widens. */
+  max-width: var(--layout-max);
+  margin: 0 auto;
 }
 
 .sidebar {
@@ -246,15 +252,38 @@ pre code { background: none; border: 0; padding: 0; font-size: 1em; }
   margin-left: auto;
 }
 
-.nav-group { padding: .8rem 0 .1rem; }
-.nav-group > .nav-title {
+.nav-group { padding: .35rem 0 .1rem; }
+.nav-group > a.nav-title {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
   font-size: .7rem;
   text-transform: uppercase;
   letter-spacing: .09em;
   color: var(--text-faint);
   font-weight: 650;
-  padding: 0 1.1rem .35rem;
+  padding: .35rem 1.1rem .35rem .9rem;
 }
+.sidebar a.nav-title:hover { color: var(--text); text-decoration: none; }
+
+/* The caret is drawn rather than typed, so it inherits colour and needs no
+   font that might be missing. */
+.nav-group > a.nav-title::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform .15s ease;
+}
+.nav-group.open > a.nav-title::before { transform: rotate(90deg); }
+.nav-group.open > a.nav-title { color: var(--text-muted); }
+
+/* Collapsed sections are hidden outright rather than height-animated: the
+   click navigates, so the section is gone before any transition could play. */
+.nav-items { display: none; }
+.nav-group.open > .nav-items { display: block; }
 .sidebar a.nav-link {
   display: block;
   padding: .3rem 1.1rem .3rem 1.15rem;
@@ -274,10 +303,14 @@ pre code { background: none; border: 0; padding: 0; font-size: 1em; }
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--toc-w);
   gap: 2.5rem;
-  max-width: 68rem;
+  /* No max-width: the grid fills the space beside the sidebar so the contents
+     rail sits against the right edge. The reading column is capped by `main`
+     below instead, which is what should be limited -- capping the grid put the
+     rail in the middle of the page with empty space to its right. */
   padding: 2.4rem 2.2rem 6rem;
 }
-.content.no-toc { grid-template-columns: minmax(0, 1fr); max-width: 54rem; }
+.content > main { max-width: 54rem; }
+.content.no-toc { grid-template-columns: minmax(0, 1fr); }
 
 main { min-width: 0; }
 

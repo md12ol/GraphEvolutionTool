@@ -112,24 +112,38 @@
       '<circle cx="16" cy="8" r="3"/><circle cx="8" cy="22" r="3"/><circle cx="24" cy="22" r="3"/>' +
       '</g></svg>' +
       '<a href="' + href("index.html") + '">GET docs</a>' +
-      '<span class="tag">v0.1</span>';
+      '<span class="tag">v0.9</span>';
     aside.appendChild(brand);
 
+    /* One section open at a time: the one holding the current page. A title is
+       a link to its own first page, so following it lands you there and the
+       next page load opens that section and closes this one -- the accordion
+       needs no state of its own, and a shared link always arrives showing the
+       same thing. */
     var nav = document.createElement("nav");
     NAV.forEach(function (group) {
+      var holdsPage = group.items.some(function (i) { return i[0] === page; });
+
       var g = document.createElement("div");
-      g.className = "nav-group";
-      var t = document.createElement("div");
+      g.className = "nav-group" + (holdsPage ? " open" : "");
+
+      var t = document.createElement("a");
       t.className = "nav-title";
+      t.href = href(group.items[0][0]);
       t.textContent = group.title;
+      t.setAttribute("aria-expanded", holdsPage ? "true" : "false");
       g.appendChild(t);
+
+      var list = document.createElement("div");
+      list.className = "nav-items";
       group.items.forEach(function (item) {
         var a = document.createElement("a");
         a.className = "nav-link" + (item[0] === page ? " active" : "");
         a.href = href(item[0]);
         a.textContent = item[1];
-        g.appendChild(a);
+        list.appendChild(a);
       });
+      g.appendChild(list);
       nav.appendChild(g);
     });
     aside.appendChild(nav);
@@ -248,6 +262,17 @@
 
   /* A deliberately small highlighter: comments, strings, numbers, keywords.
      It tints; it does not parse. Anything it gets wrong is cosmetic. */
+  /* Apply `re` to the parts of `html` that are not inside a tag, so a
+     replacement cannot corrupt an attribute inserted by an earlier pass. */
+  function outsideTags(html, re, replacement) {
+    var parts = html.split(/(<[^>]*>)/);
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].charAt(0) === "<") continue;
+      parts[i] = parts[i].replace(re, replacement);
+    }
+    return parts.join("");
+  }
+
   function tint(src, lang) {
     var out = escapeHtml(src);
     var commentRe = lang === "python" || lang === "toml" || lang === "bash"
@@ -259,9 +284,15 @@
       return (b === undefined) ? '<span class="tok-com">' + m + '</span>'
                                : a + '<span class="tok-com">' + b + '</span>';
     });
-    out = out.replace(/\b(\d+\.?\d*)\b/g, '<span class="tok-num">$1</span>');
+    /* Every pass from here on runs only on the text between tags. The string
+       and comment passes above have already inserted `class="tok-..."`
+       attributes, and `class` is a Python keyword -- matching it inside an
+       attribute produced `<span <span class="tok-key">class</span>="tok-str">`,
+       which a browser renders as a stray `="tok-str">` in the middle of the
+       code. Any Python block containing a string hit this. */
+    out = outsideTags(out, /\b(\d+\.?\d*)\b/g, '<span class="tok-num">$1</span>');
     (KEYWORDS[lang] || []).forEach(function (kw) {
-      out = out.replace(new RegExp("\\b" + kw + "\\b", "g"),
+      out = outsideTags(out, new RegExp("\\b" + kw + "\\b", "g"),
                         '<span class="tok-key">' + kw + "</span>");
     });
     return out;

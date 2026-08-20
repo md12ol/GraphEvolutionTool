@@ -495,7 +495,7 @@ pub fn new(
     <p>
       The only fallible constructor of the three. It rejects an <b>empty</b> target (which would be
       the divisor of every RMSE, giving <code>NaN</code>) and any <b>non-finite</b> value
-      (<code>fitness.rs:404-408</code>). <a href="config.html">Config validation</a> already rejects
+      (<code>fitness.rs:404-408</code>). <a href="config.html">Config Validation</a> already rejects
       both, so this is a backstop for a <code>Config</code> built in Rust without validation.
     </p>
   </div>
@@ -557,7 +557,7 @@ pub fn new(
 <h3>Worked example across all three</h3>
 
 <p>
-  Take the five-node graph from the <a href="sir.html#walkthrough">SIR walkthrough</a> — edges
+  Take the five-node graph from the <a href="sir.html#walkthrough">SIR Walkthrough</a> — edges
   <code>0–1</code>, <code>1–2</code>, <code>2–3</code>, <code>1–4</code>, rate <code>1.0</code>,
   patient zero <code>0</code>. Its single epidemic is
   <code>length 4, spread 5, profile [1, 1, 2, 1, 0]</code>. At rate 1.0 every epidemic is identical,
