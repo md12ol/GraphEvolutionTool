@@ -148,7 +148,7 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
       errors instead.</li>
   <li><b>Use generational, not steady-state.</b> Steady-state scores two children per mating event,
       so a Python objective pays one crossing <i>per event</i> instead of per generation. See
-      <a href="evolvers.html">Evolution Strategies</a>.</li>
+      <a href="variation.html#strategies">Variation &amp; Selection</a>.</li>
   <li><b>Replicates run sequentially under a Python objective</b>, chosen by the engine rather than
       by you — <code>n</code> concurrent runs would be <code>n</code> threads contending for one
       lock.</li>
@@ -231,7 +231,7 @@ impl Fitness for EdgeBudget {
   <b>Numbers you read from the outcome are in engine orientation</b> — lower is better, whatever
   your direction said. That is the stated cost of converting only at the two edges of the system,
   and the direction carried on the outcome is what you convert with. See
-  <a href="fitness.html">Fitness &amp; Orientation</a>.
+  <a href="fitness.html">Fitness &amp; Output</a>.
 </div>
 
 <p>

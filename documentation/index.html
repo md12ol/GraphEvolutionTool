@@ -107,15 +107,15 @@ touching the engine.</figcaption>
   <tbody>
     <tr>
       <td><b>Representation</b></td>
-      <td><a href="guide/genomes.html#edge-edit">edge-edit</a> — a script of edits over a starting
-          graph · <a href="guide/genomes.html#sda">SDA</a> — an automaton that writes a graph from
+      <td><a href="guide/pipeline.html#edge-edit">edge-edit</a> — a script of edits over a starting
+          graph · <a href="guide/pipeline.html#sda">SDA</a> — an automaton that writes a graph from
           scratch</td>
       <td><code>[genome] type</code></td>
     </tr>
     <tr>
       <td><b>Strategy</b></td>
-      <td><a href="guide/evolvers.html#generational">generational</a> — replace everyone each
-          round · <a href="guide/evolvers.html#steady-state">steady-state</a> — one mating at a
+      <td><a href="guide/variation.html#generational">generational</a> — replace everyone each
+          round · <a href="guide/variation.html#steady-state">steady-state</a> — one mating at a
           time</td>
       <td><code>[evolution] type</code></td>
     </tr>
@@ -176,11 +176,10 @@ print(len(result.history))           # the convergence log, one row per generati
     <tr><td>run an experiment and get numbers out</td>
         <td><a href="guide/route-python-objects.html">Python: Config Objects</a> →
             <a href="guide/route-python-toml.html">Python: TOML File</a> →
-            <a href="guide/output.html">Logs &amp; Results</a></td></tr>
+            <a href="guide/fitness.html#output">Logs &amp; results</a></td></tr>
     <tr><td>understand why a run behaves the way it does</td>
-        <td><a href="guide/fitness.html">Fitness &amp; Orientation</a> →
-            <a href="guide/sir.html">The SIR Model</a> →
-            <a href="guide/reproducibility.html">Seeds &amp; Reproducibility</a></td></tr>
+        <td><a href="guide/fitness.html">Fitness &amp; Output</a> — orientation, the epidemic
+            model, and the seeding scheme</td></tr>
     <tr><td>score graphs by something other than an epidemic</td>
         <td><a href="guide/new-fitness.html">Add an Objective</a></td></tr>
     <tr><td>add a new representation or strategy</td>

@@ -13,16 +13,16 @@
 <p class="page-kicker">How it works</p>
 <h1>The pipeline</h1>
 <p class="lede">
-  One loop, four stages, and a small number of rules about who is allowed to do what. This page is
-  the map; every stage has its own page with the detail.
+  One loop, and the two things it moves between: the <a href="#graph">graph</a> every candidate
+  becomes, and the <a href="#genomes">genomes</a> that write one.
 </p>
 
 <h2>The loop</h2>
 
 <p>
-  GET is an evolutionary algorithm. It keeps a <b>population</b> of candidate solutions, scores
-  them, lets the better ones produce children, and repeats. The only thing that makes it a
-  <i>graph</i> evolution tool is what a candidate solution is and how it gets scored.
+  GET keeps a <b>population</b> of candidate solutions, scores them, lets the better ones produce
+  children, and repeats. What makes it a <i>graph</i> evolution tool is what a candidate is and how
+  it gets scored.
 </p>
 
 <figure>
@@ -113,19 +113,37 @@
 (generational) or once per mating event (steady-state).</figcaption>
 </figure>
 
-<h2>Stage by stage</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Stage</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td><b>Config</b></td>
+        <td>Written as <a href="route-python-toml.html">TOML</a> or built from
+            <a href="route-python-objects.html">Python objects</a>. Both become the same Rust
+            <code>Config</code>.</td></tr>
+    <tr><td><b>Validate</b></td>
+        <td>Once, before a single graph is allocated. A bad config comes back as an exception
+            naming the field, never a panic.</td></tr>
+    <tr><td><b>Dispatch</b></td>
+        <td>Picks the concrete strategy and genome types, and <b>builds the starting
+            population</b> — the evolver never mints genomes itself.</td></tr>
+    <tr><td><b>Express</b></td>
+        <td>Every genome becomes a <a href="#graph">graph</a>, in parallel.</td></tr>
+    <tr><td><b>Score &amp; orient</b></td>
+        <td>Each graph gets one <code>f64</code>, flipped into the engine's orientation and checked
+            for <code>NaN</code>. <a href="fitness.html#gate">→</a></td></tr>
+    <tr><td><b>Select, breed, mutate</b></td>
+        <td>Tournament selection and three probability rolls, all owned by the engine.
+            <a href="variation.html">→</a></td></tr>
+    <tr><td><b>Out</b></td>
+        <td>The best genome, its graph, its fitness, and the run history.
+            <a href="fitness.html#output">→</a></td></tr>
+  </tbody>
+</table>
+</div>
 
-<h3>1. Config in, validated once</h3>
-<p>
-  A run starts from a <a href="route-python-toml.html">Python: TOML File</a>. Whether you wrote it as
-  TOML by hand or built it out of Python objects, it ends up as the same Rust <code>Config</code>
-  struct, and <code>Config::validate</code> checks it <b>before a single graph is allocated</b>.
-  A bad config is a user mistake, so it comes back as a Python exception naming the offending field
-  — never a panic crossing the FFI boundary. Everything downstream is allowed to assume the config
-  is sane.
-</p>
+<h3 id="two-front-ends">Two front ends, one parser</h3>
 
-<h3 id="two-front-ends">2. Two front ends, one parser</h3>
 <p>
   The Python configuration objects do not parse anything. They <b>serialize to TOML</b>, and that
   TOML is what Rust parses:
@@ -135,128 +153,305 @@
                                               hand-written TOML ─┘</code></pre>
 
 <p>
-  Two things fall out of that, and both matter in practice. There is exactly one parser and one
-  validator, so the Python path cannot accept a configuration the file path would reject. And the
-  generated TOML <i>is</i> a provenance record: write it next to your results and the run can be
-  reproduced verbatim.
+  So there is one parser and one validator, and the Python path cannot accept a configuration the
+  file path would reject. The generated TOML doubles as a provenance record: write it next to your
+  results and the run reproduces verbatim.
 </p>
 
-<h3>3. Dispatch picks the concrete types</h3>
-<p>
-  The engine is <b>statically generic</b> over the genome — <code>Evolver::run</code> is a generic
-  method, so there is no <code>Box&lt;dyn Evolver&gt;</code> and no <code>dyn Genome</code>.
-  Runtime choice is resolved by a <code>match</code> in
-  dispatch.rs that instantiates real types.
-</p>
-<p>
-  The two axes are not symmetric, and only one of them is a match:
-</p>
-<ul>
-  <li><b>Genome cannot be erased.</b> <code>mutate</code> and <code>crossover</code> are generic
-      over the RNG, <code>crossover</code> takes <code>&amp;mut Self</code>, <code>Clone</code>
-      requires <code>Sized</code>, and <code>Context</code> is an associated type that differs per
-      representation. So <b>strategy × genome</b> stays a match.</li>
-  <li><b>Fitness can be.</b> No generic methods, no <code>Self</code> in argument position, and
-      <code>dyn Fitness</code> is <code>Send + Sync</code>. The objective is erased to
-      <code>Box&lt;dyn Fitness&gt;</code> <i>before</i> the evolver is built, which collapses
-      dispatch from strategy × genome × objective down to strategy × genome.</li>
-</ul>
-<p>
-  The practical consequence: <b>adding an objective is one match arm and never touches
-  dispatch</b>, while adding a genome or a strategy multiplies the dispatch table. See
-  <a href="new-fitness.html">Add an Objective</a>.
-</p>
-
-<div class="warn">
-  <b>Dispatch also builds the starting population.</b> The evolver deliberately cannot mint
-  genomes: constructors differ per representation and some are fallible. Dispatch is where
-  genome-specific knowledge already lives, so it builds the population and hands it in. That is
-  what keeps bad dimensions a startup error rather than a mid-run panic, and it is why evolvers
-  are testable from a hand-built population.
+<div class="note">
+  <b>Two rules worth memorising.</b> Everything inside the engine is <b>lower-is-better</b>,
+  whatever your objective was — your units come back at the Python boundary. And the engine never
+  calls a fitness function directly; one gate does all scoring, orientation and
+  <code>NaN</code> rejection.
 </div>
 
-<h3>4. Express — genome to graph</h3>
+<h2 id="graph">The graph</h2>
+
 <p>
-  Every genome in the population is expressed into a <a href="graph.html">Graph</a>, in parallel
-  across rayon workers. Expression is pure Rust and holds no Python lock. See
-  <a href="genomes.html">Genomes</a> for what each representation does here.
+  A <code>Graph</code> is an <b>undirected multigraph on a fixed node count</b>, stored as a
+  symmetric adjacency matrix of weights. Weight <code>0</code> means no edge; weight <code>k</code>
+  means <code>k</code> parallel edges. Every graph carries a <code>max_edge_multiplicity</code>
+  cap — set it to <code>1</code>, the default, and you have an ordinary simple graph.
 </p>
 
-<h3>5. Score — graph to a number</h3>
+<figure>
+<svg viewBox="0 0 660 250" role="img" aria-label="A five-node graph shown as a drawing and as its adjacency matrix.">
+  <g style="color:var(--border-firm)">
+    <!-- drawing -->
+    <text x="130" y="26" class="d-text-acc" text-anchor="middle">the graph</text>
+    <line x1="130" y1="60"  x2="60"  y2="120" class="d-stroke" stroke-width="2"/>
+    <line x1="130" y1="60"  x2="200" y2="120" class="d-stroke" stroke-width="2"/>
+    <line x1="60"  y1="120" x2="95"  y2="195" class="d-stroke" stroke-width="2"/>
+    <line x1="200" y1="120" x2="165" y2="195" class="d-stroke" stroke-width="2"/>
+    <!-- a double edge, drawn as two arcs -->
+    <path d="M95 195 Q130 178 165 195" class="d-stroke" stroke-width="2"/>
+    <path d="M95 195 Q130 212 165 195" class="d-stroke" stroke-width="2"/>
+    <text x="130" y="228" class="d-text-sm" text-anchor="middle">weight 2</text>
+
+    <g class="d-fill-acc">
+      <circle cx="130" cy="60"  r="15"/><circle cx="60"  cy="120" r="15"/>
+      <circle cx="200" cy="120" r="15"/><circle cx="95"  cy="195" r="15"/>
+      <circle cx="165" cy="195" r="15"/>
+    </g>
+    <g class="d-stroke" stroke-width="1.4" fill="none">
+      <circle cx="130" cy="60"  r="15"/><circle cx="60"  cy="120" r="15"/>
+      <circle cx="200" cy="120" r="15"/><circle cx="95"  cy="195" r="15"/>
+      <circle cx="165" cy="195" r="15"/>
+    </g>
+    <g class="d-text-mono" text-anchor="middle">
+      <text x="130" y="65">0</text><text x="60" y="125">1</text><text x="200" y="125">2</text>
+      <text x="95" y="200">3</text><text x="165" y="200">4</text>
+    </g>
+
+    <!-- matrix -->
+    <text x="480" y="26" class="d-text-acc" text-anchor="middle">the storage</text>
+    <g class="d-text-mono" text-anchor="middle" font-size="13">
+      <text x="380" y="60">0</text><text x="420" y="60">1</text><text x="460" y="60">2</text>
+      <text x="500" y="60">3</text><text x="540" y="60">4</text>
+
+      <text x="340" y="90">0</text>
+      <text x="380" y="90">0</text><text x="420" y="90">1</text><text x="460" y="90">1</text>
+      <text x="500" y="90">0</text><text x="540" y="90">0</text>
+
+      <text x="340" y="120">1</text>
+      <text x="380" y="120">1</text><text x="420" y="120">0</text><text x="460" y="120">0</text>
+      <text x="500" y="120">1</text><text x="540" y="120">0</text>
+
+      <text x="340" y="150">2</text>
+      <text x="380" y="150">1</text><text x="420" y="150">0</text><text x="460" y="150">0</text>
+      <text x="500" y="150">0</text><text x="540" y="150">1</text>
+
+      <text x="340" y="180">3</text>
+      <text x="380" y="180">0</text><text x="420" y="180">1</text><text x="460" y="180">0</text>
+      <text x="500" y="180">0</text><text x="540" y="180">2</text>
+
+      <text x="340" y="210">4</text>
+      <text x="380" y="210">0</text><text x="420" y="210">0</text><text x="460" y="210">1</text>
+      <text x="500" y="210">2</text><text x="540" y="210">0</text>
+    </g>
+    <rect x="360" y="70" width="200" height="150" rx="6" class="d-stroke"/>
+    <text x="480" y="240" class="d-text-sm" text-anchor="middle">symmetric; the diagonal is always 0</text>
+  </g>
+</svg>
+<figcaption>Five nodes, six edges, one of which is doubled. The matrix is always
+<code>network_size × network_size</code> however sparse the graph is — which is why
+<a href="route-python-objects.html">memory scales with the square of the node count</a>.</figcaption>
+</figure>
+
+<div class="warn">
+  <b>The graph is silent, and that is the design.</b> Self-loops, out-of-range vertices and
+  over-cap weights are ignored or clamped rather than rejected, so an impossible edit is simply a
+  no-op. Genome expression therefore never has to validate anything and cannot fail. Two
+  consequences bite in practice: feeding a cap-5 result into a cap-1 run silently collapses every
+  weight to 1, and five of the nine <a href="#operations">edge-edit operations</a> do nothing on an
+  empty graph.
+</div>
+
 <p>
-  Each graph gets one <code>f64</code>. For the three built-in objectives that means running
-  <code>num_epidemics</code> <a href="sir.html">SIR Simulations</a> on the graph and reading one
-  number off them. Scoring is <b>batched</b>: the whole population goes over in one call, which is
-  what makes a Python objective viable at all.
+  The node count never changes during a run, edges are undirected and carry no attributes, and
+  storage is dense — every operation is <code>O(1)</code> at a memory cost
+  <a href="route-python-objects.html">quadratic in the node count</a>. Those are
+  <a href="../design-notes.html#non-goals">stated non-goals</a> rather than gaps.
 </p>
 
-<h3>6. Orient — the one conversion</h3>
 <p>
-  Objectives return values in their own units and sign; the engine only ever minimizes. The
-  conversion happens in exactly one function, <code>common::express_and_score</code>, which is
-  also the gate that rejects <code>NaN</code>. This is important enough to have
-  <a href="fitness.html">its own page</a> — including why a single <code>NaN</code> from a
-  maximizing objective can silently take over a whole run.
+  Reading a graph out gives <code>get_edge_list()</code>: every edge once as
+  <code>(u, v, multiplicity)</code> with <code>u &lt; v</code>, row-major. That is the order SDA
+  expression writes in, and the shape a run hands back to Python. <code>degree</code> counts
+  <b>distinct neighbours</b>, not edge copies — on a multigraph the two differ.
 </p>
 
-<h3>7. Select, breed, mutate</h3>
-<p>
-  Tournament selection picks parents; <code>crossover_rate</code> decides whether a pair
-  recombines; two further rolls decide whether and how much each child mutates. All of it is
-  owned by the engine rather than the genome — see <a href="variation.html">Crossover &amp;
-  mutation</a>.
-</p>
-
-<h3>8. Out</h3>
-<p>
-  A run produces an <code>EvolutionOutcome</code>: the best genome, its already-expressed graph,
-  its fitness, and the full run history. The Python boundary converts fitness back into your units
-  on the way out. See <a href="output.html">Logs &amp; Results</a>.
-</p>
-
-<h2>The three bounds that make it parallel</h2>
+<h2 id="genomes">Genomes</h2>
 
 <p>
-  These appear on the traits and look like boilerplate. They are not — each is load-bearing, and
-  removing any one of them stops the pipeline compiling in parallel form:
+  A genome is a compact recipe that <b>expresses</b> into a graph. Both of GET's are <b>indirect
+  encodings</b> — small objects whose local changes produce structured changes in the resulting
+  graph, which explores far better than flipping bits in an edge list.
 </p>
 
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Bound</th><th>Why it is there</th></tr></thead>
+  <thead><tr><th></th><th><a href="#edge-edit">edge-edit</a></th><th><a href="#sda">SDA</a></th></tr></thead>
   <tbody>
-    <tr><td><code>Genome: Clone + Send + Sync</code></td>
-        <td>The population is expressed across rayon workers. <code>Clone</code> is how an
-            individual is copied — there is no <code>copy</code> method.</td></tr>
-    <tr><td><code>Genome::Context: Send + Sync</code></td>
-        <td>One <code>&amp;Context</code> is shared by every worker during expression. Parallel
-            expression does not compile without it.</td></tr>
-    <tr><td><code>Fitness: Send + Sync</code></td>
-        <td>The default batch scorer fans out with <code>par_iter</code>.</td></tr>
+    <tr><td>Is</td><td>A script of edit operations</td><td>A finite-state machine</td></tr>
+    <tr><td>Starts from</td><td>A base graph you supply (or an empty one)</td><td>Nothing</td></tr>
+    <tr><td>Good at</td><td>Refining a network you already have</td>
+        <td>Discovering structure from scratch</td></tr>
+    <tr><td>Config</td><td><code>gene_length</code>, operation weights</td>
+        <td><code>num_states</code>, <code>max_resp_len</code>, <code>init_state</code></td></tr>
+    <tr><td>One mutation is</td><td>Rerolling one gene</td>
+        <td>Redrawing one transition, one response, or the initial character</td></tr>
+    <tr><td>Crossover is</td><td>Two-point over genes</td><td>Two-point over states</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="tip">
+  <b>They stack.</b> A run returns edge triples and an edge-edit run starts from a graph, so you
+  can evolve a topology with SDA and refine it with edge-edit, no new data format in between.
+  See <a href="route-python-objects.html">supplying a base graph</a>.
+</div>
+
+<p>Both satisfy one trait, and four parts of it are load-bearing:</p>
+
+<pre><code class="language-rust">pub trait Genome: Clone + Send + Sync {
+    type Context: Send + Sync;
+    fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph;
+    fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R);
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, rng: &amp;mut R);
+    fn print(&amp;self) -&gt; String;
+}</code></pre>
+
+<ul>
+  <li><code>crossover</code> recombines <b>in place</b>, leaving one child in each parent — both are
+      kept.</li>
+  <li><code>mutate</code> applies <b>exactly one</b> mutation per call. The engine calls it in a
+      loop; the genome does not get a vote on how many times.</li>
+  <li><code>print</code> lets a non-generic entry point record which individual won without knowing
+      its representation.</li>
+  <li><code>Context</code> carries run-level configuration and is the authority on graph size and
+      edge cap. It is shared by reference across every worker, which is why the bounds are there.</li>
+</ul>
+
+<h3 id="edge-edit">Edge-edit — a script over a base graph</h3>
+
+<p>
+  A list of encoded operations, applied in order to a clone of the base graph. <b>It is a script,
+  not a graph</b>: the same genome against a different base graph gives a different result, which
+  is what makes it good at refinement.
+</p>
+
+<p>
+  Each gene is one 64-bit integer — an <b>opcode in the low 4 bits</b> and a <b>32-bit payload</b>
+  above it, decoded mixed-radix into four vertex parameters using the node count <code>n</code> as
+  the base — <code>payload % n</code>, <code>/n % n</code>, <code>/n² % n</code>,
+  <code>/n³ % n</code>. Nothing is validated; an impossible edit is a no-op.
+</p>
+
+<h4 id="operations">The nine operations</h4>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Operation</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td><code>Add</code> / <code>Delete</code></td>
+        <td>Add or remove one edge copy between <code>v1</code> and <code>v2</code>.</td></tr>
+    <tr><td><code>Toggle</code></td>
+        <td>Absent → add. At the cap → remove. Otherwise <code>v3</code>'s parity decides.</td></tr>
+    <tr><td><code>LocalAdd</code> / <code>LocalDelete</code> / <code>LocalToggle</code></td>
+        <td>The same three, but the far endpoint is reached by a <b>two-hop walk</b> from
+            <code>v1</code> — to neighbour <code>v2</code>, then to <i>its</i> neighbour
+            <code>v3</code>. A walk that returns to the start or passes a degree-1 node is
+            rejected.</td></tr>
+    <tr><td><code>Hop</code></td>
+        <td>Move an edge to the two-hop endpoint, dropping the one to the intermediate
+            neighbour.</td></tr>
+    <tr><td><code>Swap</code></td>
+        <td>A 2-opt rewire. Two non-adjacent vertices of degree &gt; 2 and one neighbour each: cut
+            both edges and cross-connect, provided all four vertices are distinct and neither
+            would-be edge exists. Needs at least 4 nodes.</td></tr>
+    <tr><td><code>Null</code></td>
+        <td>A deliberate no-op. Weight it to <code>0</code> to make every gene do something.</td></tr>
   </tbody>
 </table>
 </div>
 
 <p>
-  Net effect: expression and native scoring are both parallel and free of the Python GIL. That
-  property is exactly what makes the batched Python objective design work — see
-  <a href="route-python-objects.html">Python: Config Objects</a>.
+  All of them are no-ops when their preconditions fail — nothing errors and nothing is retried. You
+  choose the mix with <b>relative weights</b> that need not sum to anything; <code>0.0</code>
+  disables an operation and at least one must be positive.
 </p>
 
-<h2>Two rules worth memorising</h2>
+<h3 id="sda">SDA — an automaton that writes a graph</h3>
+
+<p>
+  A Self-Driving Automaton is a small finite-state machine that reads back its own output as the
+  tape driving it. It holds an <code>init_char</code>, a transition table
+  (<code>[state][char] → next state</code>) and a response table
+  (<code>[state][char] → characters to emit</code>).
+</p>
+
+<p>
+  <b>Expression emits one character per upper-triangle vertex pair, and each character's raw value
+  <i>is</i> that edge's weight.</b> There is no decoding step. Output length is
+  <code>n(n-1)/2</code>, in the same row-major order <code>get_edge_list</code> uses — so
+  <code>output[0]</code> is <code>init_char</code> and sets edge <code>(0,1)</code>. Every response
+  is at least one character long, so the tape always grows and the run always terminates.
+</p>
+
+<figure>
+<svg viewBox="0 0 700 300" role="img" aria-label="An SDA reading its own output tape: the read head consumes a character, the machine emits a response, and the tape grows until it holds one character per vertex pair.">
+  <g style="color:var(--border-firm)">
+    <text x="20" y="24" class="d-text-acc">the tape — it is both the output and the input</text>
+
+    <g>
+      <rect x="20"  y="40" width="46" height="40" rx="5" class="d-fill-acc"/>
+      <rect x="20"  y="40" width="46" height="40" rx="5" class="d-stroke"/>
+      <rect x="70"  y="40" width="46" height="40" rx="5" class="d-fill-box"/>
+      <rect x="70"  y="40" width="46" height="40" rx="5" class="d-stroke"/>
+      <rect x="120" y="40" width="46" height="40" rx="5" class="d-fill-box"/>
+      <rect x="120" y="40" width="46" height="40" rx="5" class="d-stroke"/>
+      <rect x="170" y="40" width="46" height="40" rx="5" class="d-fill-box"/>
+      <rect x="170" y="40" width="46" height="40" rx="5" class="d-stroke"/>
+      <rect x="220" y="40" width="46" height="40" rx="5" class="d-fill-box"/>
+      <rect x="220" y="40" width="46" height="40" rx="5" class="d-stroke"/>
+      <rect x="270" y="40" width="46" height="40" rx="5" class="d-fill-box"/>
+      <rect x="270" y="40" width="46" height="40" rx="5" class="d-stroke"/>
+      <rect x="320" y="40" width="46" height="40" rx="5" class="d-stroke" stroke-dasharray="4 3"/>
+      <rect x="370" y="40" width="46" height="40" rx="5" class="d-stroke" stroke-dasharray="4 3"/>
+      <g class="d-text-mono" text-anchor="middle" font-size="15">
+        <text x="43"  y="66">1</text><text x="93"  y="66">0</text><text x="143" y="66">2</text>
+        <text x="193" y="66">1</text><text x="243" y="66">1</text><text x="293" y="66">0</text>
+      </g>
+      <text x="43" y="98" class="d-text-sm" text-anchor="middle">init_char</text>
+      <path d="M143 112 L143 86" class="d-stroke-acc" stroke-width="1.8" style="color:var(--accent)"/>
+      <text x="143" y="128" class="d-text-acc" text-anchor="middle">read head</text>
+      <text x="393" y="66" class="d-text-sm" text-anchor="middle">…</text>
+    </g>
+
+    <rect x="450" y="34" width="230" height="52" rx="8" class="d-fill-warn"/>
+    <rect x="450" y="34" width="230" height="52" rx="8" class="d-stroke"/>
+    <text x="565" y="55" class="d-text" text-anchor="middle" font-weight="600">state 2, reading '2'</text>
+    <text x="565" y="74" class="d-text-sm" text-anchor="middle">→ go to state 0, emit "1 1"</text>
+
+    <text x="20" y="176" class="d-text-acc">the same tape, read as edges</text>
+    <g class="d-text-mono" font-size="13">
+      <text x="20"  y="204">(0,1) = 1</text>
+      <text x="130" y="204">(0,2) = 0</text>
+      <text x="240" y="204">(0,3) = 2</text>
+      <text x="350" y="204">(1,2) = 1</text>
+      <text x="460" y="204">(1,3) = 1</text>
+      <text x="570" y="204">(2,3) = 0</text>
+    </g>
+    <text x="20" y="234" class="d-text-sm">Four nodes need 4×3/2 = 6 characters. The automaton stops the moment it has them.</text>
+    <text x="20" y="258" class="d-text-sm">Weight 2 on (0,3) means two parallel edges — legal here because the cap is at least 2.</text>
+    <text x="20" y="282" class="d-text-sm">Every character is a legal weight by construction, so nothing is ever clamped.</text>
+  </g>
+</svg>
+<figcaption>The automaton writes characters; the characters are edge weights, in
+<code>get_edge_list</code> order.</figcaption>
+</figure>
 
 <div class="note">
-  <b>The engine never calls <code>Fitness::evaluate</code> directly.</b>
-  <code>common::express_and_score</code> is the only path from genomes to fitness values,
-  everywhere, in both strategies. A direct call would bypass orientation and the
-  <code>NaN</code> gate, and neither failure announces itself.
+  <b id="alphabet">The alphabet is derived, not configured.</b>
+  <code>num_chars = max_edge_multiplicity + 1</code>, so the characters are exactly
+  <code>0..=cap</code> and every one is a legal weight the graph will never clamp. There is no
+  <code>num_chars</code> key: an alphabet larger than the cap would bias graphs toward it, and a
+  smaller one would leave the upper weights unreachable. This is also why validation requires
+  <code>1 ≤ cap ≤ 255</code>.
 </div>
 
-<div class="note">
-  <b>Lower is better, inside the engine, always.</b> Selection, elitism and replacement all assume
-  it, which is what lets them work without ever asking what the objective was. Your units come
-  back at the Python boundary.
-</div>
+<p>
+  <code>init_state</code> is configuration rather than genome data — mutation and crossover never
+  touch it — and must be <code>&lt; num_states</code>.
+</p>
+
+<h3>Adding a third representation</h3>
+
+<p>
+  Implement <code>Genome</code>, add one config variant, one startup function and one dispatch arm.
+  Evolvers are untouched. Recipe on <a href="new-genome.html">Add a Genome</a>.
+</p>
 
 </main>
 <script src="../assets/site.js"></script>

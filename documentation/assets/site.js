@@ -26,14 +26,8 @@
       title: "How It Works",
       items: [
         ["guide/pipeline.html",               "The Pipeline"],
-        ["guide/graph.html",                  "The Graph"],
-        ["guide/genomes.html",                "Genomes"],
-        ["guide/variation.html",              "Crossover & Mutation"],
-        ["guide/fitness.html",                "Fitness & Orientation"],
-        ["guide/sir.html",                    "The SIR Model"],
-        ["guide/evolvers.html",               "Evolution Strategies"],
-        ["guide/reproducibility.html",        "Seeds & Reproducibility"],
-        ["guide/output.html",                 "Logs & Results"]
+        ["guide/variation.html",              "Variation & Selection"],
+        ["guide/fitness.html",                "Fitness & Output"]
       ]
     },
     {

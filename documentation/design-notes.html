@@ -38,13 +38,13 @@
         <td>Rejecting it at the same gate as the conversion.</td></tr>
     <tr><td>An SDA alphabet biasing every graph</td>
         <td>Deriving it from the edge cap rather than configuring it.
-            <a href="guide/genomes.html#alphabet">→</a></td></tr>
+            <a href="guide/pipeline.html#alphabet">→</a></td></tr>
     <tr><td>The Python front end accepting what a file would reject</td>
         <td>Making Python a builder for TOML, not a second parser.
             <a href="guide/route-python-objects.html">→</a></td></tr>
     <tr><td>Reproducibility evaporating under load</td>
         <td>Per-run objective state, never shared across concurrent runs.
-            <a href="guide/reproducibility.html">→</a></td></tr>
+            <a href="guide/fitness.html#seeds">→</a></td></tr>
     <tr><td>Two config values disagreeing</td>
         <td>One source of truth for each — population size is the population's length, graph size
             belongs to the genome context.</td></tr>
@@ -174,7 +174,7 @@
   averaging more epidemics, and the two do different jobs. It is kept because a fizzled outbreak
   carries no information about the graph — it reports the dice — and because the historical results
   GET is compared against were produced with it. Both constants are exposed rather than hardcoded
-  precisely because the bias is real. <a href="guide/sir.html#reroll">→</a>
+  precisely because the bias is real. <a href="guide/fitness.html#reroll">→</a>
 </p>
 
 <h3>Steady-state carries stale fitnesses</h3>
@@ -185,7 +185,7 @@
   rescoring periodically, or freezing the seed across a generation equivalent — each trade it for a
   different distortion rather than removing it. So it is accepted and documented, with the guidance
   to prefer generational when the comparison needs to be fair.
-  <a href="guide/evolvers.html#steady-state">→</a>
+  <a href="guide/variation.html#steady-state">→</a>
 </p>
 
 <h2>Smaller decisions, each with a reason</h2>

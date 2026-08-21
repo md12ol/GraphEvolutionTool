@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Crossover &amp; mutation · GET docs</title>
+<title>Variation &amp; selection · GET docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,11 +11,10 @@
 <main>
 
 <p class="page-kicker">How it works</p>
-<h1>Crossover &amp; mutation</h1>
+<h1>Variation &amp; selection</h1>
 <p class="lede">
-  How children differ from their parents. Three probability rolls control it, all of them owned by
-  the engine rather than by the genome — which is the design decision that makes the two settings
-  mean the same thing in every configuration.
+  How children are made, and who they replace. Three probability rolls cover the first; a breeding
+  event's <a href="#event">three independent choices</a> cover the second.
 </p>
 
 <h2>The three rolls</h2>
@@ -73,128 +72,272 @@
 the two evolution strategies cannot drift apart on what a mutation means.</figcaption>
 </figure>
 
-<h2>Crossover</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Setting</th><th>Answers</th><th>Rolled</th></tr></thead>
+  <tbody>
+    <tr><td><code>crossover_rate</code></td><td>Does this pair recombine?</td>
+        <td>Once per pair</td></tr>
+    <tr><td><code>mutation_rate</code></td><td>Does this child mutate <b>at all</b>?</td>
+        <td>Once per child</td></tr>
+    <tr><td><code>max_mutations</code></td>
+        <td>If it does, <b>how many</b> — drawn uniformly from
+            <code>1..=max_mutations</code>.</td>
+        <td>Once per child</td></tr>
+  </tbody>
+</table>
+</div>
 
 <p>
-  Gated by <code>crossover_rate</code>, rolled <b>once per pair</b>. If it fires, the two parents
-  recombine <b>in place</b> — leaving one child in each. Both children are kept, because crossover
-  inherently produces two and an engine that kept only one would waste half of every crossover.
+  So <code>mutation_rate = 0.2, max_mutations = 4</code> means 80% of children are untouched, and
+  the other 20% take 1, 2, 3 or 4 mutations with equal probability. It does <b>not</b> mean each
+  gene mutates with probability 0.2 — a different and much more common convention, and confusing
+  the two will cost you a run.
 </p>
 
+<div class="warn">
+  <b><code>Genome::mutate</code> applies exactly one mutation per call.</b> The engine calls it in
+  a loop, so <code>max_mutations</code> means the same thing for every representation. A genome
+  that rolled its own count would make the setting meaningless for itself and nothing would report
+  it.
+</div>
+
+<h3>What one mutation is, and which operator runs</h3>
+
 <p>
-  Each genome offers exactly <b>one</b> crossover operator, fixed by its representation:
+  Crossover recombines <b>in place</b>, leaving one child in each parent — both are kept. The
+  operator is selected under <code>[crossover]</code> and <b>applies to whichever representation is
+  running</b>, because both genomes ship the same two-point operator. Mutation is the other way
+  round: its operator is chosen <b>per genome</b>, under <code>[genome]</code>, because the two
+  representations' mutations share no shape at all.
 </p>
 
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Genome</th><th>Operator</th></tr></thead>
+  <thead><tr><th>Genome</th><th>Crossover</th><th>One mutation is</th></tr></thead>
   <tbody>
-    <tr><td><a href="genomes.html#edge-edit">edge-edit</a></td>
-        <td><b>Two-point over genes.</b> Draw a segment within the shorter genome's length and swap
-            it. A genome shorter than two genes is left alone.</td></tr>
-    <tr><td><a href="genomes.html#sda">SDA</a></td>
-        <td><b>Two-point over states.</b> Swap a contiguous band of states — transitions and
-            responses together. Swapping state 0 also swaps <code>init_char</code>, since together
-            they determine the automaton's first transition.</td></tr>
+    <tr><td><a href="pipeline.html#edge-edit">edge-edit</a></td>
+        <td>Two-point over genes</td>
+        <td>Reroll <b>one gene</b> — opcode drawn from the configured
+            <a href="pipeline.html#operations">operation mix</a>, payload redrawn.</td></tr>
+    <tr><td><a href="pipeline.html#sda">SDA</a></td>
+        <td>Two-point over states</td>
+        <td>Redraw <code>init_char</code>, one transition target, or one response.
+            <code>init_char_mutation_rate</code> (default <code>0.04</code>) picks
+            <code>init_char</code> versus the rest;
+            <code>transition_vs_response_rate</code> (default <code>0.5</code>) splits the
+            remainder.</td></tr>
   </tbody>
 </table>
 </div>
+
+<div class="warn">
+  <b>The same count is not the same disruption.</b> One edge-edit mutation changes one edit in a
+  script of <code>gene_length</code>. One SDA mutation changes one table entry — and because the
+  automaton feeds on its own output, a single changed response can alter every character after it.
+  SDA is correspondingly more disruptive at the same <code>max_mutations</code>.
+</div>
+
+<p>
+  Both rolls live in one shared helper used by both strategies, so they cannot drift apart on what
+  a mutation means. Neither rate is range-checked: <code>1.5</code> or <code>-0.1</code> parses and
+  runs.
+</p>
+
+<h2 id="event">A breeding event: scope, selection, replacement</h2>
+
+<p>
+  A breeding event is <b>three independent choices</b>, each its own config section and each one
+  variant to extend. Every combination is legal — there is deliberately no
+  scheme-by-strategy rejection table.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Axis</th><th>Question</th><th>Options today</th><th>Config</th></tr></thead>
+  <tbody>
+    <tr><td><code>Scope</code></td><td>Which individuals may this event touch at all?</td>
+        <td><code>global</code> · <code>random_subset { size }</code></td>
+        <td><code>[scope]</code></td></tr>
+    <tr><td><code>Selection</code></td><td>Which of them become parents?</td>
+        <td><code>best</code> · <code>tournament { tournament_size }</code></td>
+        <td><code>[selection]</code></td></tr>
+    <tr><td><code>Replacement</code></td><td>Which of them do the children overwrite?</td>
+        <td><code>worst</code></td>
+        <td><code>[evolution] replacement</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  Each axis owns its own parameters and neither reads the other:
+  <code>size</code> belongs to <code>[scope]</code>, <code>tournament_size</code> to
+  <code>[selection]</code>. Ordering is by fitness with ties broken by <b>lower index</b>, so an
+  event's outcome depends only on which indices were drawn, not on the order the generator produced
+  them. Arity is fixed at <b>2 parents, 2 children, 2 replaced</b>.
+</p>
 
 <div class="note">
-  <b>There is no operator-selection setting, deliberately.</b> Additional crossover operators are
-  wanted, and they are explicitly out of scope until the rest of the design is delivered — which is
-  a sequencing decision, not a design limit. Until a second operator exists there is nothing to
-  select between, so no enum, no config field and no dispatch is built for it. When it lands it
-  follows selection: one new variant plus one match arm, mapping onto a config field.
+  <b><code>random_subset</code> draws distinct individuals; <code>tournament</code> samples with
+  replacement.</b> The distinctness is not stylistic — "the worst two members" means nothing over a
+  multiset. The consequence: under a global scope two picks can be the same individual, so
+  crossover between a genome and its own clone does nothing but mutate.
+</div>
+
+<h2 id="strategies">The two strategies</h2>
+
+<p>Both are points in that space, and the difference is how much of the population turns over.</p>
+
+<h3 id="generational">Generational</h3>
+
+<p>
+  <code>global</code> scope plus <code>tournament</code>, and <code>elite_count</code>.
+  <b>The whole population is replaced each generation</b>: score everyone, log a row, copy the
+  <code>elite_count</code> best forward unchanged, then fill every remaining slot with children.
+  Replacement does not arise — the population is rebuilt. Three rules are easy to get wrong:
+</p>
+
+<ul>
+  <li><b>Elites are rescored every generation</b>, like everyone else. Under a stochastic objective
+      an elite's recorded fitness moves while its genome does not, and that is correct — the new
+      number is a fresh sample, and freezing the old one would let a lucky draw persist forever.</li>
+  <li><b>Odd slot counts lose one child.</b> Crossover yields two, but
+      <code>population_size - elite_count</code> may be odd; the last pair contributes one and the
+      other is discarded.</li>
+  <li><b>Generation 0 is the initial population</b>, logged before any breeding, so both
+      strategies' histories share an axis.</li>
+</ul>
+
+<h3 id="steady-state">Steady-state</h3>
+
+<p>
+  <code>random_subset { size }</code> plus <code>best</code> plus <code>worst</code> — which is what
+  "tournament selection with tournament-local replacement" decomposes into. <b>One
+  mate-and-replace event at a time</b>: each event draws a scope of distinct individuals, its two
+  best breed, and the two children overwrite that same scope's two worst. Most of the population
+  simply persists.
+</p>
+
+<figure>
+<svg viewBox="0 0 700 250" role="img" aria-label="A steady-state mating event: draw a scope of six distinct individuals, the two best breed, and their children overwrite the two worst of that same scope.">
+  <defs>
+    <marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g style="color:var(--border-firm)">
+    <text x="20" y="28" class="d-text-acc">the population — most of it is untouched</text>
+    <g>
+      <rect x="20" y="42" width="660" height="34" rx="6" class="d-fill-bg"/>
+      <rect x="20" y="42" width="660" height="34" rx="6" class="d-stroke" stroke-dasharray="4 3"/>
+      <g>
+        <rect x="34"  y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="34"  y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="64"  y="49" width="20" height="20" rx="3" class="d-fill-good"/><rect x="64" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="94"  y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="94"  y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="124" y="49" width="20" height="20" rx="3" class="d-fill-warn"/><rect x="124" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="154" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="154" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="184" y="49" width="20" height="20" rx="3" class="d-fill-good"/><rect x="184" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="214" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="214" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="244" y="49" width="20" height="20" rx="3" class="d-fill-warn"/><rect x="244" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="274" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="274" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="304" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="304" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="334" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="334" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="364" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="364" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="394" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="394" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="424" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="424" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="454" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="454" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="484" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="484" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="514" y="49" width="20" height="20" rx="3" class="d-fill-good"/><rect x="514" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="544" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="544" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="574" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="574" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="604" y="49" width="20" height="20" rx="3" class="d-fill-box"/><rect x="604" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+        <rect x="634" y="49" width="20" height="20" rx="3" class="d-fill-warn"/><rect x="634" y="49" width="20" height="20" rx="3" class="d-stroke"/>
+      </g>
+    </g>
+    <text x="20" y="98" class="d-text-sm">green = in scope and best · amber = in scope and worst · grey = not in this event’s scope</text>
+
+    <rect x="90" y="126" width="200" height="46" rx="8" class="d-fill-good"/>
+    <rect x="90" y="126" width="200" height="46" rx="8" class="d-stroke"/>
+    <text x="190" y="147" class="d-text" text-anchor="middle" font-weight="600">the two best breed</text>
+    <text x="190" y="164" class="d-text-sm" text-anchor="middle">crossover, then mutate</text>
+
+    <rect x="400" y="126" width="230" height="46" rx="8" class="d-fill-warn"/>
+    <rect x="400" y="126" width="230" height="46" rx="8" class="d-stroke"/>
+    <text x="515" y="147" class="d-text" text-anchor="middle" font-weight="600">children overwrite the two worst</text>
+    <text x="515" y="164" class="d-text-sm" text-anchor="middle">of that same scope</text>
+
+    <path d="M294 149 L396 149" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#as)" style="color:var(--accent)"/>
+
+    <text x="20" y="212" class="d-text-sm">Replacement is scope-local, not global — which is what makes the strategy self-elitist</text>
+    <text x="20" y="232" class="d-text-sm">and diversity-preserving, and why the scope needs at least four distinct members.</text>
+  </g>
+</svg>
+<figcaption>One mating event. Everything outside the scope is untouched.</figcaption>
+</figure>
+
+<p>
+  Scope-local replacement makes the strategy <b>self-elitist</b> — the scope's best is never among
+  the replaced, so no explicit elitism is needed — and <b>diversity-preserving</b>, since a globally
+  poor individual survives until it is drawn. It is also <b>cheap</b>: <code>O(k log k)</code> per
+  event rather than an <code>O(population)</code> scan, which matters at 100,000 events. Replacement
+  is <b>unconditional</b>: a child takes its slot even if it scores worse than what it displaces.
+</p>
+
+<div class="warn">
+  <b>A scope of at least four is required here, and only here.</b> Two parents and the two
+  individuals they replace must be distinct. Three still preserves the scope's best but makes the
+  second parent one of the replaced; two breaks self-elitism outright. Generational has no such
+  floor, and the same <code>[scope] size</code> rejected here is accepted there.
 </div>
 
 <p>
-  One quirk worth knowing under <a href="evolvers.html#generational">generational</a>: parents are
-  drawn <i>with</i> replacement, so the same individual can be picked twice. Crossing a genome with
-  its own clone changes nothing, and the child differs only by mutation. Steady-state cannot
-  self-mate by construction.
+  <b>Logging cadence:</b> the starting population as iteration 0, then one row per
+  <code>population_size</code> events — a "generation equivalent", so
+  <code>history.len() == num_mating_events / population_size + 1</code>. Logging every event would
+  give a 100,000-row history.
 </p>
 
-<h2>Mutation</h2>
-
-<p>Two independent rolls, and it is worth being precise about which does what:</p>
+<h3>Choosing between them</h3>
 
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Setting</th><th>Answers</th><th>Default</th></tr></thead>
+  <thead><tr><th></th><th>Generational</th><th>Steady-state</th></tr></thead>
   <tbody>
-    <tr><td><code>mutation_rate</code></td><td>Does this child mutate <b>at all</b>?</td>
-        <td><i>required</i></td></tr>
-    <tr><td><code>max_mutations</code></td>
-        <td>If it does, <b>how many</b> mutations does it take — drawn uniformly from
-            <code>1..=max_mutations</code>.</td><td><code>1</code></td></tr>
+    <tr><td>Turnover</td><td>Everyone but the elites, every generation</td>
+        <td>Two individuals per event</td></tr>
+    <tr><td>Scoring per step</td><td>The whole population</td><td>The two new children only</td></tr>
+    <tr><td>Elitism</td><td>Explicit, via <code>elite_count</code></td>
+        <td>Implicit, from scope-local replacement</td></tr>
+    <tr><td>Population-level parallelism</td><td>As wide as the population</td>
+        <td><b>Two-way, regardless of cores</b></td></tr>
+    <tr><td>With a Python objective</td><td>One crossing per generation</td>
+        <td>One crossing per <i>event</i> — a poor fit</td></tr>
+    <tr><td>Fitness comparisons</td><td>Fair — everyone rescored under one seed</td>
+        <td><b>Carries stale fitnesses</b> — see below</td></tr>
   </tbody>
 </table>
 </div>
 
-<p>
-  So <code>mutation_rate = 0.2, max_mutations = 4</code> means: 80% of children are untouched, and
-  the other 20% take 1, 2, 3 or 4 mutations with equal probability. It does <b>not</b> mean each
-  gene mutates with probability 0.2 — that is a different and much more common convention, and
-  confusing the two will cost you a run.
-</p>
-
-<h3>Exactly one mutation per call</h3>
-
 <div class="warn">
-  <b><code>Genome::mutate</code> applies exactly one mutation per call.</b> This is a trait-level
-  contract, not a per-representation choice. A genome that rolled its own count internally would
-  make <code>max_mutations</code> mean nothing for that representation — and nothing would report
-  the disagreement. The engine calls <code>mutate</code> in a loop; the genome does not get a vote
-  on how many times.
+  <b>Steady-state carries stale fitnesses, and this is a known accepted limitation.</b> Only the two
+  new children are scored per event, so an individual that is not replaced keeps the fitness it was
+  born with — a score can stand for thousands of events. The bias compounds in the worst available
+  direction, since a lucky score makes an individual both likelier to be selected and less likely to
+  be replaced. It stands because rescoring per event is exactly the <code>O(population)</code> work
+  that scope-local replacement exists to avoid. <b>Prefer generational when the objective is
+  stochastic and the comparison needs to be fair</b> — which, with any of the three SIR objectives,
+  it is.
 </div>
 
-<p>What "one mutation" <i>is</i> belongs to the representation:</p>
-
-<div class="table-wrap">
-<table>
-  <thead><tr><th>Genome</th><th>One mutation is</th></tr></thead>
-  <tbody>
-    <tr><td>edge-edit</td>
-        <td>Reroll <b>one gene</b> — its opcode drawn from the configured
-            <a href="genomes.html#operations">operation mix</a>, and its payload redrawn.</td></tr>
-    <tr><td>SDA</td>
-        <td>Redraw <b>either</b> <code>init_char</code> (about 4% of calls), <b>one</b> transition
-            target, or <b>one</b> response — even odds between the latter two.</td></tr>
-  </tbody>
-</table>
-</div>
-
-<div class="warn">
-  <b>The same count is not the same disruption across representations.</b> One edge-edit mutation
-  changes one edit in a script of <code>gene_length</code>. One SDA mutation changes one entry in a
-  transition or response table — and because the automaton feeds on its own output, a single
-  changed response can alter every character after it. SDA is correspondingly more disruptive at
-  the same <code>max_mutations</code>.
-</div>
-
-<h3>A note for anyone porting old settings</h3>
+<h3>Adding a strategy, or a scheme</h3>
 
 <p>
-  Edge-edit previously rolled its own count, <code>1..=4</code>, against a hardcoded constant. At
-  the default <code>max_mutations = 1</code> it now mutates <i>less</i> per event than it used to.
-  Set <code>max_mutations = 4</code> to recover the old strength. SDA is unchanged at the default.
-</p>
-
-<h2>Why the engine owns all of this</h2>
-
-<p>
-  Both rolls happen in one shared helper, used by both strategies. That is not tidiness: selection
-  sampling once drifted apart between the two strategies, and the mutation semantics are kept in
-  one place specifically so the same thing cannot happen again. It also means a third strategy
-  inherits correct variation behaviour for free — see <a href="new-evolver.html">Add a
-  strategy</a>.
-</p>
-
-<p>
-  Neither rate is range-checked. A <code>mutation_rate</code> of <code>1.5</code> or
-  <code>-0.1</code> parses and runs; see the warning on
-  <a href="route-python-toml.html">Python: TOML File</a>.
+  A new scope, selection scheme, replacement policy or crossover operator is one enum variant plus
+  one dispatch arm, and works with every strategy. A new strategy is one config variant, one match
+  arm, and an implementation of <code>Evolver</code> — whose one non-optional rule is to score
+  through <a href="fitness.html#gate"><code>express_and_score</code></a>. Recipes on
+  <a href="new-evolver.html">Add a Strategy</a> and
+  <a href="new-selection.html">Add a Selection Scheme</a>.
 </p>
 
 </main>
