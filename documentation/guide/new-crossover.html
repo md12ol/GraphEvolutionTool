@@ -147,12 +147,20 @@ CrossoverConfig::MyCrossover { some_param } =&gt; {
   Steps 3a and 4 are one change split across two files, the same shape the selection chain has.
 </p>
 
-<h2>Step 5 — Python, and Optional</h2>
+<h2>Steps 5 and 6 — Python and the Example, Both Optional</h2>
 
 <p>
-  Leaving it out costs nothing elsewhere; the operator is then configurable from a TOML file but
+  Leaving step 5 out costs nothing elsewhere; the operator is then configurable from a TOML file but
   absent from the Python API. The variant goes at <code>get/src/py_config.rs:322</code> and its
   matching arm at <code>:908</code>.
+</p>
+
+<p>
+  Step 6 is a commented-out <code>[crossover]</code> block in
+  <code>config.example.toml:165</code>. <b>It is the step people skip</b>, and it costs nothing
+  mechanically — the example file is simply what a user copies from, so an operator missing from it
+  is one most people never find. The test suite parses and validates that file, so a block that does
+  not parse fails the build rather than a user's afternoon.
 </p>
 
 <h2>Testing It</h2>

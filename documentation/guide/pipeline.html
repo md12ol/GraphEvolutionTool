@@ -304,7 +304,7 @@ one mating event expresses and scores only the two new children, and logs once e
     type Context: Send + Sync;
     fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph;
     fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R);
-    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, rng: &amp;mut R);
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, context: &amp;Self::Context, rng: &amp;mut R);
     fn print(&amp;self) -&gt; String;
 }</code></pre>
 

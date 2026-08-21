@@ -170,12 +170,21 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
   </p>
 </div>
 
-<h2>Step 6 — Python, and Optional</h2>
+<h2>Steps 6 and 7 — Python and the Example, Both Optional</h2>
 
 <p>
-  Leaving it out costs nothing elsewhere; the strategy is then configurable from a TOML file but
+  Leaving step 6 out costs nothing elsewhere; the strategy is then configurable from a TOML file but
   absent from the Python API. The variant goes at <code>get/src/py_config.rs:221</code> and its
   <code>to_toml_value</code> arm at <code>:833</code>.
+</p>
+
+<p>
+  Step 7 is a commented-out <code>[evolution]</code> block in
+  <code>config.example.toml:153</code>, beside generational's and steady-state's. <b>It is the step
+  people skip</b>, and it costs nothing mechanically — the example file is simply what a user copies
+  from, so a strategy missing from it is one most people never find. The test suite parses and
+  validates that file, so a block that does not parse fails the build rather than a user's
+  afternoon.
 </p>
 
 <h2>The Rules You Must Not Break</h2>
