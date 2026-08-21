@@ -54,12 +54,17 @@ cargo build --release -p graph-evolution-tool --features cli --bin get-run
   <b>The same interpreter's <code>libpython</code> must be findable at run time too</b>, which is a
   separate failure from the one above and looks nothing like it: the build succeeds and the binary
   dies before printing a word. It bites when Python was installed somewhere the dynamic loader does
-  not search — a <code>pyenv</code> or CI interpreter rather than the system one. Point the loader
-  at it:
-  <pre><code class="language-bash">export LD_LIBRARY_PATH="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"</code></pre>
-  Derive the directory rather than hardcoding a version, so upgrading Python does not break it.
-  On macOS the variable is <code>DYLD_LIBRARY_PATH</code>.
+  not search — a <code>pyenv</code> or CI interpreter rather than the system one.
 </div>
+
+<p>Point the loader at it:</p>
+
+<pre><code class="language-bash">export LD_LIBRARY_PATH="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"</code></pre>
+
+<p>
+  Derive the directory rather than hardcoding a version, so upgrading Python does not break it. On
+  macOS the variable is <code>DYLD_LIBRARY_PATH</code>.
+</p>
 
 <h2>Run It</h2>
 

@@ -218,7 +218,7 @@ PyScopeConfig::Neighbourhood { radius } =&gt; {
   directly with no evolver in the way. Four assertions cover it:
 </p>
 
-<pre><code class="language-rust">// in scope.rs's own `mod tests`, beside the two that are there
+<pre><code class="language-rust" data-example>// in scope.rs's own `mod tests`, beside the two that are there
 #[test]
 fn neighbourhood_stays_in_range_and_is_reproducible() {
     let scope = Scope::Neighbourhood { radius: 2 };

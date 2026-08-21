@@ -7,13 +7,16 @@ source. Run from the repository root.
     python3 documentation/check_refs.py          # report
     python3 documentation/check_refs.py --fix    # snap each reference to its marker
 
-Also checks that each new-*.html's step table matches its chain's markers — a
-page that stops one step short is not a wrong line number and the reference
-check alone cannot see it.
+Also checks that each new-*.html's step table matches its chain's markers, and
+that every `fn` signature shown on the site appears verbatim in get/src. Each
+catches something the others cannot: a page that stops one step short is not a
+wrong line number, and a stale signature is neither.
 
 Any edit to get/src moves these. Merging one upstream PR shifted 18 of them at
 once, so --fix exists to make that a command rather than an afternoon.
 """
+import glob
+import html
 import os
 import re
 import sys
@@ -54,6 +57,57 @@ def markers(path, chain):
         if found and (chain is None or found.group(1) == chain):
             out.append(number)
     return out
+
+
+def signatures():
+    """Every `fn` line in a Rust block on the site must appear verbatim in get/src.
+
+    Catches the one thing the reference and step-table checks cannot: a
+    signature that is simply out of date. `Genome::mutate` lost its `context`
+    argument on two pages this way and no amount of reading them found it.
+    """
+    source = ""
+    for root, _, files in os.walk("get/src"):
+        for name in files:
+            if name.endswith(".rs"):
+                source += "\n" + open(os.path.join(root, name)).read()
+
+    def flat(text):
+        text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+        text = re.sub(r"\s+", "", text)
+        # A multi-line signature in the source carries a trailing comma before
+        # its `)`; the one-line form on the page does not.
+        return text.replace(",)", ")")
+
+    flat_source = flat(source)
+    checked = bad = 0
+    for page in sorted(glob.glob("documentation/**/*.html", recursive=True)):
+        if "_template" in page:
+            continue
+        # `data-example` marks a block that illustrates code the reader is
+        # about to write, so its signatures are not claims about get/src. It is
+        # declared in the page rather than guessed from the text: guessing by
+        # looking for invented names skipped the whole `Genome` trait block,
+        # which is where the one real staleness this check has found was.
+        for block in re.finditer(
+                r'<code class="language-rust"( data-example)?>(.*?)</code>',
+                open(page).read(), re.S):
+            if block.group(1):
+                continue
+            body = html.unescape(re.sub(r"<[^>]+>", "", block.group(2)))
+            for line in body.splitlines():
+                line = line.strip()
+                if not re.match(r"^(pub )?fn \w+", line):
+                    continue
+                sig = re.sub(r"\{.*$", "", line.rstrip(";").rstrip("{")).strip()
+                if "..." in sig or not sig:
+                    continue
+                checked += 1
+                if flat(sig) not in flat_source:
+                    bad += 1
+                    print(f"  {os.path.basename(page)}: not in get/src: {sig[:88]}")
+    print(f"{checked} signatures, {bad} not found in get/src")
+    return bad
 
 
 def step_tables():
@@ -136,7 +190,8 @@ def main(fix):
 
     print(f"{total} references, {wrong} wrong" + (f", {repaired} repaired" if fix else ""))
     bad_tables = step_tables()
-    return 1 if (wrong and not fix) or bad_tables else 0
+    bad_sigs = signatures()
+    return 1 if (wrong and not fix) or bad_tables or bad_sigs else 0
 
 
 if __name__ == "__main__":
