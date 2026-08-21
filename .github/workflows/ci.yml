@@ -64,17 +64,17 @@ jobs:
       # Formatting first: it is the cheapest check and needs no build, so a
       # formatting-only failure reports in seconds instead of after a compile.
       - name: cargo fmt --check
-        run: cargo fmt -p get --check
+        run: cargo fmt -p graph-evolution-tool --check
 
       # `--features cli` so the `get-run` binary is covered too. It is
       # `required-features = ["cli"]`, so without the flag cargo skips that
       # target outright: it is neither linted nor built for tests, and any
       # `#[test]` added to it would silently never run.
       - name: cargo clippy
-        run: cargo clippy -p get --all-targets --features cli -- -D warnings
+        run: cargo clippy -p graph-evolution-tool --all-targets --features cli -- -D warnings
 
       - name: cargo test
-        run: cargo test -p get --features cli
+        run: cargo test -p graph-evolution-tool --features cli
 
       # The examples are the only proof that the Rust-library route reaches
       # what it promises. Narrowing something only an external caller needs
@@ -98,7 +98,7 @@ jobs:
             name="$(basename "$path" .rs)"
             found=$((found + 1))
             echo "::group::example ${name}"
-            cargo run -q -p get --features cli --example "$name"
+            cargo run -q -p graph-evolution-tool --features cli --example "$name"
             echo "::endgroup::"
           done
           # A glob that matches nothing would make this step silently pass and

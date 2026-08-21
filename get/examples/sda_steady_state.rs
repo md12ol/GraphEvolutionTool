@@ -4,7 +4,7 @@
 //! Run it with:
 //!
 //! ```text
-//! cargo run -p get --example sda_steady_state
+//! cargo run -p graph-evolution-tool --example sda_steady_state
 //! ```
 //!
 //! The last of four programs covering every genome × evolver combination from

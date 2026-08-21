@@ -88,6 +88,15 @@
       '<span class="tag">v0.9</span>';
     aside.appendChild(brand);
 
+    /* The repository, once, in the site chrome -- so every page can reach the
+       source without any route page having to assume the reader has a clone.
+       Same tab deliberately: nothing here is a form to lose. */
+    var repo = document.createElement("a");
+    repo.className = "brand-repo";
+    repo.href = "https://github.com/md12ol/GraphEvolutionTool";
+    repo.textContent = "Source on GitHub \u2197";
+    aside.appendChild(repo);
+
     /* One section open at a time: the one holding the current page. A title is
        a link to its own first page, so following it lands you there and the
        next page load opens that section and closes this one -- the accordion

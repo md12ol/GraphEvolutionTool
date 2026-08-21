@@ -191,6 +191,14 @@ pre code { background: none; border: 0; padding: 0; font-size: 1em; }
 .brand .mark {
   width: 26px; height: 26px; flex: none;
 }
+.brand-repo {
+  display: block;
+  padding: 0 1.1rem;
+  margin: -.15rem 0 .9rem;
+  font-size: .78rem;
+  color: var(--text-muted);
+}
+.brand-repo:hover { color: var(--accent); text-decoration: none; }
 .brand .tag {
   font-size: .68rem;
   color: var(--text-faint);
