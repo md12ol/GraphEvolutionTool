@@ -152,6 +152,22 @@ mod tests {
     }
 
     #[test]
+    fn add_edge_reports_whether_the_multiplicity_changed() {
+        let mut graph = Graph::new(3, 2);
+
+        assert!(graph.add_edge(0, 1));
+        assert!(graph.add_edge(0, 1));
+        // At the cap the call is a no-op, and the caller is told so: the
+        // toggle operation branches on this to fall back to removing an edge.
+        assert!(!graph.add_edge(0, 1));
+        assert_eq!(graph.weight(0, 1), 2);
+
+        // A pair set_edge ignores cannot have changed anything either.
+        assert!(!graph.add_edge(0, 0));
+        assert!(!graph.add_edge(0, 7));
+    }
+
+    #[test]
     fn multiplicity_is_capped_at_five() {
         let mut graph = Graph::new(2, 5);
 
@@ -182,15 +198,51 @@ mod tests {
 
         graph.remove_edge(0, 1);
         assert_eq!(graph.weight(0, 1), 0);
+
+        // A third cap, neither the multigraph test's 5 nor this test's 1, so
+        // the clamp is pinned away from both boundaries.
+        let mut capped_at_three = Graph::new(2, 3);
+        capped_at_three.set_edge(0, 1, 5);
+        assert_eq!(capped_at_three.max_edge_multiplicity, 3);
+        assert_eq!(capped_at_three.weight(0, 1), 3);
     }
 
     #[test]
-    fn explicit_multiplicity_cap_is_enforced() {
-        let mut graph = Graph::new(2, 3);
-        graph.set_edge(0, 1, 5);
+    fn set_edge_ignores_self_loops_and_out_of_range_vertices() {
+        let mut graph = Graph::new(3, 5);
 
-        assert_eq!(graph.max_edge_multiplicity, 3);
-        assert_eq!(graph.weight(0, 1), 3);
+        // Genome expression decodes arbitrary payloads into vertex pairs and
+        // never validates them before use, so each of these has to be a
+        // silent no-op rather than a panic or a stored edge.
+        graph.set_edge(1, 1, 4);
+        graph.set_edge(0, 3, 4);
+        graph.set_edge(9, 0, 4);
+
+        assert_eq!(graph.get_edge_list(), vec![]);
+        assert_eq!(graph.weight(1, 1), 0);
+        assert_eq!(graph.degree(1), 0);
+        // weight() answers for an out-of-range pair too, rather than indexing.
+        assert_eq!(graph.weight(0, 3), 0);
+        assert_eq!(graph.weight(9, 0), 0);
+    }
+
+    #[test]
+    fn has_edge_is_true_exactly_when_the_multiplicity_is_nonzero() {
+        let mut graph = Graph::new(3, 5);
+        graph.set_edge(0, 1, 3);
+
+        assert!(graph.has_edge(0, 1));
+        assert!(graph.has_edge(1, 0));
+        assert!(!graph.has_edge(0, 2));
+        // The rewire operations ask about pairs they have not validated.
+        assert!(!graph.has_edge(0, 0));
+        assert!(!graph.has_edge(0, 9));
+
+        // Still an edge with copies left, gone only once the weight reaches 0.
+        graph.remove_edge(0, 1);
+        assert!(graph.has_edge(0, 1));
+        graph.set_edge(0, 1, 0);
+        assert!(!graph.has_edge(0, 1));
     }
 
     #[test]
@@ -209,12 +261,28 @@ mod tests {
     }
 
     #[test]
-    fn set_edges_sets_multiplicity_and_preserves_symmetry() {
+    fn get_neighbor_at_index_is_none_only_for_isolated_or_invalid_nodes() {
         let mut graph = Graph::new(3, 5);
-        graph.set_edges(&[(0, 1, 4), (1, 2, 2)]);
+        graph.set_edge(0, 1, 2);
 
-        assert_eq!(graph.get_edge_list(), vec![(0, 1, 4), (1, 2, 2)]);
-        assert_eq!(graph.weight(1, 0), 4);
+        assert_eq!(graph.get_neighbor_at_index(2, 0), None);
+        assert_eq!(graph.get_neighbor_at_index(7, 0), None);
+
+        // A node with any neighbour at all answers for every index, however
+        // large — that is what lets an arbitrary payload name a real neighbour.
+        assert_eq!(graph.get_neighbor_at_index(0, 0), Some(1));
+        assert_eq!(graph.get_neighbor_at_index(0, usize::MAX), Some(1));
+    }
+
+    #[test]
+    fn set_edges_sets_multiplicity_and_preserves_symmetry() {
+        let mut graph = Graph::new(4, 5);
+        graph.set_edges(&[(1, 2, 2), (0, 3, 4)]);
+
+        // Row-major, so (0, 3) comes first: it is ordered by its lower
+        // endpoint, not by insertion order and not by its higher endpoint.
+        assert_eq!(graph.get_edge_list(), vec![(0, 3, 4), (1, 2, 2)]);
+        assert_eq!(graph.weight(3, 0), 4);
         assert_eq!(graph.weight(2, 1), 2);
     }
 }

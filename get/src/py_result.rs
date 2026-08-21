@@ -305,4 +305,110 @@ mod tests {
     fn an_empty_value_still_names_its_field() {
         assert_eq!(as_comment("genome", ""), "# genome =\n");
     }
+
+    /// A result file is a **loadable edge list**, not a report that contains
+    /// one — that is what lets a run's winner go straight back in as the next
+    /// run's base graph or into a reference folder with no editing step. Only
+    /// `as_comment` was covered, so nothing checked the claim itself: the
+    /// header, the `# nodes` line and the rows all have to survive the parser
+    /// that will actually read them.
+    #[test]
+    fn a_saved_result_loads_back_through_the_edge_list_parser() {
+        let result = super::PyRunResult {
+            best_fitness: -12.5,
+            // Node 4 is isolated: it appears in no edge, so only the header
+            // can carry it, which is why num_nodes is stored rather than
+            // inferred.
+            best_edges: vec![(0, 1, 2), (1, 3, 1)],
+            num_nodes: 5,
+            best_genome_repr: "init_char: 0\n0 + 0 -> 1 [ 1 1 1 ]".to_string(),
+            history: Vec::new(),
+            seed: 7,
+            run_index: 0,
+            config_toml: "population_size = 10\n".to_string(),
+        };
+
+        let folder = std::env::temp_dir().join("get_py_result_roundtrip");
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("temp folder");
+        let path = folder.join("best.csv");
+
+        result
+            .save_results(path.to_str().expect("utf-8 path"))
+            .expect("the result should save");
+
+        let loaded = crate::graph_io::load_edge_file(&path, 10, 2, 0)
+            .expect("a saved result must be a file the loader accepts");
+
+        assert_eq!(loaded.num_nodes, 5, "the isolated node must survive");
+        assert_eq!(loaded.edges, vec![(0, 1, 2), (1, 3, 1)]);
+        assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+
+        // The provenance TOML is written beside it, under a derived name.
+        let config = std::fs::read_to_string(folder.join("best.csv.toml"))
+            .expect("the config should be written alongside");
+        assert_eq!(config, "population_size = 10\n");
+
+        std::fs::remove_dir_all(&folder).expect("cleanup");
+    }
+
+    /// The CSV header names seven columns and each row writes seven values.
+    /// Nothing checked they agree, and a mismatch is silent — every consumer
+    /// reads the file by column position.
+    #[test]
+    fn every_log_row_has_one_value_per_column_in_the_header() {
+        let result = super::PyRunResult {
+            best_fitness: 1.0,
+            best_edges: Vec::new(),
+            num_nodes: 2,
+            best_genome_repr: String::new(),
+            history: vec![
+                super::PyGenerationStats {
+                    iteration: 0,
+                    best_fitness: 1.0,
+                    mean_fitness: 2.0,
+                    std_dev: 0.5,
+                    ci_95: 0.25,
+                },
+                super::PyGenerationStats {
+                    iteration: 10,
+                    best_fitness: 0.5,
+                    mean_fitness: 1.5,
+                    std_dev: 0.25,
+                    ci_95: 0.125,
+                },
+            ],
+            seed: 99,
+            run_index: 0,
+            config_toml: String::new(),
+        };
+
+        let folder = std::env::temp_dir().join("get_py_result_logs");
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("temp folder");
+        let path = folder.join("logs.csv");
+
+        result
+            .save_logs(path.to_str().expect("utf-8 path"))
+            .expect("the logs should save");
+
+        let text = std::fs::read_to_string(&path).expect("written");
+        let mut lines = text.lines();
+        let header = lines.next().expect("a header row");
+        let columns = header.split(',').count();
+        assert_eq!(columns, 7, "{header}");
+
+        let mut rows = 0;
+        for line in lines {
+            assert_eq!(line.split(',').count(), columns, "row: {line}");
+            rows += 1;
+        }
+        assert_eq!(rows, 2, "one row per logged iteration");
+
+        // The run-level values are stamped onto every row rather than carried
+        // per row in memory.
+        assert!(text.lines().nth(1).expect("first row").ends_with("99,0"));
+
+        std::fs::remove_dir_all(&folder).expect("cleanup");
+    }
 }

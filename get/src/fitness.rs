@@ -1121,6 +1121,20 @@ def fitness(batch):
         graph
     }
 
+    /// A star: node 0 joined to every other, and nothing else joined.
+    ///
+    /// The fixture that separates `length` from `spread`, which `path_graph`
+    /// cannot: at rate 1.0 every leaf is infected in the same step, so a
+    /// 6-node star is 6 nodes wide and 2 timesteps long. A path of 6 is 6 and
+    /// 6, and so scores the same whichever field an objective reads.
+    fn star_graph(num_nodes: usize) -> Graph {
+        let mut graph = Graph::new(num_nodes, 1);
+        for leaf in 1..num_nodes {
+            graph.set_edge(0, leaf, 1);
+        }
+        graph
+    }
+
     /// Rate 1.0 from a pinned patient zero, so every epidemic is identical and
     /// no test depends on the seed.
     fn certain_batch(num_epidemics: usize) -> SirSampleParams {
@@ -1167,6 +1181,13 @@ def fitness(batch):
             6.0,
             "every node of the path is reached at rate 1.0",
         );
+        // The path cannot tell spread from length — it is 6 of both. The star
+        // is 6 wide and 2 long, so only a reading of `spread` scores it 6.
+        assert_eq!(
+            objective.evaluate(&star_graph(6)),
+            6.0,
+            "all six nodes are infected, in two timesteps",
+        );
         assert_eq!(objective.direction(), Direction::Maximize);
     }
 
@@ -1178,6 +1199,14 @@ def fitness(batch):
             objective.evaluate(&path_graph(6)),
             6.0,
             "one step per edge, plus the burnout step (spec 5.2)",
+        );
+        // Both readings give 6 on the path, and 1 on an isolated node, so
+        // neither case below can tell them apart. The star can: every leaf
+        // falls in the same step, making it 6 nodes wide and 2 steps long.
+        assert_eq!(
+            objective.evaluate(&star_graph(6)),
+            2.0,
+            "one step to infect every leaf, plus the burnout step",
         );
         assert_eq!(
             objective.evaluate(&Graph::new(4, 1)),
@@ -1393,7 +1422,9 @@ def fitness(batch):
     /// point, so this is what catches the two drifting apart.
     #[test]
     fn both_entry_points_use_the_same_reading() {
-        let graph = path_graph(6);
+        // The star, not the path: a path scores 6 under either reading, so the
+        // two entry points would agree here even if they read different fields.
+        let graph = star_graph(6);
 
         // certain_batch is deterministic, so the two differing seeds cannot
         // account for any difference in the scores.

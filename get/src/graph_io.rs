@@ -1046,6 +1046,119 @@ mod tests {
     }
 
     #[test]
+    fn every_regular_file_is_read_whatever_it_is_called() {
+        // There is no extension convention: an edge list is whatever the
+        // caller put in the folder. Every other folder test here uses `.csv`,
+        // so a filter narrowing the load to one extension — and silently
+        // dropping data the caller meant to include — would pass all of them.
+        let folder = folder_of(
+            "any_extension",
+            &[("a.csv", "0,1,1\n"), ("b.txt", "1,2,1\n"), ("c", "2,3,1\n")],
+        );
+
+        let loaded = load_edge_folder(&folder, 10, 3, 0).expect("valid");
+
+        assert_eq!(loaded.len(), 3);
+        assert_eq!(loaded[0].edges, vec![(0, 1, 1)]);
+        assert_eq!(loaded[1].edges, vec![(1, 2, 1)]);
+        assert_eq!(loaded[2].edges, vec![(2, 3, 1)]);
+
+        std::fs::remove_dir_all(&folder).expect("cleanup");
+    }
+
+    #[test]
+    fn a_sub_directory_is_skipped_rather_than_read() {
+        // Handed to load_edge_file a directory fails the read, so skipping it
+        // is what keeps a folder with any structure in it loadable at all.
+        let folder = folder_of("with_subdir", &[("a.csv", "0,1,1\n")]);
+        std::fs::create_dir_all(folder.join("nested")).expect("nested folder");
+
+        let loaded = load_edge_folder(&folder, 10, 3, 0).expect("valid");
+
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].edges, vec![(0, 1, 1)]);
+
+        std::fs::remove_dir_all(&folder).expect("cleanup");
+    }
+
+    #[test]
+    fn an_empty_folder_loads_as_an_empty_set() {
+        let folder = folder_of("empty", &[]);
+
+        let loaded = load_edge_folder(&folder, 10, 3, 0).expect("an empty folder is readable");
+
+        assert!(loaded.is_empty());
+
+        std::fs::remove_dir_all(&folder).expect("cleanup");
+    }
+
+    /// The variants are what the tests above assert on, deliberately, so the
+    /// wording stays free to improve. What is not free to change is that a
+    /// message still names the numbers telling the user what to fix — a
+    /// dropped interpolation leaves prose that reads fine and helps nobody.
+    #[test]
+    fn a_rejection_renders_carrying_the_numbers_that_locate_it() {
+        let contains_all = |rendered: &str, numbers: &[&str]| {
+            for number in numbers {
+                assert!(
+                    rendered.contains(number),
+                    "`{number}` missing from: {rendered}"
+                );
+            }
+        };
+
+        contains_all(
+            &RowProblem::NodeOutOfRange {
+                index: 42,
+                low: 7,
+                high: 31,
+            }
+            .to_string(),
+            &["42", "7", "31"],
+        );
+        contains_all(
+            &RowProblem::WeightAboveCap { weight: 48, cap: 6 }.to_string(),
+            &["48", "6"],
+        );
+        contains_all(
+            &RowProblem::NodeCountBelowIndices {
+                declared: 13,
+                needed: 27,
+            }
+            .to_string(),
+            &["13", "27"],
+        );
+        contains_all(
+            &RowProblem::NodeCountAboveCap {
+                declared: 91,
+                cap: 24,
+            }
+            .to_string(),
+            &["91", "24"],
+        );
+        contains_all(&RowProblem::ColumnCount(5).to_string(), &["5"]);
+        contains_all(
+            &RowProblem::RepeatedNodeCount { first: 18 }.to_string(),
+            &["18"],
+        );
+        contains_all(&RowProblem::NonNumeric("weight").to_string(), &["weight"]);
+
+        // A rejected row reports where it was and keeps the problem's own
+        // words, rather than replacing them with a summary of its own.
+        let row = GraphLoadError::Row {
+            path: "graphs/mutag_17.csv".to_string(),
+            line: 42,
+            problem: RowProblem::NegativeWeight(-3),
+        }
+        .to_string();
+        contains_all(&row, &["graphs/mutag_17.csv", "42"]);
+        assert!(
+            row.contains(&RowProblem::NegativeWeight(-3).to_string()),
+            "{row}"
+        );
+    }
+
+    #[test]
     fn a_missing_folder_is_a_loud_error() {
         let missing = std::path::Path::new("no_such_directory_here");
 

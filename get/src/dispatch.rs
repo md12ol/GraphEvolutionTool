@@ -1021,6 +1021,36 @@ mod tests {
     // module. Test helpers cannot be imported across sibling `#[cfg(test)]`
     // modules without giving them a home in the lib target, which GitHub #56
     // calls out as a decision to make on purpose rather than by default.
+    /// The four `[..]` blocks that choose how a breeding event behaves, each
+    /// mapped onto the engine variant it names.
+    ///
+    /// Nothing tested these mappings. A wrong arm is invisible at run time —
+    /// the run completes, produces a history and reports a winner, having
+    /// searched by a scheme the config did not ask for. The three-axis split
+    /// exists precisely so the axes can be chosen independently, so each one
+    /// carrying its own parameters across is the thing worth pinning.
+    #[test]
+    fn every_config_axis_maps_onto_the_engine_variant_it_names() {
+        assert_eq!(scope(&ScopeConfig::Global), Scope::Global);
+        assert_eq!(
+            scope(&ScopeConfig::RandomSubset { size: 7 }),
+            Scope::RandomSubset { size: 7 },
+            "the scope's own size must travel, not a default"
+        );
+
+        // `matches!` rather than `assert_eq!` only because `Selection` is the
+        // one axis enum of the four that derives neither `Debug` nor
+        // `PartialEq`; the other three are compared directly above and below.
+        assert!(matches!(selection(&SelectionConfig::Best), Selection::Best));
+        assert!(matches!(
+            selection(&SelectionConfig::Tournament { tournament_size: 5 }),
+            Selection::Tournament { tournament_size: 5 }
+        ));
+
+        assert_eq!(replacement(&ReplacementConfig::Worst), Replacement::Worst);
+        assert_eq!(crossover(&CrossoverConfig::TwoPoint), Crossover::TwoPoint);
+    }
+
     const SIR_FITNESS: &str =
         "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.05\nnum_epidemics = 30\n";
     const PYTHON_FITNESS: &str = "[fitness]\ntype = \"python\"\n";
