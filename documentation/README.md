@@ -50,7 +50,6 @@ Hard-reload (Ctrl-Shift-R, or Cmd-Shift-R).
 ```
 documentation/
 ├── index.html            the landing page
-├── status.html           what is built vs designed-but-not-yet-built
 ├── design-notes.html     the decisions behind the design, and the non-goals
 ├── _template.html        page skeleton — copy this to add a page
 ├── serve.sh
@@ -59,18 +58,24 @@ documentation/
 ├── assets/
 │   ├── style.css         the entire stylesheet. Tokens, layout, components
 │   └── site.js           the entire behaviour. Nav, TOC, pager, theme, code blocks
-└── guide/                every page except the landing page and the two project pages
+└── guide/                every page except the landing page and design notes
 ```
 
-The site has three jobs and a page belongs to exactly one. **How It Works** explains the ideas and
-is safe to read in order. **Using GET** is one page per route, each written for someone using that
-route and nothing else — the Python pages do not discuss Rust beyond noting that GET is implemented
-in it. **Extending GET** is for someone editing GET itself.
+The site has three jobs and a page belongs to exactly one. **How It Works** explains the ideas in
+three pages, safe to read in order: `pipeline` is the loop plus the two things it moves between,
+`variation` is how children are made and who survives, `fitness` is the number's whole life from
+the epidemic that produces it to the log it lands in. **Using GET** is one page per route, each
+written for someone using that route and nothing else — the Python pages do not discuss Rust beyond
+noting that GET is implemented in it. **Extending GET** is for someone editing GET itself.
 
 **There is no `reference/` directory.** It held one page per file in `get/src/` and was removed
 2026-08-21: it documented eight functions that no longer existed and its `path:line` citations had
 drifted by as much as 250 lines, because nothing anchored them. The crate's own doc comments are
 the reference now.
+
+**There is no `status.html` either**, removed 2026-08-21 with the same sweep. It indexed the
+`planned` badges in one table; the badges and their `.plan-note` callouts now carry that
+information where the feature is actually described, and the roadmap lives in the tracker.
 
 ---
 
@@ -99,7 +104,9 @@ Three consequences worth internalising before you edit anything:
    site defines.
 2. Set `<title>`, the two asset paths (`../` per directory level), and `data-page`.
 3. Add the page to `NAV` in `assets/site.js`, in the group it belongs to. Order in `NAV` is the
-   order of the pager.
+   order of the pager. A group with `title: null` renders as bare links with no collapsing
+   header — that is what `Overview` and `Design Notes` use, being one page each rather than
+   sections.
 4. Cross-link it from wherever a reader would be when they need it. The site's usefulness is
    mostly in its links.
 
@@ -116,44 +123,46 @@ Three consequences worth internalising before you edit anything:
 | **Diagrams** | Inline SVG only, using the `d-fill-*` / `d-stroke*` / `d-text*` classes so they follow the theme. No diagram libraries |
 | **Escaping** | `<` and `>` inside signatures must be `&lt;` `&gt;`, or the generics disappear |
 
-### The `planned` convention
+### The `planned` convention — currently unused
 
 The site documents GET **as `official_spec_sheet.md` designs it**, which is the repository's own
-rule: where the sheet and the code disagree, the sheet is the intent. So features that are designed
-and agreed but not yet in `get/src/` are written **in the present tense, as though they work**, and
-carry two markers:
+rule: where the sheet and the code disagree, the sheet is the intent. A feature that is designed and
+agreed but not yet in `get/src/` is written **in the present tense, as though it works**, and
+carries two markers that always travel together:
 
-- a `<span class="badge badge-planned">planned</span>` badge where they appear, and
+- a `<span class="badge badge-planned">planned</span>` badge where it appears, and
 - a `.plan-note` callout saying plainly what exists today and what to do instead.
 
-`status.html` lists every one of them in a single table. This was an explicit instruction from the
-repo owner on 2026-08-12; the badge and the status page exist so that "written as though
-implemented" never becomes "indistinguishable from implemented".
+**No page carries either marker as of 2026-08-21.** Every feature that did — replicate runs and
+`max_cores`, `ci_95`, the per-row `seed` and `run_index`, `save_logs`/`save_results`, and supplying
+a base graph — has since shipped, and the badges were removed with the How It Works condensation.
+The classes stay defined because the convention is still the right one the next time the sheet gets
+ahead of the code.
 
-The **opposite** case also occurs: several places where the spec sheet's status claims are stale
-and the code is *ahead* of the sheet. Those are documented from the code, with no badge. They are
-listed at the bottom of this file, because they want a `collab.md` item from an owner — an agent
-does not edit the sheet.
+The **opposite** case also occurs: places where the sheet's status claims are stale and the code is
+*ahead* of it. Those are documented from the code, with no badge. They want a `collab.md` item from
+an owner — an agent does not edit the sheet.
 
 ---
 
 ## Current state
 
-Written 2026-08-12. **All 38 pages in `NAV` exist and the site is complete as scoped.**
+**All 16 pages in `NAV` exist and the site is complete as scoped.** The site was written
+2026-08-12 at 38 pages; `reference/` came out on 2026-08-21 and How It Works was condensed from
+nine pages to three the same day.
 
 | Area | Pages |
 |---|---|
 | Shell | `assets/style.css`, `assets/site.js`, `_template.html`, `serve.sh` |
 | Landing | `index.html` |
-| Guide — concepts | `pipeline`, `graph`, `genomes`, `variation`, `fitness`, `sir`, `evolvers`, `reproducibility`, `output` |
+| Guide — how it works | `pipeline` (the loop, the graph, both genomes) · `variation` (the three rolls, selection, both strategies) · `fitness` (orientation, SIR, seeding, logs and results) |
 | Guide — using | `route-python-objects`, `route-python-toml`, `route-rust-library`, `route-rust-cli` — one per route |
 | Guide — extending | `extending`, `new-fitness`, `new-genome`, `new-evolver`, `new-selection`, `new-crossover`, `new-mutation` |
-| Project | `status.html`, `design-notes.html` |
+| Project | `design-notes.html` |
 
-Verified 2026-08-12: every `data-page` matches both its path and a `NAV` entry, every `NAV` entry
-has a file, **zero broken internal links and zero broken anchors** across all 38 pages, no page
-carries a stray `<style>` or `<script>` block, and every page serves over
-`python3 -m http.server`.
+Verified 2026-08-21 with the script below: every `data-page` matches both its path and a `NAV`
+entry, every `NAV` entry has a file, and **zero broken internal links and zero broken anchors**
+across all 16 pages.
 
 ### Known thin spots
 
@@ -164,14 +173,16 @@ Honest gaps rather than bugs, for whoever extends this:
   anywhere.
 - **Anchors were verified, prose was not cross-read.** Each page is internally accurate against the
   code or the spec sheet, but nobody has read them all in one pass looking for places where two
-  pages say the same thing slightly differently.
+  pages say the same thing slightly differently. The nine-into-three merge removed the worst of
+  that within How It Works; the boundary between a guide page and the route pages is less
+  settled.
 - **The four route pages overlap on purpose.** Each is meant to be read alone, so the config
   document and the seeding rule appear on more than one. Keep them in step.
 - **The Python config classes' mutability is stated conservatively.** Four of them are pyo3 complex
   enums whose variant fields carry no explicit accessor annotation; the pages say to treat those as
   read-only and rebuild the variant, rather than guessing. Worth verifying against pyo3 0.27 and
   then stating plainly.
-- **No search.** At 23 pages the sidebar is enough. If it grows past about 60, a build-free
+- **No search.** At 16 pages the sidebar is enough. If it grows past about 60, a build-free
   client-side index is the natural next step.
 
 ---
@@ -187,7 +198,7 @@ The source material is:
    invariants, a spec-vs-code table, and extension points.
 
 The surveys lived in the session scratchpad and are **not** checked in — they were working
-material, and their content is now in the reference pages. If you are continuing this work, the
+material, and their content is now in the guide pages. If you are continuing this work, the
 efficient shape is the same one that produced it:
 
 - Guide pages come from the spec sheet, which one agent can hold in context.
