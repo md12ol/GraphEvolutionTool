@@ -119,11 +119,21 @@ best.save_results("best_individual.txt")   # also writes best_individual.txt.tom
   master seed and reading the same index — not by feeding its derived seed back in.
 </p>
 
-<pre><code class="language-python">results = evolver.run(seed=7, n_runs=8)
+<pre><code class="language-python">import os
+
+results = evolver.run(seed=7, n_runs=8)
 
 for run_index, result in enumerate(results):
     print(run_index, result.best_fitness)
+    os.makedirs(f"output/run_{run_index}", exist_ok=True)
     result.save_logs(f"output/run_{run_index}/run_log.csv")</code></pre>
+
+<div class="warn">
+  <b><code>save_logs</code> and <code>save_results</code> do not create directories.</b> They write
+  the file you name and raise <code>OSError</code> if its folder is missing, so make the folder
+  first. The <code>get-run</code> CLI is different — <code>--out</code> builds the whole tree for
+  you.
+</div>
 
 <p>
   Replicates are spread across cores. Cap that with <code>max_cores</code> if you are sharing the
