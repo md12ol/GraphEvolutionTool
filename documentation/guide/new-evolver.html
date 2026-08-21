@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Add a Strategy · GET docs</title>
+<title>Add a Strategy · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -33,8 +33,10 @@
         <td>Whatever <i>your</i> strategy needs and the others do not — the generational one carries
             its generation count and elite count, the steady-state one its mating-event count.</td></tr>
     <tr><td><code>SharedEvolutionContext</code></td>
-        <td>What every strategy needs: the genome context, the rates, <code>max_mutations</code>,
-            and the selection strategy. Nothing else — see below.</td></tr>
+        <td>What every strategy needs: the genome context; <code>crossover_rate</code>,
+            <code>mutation_rate</code> and <code>max_mutations</code>; and the configured
+            <code>scope</code>, <code>selection</code> and <code>crossover</code> operator. Nothing
+            else — see below.</td></tr>
     <tr><td><code>population</code></td>
         <td>Handed in, already built. You never mint genomes.</td></tr>
     <tr><td><code>run</code></td>
@@ -71,7 +73,7 @@ num_my_events = 500</code></pre>
   </p>
 </div>
 
-<h2>The Six Edits</h2>
+<h2>The Six Steps</h2>
 
 <p>
   Every location carries a literal marker in the source, so you can jump to any step by searching
@@ -79,7 +81,9 @@ num_my_events = 500</code></pre>
   marker is the anchor that has not.
 </p>
 
-<pre><code class="language-bash">git grep -n "ADD A STRATEGY STEP" get/src    # all six, in one list</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A STRATEGY STEP" get/src    # the six steps, in one list</code></pre>
+
+<p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
 
 <div class="table-wrap">
 <table>
@@ -106,14 +110,14 @@ num_my_events = 500</code></pre>
 </table>
 </div>
 
-<h2>Step 1 — the Module</h2>
+<h2>Step 1 — The Module</h2>
 
 <pre><code class="language-rust">// step 1 — evolver/mod.rs:23
 pub mod my_strategy;
 
 pub use my_strategy::MyStrategyEvolver;</code></pre>
 
-<h2>Steps 2 and 3 — the Config Side</h2>
+<h2>Steps 2 and 3 — The Config Side</h2>
 
 <pre><code class="language-rust">// step 2 — config.rs:104
 MyStrategy {
@@ -177,7 +181,7 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
   function is both the direction conversion and the <code>NaN</code> gate. Calling the trait
   yourself produces values that compare backwards under a maximizing objective <i>and</i> lets a
   <code>NaN</code> through that will win every tournament it enters — and neither failure announces
-  itself. Detail on <a href="fitness.html#gate">Fitness &amp; Orientation</a>.
+  itself. Detail on <a href="fitness.html#gate">Fitness &amp; Output</a>.
 </div>
 
 <div class="warn">
@@ -263,19 +267,23 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 
 <p>
   If your strategy needs something the others do not, put it in the validator, not in the evolver's
-  setup. Steady-state's <code>tournament_size ≥ 4</code> is the worked example: it is strategy
-  specific, so it is checked only when that strategy is selected, and switching strategies can
-  therefore make a previously valid selection block invalid.
+  setup. Steady-state's <code>[scope] size ≥ 4</code> is the worked example — two parents and the
+  two they replace must be distinct. It is strategy specific, so it is checked only when that
+  strategy is selected, and switching strategies can therefore make a previously valid scope
+  invalid. Note <code>tournament_size</code> and <code>[scope] size</code> are deliberately
+  independent: the first sizes a tournament and has no floor beyond 1, the second sizes the pool
+  that tournament draws from.
 </p>
 
 <div class="note">
   <b>The engine's own assertions are backstops, not validation.</b> They exist for direct library
   use — tests, embedding — where no config was involved. A config-driven run must never reach one,
   because a bad config has to surface as a proper exception naming the field, not as a panic
-  crossing the Python boundary. Note there is already one asymmetry of this kind: the validator
-  enforces <code>population_size ≥ tournament_size</code> for both strategies while the
-  generational evolver deliberately omits that assertion, so the config path is stricter than the
-  engine.
+  crossing the FFI boundary. Note the validator constrains the <i>scope</i> against the population
+  — <code>[scope] size</code> must be at least 1 and at most <code>population_size</code>, because
+  distinct individuals cannot be drawn from fewer — while <code>tournament_size</code> is left
+  unbounded above, since a tournament samples with replacement and may legitimately exceed the
+  population.
 </div>
 
 <h2>Testing It</h2>
@@ -300,7 +308,7 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 <p>
   Every representation, every objective, both front ends, orientation, <code>NaN</code> rejection,
   the variation scheme, and the statistics. Your strategy is a loop over machinery that already
-  exists — which is why three edits is a realistic estimate rather than an optimistic one.
+  exists — which is why five required steps is a realistic estimate rather than an optimistic one.
 </p>
 
 </main>

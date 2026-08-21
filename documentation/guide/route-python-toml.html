@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Python: TOML File · GET docs</title>
+<title>Python: TOML File · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -20,10 +20,16 @@
 
 <h2>Install</h2>
 
+<p>
+  The distribution is <code>graph-evolution-tool</code>; it imports as <code>get</code>.
+</p>
+
 <pre><code class="language-bash">python3 -m venv .venv
 source .venv/bin/activate
-pip install .
+pip install graph-evolution-tool
 python -c "import get; print(get.__name__)"</code></pre>
+
+
 
 <h2>The Config Document</h2>
 
@@ -103,11 +109,21 @@ best.save_results("best_individual.txt")</code></pre>
 <h2>Validation Happens Once, Up Front</h2>
 
 <p>
-  The document is parsed and checked when you construct the evolver, not part-way through a run. An
-  unknown key is an error rather than a silent default — a misspelled
+  The document is parsed and checked when you construct the evolver, not part-way through a run. In
+  most sections an unknown key is an error rather than a silent default — a misspelled
   <code>tournament_sise</code> stops you immediately instead of quietly running a different
   experiment.
 </p>
+
+<div class="warn">
+  <b><code>[fitness]</code> is the exception, and it is worth knowing.</b> Its variants flatten
+  their SIR block into the section, and a flattened block is the one place serde cannot refuse an
+  unrecognised key — so a typo there is <b>ignored</b>, leaving the default in place. Two keys are
+  singled out and rejected by name because they are the mistakes that change a run silently:
+  <code>seed</code>, which belongs on <code>run</code>, and <code>target_profile</code> under a
+  variant that has no use for it. Anything else misspelled under <code>[fitness]</code> passes
+  quietly, so check that section by eye.
+</div>
 
 <pre><code class="language-python">try:
     evolver = get.GraphEvolver("config.toml")
@@ -149,8 +165,9 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
 <div class="callout">
   <p>
     The function takes the <b>whole population at once</b> and returns one number per individual in
-    the same order. Direction is declared here, never inferred. <code>NaN</code> stops the run;
-    <code>±inf</code> is allowed and marks an individual unusable.
+    the same order. Direction is declared here, never inferred. <code>NaN</code> stops the run.
+    Infinity is allowed, but which one means "invalid" follows the direction: <code>+inf</code>
+    under minimize, <code>-inf</code> under maximize — the opposite one is the best possible score.
   </p>
 </div>
 
@@ -160,18 +177,20 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
   If you would rather generate configurations than hand-write them, the same typed objects the other
   Python route uses will serialize to this format — useful for sweeping a parameter across many
   files. See <a href="route-python-objects.html">Python: Config Objects</a>, and
-  <code>examples/config_builder.py</code> in the repository, which builds configurations without
-  running anything.
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/config_builder.py"><code>config_builder.py</code></a>, which builds configurations
+  without running anything.
 </p>
 
 <h2>A Complete Example</h2>
 
 <p>
-  <code>examples/python_from_config.py</code> is this route end to end, taking the config path and
-  seed as arguments:
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/python_from_config.py"><code>python_from_config.py</code></a> is this route
+  end to end, taking the config path and seed as arguments. It is not shipped in the wheel, so
+  download it alongside
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/config.example.toml"><code>config.example.toml</code></a> and run:
 </p>
 
-<pre><code class="language-bash">python examples/python_from_config.py config.example.toml 7</code></pre>
+<pre><code class="language-bash">python python_from_config.py config.example.toml 7</code></pre>
 
 </main>
 <script src="../assets/site.js"></script>

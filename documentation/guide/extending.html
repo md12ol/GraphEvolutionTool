@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Extension Points · GET docs</title>
+<title>Extension Points · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -21,29 +21,29 @@
 
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Add a…</th><th>Costs</th><th>Because</th></tr></thead>
+  <thead><tr><th>Add a…</th><th>Integration steps</th><th>Because</th></tr></thead>
   <tbody>
     <tr><td><b><a href="new-fitness.html">Objective</a></b></td>
-        <td><b>One arm.</b> Cheapest by a wide margin — and in Python, no Rust at all.</td>
+        <td><b>One dispatch arm</b> — cheapest by a wide margin, and in Python no Rust at all.</td>
         <td>The objective is erased to a trait object <i>before</i> dispatch, so it never enters
             the strategy × genome match.</td></tr>
     <tr><td><b><a href="new-genome.html">Genome</a></b></td>
-        <td>One config variant, one startup function, one dispatch arm.</td>
+        <td>Seven steps, six required — one of them a dispatch arm.</td>
         <td>The strategy match is generic over the genome, so evolvers are untouched.</td></tr>
     <tr><td><b><a href="new-evolver.html">Strategy</a></b></td>
-        <td>One config variant, one arm in the strategy match, one trait implementation.</td>
+        <td>Six steps, five required — one of them an arm in the strategy match.</td>
         <td>The genome match is untouched, for the same reason in reverse.</td></tr>
     <tr><td><b><a href="new-selection.html">Selection Scheme</a></b></td>
-        <td>Six steps, four files — two of them optional.</td>
+        <td>Six steps, four required.</td>
         <td>Selection is already an enum for exactly this reason, and it answers only "who
             breeds", so no strategy or genome is touched.</td></tr>
     <tr><td><b><a href="new-crossover.html">Crossover Operator</a></b></td>
-        <td>Five steps — and one is a compatibility pair per genome.</td>
+        <td>Five steps — one is a compatibility pair per genome.</td>
         <td><code>[crossover]</code> is a shared section, so the operator has to declare which
             representations can honour it. The match is exhaustive on purpose: adding a variant
             stops it compiling until you do.</td></tr>
     <tr><td><b><a href="new-mutation.html">Mutation Operator</a></b></td>
-        <td>Four steps — <b>per genome</b>, and the chain exists twice.</td>
+        <td>Four steps, <b>per genome</b> — the chain exists twice.</td>
         <td>What counts as "one mutation" differs by representation, so there is no shared enum.
             Adding one for edge-edit does not touch SDA.</td></tr>
     <tr><td><b>Scope</b> · <b>Replacement</b></td>
@@ -188,7 +188,7 @@ anything else.</figcaption>
   both — producing values that compare backwards under a maximizing objective, and letting a
   <code>NaN</code> through that will take over the population. Neither failure announces itself.
   Any new evolution strategy scores its population through this function or it is wrong. Detail on
-  <a href="fitness.html#gate">Fitness &amp; Orientation</a>.
+  <a href="fitness.html#gate">Fitness &amp; Output</a>.
 </div>
 
 <h2>Practical Notes for Any of Them</h2>

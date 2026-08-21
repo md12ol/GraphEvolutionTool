@@ -1,9 +1,18 @@
 [package]
-name = "get"
+# The published name, on crates.io and PyPI alike. `get` is taken on both and
+# cannot be reclaimed (crates.io since 2024-03-14), so the distribution is
+# named for the project and the import path is set separately below — the same
+# arrangement as `pip install scikit-learn` giving you `import sklearn`.
+# Decided 2026-08-16, GitHub #88.
+name = "graph-evolution-tool"
 version = "0.9.0"
 edition = "2024"
 
 [lib]
+# `use get::` and `import get` both come from HERE, not from the package name
+# above. Renaming this would break every example, both front ends and
+# `#[pymodule] fn get` at once; renaming the package breaks nothing.
+name = "get"
 # cdylib for the importable Python extension module; rlib so `cargo test` can
 # link the crate for the unit tests.
 crate-type = ["cdylib", "rlib"]
@@ -41,7 +50,7 @@ toml = "0.8"
 #
 # So the built module turns it on from outside the manifest:
 #   maturin — `[tool.maturin] features = ["pyo3/extension-module"]`
-#   cargo   — `cargo build -p get --features pyo3/extension-module`
+#   cargo   — `cargo build -p graph-evolution-tool --features pyo3/extension-module`
 #
 # `auto-initialize` starts an embedded interpreter on the first
 # `Python::attach`, so tests can call a Python callable. Test builds only.

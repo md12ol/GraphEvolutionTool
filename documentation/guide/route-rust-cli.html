@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rust: The get-run CLI · GET docs</title>
+<title>Rust: The get-run CLI · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -20,16 +20,28 @@
 <h2>Build It</h2>
 
 <p>
-  <code>get-run</code> is built from a clone, not installed from a package. That is deliberate: this
-  route serves someone who wants a frozen copy of the code behind a set of numbers, and pinning a
-  commit is the point.
+  <b>This is the one route that starts at the repository.</b> <code>get-run</code> is built from a
+  checkout rather than installed from a package, and that is deliberate: this route serves someone
+  who wants a frozen copy of the code behind a set of numbers, so the source you built from is part
+  of the result. Take a tagged release for a run you intend to cite, or <code>main</code> to track
+  development.
 </p>
 
 <pre><code class="language-bash">git clone https://github.com/md12ol/GraphEvolutionTool
 cd GraphEvolutionTool
-cargo build --release -p get --features cli --bin get-run
+git checkout &lt;tag&gt;               # a release tag — omit to build main instead
 
+cargo build --release -p graph-evolution-tool --features cli --bin get-run
 ./target/release/get-run --help</code></pre>
+
+<p>
+  Releases are listed at
+  <a href="https://github.com/md12ol/GraphEvolutionTool/releases">github.com/md12ol/GraphEvolutionTool/releases</a>;
+  a release is an annotated tag on <code>main</code>, so the tag name is the whole provenance record
+  you need to reproduce a build. The other three routes install a published package instead and
+  never need the repository — see <a href="route-rust-library.html">Rust: As a Library</a> if you
+  want the crate rather than the binary.
+</p>
 
 <div class="warn">
   <b>A real Python must be on <code>PATH</code> to build it</b>, even though you never write any

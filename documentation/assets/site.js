@@ -12,8 +12,9 @@
 
   /* ---------- the site map -------------------------------------------- */
 
-  /* A group with no title renders as a bare link at the top of the sidebar --
-     Overview is one page, not a section, and a folder around it was noise. */
+  /* A group with no title renders as bare links with no collapsing header --
+     Overview and Design Notes are each one page, not a section, and a folder
+     around a single page was noise. */
   var NAV = [
     {
       title: null,
@@ -25,14 +26,8 @@
       title: "How It Works",
       items: [
         ["guide/pipeline.html",               "The Pipeline"],
-        ["guide/graph.html",                  "The Graph"],
-        ["guide/genomes.html",                "Genomes"],
-        ["guide/variation.html",              "Crossover & Mutation"],
-        ["guide/fitness.html",                "Fitness & Orientation"],
-        ["guide/sir.html",                    "The SIR Model"],
-        ["guide/evolvers.html",               "Evolution Strategies"],
-        ["guide/reproducibility.html",        "Seeds & Reproducibility"],
-        ["guide/output.html",                 "Logs & Results"]
+        ["guide/variation.html",              "Variation & Selection"],
+        ["guide/fitness.html",                "Fitness & Output"]
       ]
     },
     {
@@ -57,9 +52,8 @@
       ]
     },
     {
-      title: "Project",
+      title: null,
       items: [
-        ["status.html",                       "Implementation Status"],
         ["design-notes.html",                 "Design Notes"]
       ]
     }
@@ -90,9 +84,18 @@
       '<g fill="currentColor" style="color:var(--accent)">' +
       '<circle cx="16" cy="8" r="3"/><circle cx="8" cy="22" r="3"/><circle cx="24" cy="22" r="3"/>' +
       '</g></svg>' +
-      '<a href="' + href("index.html") + '">GET docs</a>' +
+      '<a href="' + href("index.html") + '">GET Docs</a>' +
       '<span class="tag">v0.9</span>';
     aside.appendChild(brand);
+
+    /* The repository, once, in the site chrome -- so every page can reach the
+       source without any route page having to assume the reader has a clone.
+       Same tab deliberately: nothing here is a form to lose. */
+    var repo = document.createElement("a");
+    repo.className = "brand-repo";
+    repo.href = "https://github.com/md12ol/GraphEvolutionTool";
+    repo.textContent = "Source on GitHub \u2197";
+    aside.appendChild(repo);
 
     /* One section open at a time: the one holding the current page. A title is
        a link to its own first page, so following it lands you there and the
@@ -112,7 +115,8 @@
         t.className = "nav-title";
         t.href = href(group.items[0][0]);
         t.textContent = group.title;
-        t.setAttribute("aria-expanded", holdsPage ? "true" : "false");
+        /* Deliberately NOT aria-expanded: this is a link to the section's first
+           page, not a control that expands anything on the current page. */
         g.appendChild(t);
       }
 
@@ -308,19 +312,25 @@
       btn.className = "copy-btn";
       btn.type = "button";
       btn.textContent = "copy";
+      /* The label is the status, so it has to be announced -- a silent failure
+         looks identical to a success to anyone not watching the button. */
+      btn.setAttribute("aria-live", "polite");
       btn.addEventListener("click", function () {
-        var done = function () {
-          btn.textContent = "copied";
+        var reset = function () {
           setTimeout(function () { btn.textContent = "copy"; }, 1200);
         };
+        var done = function () { btn.textContent = "copied"; reset(); };
+        var failed = function () { btn.textContent = "copy failed"; reset(); };
         if (navigator.clipboard) {
-          navigator.clipboard.writeText(raw).then(done, function () {});
+          navigator.clipboard.writeText(raw).then(done, failed);
         } else {
           var ta = document.createElement("textarea");
           ta.value = raw;
           document.body.appendChild(ta);
           ta.select();
-          try { document.execCommand("copy"); done(); } catch (e) {}
+          try {
+            if (document.execCommand("copy")) { done(); } else { failed(); }
+          } catch (e) { failed(); }
           document.body.removeChild(ta);
         }
       });
@@ -335,15 +345,31 @@
     btn.className = "nav-toggle";
     btn.type = "button";
     btn.setAttribute("aria-label", "Toggle navigation");
+    btn.setAttribute("aria-controls", "sidebar");
+    btn.setAttribute("aria-expanded", "false");
     btn.textContent = "☰";
+
+    /* One place that sets the class and the attribute together, so the two
+       cannot disagree about whether the menu is open. */
+    function setOpen(open) {
+      document.body.classList.toggle("nav-open", open);
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
     btn.addEventListener("click", function () {
-      document.body.classList.toggle("nav-open");
+      setOpen(!document.body.classList.contains("nav-open"));
     });
     document.body.appendChild(btn);
     document.addEventListener("click", function (e) {
       if (!document.body.classList.contains("nav-open")) return;
       if (e.target.closest && (e.target.closest(".sidebar") || e.target.closest(".nav-toggle"))) return;
-      document.body.classList.remove("nav-open");
+      setOpen(false);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      if (!document.body.classList.contains("nav-open")) return;
+      setOpen(false);
+      btn.focus();
     });
   }
 

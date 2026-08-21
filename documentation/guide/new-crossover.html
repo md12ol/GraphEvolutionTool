@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Add a Crossover Operator · GET docs</title>
+<title>Add a Crossover Operator · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -53,7 +53,7 @@ some_param = 0.5</code></pre>
   </p>
 </div>
 
-<h2>The Five Edits</h2>
+<h2>The Five Steps</h2>
 
 <p>
   Every location carries a literal marker in the source, so you can jump to any step by searching
@@ -61,7 +61,9 @@ some_param = 0.5</code></pre>
   marker is the anchor that has not.
 </p>
 
-<pre><code class="language-bash">git grep -n "ADD A CROSSOVER STEP" get/src    # all five, in one list</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A CROSSOVER STEP" get/src    # the five steps, in one list</code></pre>
+
+<p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
 
 <div class="table-wrap">
 <table>
@@ -86,7 +88,7 @@ some_param = 0.5</code></pre>
 </table>
 </div>
 
-<h2>Steps 1 and 2 — the Engine Side</h2>
+<h2>Steps 1 and 2 — The Engine Side</h2>
 
 <pre><code class="language-rust">// step 1 — evolver/common.rs:76
 MyCrossover { some_param: f64 },
@@ -106,7 +108,7 @@ Crossover::MyCrossover { some_param } =&gt; { /* recombine `first` and `second` 
   </p>
 </div>
 
-<h2>Step 3 — the Config Variant, and the Compatibility Pairs</h2>
+<h2>Step 3 — The Config Variant, and the Compatibility Pairs</h2>
 
 <p>
   Two sites in one file, and the second is the one that gets forgotten.

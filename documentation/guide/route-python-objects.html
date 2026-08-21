@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Python: Config Objects · GET docs</title>
+<title>Python: Config Objects · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -20,13 +20,19 @@
 <h2>Install</h2>
 
 <p>
-  GET is a compiled module, so it installs rather than being copied in. From a clone:
+  GET is a compiled module, so it installs rather than being copied in. The distribution is called
+  <code>graph-evolution-tool</code> and it imports as <code>get</code>: the short name was already
+  taken on PyPI and on crates.io and cannot be reclaimed, so the published name differs from the
+  import — the same arrangement as <code>pip install scikit-learn</code> giving you
+  <code>import sklearn</code>.
 </p>
 
 <pre><code class="language-bash">python3 -m venv .venv
 source .venv/bin/activate
-pip install .          # or: maturin develop, if you are changing GET itself
+pip install graph-evolution-tool
 python -c "import get; print(get.__name__)"</code></pre>
+
+
 
 <h2>The Smallest Complete Run</h2>
 
@@ -138,9 +144,11 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
         dramatically slower, because every call pays the interpreter round trip.</li>
     <li><b>Direction is declared, never inferred.</b> <code>"minimize"</code> or
         <code>"maximize"</code>. Nothing can work it out from your function.</li>
-    <li><b><code>NaN</code> stops the run.</b> <code>±inf</code> is fine and is the ordinary way to
-        mark an individual unusable. Watch for a zero denominator and <code>0.0/0.0</code> — an
-        empty graph puts both within reach.</li>
+    <li><b><code>NaN</code> stops the run.</b> Infinity is allowed, but pick the right one: it is
+        <code>+inf</code> under <code>"minimize"</code> and <code>-inf</code> under
+        <code>"maximize"</code> that mean "invalid, never select this". The opposite infinity is
+        the <i>best</i> possible score, so it wins every tournament it enters. Watch for a zero
+        denominator and <code>0.0/0.0</code> — an empty graph puts both within reach.</li>
   </ul>
 </div>
 
@@ -165,9 +173,10 @@ evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre
 <h2>A Complete Example</h2>
 
 <p>
-  <code>examples/python_inline.py</code> in the repository is this route end to end: several
-  replicates, an output directory per run, and all three files written per replicate. Run it with
-  <code>python examples/python_inline.py</code>.
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/python_inline.py"><code>python_inline.py</code></a> is this route end to end:
+  several replicates, an output directory per run, and all three files written per replicate. It
+  is not shipped in the wheel — the package carries the module and nothing else — so download it
+  and run <code>python python_inline.py</code>.
 </p>
 
 <h2>When to Use the Other Python Route</h2>

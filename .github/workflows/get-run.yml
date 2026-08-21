@@ -51,7 +51,7 @@ jobs:
           echo "libpython dir: ${libdir}"
 
       - name: Build get-run
-        run: cargo build --release -p get --features cli --bin get-run
+        run: cargo build --release -p graph-evolution-tool --features cli --bin get-run
 
       # The run writes its three output files into the current directory, so it
       # runs in a scratch directory and is checked there in the same step —

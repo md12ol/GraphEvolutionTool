@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Add a Genome · GET docs</title>
+<title>Add a Genome · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -13,7 +13,7 @@
 <p class="page-kicker">Extending GET</p>
 <h1>Add a Genome</h1>
 <p class="lede">
-  A third representation — a different way of describing a graph compactly. Four edits, and the
+  A third representation — a different way of describing a graph compactly. Seven steps, six of them required, and the
   evolvers are untouched, because the strategy match is generic over the genome type.
 </p>
 
@@ -32,9 +32,9 @@
   <thead><tr><th>Method</th><th>Must</th></tr></thead>
   <tbody>
     <tr><td><code>express</code></td>
-        <td>Build a <a href="graph.html">graph</a> from the genome and the run context.
+        <td>Build a <a href="pipeline.html#graph">graph</a> from the genome and the run context.
             <b>Deterministic</b> — the same genome and context must always give the same graph, or
-            reproducibility breaks and the two evolvers stop agreeing about the winner.</td></tr>
+            reproducibility breaks and the two strategies stop agreeing about the winner.</td></tr>
     <tr><td><code>crossover</code></td>
         <td>Recombine <b>in place</b>, leaving one child in each parent. Both are kept. Tolerate
             unequal sizes defensively even though nothing produces them.</td></tr>
@@ -56,7 +56,7 @@
   <b>The one-mutation rule is a contract, not a convention.</b> A genome that rolls its own count
   internally makes <code>max_mutations</code> mean nothing for that representation — and nothing
   reports the disagreement, so a user comparing two representations at the same setting silently
-  compares two different things. See <a href="variation.html">Crossover &amp; Mutation</a>.
+  compares two different things. See <a href="variation.html">Variation &amp; Selection</a>.
 </div>
 
 <h2>What the User Ends Up Writing</h2>
@@ -85,7 +85,7 @@ some_dimension = 256</code></pre>
   </p>
 </div>
 
-<h2>The Seven Edits</h2>
+<h2>The Seven Steps</h2>
 
 <p>
   Every location carries a literal marker in the source, so you can jump to any step by searching
@@ -93,7 +93,9 @@ some_dimension = 256</code></pre>
   marker is the anchor that has not.
 </p>
 
-<pre><code class="language-bash">git grep -n "ADD A GENOME STEP" get/src    # all seven, in one list</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A GENOME STEP" get/src    # the seven steps, in one list</code></pre>
+
+<p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
 
 <div class="table-wrap">
 <table>
@@ -123,7 +125,7 @@ some_dimension = 256</code></pre>
 </table>
 </div>
 
-<h2>Steps 1 to 3 — the Representation</h2>
+<h2>Steps 1 to 3 — The Representation</h2>
 
 <pre><code class="language-rust">// step 1 — genomes/genome.rs:148
 impl Genome for MyGenome {
@@ -131,7 +133,7 @@ impl Genome for MyGenome {
 
     fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph { ... }
     fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R) { ... }
-    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, context: &amp;Self::Context, rng: &amp;mut R) { ... }
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, rng: &amp;mut R) { ... }
     fn print(&amp;self) -&gt; String { ... }
 }
 
@@ -217,7 +219,7 @@ GenomeConfig::MyGenome(mine) =&gt; {
 <h3>Does Anything Derive From the Edge Cap?</h3>
 
 <p>
-  It might. The <a href="genomes.html#alphabet">SDA Alphabet</a> is derived as
+  It might. The <a href="pipeline.html#alphabet">SDA Alphabet</a> is derived as
   <code>max_edge_multiplicity + 1</code> so that every character it can emit is a legal edge weight
   and nothing is ever clamped. If your representation produces weights in any indirect way, work
   out what the equivalent invariant is before writing the constructor, because the failure is
@@ -282,9 +284,9 @@ GenomeConfig::MyGenome(mine) =&gt; {
 <p>
   Everything except expression. Selection, both evolution strategies, the whole
   <a href="variation.html">variation scheme</a>, orientation and <code>NaN</code> rejection,
-  logging, all three SIR objectives and any Python objective work with your representation the
+  logging, all four built-in objectives and any Python objective work with your representation the
   moment dispatch can build it — because none of them know what a genome <i>is</i>. That is what the
-  static-generic design buys, and it is the reason a new genome costs four edits rather than
+  static-generic design buys, and it is the reason a new genome costs six required steps rather than
   four files.
 </p>
 
