@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuration Reference · GET Docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/configuration.html">
+<main>
+
+<p class="page-kicker">Using GET</p>
+<h1>Configuration Reference</h1>
+<p class="lede">
+  Every key a GET configuration accepts: what it does, what else it can be, what rejects it. This is
+  the page to look something up in — the route pages show a whole document being written and run.
+</p>
+
+<div class="note">
+  <b>One schema, two spellings.</b> A TOML document and the Python config objects are the same thing:
+  the objects serialize to TOML and that TOML is what the Rust side parses, so neither route accepts
+  a configuration the other would reject. Where the Python name differs it is noted in the row.
+</div>
+
+<h2>Top Level</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Key</th><th>Type</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>population_size</code></td><td>integer</td><td>required</td>
+        <td>Individuals in the population.</td></tr>
+    <tr><td><code>network_size</code></td><td>integer</td><td>required</td>
+        <td>Nodes in every expressed graph. Fixed for the run — nothing adds or removes nodes.</td></tr>
+    <tr><td><code>max_edge_multiplicity</code></td><td>integer</td><td><code>1</code></td>
+        <td>Edge-weight cap. <code>1</code> is an unweighted simple graph; above 1 allows parallel
+            edges. Must be 1–255. <b>Also sets the SDA alphabet</b>, which is derived as
+            <code>cap + 1</code>, so every character the automaton can emit is a legal weight.</td></tr>
+    <tr><td><code>crossover_rate</code></td><td>float</td><td>required</td>
+        <td>Probability a selected pair is recombined. Validated in <code>[0, 1]</code>.</td></tr>
+    <tr><td><code>mutation_rate</code></td><td>float</td><td>required</td>
+        <td>Probability a child is mutated <i>at all</i> — not a per-gene rate. Validated in
+            <code>[0, 1]</code>.</td></tr>
+    <tr><td><code>max_mutations</code></td><td>integer</td><td><code>1</code></td>
+        <td>A mutating child takes a count drawn uniformly from <code>1..=max_mutations</code>. Must
+            be at least 1. Read this and <code>mutation_rate</code> as one knob: whether a child
+            mutates, then how hard.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2><code>[evolution]</code></h2>
+
+<p>Required. <code>type</code> selects the strategy, and the other keys belong to that strategy.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th><code>type</code></th><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td rowspan="2"><code>"generational"</code></td>
+        <td><code>num_generations</code></td><td>required</td>
+        <td>Whole-population replacements to run.</td></tr>
+    <tr><td><code>elite_count</code></td><td><code>1</code></td>
+        <td>Best individuals carried forward untouched each generation. Must be
+            <b>less than</b> <code>population_size</code> — equal would mean nothing ever
+            changes.</td></tr>
+    <tr><td rowspan="2"><code>"steady_state"</code></td>
+        <td><code>num_mating_events</code></td><td>required</td>
+        <td>Single breeding events to run. One event touches one scope, not the whole
+            population.</td></tr>
+    <tr><td><code>replacement</code></td><td><code>{ type = "worst" }</code></td>
+        <td>Who the children overwrite. See <a href="new-replacement.html">Add a Replacement
+            Policy</a> for the axis; <code>worst</code> is what makes steady-state
+            self-elitist.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout">
+  <p>
+    <b><code>replacement</code> lives inside <code>[evolution]</code> rather than in a section of its
+    own</b>, because it belongs to whichever strategy displaces individuals — the same way
+    <code>elite_count</code> belongs to generational. Generational never asks who to overwrite.
+  </p>
+</div>
+
+<h2><code>[scope]</code></h2>
+
+<p>
+  <b>Required in every configuration</b>, generational included. It names which slice of the
+  population one breeding event may touch.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th><code>type</code></th><th>Key</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>"global"</code></td><td>—</td>
+        <td>Every individual is a candidate. Consumes no randomness.</td></tr>
+    <tr><td><code>"random_subset"</code></td><td><code>size</code></td>
+        <td><code>size</code> distinct individuals, drawn uniformly without replacement. At least 1
+            and at most <code>population_size</code>. Must also be large enough for what selection
+            and replacement need to draw from it.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn">
+  <b><code>size</code> lives here, not under <code>[selection]</code>.</b> If you are migrating a
+  configuration that sized a steady-state scope with <code>tournament_size</code>, that number moves
+  into this block and <code>[selection]</code> keeps only the tournament. A tournament may now exceed
+  the population; the floor that used to be checked against <code>tournament_size</code> is checked
+  against <code>size</code> instead.
+</div>
+
+<h2><code>[selection]</code></h2>
+
+<p>Required. Who, within the scope, becomes a parent.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th><code>type</code></th><th>Key</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>"best"</code></td><td>—</td>
+        <td>Takes the scope's fittest, in rank order. Consumes no randomness — the scope did the
+            drawing.</td></tr>
+    <tr><td><code>"tournament"</code></td><td><code>tournament_size</code></td>
+        <td>Draws <code>tournament_size</code> members of the scope <b>with</b> replacement and takes
+            the best, once per parent. At least 1.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2><code>[crossover]</code></h2>
+
+<p>
+  Optional. Omitted means two-point, which is what every representation did before the operator
+  became selectable — so an existing configuration keeps its behaviour by leaving this out.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th><code>type</code></th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>"two_point"</code></td>
+        <td>Two cut points, the middle segment exchanged. The only operator that ships.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  Crossover is a <b>shared</b> section because both genomes' recombination is the same operation over
+  a linear genome. Mutation is not — see below.
+</p>
+
+<h2><code>[genome]</code></h2>
+
+<p>Required. <code>type</code> selects the representation, and the keys under it are that representation's.</p>
+
+<h3><code>type = "edge_edit"</code></h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>gene_length</code></td><td>required</td>
+        <td>Number of edit operations in the genome. The graph is what replaying them produces.</td></tr>
+    <tr><td><code>mutation</code></td><td><code>{ type = "reroll_gene" }</code></td>
+        <td>Which mutation operator applies. See <a href="new-mutation.html">Add a Mutation
+            Operator</a>.</td></tr>
+    <tr><td><code>operation_weights</code></td><td>all <code>1.0</code></td>
+        <td>Sub-table, below.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h4><code>[genome.operation_weights]</code></h4>
+
+<p>
+  Nine <b>relative</b> weights, one per edit operation:
+  <code>toggle</code>, <code>add</code>, <code>delete</code>, <code>hop</code>, <code>swap</code>,
+  <code>local_toggle</code>, <code>local_add</code>, <code>local_delete</code>, <code>null</code>.
+  <a href="pipeline.html#operations">The Nine Operations</a> says what each one does to the graph.
+</p>
+
+<p>
+  They are weights, not probabilities — they are normalized, so they need not sum to anything. Each
+  must be finite and non-negative, <b>at least one must be positive</b>, and <code>0.0</code>
+  disables its operation outright. Omit the table entirely, or any field in it, and that operation
+  weighs <code>1.0</code>. Like <code>[genome]</code> itself, this sub-table <b>rejects</b> a key it
+  does not recognize.
+</p>
+
+<h3><code>type = "sda"</code></h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>num_states</code></td><td>required</td>
+        <td>States in the automaton.</td></tr>
+    <tr><td><code>max_resp_len</code></td><td>required</td>
+        <td>Longest response string a transition may emit. Responses are drawn from
+            <code>1..=max_resp_len</code>, never empty, which is what guarantees the automaton
+            terminates.</td></tr>
+    <tr><td><code>init_state</code></td><td>required</td>
+        <td>State the automaton starts in. Must be <b>less than</b> <code>num_states</code>.</td></tr>
+    <tr><td><code>init_char_mutation_rate</code></td><td><code>0.04</code></td>
+        <td>Chance a mutation targets the initial character rather than the tables. In
+            <code>[0, 1]</code>.</td></tr>
+    <tr><td><code>transition_vs_response_rate</code></td><td><code>0.5</code></td>
+        <td>Given the tables are targeted, the split between transitions and responses. In
+            <code>[0, 1]</code>.</td></tr>
+    <tr><td><code>mutation</code></td><td><code>{ type = "redraw_one" }</code></td>
+        <td>Which mutation operator applies.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <b>There is no <code>num_chars</code>.</b> The alphabet is derived as
+  <code>max_edge_multiplicity + 1</code>, so every character the automaton can emit is a legal edge
+  weight and none is ever clamped away.
+</div>
+
+<div class="callout">
+  <p>
+    <b>Mutation is per-genome; crossover is shared.</b> <code>mutation</code> sits inside each
+    genome's own block rather than in a section of its own, because what counts as "one mutation"
+    differs entirely between a list of edit operations and an automaton — a shared enum would let a
+    configuration name an operator meaningless for the genome actually selected.
+  </p>
+</div>
+
+<h2><code>[fitness]</code></h2>
+
+<p>Required. <code>type</code> selects the objective.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th><code>type</code></th><th>Direction</th><th>What it scores</th></tr></thead>
+  <tbody>
+    <tr><td><code>"epi_spread"</code></td><td>maximize</td>
+        <td>Total ever-infected, averaged over epidemics.</td></tr>
+    <tr><td><code>"epi_length"</code></td><td>maximize</td>
+        <td>Timesteps for the outbreak to burn out.</td></tr>
+    <tr><td><code>"epi_prof_match"</code></td><td>minimize</td>
+        <td>RMSE against a target infection profile.</td></tr>
+    <tr><td><code>"struct_match"</code></td><td>minimize</td>
+        <td>Structural distance from a folder of reference graphs. Reads data from disk; requires
+            <code>max_edge_multiplicity = 1</code>.</td></tr>
+    <tr><td><code>"python"</code></td><td>declared at registration</td>
+        <td>A Python callable registered on the evolver before the run.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>The SIR block — the three <code>epi_*</code> objectives</h3>
+
+<p>These keys sit directly under <code>[fitness]</code>, not in a sub-table.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>infection_rate</code></td><td>required</td>
+        <td>Per-contact transmission probability, in <code>[0, 1]</code>.</td></tr>
+    <tr><td><code>num_epidemics</code></td><td>required</td>
+        <td>Epidemics averaged per evaluation. At least 1 — fitness is their mean.</td></tr>
+    <tr><td><code>patient_zero</code></td><td>random each epidemic</td>
+        <td>Fix the seed node instead.</td></tr>
+    <tr><td><code>min_epidemic_length</code></td><td><code>3</code></td>
+        <td>Outbreaks shorter than this are re-simulated. Set to 1 to disable the re-roll.</td></tr>
+    <tr><td><code>max_epidemic_retries</code></td><td><code>5</code></td>
+        <td>How many re-simulations before accepting a short one. At least 1.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3><code>epi_prof_match</code></h3>
+
+<p>
+  <code>target_profile</code> — required, an array of numbers, at least one element. Compared
+  verbatim at the size of the network being built: nothing is prepended and nothing is rescaled.
+  Supplying it under any other objective is rejected by name.
+</p>
+
+<h3><code>struct_match</code></h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>reference_folder</code></td><td>required</td>
+        <td>Folder of reference graphs, one edge-list file each. <b>Not checked when the config is
+            parsed</b> — validation does no I/O, so a missing or empty folder is reported when the
+            run starts.</td></tr>
+    <tr><td><code>degree_bins</code> · <code>clustering_bins</code> · <code>spectral_bins</code></td>
+        <td><code>50</code></td>
+        <td>Histogram bins per statistic family. More bins resolve finer differences and need more
+            reference graphs to fill them.</td></tr>
+    <tr><td><code>degree_gamma</code> · <code>clustering_gamma</code> · <code>spectral_gamma</code></td>
+        <td><code>1.0</code></td>
+        <td>RBF bandwidths. Must be finite and greater than zero — the kernel divides by them.</td></tr>
+    <tr><td><code>degree_weight</code> · <code>clustering_weight</code> · <code>spectral_weight</code></td>
+        <td><code>1.0</code></td>
+        <td>How much each family counts. Finite and non-negative; <b>they cannot all be zero</b>,
+            which would score every candidate identically.</td></tr>
+    <tr><td><code>density_weight</code></td><td><code>1.0</code></td>
+        <td>How much distance from the reference set's mean density counts. Zero switches the penalty
+            off.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn">
+  <b>Too large a gamma is the dangerous direction.</b> <code>exp(-gamma * d²)</code> collapses to
+  zero for every candidate, the whole population scores about the same, and evolution stalls while
+  appearing to run normally. And a weight is only as live as the reference set makes it — rings and
+  paths have clustering coefficient 0 at every node, so a reference set drawn only from those leaves
+  <code>clustering_weight</code> set and the family it weights inert, with nothing reporting it.
+</div>
+
+<h2>What Is Not a Config Value</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Thing</th><th>Where it actually goes</th></tr></thead>
+  <tbody>
+    <tr><td>The <b>seed</b></td>
+        <td>One master seed is passed to the run call; the population, evolution, epidemics and
+            replicates all derive from it. Writing <code>seed</code> under <code>[fitness]</code> is
+            rejected by name, because it used to live there.</td></tr>
+    <tr><td>A <b>base graph</b></td>
+        <td>Set on the evolver before running — no key names one. See
+            <a href="route-python-objects.html">Python: Config Objects</a>.</td></tr>
+    <tr><td>Replicate count, output folder</td>
+        <td>Arguments to the run, not the configuration. See the route pages.</td></tr>
+    <tr><td><code>num_chars</code> for SDA</td>
+        <td>Derived from <code>max_edge_multiplicity</code>, above.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Typos: Which Tables Catch Them</h2>
+
+<p>
+  <code>[genome]</code> and <code>[genome.operation_weights]</code> <b>reject</b> any key they do not
+  recognize, under either <code>type</code>. Most other tables ignore one.
+</p>
+
+<div class="warn">
+  <b><code>[fitness]</code> cannot reject typos, and this is structural rather than an oversight.</b>
+  Its variants flatten the shared SIR block into themselves, and flattening consumes unrecognized
+  keys into the flattened field — so the check that rejects them cannot fire there. Two names are
+  caught explicitly because they are known migration hazards: <code>seed</code>, and
+  <code>target_profile</code> under an objective that never reads one. Anything else misspelled under
+  <code>[fitness]</code> is silently ignored, and your run uses the default.
+</div>
+
+<h2>When a Value Is Rejected</h2>
+
+<p>
+  Validation runs <b>once, up front</b> — every check above happens before any individual is created,
+  so a bad configuration fails in milliseconds rather than mid-run. The error names the field and the
+  constraint. From Python it arrives as a <code>ValueError</code> naming the <i>attribute path</i>
+  you would have written (<code>config.scope.size</code>), not the TOML key, so the message matches
+  the code in front of you.
+</p>
+
+<p>
+  The one thing validation deliberately does not do is touch the filesystem. A path-valued setting —
+  today only <code>reference_folder</code> — is checked when the run starts instead.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

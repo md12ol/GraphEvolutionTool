@@ -36,7 +36,8 @@
         ["guide/route-python-objects.html",   "Python: Config Objects"],
         ["guide/route-python-toml.html",      "Python: TOML File"],
         ["guide/route-rust-library.html",     "Rust: As a Library"],
-        ["guide/route-rust-cli.html",         "Rust: The get-run CLI"]
+        ["guide/route-rust-cli.html",         "Rust: The get-run CLI"],
+        ["guide/configuration.html",          "Configuration Reference"]
       ]
     },
     {
@@ -47,8 +48,8 @@
         ["guide/new-genome.html",             "Add a Genome"],
         ["guide/new-evolver.html",            "Add a Strategy"],
         ["guide/new-selection.html",          "Add a Selection Scheme"],
-        ["guide/new-scope.html",               "Add a Scope"],
-        ["guide/new-replacement.html",         "Add a Replacement Policy"],
+        ["guide/new-scope.html",              "Add a Scope"],
+        ["guide/new-replacement.html",        "Add a Replacement Policy"],
         ["guide/new-crossover.html",          "Add a Crossover Operator"],
         ["guide/new-mutation.html",           "Add a Mutation Operator"]
       ]
