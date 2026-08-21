@@ -138,38 +138,43 @@ file it in the per-owner queue — `mdube_edits.md` or `jsargant_edits.md`, whic
 
 ## Current state
 
-**All 18 pages in `NAV` exist and the site is complete as scoped.** The site was written
+**All 19 pages in `NAV` exist and the site is complete as scoped.** The site was written
 2026-08-12 at 38 pages; `reference/` came out on 2026-08-21 and How It Works was condensed from
-nine pages to three the same day.
+nine pages to three the same day, and the configuration reference and the two remaining extension
+guides were added the same day.
 
 | Area | Pages |
 |---|---|
 | Shell | `assets/style.css`, `assets/site.js`, `_template.html`, `serve.sh` |
 | Landing | `index.html` |
 | Guide — how it works | `pipeline` (the loop, the graph, both genomes) · `variation` (the three rolls, selection, both strategies) · `fitness` (orientation, SIR, seeding, logs and results) |
-| Guide — using | `route-python-objects`, `route-python-toml`, `route-rust-library`, `route-rust-cli` — one per route |
+| Guide — using | `route-python-objects`, `route-python-toml`, `route-rust-library`, `route-rust-cli` — one per route — plus `configuration`, the per-key reference they all point at |
 | Guide — extending | `extending`, `new-fitness`, `new-genome`, `new-evolver`, `new-selection`, `new-scope`, `new-replacement`, `new-crossover`, `new-mutation` — one per extension chain, and every chain has one |
 | Project | `design-notes.html` |
 
 Verified 2026-08-21 with the script below: every `data-page` matches both its path and a `NAV`
 entry, every `NAV` entry has a file, and **zero broken internal links and zero broken anchors**
-across all 18 pages.
+across all 19 pages.
 
 ### Known thin spots
 
 Honest gaps rather than bugs, for whoever extends this:
 
 - **Anchors are verified mechanically; prose is not.** Each page was checked against the code
-  page by page, but nobody has read all 16 in one pass looking for places where two of them say
-  the same thing slightly differently. The nine-into-three merge removed the worst of that within
+  page by page — snippets executed, references resolved, step tables matched against the markers —
+  but nobody has read all 19 in one pass looking for places where two of them say the same thing
+  slightly differently. The nine-into-three merge removed the worst of that within
   How It Works; the boundary between a guide page and the route pages is less settled.
 - **The four route pages overlap on purpose.** Each is meant to be read alone, so the config
   document and the seeding rule appear on more than one. Keep them in step.
+- **Nothing checks the defaults the configuration reference states.** About twenty of them,
+  transcribed from `config.rs`'s serde attributes and `Default` impls and verified once by hand.
+  A Rust test cannot read the HTML, so a default changing in the code would not fail anything.
 - **The Python config classes' mutability is stated conservatively.** Four of them are pyo3 complex
   enums whose variant fields carry no explicit accessor annotation; the pages say to treat those as
   read-only and rebuild the variant, rather than guessing. Worth verifying against pyo3 0.27 and
   then stating plainly.
-- **No search.** At 18 pages the sidebar is enough. If it grows past about 60, a build-free
+- **No search.** At 19 pages the sidebar is enough. If it grows past about 60, a build-free
   client-side index is the natural next step.
 
 ---
