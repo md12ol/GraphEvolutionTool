@@ -36,6 +36,7 @@
 //!     crossover_rate=0.9,
 //!     mutation_rate=0.2,
 //!     evolution=get.EvolutionConfig.Generational(num_generations=500),
+//!     scope=get.ScopeConfig.Global(),
 //!     selection=get.SelectionConfig.Tournament(tournament_size=5),
 //!     genome=get.GenomeConfig.EdgeEdit(gene_length=256),
 //!     fitness=get.FitnessConfig.EpiSpread(
