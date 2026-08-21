@@ -8,8 +8,11 @@
 #   Setup A (live)        edge-edit genome, generational strategy, epi_spread
 #   Setup B (commented)   SDA genome, steady-state strategy, epi_prof_match
 #
-# Every key, what it does and what else it can be, is on the documentation site.
-# This file is short on purpose: it is what you copy, not what you read.
+# This file is short on purpose: it is what you copy, not what you read. The
+# documentation site explains these settings where it explains the thing they
+# control -- `documentation/guide/route-python-toml.html` walks a whole document,
+# `fitness.html` covers the objectives and `variation.html` the operators. There
+# is no single page listing every key with all of its alternatives.
 #
 # `examples/config_builder.py` builds setup A as typed Python objects, for the
 # route that constructs a config in code instead of reading one.
