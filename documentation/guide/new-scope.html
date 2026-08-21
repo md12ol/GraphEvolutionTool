@@ -97,44 +97,155 @@ radius = 3</code></pre>
 <h2>Steps 1 and 2 — The Engine Side</h2>
 
 <p>
-  Step 1 is the variant. Step 2 is the arm in the draw, and the match is exhaustive, so the compiler
-  finds it for you — these two are the pair you cannot forget.
+  Both are in <code>get/src/evolver/scope.rs</code>. Add the variant, then the arm that draws it:
+</p>
+
+<pre><code class="language-rust">// step 1 — evolver/scope.rs:49
+Neighbourhood { radius: usize },
+
+// step 2 — evolver/scope.rs:103
+Scope::Neighbourhood { radius } =&gt; {
+    let centre = rng.random_range(0..population_len);
+    for offset in 0..=(radius * 2) {
+        out.push((centre + offset) % population_len);
+    }
+}</code></pre>
+
+<p>
+  <code>draw_into</code> writes into the caller's buffer rather than returning a <code>Vec</code>,
+  because generational draws a scope per breeding pair and an allocation per pair is a cost this
+  abstraction has no reason to add. <b><code>out</code> is already cleared for you</b>, once, before
+  the match — do not clear it again in your arm.
 </p>
 
 <div class="warn">
-  <b>Three contracts the signature does not enforce.</b>
+  <b>Three contracts your arm must honour, none of which the compiler checks.</b>
   <ul>
-    <li><b>Every index must be in range</b> for the population. Nothing downstream re-checks, and an
-        out-of-range index is an assertion in a debug build and a silent misread otherwise.</li>
-    <li><b>Distinctness is load-bearing where a replacement policy names positions.</b>
+    <li><b>Every index must be in range</b> for <code>population_len</code>. Nothing downstream
+        re-checks, so an out-of-range index is an assertion in a debug build and a silent misread
+        otherwise.</li>
+    <li><b>Keep them distinct if any replacement policy is to name positions.</b>
         <code>RandomSubset</code> draws without replacement precisely so that "the worst two members"
-        means something; over a multiset it does not. A scope that repeats an index has to be paired
-        with a policy that tolerates it.</li>
-    <li><b>Take every random value from the RNG you are handed.</b> A scope that reaches for a thread
-        RNG produces a run that cannot be reproduced from its seed.</li>
+        means something; over a multiset it does not. The wrapping example above can repeat an index
+        when <code>radius * 2 + 1</code> exceeds the population — which is exactly the kind of thing
+        to decide deliberately rather than discover.</li>
+    <li><b>Take every random value from <code>rng</code>.</b> Any other source breaks seeded
+        reproducibility in the way hardest to notice: the run still works, it just cannot be
+        repeated.</li>
   </ul>
 </div>
 
 <p>
-  <code>Global</code> consumes <b>no</b> randomness at all, which is worth knowing when comparing two
-  runs: switching a config from <code>global</code> to any drawing scope changes the whole downstream
-  stream, not just the scope.
+  Leave the indices <b>unordered</b>. Anything needing them ranked sorts its own copy, which for a
+  small subset beats sorting a global scope nobody was going to read in order.
 </p>
+
+<div class="tip">
+  <b>If your scope should be Rust-only, you are finished here.</b> Steps 1 and 2 are the whole
+  engine; everything below exists to let a config file name it.
+</div>
 
 <h2>Steps 3 and 4 — The Config Side</h2>
 
+<p>One change, two files. The config variant, and the arm mapping it onto the engine variant:</p>
+
+<pre><code class="language-rust">// step 3 — config.rs:138
+Neighbourhood { radius: usize },
+
+// step 4 — dispatch.rs:939
+ScopeConfig::Neighbourhood { radius } =&gt; {
+    Scope::Neighbourhood { radius: *radius }
+}</code></pre>
+
 <p>
-  These are one change split across two files: a config variant nothing maps is dead code, and a
-  dispatch arm for a variant that does not exist will not compile. Any constraint on your own
-  parameters goes in the config layer beside the variant.
+  These two are <b>one change split across two files</b>: a config variant nothing constructs is dead
+  code, and an arm for a variant that does not exist will not compile. Neither can be forgotten
+  quietly.
 </p>
+
+<p>
+  If your variant has parameters that can be wrong — a radius that must be at least one — constrain
+  them in <code>Config::validate_scope</code>, in <code>get/src/config.rs</code>. <b>Only your
+  own</b>: <code>size</code> belongs to <code>RandomSubset</code> and nothing else reads it, which is
+  the separation this axis exists for.
+</p>
+
+<div class="warn">
+  <b>A field you validate also needs a line in <code>python_attribute_path</code></b>
+  (<code>get/src/py_config.rs</code>), or a Python caller who trips your check sees an error naming a
+  TOML field they never wrote. The test
+  <code>every_validation_field_maps_to_a_python_attribute</code> is what catches a missing one — but
+  only for fields that reach validation.
+</div>
 
 <h2>Steps 5 and 6 — Python, and Optional</h2>
 
 <p>
-  Skipping step 5 makes the scope TOML-only: it still runs from a config file and from the Rust
-  library, and a Python caller simply cannot name it. Skipping step 6 costs nothing mechanically and
-  means most people never find it, because the shipped example is what a user copies from.
+  Skipping these makes the scope TOML-only: it still runs from a config file and from the Rust
+  library, and a Python caller simply cannot name it. Step 5 is the mirrored variant on
+  <code>PyScopeConfig</code> (<code>get/src/py_config.rs:264</code>) and its arm in the conversion
+  that writes the <code>[scope]</code> table (<code>:876</code>):
+</p>
+
+<pre><code class="language-rust">// step 5 — py_config.rs:264
+#[pyo3(constructor = (radius))]
+Neighbourhood { radius: usize },
+
+// step 5 — py_config.rs:876
+PyScopeConfig::Neighbourhood { radius } =&gt; {
+    table.insert("type".to_string(), Value::String("neighbourhood".to_string()));
+    table.insert("radius".to_string(), integer("radius", *radius)?);
+}</code></pre>
+
+<p>
+  Write <b>your own parameters and no other block's</b> — the arm is building the
+  <code>[scope]</code> table alone. Step 6 is a commented-out block in
+  <code>config.example.toml:156</code>.
+</p>
+
+<div class="callout">
+  <p>
+    <b>Step 5 is the one nothing checks.</b> A scope missing its Python mirror does not fail to
+    compile and does not fail a test. It is simply absent from the Python API, and the first person
+    to notice is a user who cannot find it.
+  </p>
+</div>
+
+<h2>Testing It</h2>
+
+<p>
+  A scope is a pure function from a population size and an RNG to a list of indices, so it tests
+  directly with no evolver in the way. Four assertions cover it:
+</p>
+
+<pre><code class="language-rust">// in scope.rs's own `mod tests`, beside the two that are there
+#[test]
+fn neighbourhood_stays_in_range_and_is_reproducible() {
+    let scope = Scope::Neighbourhood { radius: 2 };
+    let mut out = Vec::new();
+
+    let mut rng = StdRng::seed_from_u64(7);
+    scope.draw_into(20, &amp;mut out, &amp;mut rng);
+    assert!(out.iter().all(|&amp;i| i &lt; 20));        // in range
+    assert_eq!(out.len(), 5);                       // the size it promises
+
+    let first = out.clone();
+    let mut fresh = StdRng::seed_from_u64(7);
+    scope.draw_into(20, &amp;mut out, &amp;mut fresh);
+    assert_eq!(out, first);                         // same seed, same scope
+}</code></pre>
+
+<p>
+  Read the two tests already in that module first. <code>a_global_scope_is_every_index_and_
+  consumes_no_randomness</code> shows how to assert that a scope leaves the RNG stream untouched —
+  worth copying if yours is deterministic, because a scope that quietly draws is what makes two runs
+  with the same seed diverge. <code>a_random_subset_is_distinct_and_the_size_asked_for</code> is the
+  distinctness assertion: collect into a <code>HashSet</code> and check the length is unchanged.
+</p>
+
+<p>
+  Then add the keys to <code>config.example.toml</code>, which the test suite parses and validates —
+  a block that does not parse fails the suite rather than a user's afternoon.
 </p>
 
 <h2>The Other Two Axes</h2>

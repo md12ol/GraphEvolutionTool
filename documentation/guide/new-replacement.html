@@ -91,6 +91,95 @@ replacement       = { type = "random" }</code></pre>
   arrive from. The Python half is optional; leaving it out makes the policy TOML-only.
 </p>
 
+<h2>Steps 1 and 2 — The Engine Side</h2>
+
+<p>
+  Both are in <code>get/src/evolver/replacement.rs</code>. Add the variant, then the arm that names
+  the victims:
+</p>
+
+<pre><code class="language-rust">// step 1 — evolver/replacement.rs:46
+Random,
+
+// step 2 — evolver/replacement.rs:77
+Replacement::Random =&gt; {
+    // needs an `rng` parameter; `pick` takes none today
+    // precisely because no shipped policy draws.
+}</code></pre>
+
+<p>
+  The signature you are filling in is:
+</p>
+
+<pre><code class="language-rust">fn pick(&amp;self, scope: &amp;[usize], fitnesses: &amp;[f64], count: usize) -&gt; Vec&lt;usize&gt;</code></pre>
+
+<div class="warn">
+  <b>Two contracts, and the second is the expensive one.</b>
+  <ul>
+    <li><b>Return indices into the <i>population</i>, not into <code>scope</code></b>, and in the
+        order children should take the slots. <code>scope</code> is itself a list of population
+        indices, so returning a position within it is a bug that type-checks.</li>
+    <li><b>A policy that draws changes this signature</b> — <code>pick</code> takes no
+        <code>rng</code> today precisely because no shipped policy needs one. Adding the parameter
+        shifts <b>every seeded run's RNG stream</b>, so results before and after stop being
+        comparable. That is a real cost, not a formality; decide it deliberately.</li>
+  </ul>
+</div>
+
+<p>
+  Say at the variant what your policy <b>gives up</b>. <code>Worst</code> is what makes a strategy
+  self-elitist, and anything that can overwrite the scope's best removes that guarantee — leaving
+  that to be discovered later is how a run quietly stops improving.
+</p>
+
+<h2>Step 3 — The Three Places a Name Arrives From</h2>
+
+<pre><code class="language-rust">// step 3 — config.rs:163
+Random,
+
+// step 3 — dispatch.rs:960
+ReplacementConfig::Random =&gt; Replacement::Random,
+
+// step 3 — py_config.rs:243   (optional)
+#[pyo3(constructor = ())]
+Random {},
+
+// step 3 — py_config.rs:857   (optional, the matching arm)
+PyReplacementConfig::Random {} =&gt; {
+    table.insert("type".to_string(), Value::String("random".to_string()));
+}</code></pre>
+
+<p>
+  The first two are one change split across two files and neither compiles without the other. The
+  second two are the Python mirror, and <b>nothing checks them</b>: a policy missing its mirror
+  compiles clean and passes every test, and is simply absent from the Python API.
+</p>
+
+<h2>Testing It</h2>
+
+<p>
+  <code>pick</code> is a pure function from a scope and a fitness slice to a list of indices — no
+  RNG, no evolver, nothing to set up:
+</p>
+
+<pre><code class="language-rust">#[test]
+fn random_returns_population_indices_from_the_scope() {
+    let scope = [3, 7, 11, 15];
+    let fitnesses = [0.0; 16];
+
+    let victims = Replacement::Random.pick(&amp;scope, &amp;fitnesses, 2);
+
+    assert_eq!(victims.len(), 2);
+    assert!(victims.iter().all(|v| scope.contains(v)));
+}</code></pre>
+
+<p>
+  The existing test beside it, <code>the_worst_are_returned_worst_first</code>, is the one to read
+  before writing yours — it pins the ordering contract that the children's slot assignment depends
+  on. If your policy claims to preserve self-elitism, assert that too: the scope's best index must
+  never appear in the result.
+</p>
+
 <h2>The Limit Worth Knowing Before You Start</h2>
 
 <div class="warn">

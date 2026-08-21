@@ -245,6 +245,164 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
   an objective selectable by name from <code>config.toml</code> with no Rust at the call site.
 </div>
 
+<h2>Step 1 — The Trait</h2>
+
+<p>
+  Everything below assumes an objective called <code>MyObjective</code> with one parameter. Start
+  with the type and its implementation, in <code>get/src/fitness.rs</code>:
+</p>
+
+<pre><code class="language-rust">// step 1 — fitness.rs:235
+pub struct MyObjective {
+    threshold: f64,
+}
+
+impl MyObjective {
+    /// Fallible because `threshold` can be wrong, and step 2's validation
+    /// does not run on the library route.
+    pub fn new(threshold: f64) -&gt; Result&lt;Self, &amp;'static str&gt; {
+        if !threshold.is_finite() {
+            return Err("threshold must be finite");
+        }
+        Ok(Self { threshold })
+    }
+}
+
+impl Fitness for MyObjective {
+    fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64 {
+        let mut over = 0;
+        for node in 0..graph.num_nodes {
+            if graph.degree(node) as f64 &gt; self.threshold {
+                over += 1;
+            }
+        }
+        over as f64
+    }
+
+    fn direction(&amp;self) -&gt; Direction {
+        Direction::Maximize
+    }
+}</code></pre>
+
+<div class="warn">
+  <b>Validate in the constructor as well as in step 2, not instead of it.</b> Step 2's checks live
+  in the config layer, which the <a href="route-rust-library.html">library route</a> never runs — so
+  a guard written only there does not exist for a caller who depends on the crate. The two sites are
+  additive. <code>EpiProfMatch::new</code> rejects an empty or non-finite target for exactly this
+  reason, and <code>StructMatch::new</code> rejects a non-finite weight.
+</div>
+
+<h2>Step 2 — The Config Side, Three Edits</h2>
+
+<p>All in <code>get/src/config.rs</code>. The variant, its name, and its constraints:</p>
+
+<pre><code class="language-rust">// step 2a — config.rs:465   the variant a user selects
+MyObjective { threshold: f64 },
+
+// step 2b — config.rs:491   the string `[fitness] type` is written as
+FitnessConfig::MyObjective { .. } =&gt; "my_objective",
+
+// step 2c — config.rs:1083  the validation arm, if anything can be wrong
+FitnessConfig::MyObjective { threshold } =&gt; {
+    if !threshold.is_finite() {
+        return Err(invalid("threshold", "must be finite"));
+    }
+    return Ok(());
+}</code></pre>
+
+<p>
+  You never write <code>"my_objective"</code> as a config key — the variant name converted to
+  snake_case is what a user types. <b>Step 2b cannot be forgotten:</b> the match is exhaustive, so
+  omitting it fails to compile. Steps 2a and 2c can.
+</p>
+
+<div class="warn">
+  <b>Two things about that validation are not obvious.</b>
+  <ul>
+    <li><b>It may not touch the filesystem.</b> <code>Config::validate</code> does no I/O, which is
+        why <code>epi_prof_match</code> takes its target curve inline rather than as a path. An
+        objective that must name a file cannot check the file here — everything about its contents
+        becomes step 3's problem.</li>
+    <li><b>It may constrain fields outside <code>[fitness]</code>.</b> <code>struct_match</code>
+        requires a top-level <code>max_edge_multiplicity</code> of 1, because its statistics count
+        neighbours rather than summing weights, and it rejects the whole config if that is not
+        so.</li>
+  </ul>
+</div>
+
+<h2>Step 3 — Dispatch</h2>
+
+<pre><code class="language-rust">// step 3 — dispatch.rs:219
+FitnessConfig::MyObjective { threshold } =&gt; {
+    let objective = MyObjective::new(*threshold).map_err(PyValueError::new_err)?;
+    Ok(Box::new(objective))
+}</code></pre>
+
+<p>
+  Steps 2 and 3 are <b>one change split across two files</b>: a variant nothing constructs is dead
+  code, and an arm for a variant that does not exist will not compile.
+</p>
+
+<div class="warn">
+  <b>This arm runs once per <i>replicate</i>, not once per run.</b> Two consequences:
+  <ul>
+    <li>It is where anything needing the <b>filesystem</b> finally happens, since step 2 could not.
+        An unreadable folder or an empty reference set is reported from here.</li>
+    <li>Anything <b>expensive and immutable</b> should be built once and shared behind an
+        <code>Arc</code> rather than rebuilt per replicate — see
+        <code>GraphEvolver::struct_match_reference</code>. What a fresh objective per replicate buys
+        is isolation of per-run state; an objective with none has nothing to keep apart, and
+        rebuilding its data is pure waste.</li>
+  </ul>
+</div>
+
+<h2>Steps 4 and 5 — Python and the Example, Both Optional</h2>
+
+<pre><code class="language-rust">// step 4 — py_config.rs:482   the Python-side variant
+#[pyo3(constructor = (threshold))]
+MyObjective { threshold: f64 },
+
+// step 4 — py_config.rs:706   an attribute path per validated field
+"threshold" =&gt; Some("config.fitness.threshold"),</code></pre>
+
+<p>
+  Leaving step 4 out costs nothing elsewhere — the objective is then TOML-only and a Python caller
+  simply cannot name it. But <b>if step 2c raised a new field name, that name needs its attribute
+  path</b>, or a Python caller who trips your check sees an error naming a TOML field they never
+  wrote. The test <code>every_validation_field_maps_to_a_python_attribute</code> catches a missing
+  one.
+</p>
+
+<p>
+  Step 5 is a commented-out block in <code>config.example.toml:87</code>. The example file is what a
+  user copies from, so an objective missing from it is one most people never find — and the test
+  suite parses and validates that file, so a block that does not parse fails the build rather than a
+  user's afternoon.
+</p>
+
+<h2>Step 6 — The Test That Catches a Silent Failure</h2>
+
+<pre><code class="language-rust">// step 6 — dispatch.rs:1124   one line in the existing `cases` array
+(
+    "[fitness]\ntype = \"my_objective\"\nthreshold = 3.0\n".to_string(),
+    Direction::Maximize,
+),</code></pre>
+
+<p>
+  Each case is a <code>[fitness]</code> block and the direction it must come back with. The three
+  SIR objectives use the <code>sir_block</code> helper because they share a block;
+  <code>struct_match</code> uses <code>struct_match_block</code>, which writes real reference files
+  into a temp folder first. An objective needing neither writes its block inline, as above.
+</p>
+
+<p>
+  <code>each_objective_erases_to_a_box_carrying_its_own_direction</code> asserts that your variant
+  survives being boxed with its direction intact. <b>Worth writing because the failure it catches is
+  silent:</b> <code>Fitness::direction</code> defaults to <code>Minimize</code>, so an objective
+  whose direction is lost runs the search <i>backwards</i> and looks merely unconverged. Nothing
+  panics and no number looks wrong.
+</p>
+
 <div class="warn">
   <b>Two traps in the trait itself.</b> Do not call <code>self.evaluate_batch</code> from inside
   <code>evaluate</code> — the default <code>evaluate_batch</code> calls <code>evaluate</code>, so
