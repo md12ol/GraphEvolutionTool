@@ -193,10 +193,19 @@ evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre
 
 <div class="warn">
   <b>These loaders warn rather than raise on three things</b>, so a run can start from data you did
-  not mean to supply and nothing will stop it. A repeated edge — canonical, so <code>2,5</code> and
-  <code>5,2</code> are one edge — is kept with the <b>last</b> occurrence's weight; a zero-weight
-  edge is kept as given, which is no edge at all; an empty file loads an empty base graph. Each
-  raises a Python <code>UserWarning</code> naming the file and the line, so
+  not mean to supply and nothing will stop it.
+  <ul>
+    <li><b>A repeated edge</b> — canonical, so <code>2,5</code> and <code>5,2</code> are the same
+        edge — takes the <b>last</b> occurrence's weight. Earlier rows for that pair are
+        overwritten, not added to.</li>
+    <li><b>A zero-weight row is accepted and adds no edge.</b> Weight 0 <i>is</i> the absence of an
+        edge, so the row is read, counted as valid, and leaves the pair unconnected — it is not an
+        edge with weight zero sitting in the graph, and it will not appear in
+        <code>best_edges</code>. The warning's phrase is "kept as given", which means the number you
+        wrote was stored verbatim rather than treated as an error.</li>
+    <li><b>An empty file</b> loads an empty base graph.</li>
+  </ul>
+  Each raises a Python <code>UserWarning</code> naming the file and the line, so
   <code>warnings.simplefilter("error")</code> turns them into failures if you would rather find out
   loudly.
   <p>
