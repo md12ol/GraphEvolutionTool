@@ -13,7 +13,7 @@
 <p class="page-kicker">Extending GET</p>
 <h1>Add a Crossover Operator</h1>
 <p class="lede">
-  Recombining two parents into two children. Five edits — and one of them is the step people miss:
+  Recombining two parents into two children. Six edits — and one of them is the step people miss:
   <code>[crossover]</code> is a <b>shared</b> section, so a new operator has to declare which
   genomes can honour it.
 </p>
@@ -53,7 +53,7 @@ some_param = 0.5</code></pre>
   </p>
 </div>
 
-<h2>The Five Steps</h2>
+<h2>The Six Steps</h2>
 
 <p>
   Every location carries a literal marker in the source, so you can jump to any step by searching
@@ -61,7 +61,7 @@ some_param = 0.5</code></pre>
   marker is the anchor that has not.
 </p>
 
-<pre><code class="language-bash">git grep -n "ADD A CROSSOVER STEP" get/src    # the five steps, in one list</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A CROSSOVER STEP" get/src config.example.toml    # all six</code></pre>
 
 <p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
 
@@ -84,6 +84,9 @@ some_param = 0.5</code></pre>
         <td>The arm mapping your <code>CrossoverConfig</code> onto the engine variant.</td></tr>
     <tr><td>5</td><td><code>get/src/py_config.rs:322</code> and <code>:908</code></td>
         <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
+    <tr><td>6</td><td><code>config.example.toml:165</code></td>
+        <td><b>Optional, and the step people skip.</b> A commented-out <code>[crossover]</code>
+            block. The shipped example is what a user copies from.</td></tr>
   </tbody>
 </table>
 </div>

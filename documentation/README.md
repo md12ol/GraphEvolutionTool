@@ -267,6 +267,35 @@ print(f"{total} references, {bad} not on a marker")
 EOF
 ```
 
+### And the step counts
+
+Each `new-*.html` page walks one marker chain, and its step table must match that chain's markers in
+the source — same count, same numbers. This catches a page that stops one step short, which both the
+crossover and strategy pages did (each was missing the `config.example.toml` step):
+
+```bash
+python3 - <<'EOF'
+import re, glob, os, subprocess
+CHAIN = {'new-fitness': 'OBJECTIVE', 'new-genome': 'GENOME', 'new-evolver': 'STRATEGY',
+         'new-selection': 'SELECTION', 'new-scope': 'SCOPE', 'new-replacement': 'REPLACEMENT',
+         'new-crossover': 'CROSSOVER', 'new-mutation': 'MUTATION'}
+for page, chain in sorted(CHAIN.items()):
+    path = f'documentation/guide/{page}.html'
+    rows = {n.rstrip('ab') for n, _ in
+            re.findall(r'<tr><td>(\d+[ab]?)</td>(.*?)</tr>', open(path).read(), re.S)}
+    out = subprocess.run(['git', 'grep', '-ohE', f'ADD AN? {chain} STEP [0-9]+',
+                          '--', 'get/src', 'config.example.toml'],
+                         capture_output=True, text=True).stdout
+    marks = {m.split()[-1] for m in out.splitlines()}
+    print(f"{page:16} page={sorted(rows, key=int)}  source={sorted(marks, key=int)}"
+          f"{'' if rows == marks else '   <-- MISMATCH'}")
+EOF
+```
+
+Every step-numbered reference is also checked against the marker it names — that the marker belongs
+to *this* page's chain, and that its number matches the row. A shifted line can easily land on a
+marker from a different chain, which a bare "is it a marker" check happily accepts.
+
 **A bare `:NNN` continuation inherits the filename from the reference before it**, which is how the
 step tables are written and why the checker tracks `last`. Any edit to `get/src` can shift these —
 adding the objective chain's six markers moved 28 of them at once — so run it after touching the

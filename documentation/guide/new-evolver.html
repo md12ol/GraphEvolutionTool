@@ -13,8 +13,9 @@
 <p class="page-kicker">Extending GET</p>
 <h1>Add a Strategy</h1>
 <p class="lede">
-  A third evolution strategy — a different answer to "who breeds and who gets replaced". Three
-  edits, and the genome match is untouched, because your evolver is generic over the representation.
+  A third evolution strategy — a different answer to "who breeds and who gets replaced". Seven steps,
+  three of them required, and the genome match is untouched, because your evolver is generic over the
+  representation.
 </p>
 
 <h2>What You Have to Implement</h2>
@@ -73,7 +74,7 @@ num_my_events = 500</code></pre>
   </p>
 </div>
 
-<h2>The Six Steps</h2>
+<h2>The Seven Steps</h2>
 
 <p>
   Every location carries a literal marker in the source, so you can jump to any step by searching
@@ -81,7 +82,7 @@ num_my_events = 500</code></pre>
   marker is the anchor that has not.
 </p>
 
-<pre><code class="language-bash">git grep -n "ADD A STRATEGY STEP" get/src    # the six steps, in one list</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A STRATEGY STEP" get/src config.example.toml    # all seven</code></pre>
 
 <p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
 
@@ -106,6 +107,10 @@ num_my_events = 500</code></pre>
             genome with no match on strategy inside it.</td></tr>
     <tr><td>6</td><td><code>get/src/py_config.rs:221</code> and <code>:833</code></td>
         <td><b>Optional.</b> The Python-side variant, and its <code>to_toml_value</code> arm.</td></tr>
+    <tr><td>7</td><td><code>config.example.toml:153</code></td>
+        <td><b>Optional, and the step people skip.</b> A commented-out <code>[evolution]</code>
+            block for your strategy. The shipped example is what a user copies from, so a strategy
+            missing from it is one most people never find.</td></tr>
   </tbody>
 </table>
 </div>
