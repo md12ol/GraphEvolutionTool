@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Design notes · GET docs</title>
+<title>Design Notes · GET docs</title>
 <link rel="stylesheet" href="assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,20 +11,20 @@
 <main>
 
 <p class="page-kicker">Project</p>
-<h1>Design notes</h1>
+<h1>Design Notes</h1>
 <p class="lede">
-  Why GET is shaped the way it is. Every decision here was made because the alternative fails
-  <b>silently</b> — that is the thread running through all of them, and it is worth reading before
-  changing anything structural.
+  Why GET is shaped the way it is — the alternatives that were rejected, and what each would have
+  failed at. The mechanisms are on the How It Works pages; this page is the reasoning, and the
+  non-goals.
 </p>
 
-<h2>The organising principle: make silent failure impossible</h2>
+<h2>The Organising Principle: Make Silent Failure Impossible</h2>
 
 <p>
   An evolutionary run that is subtly wrong looks exactly like one that is merely not converging.
-  There is no crash, no stack trace, and no obviously bad number — just a curve that flattens out
-  somewhere it should not have. Nearly every structural decision in GET is chosen to convert a
-  silent failure into either an impossibility or a loud one.
+  No crash, no stack trace, no obviously bad number — just a curve that flattens out somewhere it
+  should not have. Nearly every structural decision in GET converts a silent failure into either an
+  impossibility or a loud one.
 </p>
 
 <div class="table-wrap">
@@ -33,7 +33,7 @@
   <tbody>
     <tr><td>Optimizing in the wrong direction</td>
         <td>One conversion point, not a direction-aware comparator.
-            <a href="guide/fitness.html">→</a></td></tr>
+            <a href="guide/fitness.html#gate">→</a></td></tr>
     <tr><td>One <code>NaN</code> taking over the population</td>
         <td>Rejecting it at the same gate as the conversion.</td></tr>
     <tr><td>An SDA alphabet biasing every graph</td>
@@ -41,10 +41,13 @@
             <a href="guide/pipeline.html#alphabet">→</a></td></tr>
     <tr><td>The Python front end accepting what a file would reject</td>
         <td>Making Python a builder for TOML, not a second parser.
-            <a href="guide/route-python-objects.html">→</a></td></tr>
+            <a href="guide/pipeline.html#two-front-ends">→</a></td></tr>
     <tr><td>Reproducibility evaporating under load</td>
         <td>Per-run objective state, never shared across concurrent runs.
             <a href="guide/fitness.html#seeds">→</a></td></tr>
+    <tr><td>An impossible edit needing a validity check</td>
+        <td>A silent, dense graph: out-of-range edits are no-ops evolution routes around, so
+            expression cannot fail. <a href="guide/pipeline.html#graph">→</a></td></tr>
     <tr><td>Two config values disagreeing</td>
         <td>One source of truth for each — population size is the population's length, graph size
             belongs to the genome context.</td></tr>
@@ -52,73 +55,46 @@
 </table>
 </div>
 
-<h2>Static generics, not trait objects</h2>
+<h2>Static Generics, Not Trait Objects</h2>
 
 <p>
-  The engine is <b>statically generic</b> over the genome. That means no
-  <code>Box&lt;dyn Evolver&gt;</code> and no <code>dyn Genome</code>, and runtime choice resolved by
-  a <code>match</code> that instantiates concrete types.
+  The engine is statically generic over the genome, and this is forced rather than chosen. A genome
+  cannot be a trait object: its mutation and crossover methods are generic over the random number
+  generator, crossover takes a mutable <code>Self</code>, cloning requires a statically known size,
+  and its context is an associated type that differs per representation. Any one of those rules out
+  erasure.
 </p>
 
-<p>This is forced rather than chosen. A genome cannot be a trait object because:</p>
-
-<ul>
-  <li>its mutation and crossover methods are generic over the random number generator;</li>
-  <li>crossover takes a mutable <code>Self</code>;</li>
-  <li>cloning requires a statically known size;</li>
-  <li>its context is an associated type that differs per representation.</li>
-</ul>
-
 <p>
-  Any one of those rules out erasure. <b>Fitness has none of them</b> — no generic methods, no
-  <code>Self</code> in argument position, thread-safe through its supertrait — so the objective
-  <i>is</i> erased, before the evolver is built. That asymmetry is the single most consequential
-  shape decision in the codebase, because it collapses dispatch from strategy × genome × objective
-  down to strategy × genome, and makes adding an objective free of dispatch entirely.
+  <b>Fitness has none of them</b>, so the objective <i>is</i> erased, before the evolver is built.
+  That asymmetry is the most consequential shape decision in the codebase: it collapses dispatch
+  from strategy × genome × objective down to strategy × genome, and makes adding an objective free
+  of dispatch entirely. <a href="guide/extending.html">Extension Points</a> has what that costs each
+  kind of addition.
 </p>
 
-<p>See <a href="guide/extending.html">Extension Points</a> for what that costs each kind of
-   addition.</p>
-
-<h2>One conversion, at one gate</h2>
+<h2>One Conversion, at One Gate</h2>
 
 <p>
-  Objectives return values in their own units and sign; the engine only ever minimizes. There are
-  two obvious ways to reconcile that, and GET rejects the more common one.
+  Objectives return values in their own units and sign; the engine only ever minimizes. The common
+  reconciliation — a <b>direction-aware comparator</b> — is rejected, because it needs the direction
+  at every comparison site: tournament ordering, the generational argmin, the steady-state best. A
+  missed one fails silently. Converting in the batch scorer instead puts it in the only place the
+  whole population is scored, which is the only place "exactly once" can be guaranteed rather than
+  remembered. The same function is the <code>NaN</code> gate: orientation and rejection share one
+  door by design.
 </p>
 
-<div class="table-wrap">
-<table>
-  <thead><tr><th>Approach</th><th>Fails how</th></tr></thead>
-  <tbody>
-    <tr><td>A direction-aware comparator</td>
-        <td>Needs the direction at every comparison site — tournament ordering, the generational
-            argmin, the steady-state best. A missed one fails <b>silently</b>, and produces a run
-            that looks like it simply is not converging.</td></tr>
-    <tr><td><b>One conversion in the batch scorer</b></td>
-        <td>The only place the whole population is scored, so it is the only place "exactly once"
-            can be <i>guaranteed</i> rather than remembered.</td></tr>
-  </tbody>
-</table>
-</div>
+<h3>Convert at the Edges, Never in the Middle</h3>
 
 <p>
-  The same function is also the <code>NaN</code> gate: orientation and rejection share one door by
-  design. And the invariant that makes it structural rather than habitual is that <b>the engine
-  never calls the fitness trait directly</b> — anywhere, in either strategy.
-</p>
-
-<h3>Convert at the edges, never in the middle</h3>
-
-<p>
-  An earlier design converted <i>back</i> immediately inside the statistics and the outcome, so a
-  number flipped twice on a short trip and every internal type had to know the direction. The rule
-  now is that everything inside the engine is lower-is-better and nothing in the middle converts.
-  Three things fall out, and the third is the real prize:
+  An earlier design converted <i>back</i> inside the statistics and the outcome, so a number flipped
+  twice on a short trip and every internal type had to know the direction. Now nothing in the middle
+  converts, and three things fall out — the third being the real prize:
 </p>
 
 <ol>
-  <li>Exactly <b>two</b> conversions per run instead of one per statistics row.</li>
+  <li>Two conversions per run instead of one per statistics row.</li>
   <li>The statistics function loses its direction parameter entirely.</li>
   <li><b>The standard-deviation special case disappears.</b> Deviation is invariant under negation,
       so a converting statistics function had to deliberately <i>not</i> convert it — an asymmetry
@@ -127,118 +103,56 @@
 </ol>
 
 <p>
-  The stated cost: a Rust embedder reading the outcome directly gets engine-oriented numbers. That
+  The stated cost: a Rust embedder reading the outcome directly gets engine-oriented numbers, which
   is what the direction carried on the outcome is for.
 </p>
 
-<h2>Why the graph is silent and dense</h2>
+<h2>Two Things Accepted as Costs, Not Solved</h2>
 
 <p>
-  A genome decodes arbitrary integers into vertex indices. If the graph validated them, every
-  operation would need a check and a decision about what to do when it fails. Instead, self-loops
-  and out-of-range vertices are <b>ignored</b>, and an impossible edit is simply a no-op that
-  evolution routes around. That is why expression cannot fail and returns a graph rather than a
-  result.
+  <b>The epidemic re-roll is a biased resample.</b> Discarding outbreaks shorter than a threshold
+  shifts expected fitness upward by an amount depending on how often a given graph fizzles, so it is
+  not interchangeable with averaging more epidemics. It is kept because a fizzled outbreak reports
+  the dice rather than the graph, and because the historical results GET is compared against were
+  produced with it. <a href="guide/fitness.html#reroll">→</a>
 </p>
 
 <p>
-  Dense storage is the other half. Every operation is constant time and expression is cheap; the
-  cost is memory that grows with the <i>square</i> of the node count, and multiplies by the
-  population and the concurrency. That trade is
-  <a href="guide/route-python-objects.html">documented rather than hidden</a>, because the failure mode —
-  raising the core count and exhausting memory on hardware that coped before — is genuinely
-  unintuitive.
+  <b>Steady-state carries stale fitnesses.</b> Incremental scoring plus a stochastic objective means
+  the population's recorded fitnesses were computed under different dice than the children being
+  compared against them. The alternatives — rescoring periodically, or freezing the seed across a
+  generation equivalent — each trade it for a different distortion rather than removing it. So it is
+  accepted and documented, with the guidance to prefer generational when the comparison needs to be
+  fair. <a href="guide/variation.html#steady-state">→</a>
 </p>
 
-<h2>Why replicate seeding is a stream</h2>
+<h2>Smaller Decisions, Each With a Reason</h2>
 
 <p>
-  One master seed feeds a generator whose output <i>is</i> the per-run seed list. The property this
-  buys, and which is easy to lose: <b>a run's seed must not depend on how many runs you asked
-  for</b>. Ask for 50 and the first 30 reproduce exactly, so extending an experiment never
-  invalidates the replicates you already have.
+  Decisions whose reasoning lives nowhere else. Where a choice is explained on the page describing
+  the mechanism, it is not repeated here.
 </p>
-
-<p>
-  <code>master + i</code> or a hash of the two would work equally well. <code>master ^ i</code>
-  would not, because nearby masters collide across run indices.
-</p>
-
-<h2>Two things accepted as costs, not solved</h2>
-
-<h3>The epidemic re-roll is a biased resample</h3>
-
-<p>
-  Discarding outbreaks shorter than a threshold shifts expected fitness upward, by an amount that
-  depends on how often a given graph fizzles. It is therefore <b>not</b> interchangeable with
-  averaging more epidemics, and the two do different jobs. It is kept because a fizzled outbreak
-  carries no information about the graph — it reports the dice — and because the historical results
-  GET is compared against were produced with it. Both constants are exposed rather than hardcoded
-  precisely because the bias is real. <a href="guide/fitness.html#reroll">→</a>
-</p>
-
-<h3>Steady-state carries stale fitnesses</h3>
-
-<p>
-  Incremental scoring plus a stochastic objective means the population's recorded fitnesses were
-  computed under different dice than the children being compared against them. The alternatives —
-  rescoring periodically, or freezing the seed across a generation equivalent — each trade it for a
-  different distortion rather than removing it. So it is accepted and documented, with the guidance
-  to prefer generational when the comparison needs to be fair.
-  <a href="guide/variation.html#steady-state">→</a>
-</p>
-
-<h2>Smaller decisions, each with a reason</h2>
 
 <div class="table-wrap">
 <table>
   <thead><tr><th>Decision</th><th>Because</th></tr></thead>
   <tbody>
-    <tr><td>The evolver never builds genomes</td>
-        <td>Constructors differ per representation and some are fallible. Dispatch builds the
-            population, so bad dimensions surface at startup, and evolvers stay testable from a
-            hand-built population.</td></tr>
-    <tr><td>Both crossover children are kept</td>
-        <td>Crossover inherently produces two. Keeping one wastes half of every crossover.</td></tr>
-    <tr><td><code>mutate</code> applies exactly one mutation</td>
-        <td>A genome that rolled its own count would make <code>max_mutations</code> meaningless
-            for that representation, and nothing would report it.</td></tr>
-    <tr><td>Direction is not configurable</td>
-        <td>One objective is always maximized or always minimized. A config that could say
-            otherwise would only let it contradict the objective.</td></tr>
-    <tr><td>A user objective gets no config variant</td>
-        <td>A string-keyed registry would move validation out of the parser — the exact failure the
-            single-validator design prevents. Nothing user-supplied is ever deserialized, so there
-            is nothing new to validate.</td></tr>
-    <tr><td>The seed is not in the config</td>
-        <td>The seed describes <i>this invocation</i>; the config describes <i>the experiment</i>.
-            A separately configured fitness seed would leave replicates facing identical epidemics,
-            which is what replicates exist to vary.</td></tr>
     <tr><td>Validation is a function, not a parse side effect</td>
         <td>The Python front end bypasses the parser entirely. Without one shared validator it
             would silently accept what a file rejects — and Python is the path users take.</td></tr>
     <tr><td>Validation returns an error, never panics</td>
         <td>A bad config is a user mistake. A panic crossing the FFI reaches the user as an opaque
             exception they cannot act on.</td></tr>
-    <tr><td>A pinned random generator, not the library default</td>
-        <td>The default's algorithm may change between releases, which would defeat the entire
-            purpose of a seed argument.</td></tr>
-    <tr><td>Epidemics within an evaluation run serially</td>
-        <td>The two levels above already provide more independent work than any core count, and
-            serial epidemics make each parallel task larger.</td></tr>
+    <tr><td>A user objective gets no config variant</td>
+        <td>A string-keyed registry would move validation out of the parser — the exact failure the
+            single-validator design prevents. Nothing user-supplied is ever deserialized, so there
+            is nothing new to validate.</td></tr>
     <tr><td>The engine chooses the replicate mode, not the user</td>
         <td>The fitness type already determines the correct answer, so a setting would only create
             a way to choose wrong.</td></tr>
     <tr><td>Thread pool built per call, not globally</td>
         <td>A global pool configures once per process, and this is an extension module imported once
             per session — so the core cap would belong to whichever call happened first.</td></tr>
-    <tr><td>The reported best is the final population's best</td>
-        <td>A running best under a stochastic objective is largely a record of which iteration drew
-            the luckiest sample. And a non-elitist run genuinely can lose its best — reporting
-            otherwise describes a population that no longer exists.</td></tr>
-    <tr><td>Tournaments break ties by lower index</td>
-        <td>So an outcome depends only on which indices were drawn, not on the order the generator
-            produced them.</td></tr>
     <tr><td>A Python objective must be batched</td>
         <td>Per-individual callbacks serialize behind the interpreter lock, losing all the
             parallelism the expression stage just bought — orders of magnitude, not
@@ -247,7 +161,7 @@
 </table>
 </div>
 
-<h2 id="non-goals">Non-goals</h2>
+<h2 id="non-goals">Non-Goals</h2>
 
 <p>Stated so their absence reads as a decision rather than an oversight.</p>
 
@@ -284,7 +198,7 @@
   config would accept them.
 </p>
 
-<h2>Conventions, in one place</h2>
+<h2>Conventions, in One Place</h2>
 
 <ul>
   <li>Lower is better inside the engine, always.</li>

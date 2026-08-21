@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Variation &amp; selection · GET docs</title>
+<title>Variation &amp; Selection · GET docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,61 +11,68 @@
 <main>
 
 <p class="page-kicker">How it works</p>
-<h1>Variation &amp; selection</h1>
+<h1>Variation &amp; Selection</h1>
 <p class="lede">
   How children are made, and who they replace. Three probability rolls cover the first; a breeding
   event's <a href="#event">three independent choices</a> cover the second.
 </p>
 
-<h2>The three rolls</h2>
+<h2>The Three Rolls</h2>
 
 <figure>
-<svg viewBox="0 0 700 300" role="img" aria-label="Two parents are selected, a crossover roll decides whether they recombine, then each child gets a mutation roll and a mutation count roll.">
+<svg viewBox="0 0 720 240" role="img" aria-label="A pair is selected, one crossover roll decides whether they recombine, and two children result. Then per child: one roll decides whether it mutates at all, a second decides how many mutations, and Genome::mutate is called that many times.">
   <defs>
     <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
     </marker>
   </defs>
   <g style="color:var(--border-firm)">
-    <rect x="30" y="24" width="180" height="44" rx="8" class="d-fill-box"/>
-    <rect x="30" y="24" width="180" height="44" rx="8" class="d-stroke"/>
-    <text x="120" y="51" class="d-text" text-anchor="middle" font-weight="600">select two parents</text>
 
-    <rect x="30" y="100" width="180" height="60" rx="8" class="d-fill-acc"/>
-    <rect x="30" y="100" width="180" height="60" rx="8" class="d-stroke"/>
-    <text x="120" y="124" class="d-text" text-anchor="middle" font-weight="600">roll 1 — crossover?</text>
-    <text x="120" y="144" class="d-text-mono" text-anchor="middle" font-size="11">crossover_rate</text>
+    <!-- row 1: once per pair -->
+    <text x="30" y="18" class="d-text-acc">once per pair</text>
 
-    <rect x="30" y="192" width="180" height="60" rx="8" class="d-fill-good"/>
-    <rect x="30" y="192" width="180" height="60" rx="8" class="d-stroke"/>
-    <text x="120" y="216" class="d-text" text-anchor="middle" font-weight="600">two children exist</text>
-    <text x="120" y="236" class="d-text-sm" text-anchor="middle">one in each parent, in place</text>
+    <rect x="30" y="24" width="180" height="58" rx="8" class="d-fill-box"/>
+    <rect x="30" y="24" width="180" height="58" rx="8" class="d-stroke"/>
+    <text x="120" y="58" class="d-text" text-anchor="middle" font-weight="600">select two parents</text>
 
-    <path d="M120 70 L120 96"   class="d-stroke" stroke-width="1.5" marker-end="url(#av)"/>
-    <path d="M120 162 L120 188" class="d-stroke" stroke-width="1.5" marker-end="url(#av)"/>
+    <rect x="250" y="24" width="190" height="58" rx="8" class="d-fill-acc"/>
+    <rect x="250" y="24" width="190" height="58" rx="8" class="d-stroke"/>
+    <text x="345" y="48" class="d-text" text-anchor="middle" font-weight="600">roll 1 — crossover?</text>
+    <text x="345" y="68" class="d-text-mono" text-anchor="middle" font-size="11">crossover_rate</text>
 
-    <path d="M214 222 L268 222" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#av)" style="color:var(--accent)"/>
-    <text x="242" y="212" class="d-text-sm" text-anchor="middle">per child</text>
+    <rect x="480" y="24" width="190" height="58" rx="8" class="d-fill-good"/>
+    <rect x="480" y="24" width="190" height="58" rx="8" class="d-stroke"/>
+    <text x="575" y="48" class="d-text" text-anchor="middle" font-weight="600">two children</text>
+    <text x="575" y="68" class="d-text-sm" text-anchor="middle">one in each parent, in place</text>
 
-    <rect x="272" y="100" width="190" height="60" rx="8" class="d-fill-acc"/>
-    <rect x="272" y="100" width="190" height="60" rx="8" class="d-stroke"/>
-    <text x="367" y="124" class="d-text" text-anchor="middle" font-weight="600">roll 2 — mutate at all?</text>
-    <text x="367" y="144" class="d-text-mono" text-anchor="middle" font-size="11">mutation_rate</text>
+    <path d="M214 53 L246 53" class="d-stroke" stroke-width="1.5" marker-end="url(#av)"/>
+    <path d="M444 53 L476 53" class="d-stroke" stroke-width="1.5" marker-end="url(#av)"/>
 
-    <rect x="272" y="192" width="190" height="60" rx="8" class="d-fill-acc"/>
-    <rect x="272" y="192" width="190" height="60" rx="8" class="d-stroke"/>
-    <text x="367" y="216" class="d-text" text-anchor="middle" font-weight="600">roll 3 — how many?</text>
-    <text x="367" y="236" class="d-text-mono" text-anchor="middle" font-size="11">uniform 1..=max_mutations</text>
+    <!-- the branch: everything below happens once per child -->
+    <path d="M575 86 L575 115 L130 115 L130 151" class="d-stroke-acc" stroke-width="1.6"
+          fill="none" marker-end="url(#av)" style="color:var(--accent)"/>
+    <text x="352" y="108" class="d-text-acc" text-anchor="middle">then, for each child separately</text>
 
-    <path d="M367 190 L367 166" class="d-stroke" stroke-width="1.5" marker-end="url(#av)"/>
+    <!-- row 2: per child -->
+    <rect x="30" y="155" width="200" height="58" rx="8" class="d-fill-acc"/>
+    <rect x="30" y="155" width="200" height="58" rx="8" class="d-stroke"/>
+    <text x="130" y="179" class="d-text" text-anchor="middle" font-weight="600">roll 2 — mutate at all?</text>
+    <text x="130" y="199" class="d-text-mono" text-anchor="middle" font-size="11">mutation_rate</text>
 
-    <rect x="500" y="140" width="170" height="76" rx="8" class="d-fill-good"/>
-    <rect x="500" y="140" width="170" height="76" rx="8" class="d-stroke"/>
-    <text x="585" y="168" class="d-text" text-anchor="middle" font-weight="600">Genome::mutate</text>
-    <text x="585" y="188" class="d-text-sm" text-anchor="middle">called exactly that</text>
-    <text x="585" y="205" class="d-text-sm" text-anchor="middle">many times</text>
+    <rect x="270" y="155" width="200" height="58" rx="8" class="d-fill-acc"/>
+    <rect x="270" y="155" width="200" height="58" rx="8" class="d-stroke"/>
+    <text x="370" y="179" class="d-text" text-anchor="middle" font-weight="600">roll 3 — how many?</text>
+    <text x="370" y="199" class="d-text-mono" text-anchor="middle" font-size="11">uniform 1..=max_mutations</text>
 
-    <path d="M466 200 L496 190" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#av)" style="color:var(--accent)"/>
+    <rect x="510" y="155" width="180" height="58" rx="8" class="d-fill-good"/>
+    <rect x="510" y="155" width="180" height="58" rx="8" class="d-stroke"/>
+    <text x="600" y="179" class="d-text" text-anchor="middle" font-weight="600">Genome::mutate</text>
+    <text x="600" y="199" class="d-text-sm" text-anchor="middle">called that many times</text>
+
+    <path d="M234 184 L266 184" class="d-stroke" stroke-width="1.5" marker-end="url(#av)"/>
+    <text x="250" y="174" class="d-text-sm" text-anchor="middle">if yes</text>
+    <path d="M474 184 L506 184" class="d-stroke" stroke-width="1.5" marker-end="url(#av)"/>
+
   </g>
 </svg>
 <figcaption>One roll per pair, then two rolls per child. All three live in one shared helper, so
@@ -102,7 +109,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
   it.
 </div>
 
-<h3>What one mutation is, and which operator runs</h3>
+<h3>What One Mutation Is, and Which Operator Runs</h3>
 
 <p>
   Crossover recombines <b>in place</b>, leaving one child in each parent — both are kept. The
@@ -144,7 +151,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
   runs.
 </p>
 
-<h2 id="event">A breeding event: scope, selection, replacement</h2>
+<h2 id="event">A Breeding Event: Scope, Selection, Replacement</h2>
 
 <p>
   A breeding event is <b>three independent choices</b>, each its own config section and each one
@@ -184,7 +191,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
   crossover between a genome and its own clone does nothing but mutate.
 </div>
 
-<h2 id="strategies">The two strategies</h2>
+<h2 id="strategies">The Two Strategies</h2>
 
 <p>Both are points in that space, and the difference is how much of the population turns over.</p>
 
@@ -263,7 +270,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 
     <rect x="400" y="126" width="230" height="46" rx="8" class="d-fill-warn"/>
     <rect x="400" y="126" width="230" height="46" rx="8" class="d-stroke"/>
-    <text x="515" y="147" class="d-text" text-anchor="middle" font-weight="600">children overwrite the two worst</text>
+    <text x="515" y="147" class="d-text" text-anchor="middle" font-weight="600">children replace the two worst</text>
     <text x="515" y="164" class="d-text-sm" text-anchor="middle">of that same scope</text>
 
     <path d="M294 149 L396 149" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#as)" style="color:var(--accent)"/>
@@ -297,7 +304,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
   give a 100,000-row history.
 </p>
 
-<h3>Choosing between them</h3>
+<h3>Choosing Between Them</h3>
 
 <div class="table-wrap">
 <table>
@@ -329,7 +336,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
   it is.
 </div>
 
-<h3>Adding a strategy, or a scheme</h3>
+<h3>Adding a Strategy, or a Scheme</h3>
 
 <p>
   A new scope, selection scheme, replacement policy or crossover operator is one enum variant plus

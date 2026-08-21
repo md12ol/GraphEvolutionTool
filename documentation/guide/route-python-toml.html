@@ -20,10 +20,21 @@
 
 <h2>Install</h2>
 
+<p>
+  The distribution is <code>graph-evolution-tool</code>; it imports as <code>get</code>.
+</p>
+
 <pre><code class="language-bash">python3 -m venv .venv
 source .venv/bin/activate
-pip install .
+pip install graph-evolution-tool
 python -c "import get; print(get.__name__)"</code></pre>
+
+<div class="note">
+  <b>The first release is not on PyPI yet.</b> Until it is, install from a checkout of the
+  repository — <code>pip install .</code> from its root does the same thing, and
+  <code>maturin develop</code> is the variant to use if you are changing GET itself. Nothing about
+  the code below depends on which way it was installed.
+</div>
 
 <h2>The Config Document</h2>
 

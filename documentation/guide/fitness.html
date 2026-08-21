@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Fitness &amp; output · GET docs</title>
+<title>Fitness &amp; Output · GET docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,7 +11,7 @@
 <main>
 
 <p class="page-kicker">How it works</p>
-<h1>Fitness &amp; output</h1>
+<h1>Fitness &amp; Output</h1>
 <p class="lede">
   A fitness function turns a graph into one number. This page is that number's life: which
   direction is <i>better</i>, the <a href="#sir">epidemic</a> that produces it, the
@@ -19,7 +19,7 @@
   ends up in.
 </p>
 
-<h2>The contract</h2>
+<h2>The Contract</h2>
 
 <pre><code class="language-rust">pub trait Fitness: Send + Sync {
     fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64;
@@ -36,7 +36,7 @@
   individual.
 </p>
 
-<h2 id="gate">Two number systems, one gate</h2>
+<h2 id="gate">Two Number Systems, One Gate</h2>
 
 <p>
   <b>Your units</b> are whatever your objective returns. <b>Engine orientation</b> has one rule:
@@ -119,7 +119,7 @@ impossible rather than merely unlikely.</figcaption>
   <code>Minimize</code> is the sanctioned way to say <i>this individual is invalid</i>.
 </p>
 
-<h2>The four built-in objectives</h2>
+<h2>The Four Built-in Objectives</h2>
 
 <div class="table-wrap">
 <table>
@@ -155,7 +155,7 @@ impossible rather than merely unlikely.</figcaption>
   matching it exactly. Inherited from the original C++ for comparability.
 </div>
 
-<h2 id="sir">The SIR model</h2>
+<h2 id="sir">The SIR Model</h2>
 
 <p>
   Every node is <b>S</b>usceptible, <b>I</b>nfectious or <b>R</b>ecovered, and only ever moves
@@ -254,7 +254,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
   should include that trailing zero.
 </div>
 
-<h3 id="reroll">Short epidemics are re-rolled</h3>
+<h3 id="reroll">Short Epidemics Are Re-rolled</h3>
 
 <p>
   An outbreak shorter than <code>min_epidemic_length</code> is discarded and re-simulated, up to
@@ -271,7 +271,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
   <code>min_epidemic_length = 1</code>; <code>0</code> is a validation error, not an off switch.
 </div>
 
-<h3>SIR parameters</h3>
+<h3>SIR Parameters</h3>
 
 <div class="table-wrap">
 <table>
@@ -294,7 +294,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
 </table>
 </div>
 
-<h2 id="seeds">Seeds &amp; reproducibility</h2>
+<h2 id="seeds">Seeds &amp; Reproducibility</h2>
 
 <p>
   <b>One seed for the whole experiment</b>, passed to <code>run</code> rather than set in the
@@ -318,7 +318,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
   seed argument.
 </div>
 
-<h3>The epidemic dice</h3>
+<h3>The Epidemic Dice</h3>
 
 <p>
   Two requirements pull in opposite directions. <b>Within one evaluation</b> every population
@@ -358,7 +358,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
   seed for you.
 </p>
 
-<h2 id="output">Logs &amp; results</h2>
+<h2 id="output">Logs &amp; Results</h2>
 
 <p>
   One row per logged iteration — every generation for
@@ -390,7 +390,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
   aggregated. Mixing them up produces a plot that looks right and answers the wrong question.
 </div>
 
-<h3>Units, and the best individual</h3>
+<h3>Units, and the Best Individual</h3>
 
 <p>
   A run hands back the winning genome printed, the network it expressed as
@@ -426,7 +426,7 @@ best.save_results("results.txt")      # best individual, with the run's config T
   them</b>. With the seed on every log row, that pair re-runs the experiment exactly.
 </p>
 
-<h2>Writing your own objective</h2>
+<h2>Writing Your Own Objective</h2>
 
 <p>
   Two routes, and neither is a fallback for the other — see <a href="new-fitness.html">Add an

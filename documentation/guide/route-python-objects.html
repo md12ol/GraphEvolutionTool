@@ -20,13 +20,23 @@
 <h2>Install</h2>
 
 <p>
-  GET is a compiled module, so it installs rather than being copied in. From a clone:
+  GET is a compiled module, so it installs rather than being copied in. The distribution is called
+  <code>graph-evolution-tool</code> and it imports as <code>get</code> — PyPI will not accept
+  <code>get</code> as a project name, but the module inside it is named by the crate and is
+  unaffected.
 </p>
 
 <pre><code class="language-bash">python3 -m venv .venv
 source .venv/bin/activate
-pip install .          # or: maturin develop, if you are changing GET itself
+pip install graph-evolution-tool
 python -c "import get; print(get.__name__)"</code></pre>
+
+<div class="note">
+  <b>The first release is not on PyPI yet.</b> Until it is, install from a checkout of the
+  repository — <code>pip install .</code> from its root does the same thing, and
+  <code>maturin develop</code> is the variant to use if you are changing GET itself. Nothing about
+  the code below depends on which way it was installed.
+</div>
 
 <h2>The Smallest Complete Run</h2>
 

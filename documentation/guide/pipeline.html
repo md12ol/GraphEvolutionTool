@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The pipeline · GET docs</title>
+<title>The Pipeline · GET docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,13 +11,13 @@
 <main>
 
 <p class="page-kicker">How it works</p>
-<h1>The pipeline</h1>
+<h1>The Pipeline</h1>
 <p class="lede">
   One loop, and the two things it moves between: the <a href="#graph">graph</a> every candidate
   becomes, and the <a href="#genomes">genomes</a> that write one.
 </p>
 
-<h2>The loop</h2>
+<h2>The Loop</h2>
 
 <p>
   GET keeps a <b>population</b> of candidate solutions, scores them, lets the better ones produce
@@ -26,7 +26,7 @@
 </p>
 
 <figure>
-<svg viewBox="0 0 760 430" role="img" aria-label="Detailed pipeline: build population, express genomes to graphs, score with fitness, orient, select, breed, mutate, repeat.">
+<svg viewBox="0 0 760 430" role="img" aria-label="Detailed pipeline: config is validated and dispatched, then the loop expresses genomes to graphs, scores them, orients the values, logs a stats row, selects, breeds and mutates, and repeats; the run ends in an EvolutionOutcome.">
   <defs>
     <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
@@ -34,7 +34,7 @@
   </defs>
   <g style="color:var(--border-firm)">
 
-  <!-- setup column -->
+  <!-- setup column: once per run -->
   <rect x="20" y="20" width="200" height="56" rx="9" class="d-fill-box"/>
   <rect x="20" y="20" width="200" height="56" rx="9" class="d-stroke"/>
   <text x="120" y="42" class="d-text" text-anchor="middle" font-weight="600">Config</text>
@@ -48,64 +48,71 @@
   <rect x="20" y="192" width="200" height="56" rx="9" class="d-fill-box"/>
   <rect x="20" y="192" width="200" height="56" rx="9" class="d-stroke"/>
   <text x="120" y="214" class="d-text" text-anchor="middle" font-weight="600">dispatch</text>
-  <text x="120" y="233" class="d-text-sm" text-anchor="middle">pick concrete types, mint population</text>
+  <text x="120" y="233" class="d-text-sm" text-anchor="middle">pick types, build the population</text>
 
   <path d="M120 78 L120 102" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
   <path d="M120 164 L120 188" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
 
-  <!-- the loop box -->
-  <rect x="270" y="20" width="470" height="330" rx="12" class="d-fill-bg"/>
-  <rect x="270" y="20" width="470" height="330" rx="12" class="d-stroke" stroke-dasharray="5 4"/>
-  <text x="505" y="43" class="d-text-acc" text-anchor="middle">the evolution loop — one iteration</text>
+  <!-- the loop -->
+  <rect x="260" y="20" width="480" height="330" rx="12" class="d-fill-bg"/>
+  <rect x="260" y="20" width="480" height="330" rx="12" class="d-stroke" stroke-dasharray="5 4"/>
+  <text x="500" y="43" class="d-text-acc" text-anchor="middle">the evolution loop — one iteration</text>
 
-  <rect x="300" y="60" width="180" height="52" rx="8" class="d-fill-acc"/>
-  <rect x="300" y="60" width="180" height="52" rx="8" class="d-stroke"/>
-  <text x="390" y="82" class="d-text" text-anchor="middle" font-weight="600">express</text>
-  <text x="390" y="99" class="d-text-sm" text-anchor="middle">genomes → graphs, in parallel</text>
+  <rect x="330" y="60" width="185" height="52" rx="8" class="d-fill-acc"/>
+  <rect x="330" y="60" width="185" height="52" rx="8" class="d-stroke"/>
+  <text x="422" y="82" class="d-text" text-anchor="middle" font-weight="600">express</text>
+  <text x="422" y="99" class="d-text-sm" text-anchor="middle">genomes → graphs, in parallel</text>
 
-  <rect x="300" y="132" width="180" height="52" rx="8" class="d-fill-good"/>
-  <rect x="300" y="132" width="180" height="52" rx="8" class="d-stroke"/>
-  <text x="390" y="154" class="d-text" text-anchor="middle" font-weight="600">score</text>
-  <text x="390" y="171" class="d-text-sm" text-anchor="middle">epidemics → one f64 each</text>
+  <rect x="330" y="132" width="185" height="52" rx="8" class="d-fill-good"/>
+  <rect x="330" y="132" width="185" height="52" rx="8" class="d-stroke"/>
+  <text x="422" y="154" class="d-text" text-anchor="middle" font-weight="600">score</text>
+  <text x="422" y="171" class="d-text-sm" text-anchor="middle">one f64 per individual</text>
 
-  <rect x="300" y="204" width="180" height="52" rx="8" class="d-fill-warn"/>
-  <rect x="300" y="204" width="180" height="52" rx="8" class="d-stroke"/>
-  <text x="390" y="226" class="d-text" text-anchor="middle" font-weight="600">orient · reject NaN</text>
-  <text x="390" y="243" class="d-text-sm" text-anchor="middle">the single conversion point</text>
+  <rect x="330" y="204" width="185" height="52" rx="8" class="d-fill-warn"/>
+  <rect x="330" y="204" width="185" height="52" rx="8" class="d-stroke"/>
+  <text x="422" y="226" class="d-text" text-anchor="middle" font-weight="600">orient · reject NaN</text>
+  <text x="422" y="243" class="d-text-sm" text-anchor="middle">the single conversion point</text>
 
-  <rect x="540" y="60" width="170" height="52" rx="8" class="d-fill-box"/>
-  <rect x="540" y="60" width="170" height="52" rx="8" class="d-stroke"/>
-  <text x="625" y="82" class="d-text" text-anchor="middle" font-weight="600">log a stats row</text>
-  <text x="625" y="99" class="d-text-sm" text-anchor="middle">best · mean · sd · ci</text>
+  <rect x="555" y="60" width="165" height="52" rx="8" class="d-fill-box"/>
+  <rect x="555" y="60" width="165" height="52" rx="8" class="d-stroke"/>
+  <text x="637" y="82" class="d-text" text-anchor="middle" font-weight="600">log a stats row</text>
+  <text x="637" y="99" class="d-text-sm" text-anchor="middle">best · mean · sd · ci</text>
 
-  <rect x="540" y="132" width="170" height="52" rx="8" class="d-fill-box"/>
-  <rect x="540" y="132" width="170" height="52" rx="8" class="d-stroke"/>
-  <text x="625" y="154" class="d-text" text-anchor="middle" font-weight="600">select</text>
-  <text x="625" y="171" class="d-text-sm" text-anchor="middle">scope · select · replace</text>
+  <rect x="555" y="132" width="165" height="52" rx="8" class="d-fill-box"/>
+  <rect x="555" y="132" width="165" height="52" rx="8" class="d-stroke"/>
+  <text x="637" y="154" class="d-text" text-anchor="middle" font-weight="600">select</text>
+  <text x="637" y="171" class="d-text-sm" text-anchor="middle">scope · select · replace</text>
 
-  <rect x="540" y="204" width="170" height="52" rx="8" class="d-fill-box"/>
-  <rect x="540" y="204" width="170" height="52" rx="8" class="d-stroke"/>
-  <text x="625" y="226" class="d-text" text-anchor="middle" font-weight="600">crossover + mutate</text>
-  <text x="625" y="243" class="d-text-sm" text-anchor="middle">three rolls, engine-owned</text>
+  <rect x="555" y="204" width="165" height="52" rx="8" class="d-fill-box"/>
+  <rect x="555" y="204" width="165" height="52" rx="8" class="d-stroke"/>
+  <text x="637" y="226" class="d-text" text-anchor="middle" font-weight="600">crossover + mutate</text>
+  <text x="637" y="243" class="d-text-sm" text-anchor="middle">three rolls, engine-owned</text>
 
-  <path d="M390 114 L390 128" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
-  <path d="M390 186 L390 200" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
-  <path d="M482 230 L510 230 L510 86 L536 86" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
-  <path d="M625 114 L625 128" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
-  <path d="M625 186 L625 200" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
-  <path d="M625 258 L625 300 L390 300 L390 320" class="d-stroke-acc" stroke-width="1.6" style="color:var(--accent)"/>
-  <path d="M390 320 L290 320 L290 86 L296 86" class="d-stroke-acc" stroke-width="1.6"
-        marker-end="url(#a2)" style="color:var(--accent)"/>
-  <text x="470" y="315" class="d-text-acc" text-anchor="middle">next generation</text>
+  <!-- dispatch hands the starting population to express -->
+  <path d="M224 220 L245 220 L245 78 L326 78" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
 
-  <path d="M224 220 L266 220" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+  <!-- down the left column -->
+  <path d="M422 114 L422 128" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+  <path d="M422 186 L422 200" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+
+  <!-- across to the right column -->
+  <path d="M515 230 L535 230 L535 86 L551 86" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+
+  <!-- down the right column -->
+  <path d="M637 114 L637 128" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+  <path d="M637 186 L637 200" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+
+  <!-- and back to express: one path, three bends -->
+  <path d="M637 258 L637 310 L300 310 L300 96 L326 96" class="d-stroke-acc" stroke-width="1.6"
+        fill="none" marker-end="url(#a2)" style="color:var(--accent)"/>
+  <text x="470" y="300" class="d-text-acc" text-anchor="middle">next generation</text>
 
   <!-- outcome -->
-  <rect x="270" y="372" width="470" height="46" rx="9" class="d-fill-good"/>
-  <rect x="270" y="372" width="470" height="46" rx="9" class="d-stroke"/>
-  <text x="505" y="393" class="d-text" text-anchor="middle" font-weight="600">EvolutionOutcome</text>
-  <text x="505" y="409" class="d-text-sm" text-anchor="middle">best genome · its graph · its fitness · the full history</text>
-  <path d="M505 352 L505 368" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
+  <rect x="260" y="372" width="480" height="46" rx="9" class="d-fill-good"/>
+  <rect x="260" y="372" width="480" height="46" rx="9" class="d-stroke"/>
+  <text x="500" y="393" class="d-text" text-anchor="middle" font-weight="600">EvolutionOutcome</text>
+  <text x="500" y="409" class="d-text-sm" text-anchor="middle">best genome · its graph · its fitness · the full history</text>
+  <path d="M500 352 L500 368" class="d-stroke" stroke-width="1.5" marker-end="url(#a2)"/>
 
   </g>
 </svg>
@@ -117,10 +124,12 @@
 <table>
   <thead><tr><th>Stage</th><th>Does</th></tr></thead>
   <tbody>
-    <tr><td><b>Config</b></td>
+    <tr><td><b id="two-front-ends">Config</b></td>
         <td>Written as <a href="route-python-toml.html">TOML</a> or built from
-            <a href="route-python-objects.html">Python objects</a>. Both become the same Rust
-            <code>Config</code>.</td></tr>
+            <a href="route-python-objects.html">Python objects</a> — which do not parse anything,
+            they serialize to TOML, and that TOML is what Rust parses. <b>One parser, one
+            validator</b>, so neither front end can accept a configuration the other would reject,
+            and the generated TOML doubles as a provenance record.</td></tr>
     <tr><td><b>Validate</b></td>
         <td>Once, before a single graph is allocated. A bad config comes back as an exception
             naming the field, never a panic.</td></tr>
@@ -142,22 +151,6 @@
 </table>
 </div>
 
-<h3 id="two-front-ends">Two front ends, one parser</h3>
-
-<p>
-  The Python configuration objects do not parse anything. They <b>serialize to TOML</b>, and that
-  TOML is what Rust parses:
-</p>
-
-<pre><code class="language-text" data-no-tint>Python config objects ──serialize──&gt; TOML ──serde──&gt; Config ──validate──&gt; run
-                                              hand-written TOML ─┘</code></pre>
-
-<p>
-  So there is one parser and one validator, and the Python path cannot accept a configuration the
-  file path would reject. The generated TOML doubles as a provenance record: write it next to your
-  results and the run reproduces verbatim.
-</p>
-
 <div class="note">
   <b>Two rules worth memorising.</b> Everything inside the engine is <b>lower-is-better</b>,
   whatever your objective was — your units come back at the Python boundary. And the engine never
@@ -165,7 +158,7 @@
   <code>NaN</code> rejection.
 </div>
 
-<h2 id="graph">The graph</h2>
+<h2 id="graph">The Graph</h2>
 
 <p>
   A <code>Graph</code> is an <b>undirected multigraph on a fixed node count</b>, stored as a
@@ -313,7 +306,7 @@
       edge cap. It is shared by reference across every worker, which is why the bounds are there.</li>
 </ul>
 
-<h3 id="edge-edit">Edge-edit — a script over a base graph</h3>
+<h3 id="edge-edit">Edge-edit — A Script Over a Base Graph</h3>
 
 <p>
   A list of encoded operations, applied in order to a clone of the base graph. <b>It is a script,
@@ -328,7 +321,7 @@
   <code>/n³ % n</code>. Nothing is validated; an impossible edit is a no-op.
 </p>
 
-<h4 id="operations">The nine operations</h4>
+<h4 id="operations">The Nine Operations</h4>
 
 <div class="table-wrap">
 <table>
@@ -362,7 +355,7 @@
   disables an operation and at least one must be positive.
 </p>
 
-<h3 id="sda">SDA — an automaton that writes a graph</h3>
+<h3 id="sda">SDA — An Automaton That Writes a Graph</h3>
 
 <p>
   A Self-Driving Automaton is a small finite-state machine that reads back its own output as the
@@ -446,7 +439,7 @@
   touch it — and must be <code>&lt; num_states</code>.
 </p>
 
-<h3>Adding a third representation</h3>
+<h3>Adding a Third Representation</h3>
 
 <p>
   Implement <code>Genome</code>, add one config variant, one startup function and one dispatch arm.
