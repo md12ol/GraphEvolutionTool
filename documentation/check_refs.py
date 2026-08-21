@@ -59,6 +59,61 @@ def markers(path, chain):
     return out
 
 
+def structure():
+    """data-page, NAV membership, internal links and anchors, across every page."""
+    pages = [os.path.relpath(os.path.join(d, f), "documentation")
+             for d, _, fs in os.walk("documentation") for f in fs if f.endswith(".html")]
+    nav = set(re.findall(r'\["([^"]+\.html)",',
+                         open("documentation/assets/site.js").read()))
+
+    def slug(text):
+        text = re.sub(r"<[^>]+>", "", text).replace("&amp;", "and")
+        return re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", text.lower()).strip())
+
+    ids = {}
+    for page in pages:
+        body = open(os.path.join("documentation", page)).read()
+        ids[page] = set(re.findall(r'\sid="([^"]+)"', body)) | {
+            slug(t) for _, t in re.findall(r"<(h[23])[^>]*>(.*?)</\1>", body, re.S)}
+
+    bad = 0
+    for entry in sorted(nav):
+        if not os.path.exists(os.path.join("documentation", entry)):
+            print(f"  NAV entry with no file: {entry}")
+            bad += 1
+    for page in sorted(pages):
+        if page == "_template.html":
+            continue
+        body = open(os.path.join("documentation", page)).read()
+        declared = re.search(r'data-page="([^"]+)"', body)
+        if not declared or declared.group(1) != page:
+            print(f"  bad data-page: {page}")
+            bad += 1
+        elif page not in nav:
+            print(f"  not in NAV: {page}")
+            bad += 1
+        if not body.rstrip().endswith("</html>"):
+            print(f"  truncated: {page}")
+            bad += 1
+        if "<style" in body:
+            print(f"  stray <style>: {page}")
+            bad += 1
+        for href in re.findall(r'href="([^"]+)"', body):
+            if href.startswith(("http", "data:", "mailto:")):
+                continue
+            target, _, fragment = href.partition("#")
+            full = (os.path.normpath(os.path.join(os.path.dirname(page), target))
+                    if target else page)
+            if target and not os.path.exists(os.path.join("documentation", full)):
+                print(f"  broken link: {page} -> {href}")
+                bad += 1
+            elif fragment and full in ids and fragment not in ids[full]:
+                print(f"  broken anchor: {page} -> {href}")
+                bad += 1
+    print(f"{len(pages) - 1} pages, {len(nav)} nav entries, {bad} problems")
+    return bad
+
+
 def signatures():
     """Every `fn` line in a Rust block on the site must appear verbatim in get/src.
 
@@ -191,7 +246,8 @@ def main(fix):
     print(f"{total} references, {wrong} wrong" + (f", {repaired} repaired" if fix else ""))
     bad_tables = step_tables()
     bad_sigs = signatures()
-    return 1 if (wrong and not fix) or bad_tables or bad_sigs else 0
+    bad_structure = structure()
+    return 1 if (wrong and not fix) or bad_tables or bad_sigs or bad_structure else 0
 
 
 if __name__ == "__main__":
