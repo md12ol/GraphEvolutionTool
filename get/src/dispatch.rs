@@ -104,7 +104,7 @@ pub(crate) struct ErasedOutcome {
 /// in size, so there is no single right value; this is a sanity bound that
 /// still catches a file indexed the wrong way (a global TUDataset index, say)
 /// while admitting any plausible reference graph.
-const MAX_REFERENCE_NODES: usize = 100_000;
+pub(crate) const MAX_REFERENCE_NODES: usize = 100_000;
 
 /// The parts of dispatch that need the evolver itself, not just its config.
 ///
@@ -290,6 +290,8 @@ impl GraphEvolver {
         // The loader wants one node count for the whole folder, and reference
         // graphs differ in size. This is an upper bound that still catches a
         // wild index; each graph's real size comes from `EdgeFile::to_graph`.
+        // `load_reference_graphs` computes the same bound, so what a run reads
+        // and what a caller can inspect are the same set of files.
         let index_cap = self.config.network_size.max(MAX_REFERENCE_NODES);
 
         let loaded = graph_io::load_edge_folder(
