@@ -54,7 +54,6 @@ documentation/
 ├── _template.html        page skeleton — copy this to add a page
 ├── serve.sh
 ├── README.md             this file — how the site works
-├── HANDOFF.md            what has been done and what to do next, for a new session
 ├── assets/
 │   ├── style.css         the entire stylesheet. Tokens, layout, components
 │   └── site.js           the entire behaviour. Nav, TOC, pager, theme, code blocks
