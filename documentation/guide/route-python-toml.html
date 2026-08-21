@@ -114,11 +114,21 @@ best.save_results("best_individual.txt")</code></pre>
 <h2>Validation Happens Once, Up Front</h2>
 
 <p>
-  The document is parsed and checked when you construct the evolver, not part-way through a run. An
-  unknown key is an error rather than a silent default — a misspelled
+  The document is parsed and checked when you construct the evolver, not part-way through a run. In
+  most sections an unknown key is an error rather than a silent default — a misspelled
   <code>tournament_sise</code> stops you immediately instead of quietly running a different
   experiment.
 </p>
+
+<div class="warn">
+  <b><code>[fitness]</code> is the exception, and it is worth knowing.</b> Its variants flatten
+  their SIR block into the section, and a flattened block is the one place serde cannot refuse an
+  unrecognised key — so a typo there is <b>ignored</b>, leaving the default in place. Two keys are
+  singled out and rejected by name because they are the mistakes that change a run silently:
+  <code>seed</code>, which belongs on <code>run</code>, and <code>target_profile</code> under a
+  variant that has no use for it. Anything else misspelled under <code>[fitness]</code> passes
+  quietly, so check that section by eye.
+</div>
 
 <pre><code class="language-python">try:
     evolver = get.GraphEvolver("config.toml")
@@ -160,8 +170,9 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
 <div class="callout">
   <p>
     The function takes the <b>whole population at once</b> and returns one number per individual in
-    the same order. Direction is declared here, never inferred. <code>NaN</code> stops the run;
-    <code>±inf</code> is allowed and marks an individual unusable.
+    the same order. Direction is declared here, never inferred. <code>NaN</code> stops the run.
+    Infinity is allowed, but which one means "invalid" follows the direction: <code>+inf</code>
+    under minimize, <code>-inf</code> under maximize — the opposite one is the best possible score.
   </p>
 </div>
 

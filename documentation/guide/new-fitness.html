@@ -107,7 +107,9 @@ result = evolver.run(20260812)</code></pre>
             case-insensitive. Nothing can infer it from your function, and this is the only place
             it can be said.</td></tr>
     <tr><td><b>What you may return</b></td>
-        <td>Any real number, and <code>±inf</code> to mark an individual unusable.
+        <td>Any real number. To mark an individual invalid use the infinity that sorts
+            <i>worst</i> for your direction — <code>+inf</code> under minimize,
+            <code>-inf</code> under maximize; the other one wins every tournament.
             <b><code>NaN</code> stops the run</b> — it is not skipped or scored as a loss. Watch
             for a zero denominator, <code>0.0/0.0</code> and <code>inf - inf</code>: an empty graph
             puts all three within reach.</td></tr>

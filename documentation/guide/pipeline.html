@@ -142,8 +142,8 @@
         <td>Each graph gets one <code>f64</code>, flipped into the engine's orientation and checked
             for <code>NaN</code>. <a href="fitness.html#gate">→</a></td></tr>
     <tr><td><b>Select, breed, mutate</b></td>
-        <td>Tournament selection and three probability rolls, all owned by the engine.
-            <a href="variation.html">→</a></td></tr>
+        <td>The configured <a href="variation.html#event">scope, selection and replacement</a>,
+            plus three probability rolls — all owned by the engine.</td></tr>
     <tr><td><b>Out</b></td>
         <td>The best genome, its graph, its fitness, and the run history.
             <a href="fitness.html#output">→</a></td></tr>
@@ -226,7 +226,7 @@
     <text x="480" y="240" class="d-text-sm" text-anchor="middle">symmetric; the diagonal is always 0</text>
   </g>
 </svg>
-<figcaption>Five nodes, six edges, one of which is doubled. The matrix is always
+<figcaption>Five nodes and five distinct neighbour pairs, six edge copies in total — the 3–4 pair has multiplicity 2. The matrix is always
 <code>network_size × network_size</code> however sparse the graph is — which is why
 <a href="route-python-objects.html">memory scales with the square of the node count</a>.</figcaption>
 </figure>
@@ -242,8 +242,9 @@
 
 <p>
   The node count never changes during a run, edges are undirected and carry no attributes, and
-  storage is dense — every operation is <code>O(1)</code> at a memory cost
-  <a href="route-python-objects.html">quadratic in the node count</a>. Those are
+  storage is dense — reading or updating one edge is <code>O(1)</code>, while a scan like
+  <code>degree</code> is <code>O(n)</code> and <code>get_edge_list</code> <code>O(n²)</code>, at a
+  memory cost <a href="route-python-objects.html">quadratic in the node count</a>. Those are
   <a href="../design-notes.html#non-goals">stated non-goals</a> rather than gaps.
 </p>
 

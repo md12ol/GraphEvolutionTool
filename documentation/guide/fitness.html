@@ -163,7 +163,8 @@ impossible rather than merely unlikely.</figcaption>
   <code>t</code> spends step <code>t+1</code> infectious, transmitting to each still-susceptible
   neighbour with probability <code>infection_rate</code> <b>per edge</b>, then recovers forever. A
   single <code>patient_zero</code> seeds the outbreak, which runs until no infectious nodes remain
-  — no step cap is needed, since the infectious set can only shrink.
+  — no step cap is needed, because a node only ever moves S → I → R and so can be infected at most
+  once, which bounds the run by the node count.
 </p>
 
 <figure>
@@ -278,8 +279,8 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
   <thead><tr><th>Key</th><th>Default</th><th>Effect</th></tr></thead>
   <tbody>
     <tr><td><code>infection_rate</code></td><td><i>required</i></td>
-        <td>Per-edge, per-timestep transmission probability. Not range-checked — keep it in
-            <code>[0, 1]</code> yourself.</td></tr>
+        <td>Per-edge, per-timestep transmission probability. Validated in
+            <code>[0, 1]</code>.</td></tr>
     <tr><td><code>num_epidemics</code></td><td><i>required</i></td>
         <td>Outbreaks averaged per evaluation. A single draw is very noisy, so this is not a tuning
             nicety — and it dominates run time, since the simulations run sequentially within one

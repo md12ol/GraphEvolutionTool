@@ -148,9 +148,11 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
         dramatically slower, because every call pays the interpreter round trip.</li>
     <li><b>Direction is declared, never inferred.</b> <code>"minimize"</code> or
         <code>"maximize"</code>. Nothing can work it out from your function.</li>
-    <li><b><code>NaN</code> stops the run.</b> <code>±inf</code> is fine and is the ordinary way to
-        mark an individual unusable. Watch for a zero denominator and <code>0.0/0.0</code> — an
-        empty graph puts both within reach.</li>
+    <li><b><code>NaN</code> stops the run.</b> Infinity is allowed, but pick the right one: it is
+        <code>+inf</code> under <code>"minimize"</code> and <code>-inf</code> under
+        <code>"maximize"</code> that mean "invalid, never select this". The opposite infinity is
+        the <i>best</i> possible score, so it wins every tournament it enters. Watch for a zero
+        denominator and <code>0.0/0.0</code> — an empty graph puts both within reach.</li>
   </ul>
 </div>
 

@@ -131,7 +131,7 @@ impl Genome for MyGenome {
 
     fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph { ... }
     fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R) { ... }
-    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, context: &amp;Self::Context, rng: &amp;mut R) { ... }
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, rng: &amp;mut R) { ... }
     fn print(&amp;self) -&gt; String { ... }
 }
 
@@ -282,7 +282,7 @@ GenomeConfig::MyGenome(mine) =&gt; {
 <p>
   Everything except expression. Selection, both evolution strategies, the whole
   <a href="variation.html">variation scheme</a>, orientation and <code>NaN</code> rejection,
-  logging, all three SIR objectives and any Python objective work with your representation the
+  logging, all four built-in objectives and any Python objective work with your representation the
   moment dispatch can build it — because none of them know what a genome <i>is</i>. That is what the
   static-generic design buys, and it is the reason a new genome costs four edits rather than
   four files.

@@ -33,8 +33,10 @@
         <td>Whatever <i>your</i> strategy needs and the others do not — the generational one carries
             its generation count and elite count, the steady-state one its mating-event count.</td></tr>
     <tr><td><code>SharedEvolutionContext</code></td>
-        <td>What every strategy needs: the genome context, the rates, <code>max_mutations</code>,
-            and the selection strategy. Nothing else — see below.</td></tr>
+        <td>What every strategy needs: the genome context; <code>crossover_rate</code>,
+            <code>mutation_rate</code> and <code>max_mutations</code>; and the configured
+            <code>scope</code>, <code>selection</code> and <code>crossover</code> operator. Nothing
+            else — see below.</td></tr>
     <tr><td><code>population</code></td>
         <td>Handed in, already built. You never mint genomes.</td></tr>
     <tr><td><code>run</code></td>
@@ -263,19 +265,23 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 
 <p>
   If your strategy needs something the others do not, put it in the validator, not in the evolver's
-  setup. Steady-state's <code>tournament_size ≥ 4</code> is the worked example: it is strategy
-  specific, so it is checked only when that strategy is selected, and switching strategies can
-  therefore make a previously valid selection block invalid.
+  setup. Steady-state's <code>[scope] size ≥ 4</code> is the worked example — two parents and the
+  two they replace must be distinct. It is strategy specific, so it is checked only when that
+  strategy is selected, and switching strategies can therefore make a previously valid scope
+  invalid. Note <code>tournament_size</code> and <code>[scope] size</code> are deliberately
+  independent: the first sizes a tournament and has no floor beyond 1, the second sizes the pool
+  that tournament draws from.
 </p>
 
 <div class="note">
   <b>The engine's own assertions are backstops, not validation.</b> They exist for direct library
   use — tests, embedding — where no config was involved. A config-driven run must never reach one,
   because a bad config has to surface as a proper exception naming the field, not as a panic
-  crossing the Python boundary. Note there is already one asymmetry of this kind: the validator
-  enforces <code>population_size ≥ tournament_size</code> for both strategies while the
-  generational evolver deliberately omits that assertion, so the config path is stricter than the
-  engine.
+  crossing the FFI boundary. Note the validator constrains the <i>scope</i> against the population
+  — <code>[scope] size</code> must be at least 1 and at most <code>population_size</code>, because
+  distinct individuals cannot be drawn from fewer — while <code>tournament_size</code> is left
+  unbounded above, since a tournament samples with replacement and may legitimately exceed the
+  population.
 </div>
 
 <h2>Testing It</h2>

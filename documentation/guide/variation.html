@@ -147,8 +147,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 
 <p>
   Both rolls live in one shared helper used by both strategies, so they cannot drift apart on what
-  a mutation means. Neither rate is range-checked: <code>1.5</code> or <code>-0.1</code> parses and
-  runs.
+  a mutation means. Both rates are validated in <code>[0, 1]</code> before a run starts.
 </p>
 
 <h2 id="event">A Breeding Event: Scope, Selection, Replacement</h2>
@@ -198,10 +197,12 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 <h3 id="generational">Generational</h3>
 
 <p>
-  <code>global</code> scope plus <code>tournament</code>, and <code>elite_count</code>.
   <b>The whole population is replaced each generation</b>: score everyone, log a row, copy the
-  <code>elite_count</code> best forward unchanged, then fill every remaining slot with children.
-  Replacement does not arise — the population is rebuilt. Three rules are easy to get wrong:
+  <code>elite_count</code> best forward unchanged, then fill every remaining slot with children of
+  pairs drawn from the configured scope. Replacement does not arise — the population is rebuilt, so
+  <code>elite_count</code> is this strategy's own knob. The usual configuration is
+  <code>global</code> scope with <code>tournament</code> selection, but the scope is read from
+  config like any other, not fixed by the strategy. Three rules are easy to get wrong:
 </p>
 
 <ul>
@@ -218,11 +219,12 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 <h3 id="steady-state">Steady-state</h3>
 
 <p>
-  <code>random_subset { size }</code> plus <code>best</code> plus <code>worst</code> — which is what
-  "tournament selection with tournament-local replacement" decomposes into. <b>One
-  mate-and-replace event at a time</b>: each event draws a scope of distinct individuals, its two
-  best breed, and the two children overwrite that same scope's two worst. Most of the population
-  simply persists.
+  <b>One mate-and-replace event at a time</b>: each event draws the configured scope, selects two
+  parents within it, and applies the configured replacement policy to that same scope. Most of the
+  population simply persists. Replacement is this strategy's own knob — generational has no use for
+  one. The usual configuration is <code>random_subset { size }</code> with <code>best</code> and
+  <code>worst</code>, which is what "tournament selection with tournament-local replacement"
+  decomposes into, and everything below describes that default.
 </p>
 
 <figure>

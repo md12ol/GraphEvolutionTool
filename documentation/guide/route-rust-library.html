@@ -113,8 +113,8 @@ let genome_context = SdaContext {
     mutation: SdaMutation::RedrawOne,
 };
 
-// 3. What the engine owns: the two variation rolls, who breeds, and from where.
-//    A strategy never rolls these itself.
+// 3. What the engine owns: the variation rates and cap, the scope bred from,
+//    who is selected, and which crossover operator runs. Never the strategy.
 let shared = SharedEvolutionContext {
     genome_context,
     crossover_rate: 0.8,
@@ -197,12 +197,22 @@ for row in &amp;outcome.history {
 <pre><code class="language-rust">use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
+// Build the generator ONCE, outside the loop. Seeding it per iteration would
+// reset the stream and hand every replicate the same seed.
+let mut master = ChaCha8Rng::seed_from_u64(seed);
+
 for run_index in 0..n_runs {
-    let mut master = ChaCha8Rng::seed_from_u64(seed);
     let run_seed: u64 = master.random();
     let outcome = one_run(run_seed);
-    // ... write this replicate's files
+    println!("run {run_index} used seed {run_seed}");
 }</code></pre>
+
+<p>
+  That is the same policy GET's own dispatch uses for <code>run</code>'s replicates: one generator
+  seeded from the master, drawn once per run — so a run's seed does not depend on how many runs you
+  asked for. Deriving from <code>master + i</code> or a hash would do as well;
+  <code>master ^ i</code> would not, because nearby masters collide across run indices.
+</p>
 
 <h2>Complete Examples</h2>
 
