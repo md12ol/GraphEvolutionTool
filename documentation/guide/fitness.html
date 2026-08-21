@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Fitness &amp; Output · GET docs</title>
+<title>Fitness &amp; Output · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -46,7 +46,7 @@
 </p>
 
 <figure>
-<svg viewBox="0 0 700 470" role="img" aria-label="Fitness values flow from your units through one inward conversion into engine orientation, and back out through one outward conversion at the Python boundary.">
+<svg viewBox="0 0 700 470" role="img" aria-label="Fitness values flow from your units through one inward conversion into engine orientation, and back out through one outward conversion in the dispatch layer.">
   <defs>
     <marker id="af" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
@@ -83,7 +83,7 @@
 
   <rect x="60" y="370" width="580" height="58" rx="9" class="d-fill-warn"/>
   <rect x="60" y="370" width="580" height="58" rx="9" class="d-stroke"/>
-  <text x="350" y="393" class="d-text" text-anchor="middle" font-weight="600">Python boundary</text>
+  <text x="350" y="393" class="d-text" text-anchor="middle" font-weight="600">the dispatch boundary</text>
   <text x="350" y="412" class="d-text-acc" text-anchor="middle">ORIENT BACK — the one and only flip outward</text>
 
   <rect x="60" y="440" width="580" height="26" rx="7" class="d-fill-good"/>
@@ -400,17 +400,23 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
 </p>
 
 <p>
-  The Python boundary converts <code>best_fitness</code> and <code>mean_fitness</code> back into
-  your units and sign. <code>std_dev</code> and <code>ci_95</code> are <b>not</b> converted, and
-  correctly so: a spread is identical under negation. So an <code>epi_spread</code> log reads in
-  infected nodes and goes <i>up</i>; an <code>epi_prof_match</code> log reads as an RMSE and goes
-  <i>down</i>.
+  The dispatch layer converts <code>best_fitness</code> and <code>mean_fitness</code> back into
+  your units and sign on the way out. <code>std_dev</code> and <code>ci_95</code> are <b>not</b>
+  converted, and correctly so: a spread is identical under negation. So an <code>epi_spread</code>
+  log reads in infected nodes and goes <i>up</i>; an <code>epi_prof_match</code> log reads as an
+  RMSE and goes <i>down</i>.
 </p>
 
 <div class="warn">
-  <b>Reading <code>EvolutionOutcome</code> directly from Rust gives engine-oriented numbers.</b>
-  That is the stated cost of converting only at the edges, and what the direction stored on the
-  outcome is for. If you are embedding GET rather than driving it from Python, convert yourself.
+  <b>Which routes convert, and the one that does not.</b> The outward conversion lives in the
+  dispatch layer, not at the language boundary — so <a href="route-python-objects.html">both Python
+  routes</a>, the <a href="route-rust-cli.html"><code>get-run</code> CLI</a> and
+  <code>run_many_from_toml</code> all hand you numbers already in your objective's units. The
+  exception is <a href="route-rust-library.html">driving an <code>Evolver</code> directly</a>: that
+  returns an <code>EvolutionOutcome</code> carrying <code>best_fitness_engine</code>, which is
+  engine-oriented, plus the <code>direction</code> to undo it —
+  <code>direction.orient(outcome.best_fitness_engine)</code> is the same negation, and it is its own
+  inverse.
 </div>
 
 <pre><code class="language-python">results = evolver.run(seed=20260812, n_runs=30, max_cores=8)

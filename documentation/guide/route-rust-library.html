@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rust: As a Library · GET docs</title>
+<title>Rust: As a Library · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -154,19 +154,35 @@ let outcome = evolver.run(&amp;fitness, seed);</code></pre>
 
 <h2>Reading the Outcome</h2>
 
-<pre><code class="language-rust">println!("best fitness  = {}", outcome.best_fitness);
-println!("edges         = {}", outcome.best_graph.edge_count());
+<pre><code class="language-rust">// `best_fitness_engine` is lower-is-better, whatever your objective computed.
+// `direction` is how you undo that — and the negation is its own inverse.
+let best = outcome.direction.orient(outcome.best_fitness_engine);
+
+println!("best fitness  = {best}");
+println!("edges         = {}", outcome.best_graph.get_edge_list().len());
 println!("genome        = {}", outcome.best_genome.print());
 
 for row in &amp;outcome.history {
-    println!("{} {} {}", row.iteration, row.best_fitness, row.mean_fitness);
+    println!(
+        "{} {} {}",
+        row.iteration,
+        outcome.direction.orient(row.best_fitness),
+        outcome.direction.orient(row.mean_fitness),
+    );
 }</code></pre>
 
-<div class="callout">
+<div class="warn">
   <p>
-    <b>Scores come back in your units, not the engine's.</b> The engine minimizes internally and
-    converts on the way out, so a <code>Maximize</code> objective's <code>best_fitness</code> is the
-    number your <code>evaluate</code> returned — not its negation.
+    <b>This is the one route that hands you engine-oriented numbers.</b> The outward conversion
+    lives in the dispatch layer, and driving an <code>Evolver</code> yourself goes underneath it —
+    so <code>best_fitness_engine</code> and every <code>history</code> row are lower-is-better here,
+    even for a <code>Maximize</code> objective. The field is named <code>_engine</code> precisely so
+    this is not something you discover from a wrong plot.
+  </p>
+  <p>
+    The two Python routes and the <a href="route-rust-cli.html"><code>get-run</code> CLI</a> all go
+    through dispatch and convert for you. <code>std_dev</code> and <code>ci_95</code> are never
+    converted on any route — a spread is identical under negation.
   </p>
 </div>
 
