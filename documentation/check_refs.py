@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""Check — and with --fix, repair — the site's `path:line` references.
+
+Every `file.rs:NNN` on the site points at an `ADD A ... STEP n` marker in the
+source. Run from the repository root.
+
+    python3 documentation/check_refs.py          # report
+    python3 documentation/check_refs.py --fix    # snap each reference to its marker
+
+Also checks that each new-*.html's step table matches its chain's markers, and
+that every `fn` signature shown on the site appears verbatim in get/src. Each
+catches something the others cannot: a page that stops one step short is not a
+wrong line number, and a stale signature is neither.
+
+Any edit to get/src moves these. Merging one upstream PR shifted 18 of them at
+once, so --fix exists to make that a command rather than an afternoon.
+"""
+import glob
+import html
+import os
+import re
+import sys
+
+MOD = {
+    "documentation/guide/new-genome.html": "get/src/genomes/mod.rs",
+    "documentation/guide/new-evolver.html": "get/src/evolver/mod.rs",
+}
+CHAIN = {
+    "new-fitness": "OBJECTIVE", "new-genome": "GENOME", "new-evolver": "STRATEGY",
+    "new-selection": "SELECTION", "new-scope": "SCOPE", "new-replacement": "REPLACEMENT",
+    "new-crossover": "CROSSOVER", "new-mutation": "MUTATION",
+}
+REF = re.compile(r"([a-z_]+\.rs|config\.example\.toml):(\d+)|<code>:(\d+)</code>")
+# A *declaration* marker: the name, an optional branch qualifier, then an em
+# dash introducing what to do. A cross-reference — `search `ADD A ... STEP 4``
+# — is wrapped in backticks and carries no dash, and must not count: a
+# reference that snapped to one would point at prose about a different step.
+MARKER = re.compile(r"ADD AN? ([A-Z]+) STEP (\d+)(?: \([^)]*\))? \u2014")
+
+
+def resolve(page, name):
+    if name == "config.example.toml":
+        return name
+    if name == "mod.rs":
+        return MOD[page]
+    for root, _, files in os.walk("get/src"):
+        if name in files:
+            return os.path.join(root, name)
+    raise SystemExit(f"{page}: no source file named {name}")
+
+
+def markers(path, chain):
+    """Line numbers in `path` carrying a marker for `chain`, 1-based."""
+    out = []
+    for number, line in enumerate(open(path).read().splitlines(), 1):
+        found = MARKER.search(line)
+        if found and (chain is None or found.group(1) == chain):
+            out.append(number)
+    return out
+
+
+def structure():
+    """data-page, NAV membership, internal links and anchors, across every page."""
+    pages = [os.path.relpath(os.path.join(d, f), "documentation")
+             for d, _, fs in os.walk("documentation") for f in fs if f.endswith(".html")]
+    nav = set(re.findall(r'\["([^"]+\.html)",',
+                         open("documentation/assets/site.js").read()))
+
+    def slug(text):
+        text = re.sub(r"<[^>]+>", "", text).replace("&amp;", "and")
+        return re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", text.lower()).strip())
+
+    ids = {}
+    for page in pages:
+        body = open(os.path.join("documentation", page)).read()
+        ids[page] = set(re.findall(r'\sid="([^"]+)"', body)) | {
+            slug(t) for _, t in re.findall(r"<(h[23])[^>]*>(.*?)</\1>", body, re.S)}
+
+    bad = 0
+    for entry in sorted(nav):
+        if not os.path.exists(os.path.join("documentation", entry)):
+            print(f"  NAV entry with no file: {entry}")
+            bad += 1
+    for page in sorted(pages):
+        if page == "_template.html":
+            continue
+        body = open(os.path.join("documentation", page)).read()
+        declared = re.search(r'data-page="([^"]+)"', body)
+        if not declared or declared.group(1) != page:
+            print(f"  bad data-page: {page}")
+            bad += 1
+        elif page not in nav:
+            print(f"  not in NAV: {page}")
+            bad += 1
+        if not body.rstrip().endswith("</html>"):
+            print(f"  truncated: {page}")
+            bad += 1
+        if "<style" in body:
+            print(f"  stray <style>: {page}")
+            bad += 1
+        for href in re.findall(r'href="([^"]+)"', body):
+            if href.startswith(("http", "data:", "mailto:")):
+                continue
+            target, _, fragment = href.partition("#")
+            full = (os.path.normpath(os.path.join(os.path.dirname(page), target))
+                    if target else page)
+            if target and not os.path.exists(os.path.join("documentation", full)):
+                print(f"  broken link: {page} -> {href}")
+                bad += 1
+            elif fragment and full in ids and fragment not in ids[full]:
+                print(f"  broken anchor: {page} -> {href}")
+                bad += 1
+    print(f"{len(pages) - 1} pages, {len(nav)} nav entries, {bad} problems")
+    return bad
+
+
+def signatures():
+    """Every `fn` line in a Rust block on the site must appear verbatim in get/src.
+
+    Catches the one thing the reference and step-table checks cannot: a
+    signature that is simply out of date. `Genome::mutate` lost its `context`
+    argument on two pages this way and no amount of reading them found it.
+    """
+    source = ""
+    for root, _, files in os.walk("get/src"):
+        for name in files:
+            if name.endswith(".rs"):
+                source += "\n" + open(os.path.join(root, name)).read()
+
+    def flat(text):
+        text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+        text = re.sub(r"\s+", "", text)
+        # A multi-line signature in the source carries a trailing comma before
+        # its `)`; the one-line form on the page does not.
+        return text.replace(",)", ")")
+
+    flat_source = flat(source)
+    checked = bad = 0
+    for page in sorted(glob.glob("documentation/**/*.html", recursive=True)):
+        if "_template" in page:
+            continue
+        # `data-example` marks a block that illustrates code the reader is
+        # about to write, so its signatures are not claims about get/src. It is
+        # declared in the page rather than guessed from the text: guessing by
+        # looking for invented names skipped the whole `Genome` trait block,
+        # which is where the one real staleness this check has found was.
+        for block in re.finditer(
+                r'<code class="language-rust"( data-example)?>(.*?)</code>',
+                open(page).read(), re.S):
+            if block.group(1):
+                continue
+            body = html.unescape(re.sub(r"<[^>]+>", "", block.group(2)))
+            for line in body.splitlines():
+                line = line.strip()
+                if not re.match(r"^(pub )?fn \w+", line):
+                    continue
+                sig = re.sub(r"\{.*$", "", line.rstrip(";").rstrip("{")).strip()
+                if "..." in sig or not sig:
+                    continue
+                checked += 1
+                if flat(sig) not in flat_source:
+                    bad += 1
+                    print(f"  {os.path.basename(page)}: not in get/src: {sig[:88]}")
+    print(f"{checked} signatures, {bad} not found in get/src")
+    return bad
+
+
+def step_tables():
+    """Each new-*.html's step table must match its chain's markers in the source."""
+    bad = 0
+    for page, chain in sorted(CHAIN.items()):
+        path = f"documentation/guide/{page}.html"
+        rows = {n.rstrip("ab") for n, _ in re.findall(
+            r"<tr><td>(\d+[ab]?)</td>(.*?)</tr>", open(path).read(), re.S)}
+        marks = set()
+        for source in ["config.example.toml"] + [
+                os.path.join(r, f) for r, _, fs in os.walk("get/src")
+                for f in fs if f.endswith(".rs")]:
+            for line in open(source).read().splitlines():
+                found = MARKER.search(line)
+                if found and found.group(1) == chain:
+                    marks.add(found.group(2))
+        if rows != marks:
+            bad += 1
+            print(f"  {page}: page has steps {sorted(rows, key=int)}, "
+                  f"source has {sorted(marks, key=int)}")
+    print(f"{len(CHAIN)} step tables, {bad} mismatched")
+    return bad
+
+
+def main(fix):
+    pages = []
+    for root, _, files in os.walk("documentation"):
+        pages += [os.path.join(root, f) for f in files
+                  if f.endswith(".html") and "_template" not in f]
+
+    total = wrong = repaired = 0
+    for page in sorted(pages):
+        chain = CHAIN.get(os.path.basename(page)[:-5])
+        text = open(page).read()
+        out, last, cursor, touched = [], None, 0, False
+
+        for ref in REF.finditer(text):
+            out.append(text[cursor:ref.start()])
+            cursor = ref.end()
+            if ref.group(1):
+                last, line = ref.group(1), int(ref.group(2))
+                template = f"{last}:%d"
+            elif last:
+                line = int(ref.group(3))
+                template = "<code>:%d</code>"
+            else:
+                out.append(ref.group(0))
+                continue
+
+            total += 1
+            source = resolve(page, last)
+            lines = open(source).read().splitlines()
+            here = lines[line - 1] if line <= len(lines) else ""
+            found = MARKER.search(here)
+
+            if found and (chain is None or found.group(1) == chain):
+                out.append(ref.group(0))
+                continue
+
+            wrong += 1
+            # Snap to the nearest marker of this page's chain in this file.
+            candidates = markers(source, chain)
+            if not candidates:
+                print(f"  {page} -> {last}:{line}: no {chain} marker in {source}")
+                out.append(ref.group(0))
+                continue
+            best = min(candidates, key=lambda n: abs(n - line))
+            print(f"  {page} -> {last}:{line} is not a {chain} marker"
+                  f"{f'; nearest is :{best}' if fix else ''}")
+            out.append(template % best if fix else ref.group(0))
+            repaired += fix
+            touched = touched or fix
+
+        out.append(text[cursor:])
+        # Only pages that actually changed, so a repair run does not restamp
+        # every file on the site.
+        if touched:
+            open(page, "w").write("".join(out))
+
+    print(f"{total} references, {wrong} wrong" + (f", {repaired} repaired" if fix else ""))
+    bad_tables = step_tables()
+    bad_sigs = signatures()
+    bad_structure = structure()
+    return 1 if (wrong and not fix) or bad_tables or bad_sigs or bad_structure else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main("--fix" in sys.argv))

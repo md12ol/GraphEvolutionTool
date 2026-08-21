@@ -26,8 +26,6 @@
   --good-soft:    #16261d;
   --good-line:    #2a4635;
   --plan:         #c1a8f0;
-  --plan-soft:    #221c33;
-  --plan-line:    #3d3159;
 
   color-scheme: dark;
 
@@ -357,7 +355,7 @@ th {
 tbody tr:hover { background: var(--bg-sunken); }
 td code { white-space: nowrap; }
 
-.callout, .note, .warn, .tip, .plan-note {
+.callout, .note, .warn, .tip {
   border: 1px solid var(--border);
   border-left: 3px solid var(--border-firm);
   border-radius: var(--radius);
@@ -367,32 +365,15 @@ td code { white-space: nowrap; }
   font-size: .93rem;
 }
 .callout > :last-child, .note > :last-child, .warn > :last-child,
-.tip > :last-child, .plan-note > :last-child { margin-bottom: 0; }
+.tip > :last-child { margin-bottom: 0; }
 .note  { border-left-color: var(--accent); background: var(--accent-soft); }
 .warn  { border-left-color: var(--warn);   background: var(--warn-soft); }
 .tip   { border-left-color: var(--good);   background: var(--good-soft); }
-.plan-note { border-left-color: var(--plan); background: var(--plan-soft); }
 /* Neutral by design: a callout marks something worth stopping on without
    claiming it is a warning. Left border only, no tinted fill. */
 .callout { border-left-color: var(--border-firm); }
 .callout ul { margin-bottom: 0; }
-.callout b, .note b, .warn b, .tip b, .plan-note b { font-weight: 650; }
-
-.badge {
-  display: inline-block;
-  font-size: .68rem;
-  font-weight: 650;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  padding: .08rem .45rem;
-  border-radius: 20px;
-  border: 1px solid;
-  vertical-align: middle;
-  white-space: nowrap;
-}
-.badge-built   { color: var(--good); background: var(--good-soft); border-color: var(--good-line); }
-.badge-planned { color: var(--plan); background: var(--plan-soft); border-color: var(--plan-line); }
-.badge-partial { color: var(--warn); background: var(--warn-soft); border-color: var(--warn-line); }
+.callout b, .note b, .warn b, .tip b { font-weight: 650; }
 
 /* card grid, used on the landing page */
 .cards {
@@ -412,33 +393,6 @@ td code { white-space: nowrap; }
 .card:hover { border-color: var(--accent); text-decoration: none; box-shadow: 0 2px 12px rgba(0,0,0,.05); }
 .card h3 { margin: 0 0 .3rem; font-size: 1rem; color: var(--accent); }
 .card p  { margin: 0; font-size: .88rem; color: var(--text-muted); }
-
-/* definition list for API items */
-.api-item {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin: 0 0 1rem;
-  overflow: hidden;
-  background: var(--bg-raised);
-}
-.api-item > .api-sig {
-  background: var(--bg-code);
-  border-bottom: 1px solid var(--border);
-  padding: .6rem .9rem;
-  font-family: var(--mono);
-  font-size: .83rem;
-  overflow-x: auto;
-  white-space: pre;
-}
-.api-item > .api-body { padding: .8rem .9rem; font-size: .93rem; }
-.api-item > .api-body > :last-child { margin-bottom: 0; }
-.src {
-  float: right;
-  font-family: var(--mono);
-  font-size: .74rem;
-  color: var(--text-faint);
-  font-weight: 400;
-}
 
 /* figures / diagrams */
 figure {

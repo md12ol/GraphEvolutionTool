@@ -36,6 +36,7 @@
 //!     crossover_rate=0.9,
 //!     mutation_rate=0.2,
 //!     evolution=get.EvolutionConfig.Generational(num_generations=500),
+//!     scope=get.ScopeConfig.Global(),
 //!     selection=get.SelectionConfig.Tournament(tournament_size=5),
 //!     genome=get.GenomeConfig.EdgeEdit(gene_length=256),
 //!     fitness=get.FitnessConfig.EpiSpread(
@@ -478,6 +479,17 @@ pub enum PyFitnessConfig {
         spectral_weight: f64,
         density_weight: f64,
     },
+    // ADD AN OBJECTIVE STEP 4 — the Python-side variant, if the objective
+    // should be reachable from Python:
+    //
+    //     #[pyo3(constructor = (threshold))]
+    //     MyObjective { threshold: f64 },
+    //
+    // Optional; leaving it out costs nothing elsewhere and a Python caller
+    // simply cannot name the objective. If step 2's validation raises a new
+    // field name, that name also needs an attribute path — search
+    // `ADD AN OBJECTIVE STEP 4` again for it, or the error a Python caller
+    // sees names a TOML field they never wrote.
     /// A Python callable registered before the run, via
     /// `GraphEvolver.set_fitness_function`. Its direction is declared at
     /// registration, not here (spec §7).
@@ -691,6 +703,11 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         "degree_weight" => Some("config.fitness.degree_weight"),
         "clustering_weight" => Some("config.fitness.clustering_weight"),
         "spectral_weight" => Some("config.fitness.spectral_weight"),
+        // ADD AN OBJECTIVE STEP 4 — one line per field step 2's validation
+        // names, mapping the TOML name to the Python attribute path. The test
+        // `every_validation_field_maps_to_a_python_attribute` is what catches
+        // a missing one. The step after this is the shipped example — search
+        // `ADD AN OBJECTIVE STEP 5` for it.
         "density_weight" => Some("config.fitness.density_weight"),
         _ => None,
     }

@@ -29,6 +29,12 @@
 //!   selectable by name from `config.toml` and runnable by the `get-run`
 //!   binary, with no Rust written at the call site.
 //!
+//! Every step is marked in the source. One command lists the whole chain:
+//!
+//! ```text
+//! git grep -n "ADD AN OBJECTIVE STEP" get/src config.example.toml
+//! ```
+//!
 //! The steps, in the order you would walk them:
 //!
 //! 1. **This file** — implement [`Fitness`] for your type. [`Fitness::evaluate`]
@@ -226,6 +232,20 @@ impl Direction {
 ///
 /// [`Direction::orient`] panics on it. Watch for division by a count that can
 /// be zero, `0.0 / 0.0`, and `inf - inf`.
+// ADD AN OBJECTIVE STEP 1 — implement this trait for your own type, in this
+// file or beside your own code:
+//
+//     impl Fitness for MyObjective {
+//         fn evaluate(&self, graph: &Graph) -> f64 { ... }
+//     }
+//
+// Validate the objective's own inputs in its constructor and make it fallible
+// if it has any worth checking — step 2's validation lives in `config.rs`,
+// which the library route never runs, so a guard written only there does not
+// exist for a caller depending on this crate. The two sites are additive.
+// This is the only step available to such a caller, and it is enough on its
+// own. The step after this is the config variant a user names — search
+// `ADD AN OBJECTIVE STEP 2` for it.
 pub trait Fitness: Send + Sync {
     /// Score one graph: the **original**, in the objective's own units, never
     /// an oriented value. Must not return `NaN`.

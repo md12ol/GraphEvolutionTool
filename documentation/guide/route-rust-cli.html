@@ -50,6 +50,22 @@ cargo build --release -p graph-evolution-tool --features cli --bin get-run
   binary can die at startup rather than printing anything useful.
 </div>
 
+<div class="warn">
+  <b>The same interpreter's <code>libpython</code> must be findable at run time too</b>, which is a
+  separate failure from the one above and looks nothing like it: the build succeeds and the binary
+  dies before printing a word. It bites when Python was installed somewhere the dynamic loader does
+  not search — a <code>pyenv</code> or CI interpreter rather than the system one.
+</div>
+
+<p>Point the loader at it:</p>
+
+<pre><code class="language-bash">export LD_LIBRARY_PATH="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"</code></pre>
+
+<p>
+  Derive the directory rather than hardcoding a version, so upgrading Python does not break it. On
+  macOS the variable is <code>DYLD_LIBRARY_PATH</code>.
+</p>
+
 <h2>Run It</h2>
 
 <pre><code class="language-bash">get-run config.toml 7</code></pre>
@@ -67,6 +83,7 @@ cargo build --release -p graph-evolution-tool --features cli --bin get-run
     <tr><td><code>[seed]</code></td><td>Master seed. Random if omitted.</td></tr>
     <tr><td><code>--runs N</code></td><td>Replicates from that master seed. Above 1 requires <code>--out</code>.</td></tr>
     <tr><td><code>--out DIR</code></td><td>Write into <code>DIR/&lt;timestamp&gt;-&lt;seed&gt;/</code> instead of the working directory.</td></tr>
+    <tr><td><code>--help</code></td><td>Print the usage above and exit. <code>-h</code> works too.</td></tr>
   </tbody>
 </table>
 </div>
@@ -115,6 +132,11 @@ num_epidemics  = 30</code></pre>
     part-way through a run. Every other objective works exactly as it does elsewhere.
   </p>
 </div>
+
+<p>
+  Every key the document can carry is in the <a href="configuration.html">Configuration
+  Reference</a>.
+</p>
 
 <h2>Where the Files Go</h2>
 

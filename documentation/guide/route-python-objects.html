@@ -34,6 +34,22 @@ python -c "import get; print(get.__name__)"</code></pre>
 
 
 
+<div class="tip">
+  <b>Building from a checkout instead.</b> If you want the working copy rather than the published
+  package — or the package is not on PyPI yet — build the extension module with
+  <a href="https://www.maturin.rs">maturin</a>. It compiles the Rust and installs it into the
+  active virtual environment under the import name <code>get</code>:
+  <pre><code class="language-bash">git clone https://github.com/md12ol/GraphEvolutionTool
+cd GraphEvolutionTool
+python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+python3 -m ensurepip --upgrade      # only if this Python has no pip
+pip install maturin
+maturin develop --release</code></pre>
+  A Rust toolchain is needed for this and not for <code>pip install</code>; get one from
+  <a href="https://rustup.rs">rustup.rs</a>. Re-run <code>maturin develop</code> after every change
+  to the Rust — the installed module does not track the source.
+</div>
+
 <h2>The Smallest Complete Run</h2>
 
 <pre><code class="language-python">import get
@@ -103,11 +119,21 @@ best.save_results("best_individual.txt")   # also writes best_individual.txt.tom
   master seed and reading the same index — not by feeding its derived seed back in.
 </p>
 
-<pre><code class="language-python">results = evolver.run(seed=7, n_runs=8)
+<pre><code class="language-python">import os
+
+results = evolver.run(seed=7, n_runs=8)
 
 for run_index, result in enumerate(results):
     print(run_index, result.best_fitness)
+    os.makedirs(f"output/run_{run_index}", exist_ok=True)
     result.save_logs(f"output/run_{run_index}/run_log.csv")</code></pre>
+
+<div class="warn">
+  <b><code>save_logs</code> and <code>save_results</code> do not create directories.</b> They write
+  the file you name and raise <code>OSError</code> if its folder is missing, so make the folder
+  first. The <code>get-run</code> CLI is different — <code>--out</code> builds the whole tree for
+  you.
+</div>
 
 <p>
   Replicates are spread across cores. Cap that with <code>max_cores</code> if you are sharing the
@@ -156,11 +182,37 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
 
 <pre><code class="language-python">evolver = get.GraphEvolver.from_config(config)
 
-# (u, v, multiplicity), in your own node numbering
+# Call ONE of these, not both — a second loader that disagrees about the
+# numbering raises, and one run has one numbering.
+
+# from memory: (u, v, multiplicity), in your own node numbering
 evolver.set_base_graph(40, [(0, 1, 1), (1, 2, 1)], min_node_index=0)
 
-# or from a file, one edge per line, with a `# nodes = N` header
+# from a file: one edge per line, with a `# nodes = N` header
 evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre>
+
+<div class="warn">
+  <b>These loaders warn rather than raise on three things</b>, so a run can start from data you did
+  not mean to supply and nothing will stop it.
+  <ul>
+    <li><b>A repeated edge</b> — canonical, so <code>2,5</code> and <code>5,2</code> are the same
+        edge — takes the <b>last</b> occurrence's weight. Earlier rows for that pair are
+        overwritten, not added to.</li>
+    <li><b>A zero-weight row is accepted and adds no edge.</b> Weight 0 <i>is</i> the absence of an
+        edge, so the row is read, counted as valid, and leaves the pair unconnected — it is not an
+        edge with weight zero sitting in the graph, and it will not appear in
+        <code>best_edges</code>. The warning's phrase is "kept as given", which means the number you
+        wrote was stored verbatim rather than treated as an error.</li>
+    <li><b>An empty file</b> loads an empty base graph.</li>
+  </ul>
+  Each raises a Python <code>UserWarning</code> naming the file and the line, so
+  <code>warnings.simplefilter("error")</code> turns them into failures if you would rather find out
+  loudly.
+  <p>
+    A weight <i>above</i> <code>max_edge_multiplicity</code> is the opposite case and <b>raises</b>,
+    naming the file, the line and the cap rather than clamping silently.
+  </p>
+</div>
 
 <div class="callout">
   <p>

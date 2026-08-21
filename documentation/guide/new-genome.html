@@ -23,7 +23,7 @@
     type Context: Send + Sync;
     fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph;
     fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R);
-    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, rng: &amp;mut R);
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, context: &amp;Self::Context, rng: &amp;mut R);
     fn print(&amp;self) -&gt; String;
 }</code></pre>
 
@@ -93,7 +93,7 @@ some_dimension = 256</code></pre>
   marker is the anchor that has not.
 </p>
 
-<pre><code class="language-bash">git grep -n "ADD A GENOME STEP" get/src    # the seven steps, in one list</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A GENOME STEP" get/src config.example.toml    # the seven steps, in one list</code></pre>
 
 <p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
 
@@ -109,16 +109,16 @@ some_dimension = 256</code></pre>
         <td>Declare the <code>Context</code> type your genome named.</td></tr>
     <tr><td>3</td><td><code>get/src/genomes/mod.rs:16</code></td>
         <td><code>pub mod</code> your module and re-export the type and its context.</td></tr>
-    <tr><td>4</td><td><code>get/src/config.rs:245</code> and <code>:939</code></td>
+    <tr><td>4</td><td><code>get/src/config.rs:245</code> and <code>:951</code></td>
         <td>A <code>GenomeConfig</code> variant plus the struct it carries, <i>and</i> its arm in
             <code>validate_genome</code>.</td></tr>
-    <tr><td>5</td><td><code>get/src/dispatch.rs:386</code></td>
+    <tr><td>5</td><td><code>get/src/dispatch.rs:403</code></td>
         <td>A start builder beside <code>sda_start</code>: validate the dimensions once, mint
             <code>population_size</code> individuals, build the context.</td></tr>
-    <tr><td>6</td><td><code>get/src/dispatch.rs:650</code></td>
+    <tr><td>6</td><td><code>get/src/dispatch.rs:667</code></td>
         <td>One arm in the genome match, calling your step-5 builder. The <b>strategy</b> match is
             not touched — it is generic over the genome.</td></tr>
-    <tr><td>7</td><td><code>get/src/py_config.rs:406</code> and <code>:665</code></td>
+    <tr><td>7</td><td><code>get/src/py_config.rs:407</code> and <code>:677</code></td>
         <td><b>Optional.</b> The Python-side variant and its <code>to_toml_value</code> arm, plus
             one line in <code>python_attribute_path</code> per field step 4 validates by name.</td></tr>
   </tbody>
@@ -133,7 +133,7 @@ impl Genome for MyGenome {
 
     fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph { ... }
     fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R) { ... }
-    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, rng: &amp;mut R) { ... }
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, context: &amp;Self::Context, rng: &amp;mut R) { ... }
     fn print(&amp;self) -&gt; String { ... }
 }
 
@@ -165,21 +165,21 @@ pub use my_genome::MyGenome;</code></pre>
 <pre><code class="language-rust">// step 4a — config.rs:245
 MyGenome(MyGenomeConfig),
 
-// step 4b — config.rs:939
+// step 4b — config.rs:951
 GenomeConfig::MyGenome(mine) =&gt; {
     if mine.some_dimension == 0 {
         return Err(invalid("some_dimension", "must be at least 1"));
     }
 }
 
-// step 5 — dispatch.rs:386
+// step 5 — dispatch.rs:403
 pub(crate) fn my_genome_start&lt;R: Rng + ?Sized&gt;(
     config: &amp;Config,
     mine: &amp;MyGenomeConfig,
     rng: &amp;mut R,
 ) -&gt; PyResult&lt;(MyContext, Vec&lt;MyGenome&gt;)&gt; { ... }
 
-// step 6 — dispatch.rs:650
+// step 6 — dispatch.rs:667
 GenomeConfig::MyGenome(mine) =&gt; {
     let (genome_context, population) = my_genome_start(config, mine, &amp;mut rng)?;
     ...
@@ -189,8 +189,8 @@ GenomeConfig::MyGenome(mine) =&gt; {
 
 <p>
   Leaving it out costs nothing elsewhere; the genome is then configurable from a TOML file but
-  absent from the Python API. The variant goes at <code>get/src/py_config.rs:406</code>, and the
-  <code>python_attribute_path</code> lines at <code>:665</code>.
+  absent from the Python API. The variant goes at <code>get/src/py_config.rs:407</code>, and the
+  <code>python_attribute_path</code> lines at <code>:677</code>.
 </p>
 
 <div class="callout">

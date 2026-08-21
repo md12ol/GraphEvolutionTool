@@ -65,7 +65,7 @@ struct Regularity {
 impl Fitness for Regularity {
     fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64 {
         let mut at_target = 0;
-        for node in 0..graph.num_nodes() {
+        for node in 0..graph.num_nodes {
             if graph.degree(node) == self.target_degree {
                 at_target += 1;
             }
