@@ -276,10 +276,12 @@
 </div>
 
 <p>
-  One item is a "not yet" rather than a "never": <b>additional crossover operators</b> per
-  representation are wanted, and are sequenced after the rest of the design. Until a second operator
-  exists there is nothing to select between, so no enum, no config field and no dispatch is built
-  for it. When it lands it follows selection — one variant, one match arm, one config field.
+  <b>Operator selection is built, and it is deliberately asymmetric.</b> Crossover is chosen once
+  under <code>[crossover]</code> and applies to whichever representation is running, because both
+  genomes ship the same two-point operator through one helper. Mutation is chosen <i>per genome</i>,
+  under <code>[genome]</code>, because the two representations' mutations share no shape — a single
+  shared enum would carry variants that are dead for one genome from its first release, and a
+  config would accept them.
 </p>
 
 <h2>Conventions, in one place</h2>
