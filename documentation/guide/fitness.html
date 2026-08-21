@@ -119,6 +119,16 @@ impossible rather than merely unlikely.</figcaption>
   <code>Minimize</code> is the sanctioned way to say <i>this individual is invalid</i>.
 </p>
 
+<div class="warn">
+  <b>The <code>NaN</code> gate is an assertion, so it aborts rather than raising.</b> From Python it
+  surfaces as a <code>pyo3_runtime.PanicException</code> naming the batch index that produced it —
+  not a <code>ValueError</code> you would normally catch. Treat it as a bug in your objective, which
+  it is: the message names the usual causes (a division by a possibly-zero count,
+  <code>0.0/0.0</code>, <code>inf - inf</code>). Note the two infinities are the opposite case and
+  are let through, so a run reporting <code>-inf</code> under <code>Minimize</code> is your objective
+  saying something is <i>perfect</i>, not something failing.
+</div>
+
 <h2>The Four Built-in Objectives</h2>
 
 <div class="table-wrap">
