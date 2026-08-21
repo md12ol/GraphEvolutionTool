@@ -20,13 +20,14 @@
 
 <div class="callout">
   <p>
-    <b>Read this before you grep.</b> <code>git grep -n "ADD A MUTATION STEP"</code> returns
-    <b>eight</b> markers: four for edge-edit and four for SDA, interleaved. Every marker names its
-    half, so narrow the search to yours:
+    <b>Read this before you grep.</b> There are <b>four numbered steps for edge-edit and four for
+    SDA</b>, interleaved. The grep prints more lines than that — each step is also named where a
+    neighbouring marker points forward to it — so read the step numbers, not the line count. Every
+    marker names its half, so narrow the search to yours:
   </p>
 <pre><code class="language-bash">git grep -nE "ADD A MUTATION STEP . \(for EdgeEdit\)"   # edge-edit's four
 git grep -nE "ADD A MUTATION STEP . \(for SDA\)"        # SDA's four
-git grep -n  "ADD A MUTATION STEP"                      # both, all eight</code></pre>
+git grep -n  "ADD A MUTATION STEP"                      # both halves at once</code></pre>
   <p>
     Unlike crossover, mutation is <b>per representation</b>: there is no shared
     <code>Mutation</code> enum and no compatibility match to extend. Adding an operator for one
@@ -75,7 +76,7 @@ mutation    = { type = "my_mutation", some_param = 0.5 }</code></pre>
   </p>
 </div>
 
-<h2 id="edge-edit">Edge-Edit — The Four Edits</h2>
+<h2 id="edge-edit">Edge-Edit — The Four Steps</h2>
 
 <div class="table-wrap">
 <table>
@@ -117,7 +118,7 @@ EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
   is the default.
 </p>
 
-<h2 id="sda">SDA — The Four Edits</h2>
+<h2 id="sda">SDA — The Four Steps</h2>
 
 <div class="table-wrap">
 <table>

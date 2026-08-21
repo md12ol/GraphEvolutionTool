@@ -22,18 +22,16 @@
 
 <pre><code class="language-toml"># Cargo.toml
 [dependencies]
-get = "0.9"
-
-# or pin a commit outright, which this route has a particular reason to want
+# Pin a commit — which this route has a particular reason to want.
 get = { git = "https://github.com/md12ol/GraphEvolutionTool", rev = "&lt;commit&gt;" }
 
-# or a local checkout, if you are changing GET alongside your own code
+# Or a local checkout, if you are changing GET alongside your own code.
 get = { path = "../GraphEvolutionTool/get" }</code></pre>
 
 <div class="note">
-  <b>The crate is not on crates.io yet.</b> Until it is, use one of the other two lines — the
-  <code>git</code> form is the one that gives you a fixed version, and it is what the callout below
-  is about.
+  <b>After the first release, <code>get = "0.9"</code> works too.</b> The crate is not on crates.io
+  yet, so today it comes from the repository by commit or by path. For this route that is barely a
+  constraint — see below.
 </div>
 
 <div class="callout">

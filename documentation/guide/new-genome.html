@@ -13,7 +13,7 @@
 <p class="page-kicker">Extending GET</p>
 <h1>Add a Genome</h1>
 <p class="lede">
-  A third representation — a different way of describing a graph compactly. Four edits, and the
+  A third representation — a different way of describing a graph compactly. Seven steps, six of them required, and the
   evolvers are untouched, because the strategy match is generic over the genome type.
 </p>
 
@@ -85,7 +85,7 @@ some_dimension = 256</code></pre>
   </p>
 </div>
 
-<h2>The Seven Edits</h2>
+<h2>The Seven Steps</h2>
 
 <p>
   Every location carries a literal marker in the source, so you can jump to any step by searching
@@ -93,7 +93,9 @@ some_dimension = 256</code></pre>
   marker is the anchor that has not.
 </p>
 
-<pre><code class="language-bash">git grep -n "ADD A GENOME STEP" get/src    # all seven, in one list</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A GENOME STEP" get/src    # the seven steps, in one list</code></pre>
+
+<p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
 
 <div class="table-wrap">
 <table>
@@ -284,7 +286,7 @@ GenomeConfig::MyGenome(mine) =&gt; {
   <a href="variation.html">variation scheme</a>, orientation and <code>NaN</code> rejection,
   logging, all four built-in objectives and any Python objective work with your representation the
   moment dispatch can build it — because none of them know what a genome <i>is</i>. That is what the
-  static-generic design buys, and it is the reason a new genome costs four edits rather than
+  static-generic design buys, and it is the reason a new genome costs six required steps rather than
   four files.
 </p>
 

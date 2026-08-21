@@ -106,7 +106,8 @@
         t.className = "nav-title";
         t.href = href(group.items[0][0]);
         t.textContent = group.title;
-        t.setAttribute("aria-expanded", holdsPage ? "true" : "false");
+        /* Deliberately NOT aria-expanded: this is a link to the section's first
+           page, not a control that expands anything on the current page. */
         g.appendChild(t);
       }
 
@@ -302,19 +303,25 @@
       btn.className = "copy-btn";
       btn.type = "button";
       btn.textContent = "copy";
+      /* The label is the status, so it has to be announced -- a silent failure
+         looks identical to a success to anyone not watching the button. */
+      btn.setAttribute("aria-live", "polite");
       btn.addEventListener("click", function () {
-        var done = function () {
-          btn.textContent = "copied";
+        var reset = function () {
           setTimeout(function () { btn.textContent = "copy"; }, 1200);
         };
+        var done = function () { btn.textContent = "copied"; reset(); };
+        var failed = function () { btn.textContent = "copy failed"; reset(); };
         if (navigator.clipboard) {
-          navigator.clipboard.writeText(raw).then(done, function () {});
+          navigator.clipboard.writeText(raw).then(done, failed);
         } else {
           var ta = document.createElement("textarea");
           ta.value = raw;
           document.body.appendChild(ta);
           ta.select();
-          try { document.execCommand("copy"); done(); } catch (e) {}
+          try {
+            if (document.execCommand("copy")) { done(); } else { failed(); }
+          } catch (e) { failed(); }
           document.body.removeChild(ta);
         }
       });
@@ -329,15 +336,31 @@
     btn.className = "nav-toggle";
     btn.type = "button";
     btn.setAttribute("aria-label", "Toggle navigation");
+    btn.setAttribute("aria-controls", "sidebar");
+    btn.setAttribute("aria-expanded", "false");
     btn.textContent = "☰";
+
+    /* One place that sets the class and the attribute together, so the two
+       cannot disagree about whether the menu is open. */
+    function setOpen(open) {
+      document.body.classList.toggle("nav-open", open);
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
     btn.addEventListener("click", function () {
-      document.body.classList.toggle("nav-open");
+      setOpen(!document.body.classList.contains("nav-open"));
     });
     document.body.appendChild(btn);
     document.addEventListener("click", function (e) {
       if (!document.body.classList.contains("nav-open")) return;
       if (e.target.closest && (e.target.closest(".sidebar") || e.target.closest(".nav-toggle"))) return;
-      document.body.classList.remove("nav-open");
+      setOpen(false);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      if (!document.body.classList.contains("nav-open")) return;
+      setOpen(false);
+      btn.focus();
     });
   }
 

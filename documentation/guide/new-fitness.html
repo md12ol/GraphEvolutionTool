@@ -244,10 +244,10 @@ impl Fitness for EdgeBudget {
 <h2>Checklist, Whichever Route</h2>
 
 <ul>
-  <li>Return values in <b>your own units and sign</b>. Nothing is normalized for you, and nothing
+  <li>Return values in <b>your own units and sign</b>. Nothing is normalised for you, and nothing
       should be pre-negated.</li>
   <li>Declare <code>direction</code> honestly. A negated value <i>and</i> a
-      <code>Maximize</code> declaration cancel into a run that optimizes backwards, and looks
+      <code>Maximize</code> declaration cancel into a run that optimises backwards, and looks
       exactly like one that simply is not converging.</li>
   <li>Never return <code>NaN</code>. Use <code>+inf</code> under minimize to mean "invalid, never
       select this".</li>

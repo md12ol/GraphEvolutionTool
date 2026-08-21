@@ -73,7 +73,7 @@ num_my_events = 500</code></pre>
   </p>
 </div>
 
-<h2>The Six Edits</h2>
+<h2>The Six Steps</h2>
 
 <p>
   Every location carries a literal marker in the source, so you can jump to any step by searching
@@ -81,7 +81,9 @@ num_my_events = 500</code></pre>
   marker is the anchor that has not.
 </p>
 
-<pre><code class="language-bash">git grep -n "ADD A STRATEGY STEP" get/src    # all six, in one list</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A STRATEGY STEP" get/src    # the six steps, in one list</code></pre>
+
+<p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
 
 <div class="table-wrap">
 <table>
@@ -306,7 +308,7 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 <p>
   Every representation, every objective, both front ends, orientation, <code>NaN</code> rejection,
   the variation scheme, and the statistics. Your strategy is a loop over machinery that already
-  exists — which is why three edits is a realistic estimate rather than an optimistic one.
+  exists — which is why five required steps is a realistic estimate rather than an optimistic one.
 </p>
 
 </main>

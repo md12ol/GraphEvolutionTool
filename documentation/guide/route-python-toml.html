@@ -26,15 +26,17 @@
 
 <pre><code class="language-bash">python3 -m venv .venv
 source .venv/bin/activate
-pip install graph-evolution-tool
+pip install .          # from a checkout of the repository
 python -c "import get; print(get.__name__)"</code></pre>
 
 <div class="note">
-  <b>The first release is not on PyPI yet.</b> Until it is, install from a checkout of the
-  repository — <code>pip install .</code> from its root does the same thing, and
-  <code>maturin develop</code> is the variant to use if you are changing GET itself. Nothing about
-  the code below depends on which way it was installed.
+  <b>After the first release this becomes <code>pip install graph-evolution-tool</code>.</b> The
+  distribution is not on PyPI yet, so today it installs from a checkout — <code>pip install .</code>
+  at the repository root, or <code>maturin develop</code> if you are changing GET itself. Nothing
+  below depends on which way it was installed.
 </div>
+
+
 
 <h2>The Config Document</h2>
 

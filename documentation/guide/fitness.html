@@ -29,7 +29,7 @@
 
 <p>
   <code>evaluate</code> returns a score <b>in the objective's own units and sign</b> — nothing is
-  normalized or flipped for you. <code>direction</code> declares whether bigger or smaller is
+  normalised or flipped for you. <code>direction</code> declares whether bigger or smaller is
   better, and is a property of what the function computes, never of the run — so it is never
   configurable. <code>evaluate_batch</code> scores a whole population at once, which is what lets a
   <a href="new-fitness.html">Python objective</a> pay one crossing per batch rather than one per
@@ -325,7 +325,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
   Two requirements pull in opposite directions. <b>Within one evaluation</b> every population
   member must face the <i>same</i> draws — <b>common random numbers</b>, which is what makes
   fitness differences reflect the graph rather than the dice. <b>Across evaluations</b> the same
-  network must <i>not</i> keep getting the same epidemic, or the run optimizes against one frozen
+  network must <i>not</i> keep getting the same epidemic, or the run optimises against one frozen
   sample of the disease.
 </p>
 
@@ -360,6 +360,44 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
 </p>
 
 <h2 id="output">Logs &amp; Results</h2>
+
+<figure>
+<svg viewBox="0 0 700 320" role="img" aria-label="Convergence of a 60-generation edge-edit run scored on epidemic spread: best fitness rises from 10 to 35 infected nodes and the population mean follows it.">
+  <g style="color:var(--border-firm)">
+  <line x1="62" y1="274.0" x2="682" y2="274.0" class="d-stroke" stroke-width="0.6" opacity="0.35"/>
+  <text x="54" y="278.0" class="d-text-sm" text-anchor="end">3</text>
+  <line x1="62" y1="212.0" x2="682" y2="212.0" class="d-stroke" stroke-width="0.6" opacity="0.35"/>
+  <text x="54" y="216.0" class="d-text-sm" text-anchor="end">11</text>
+  <line x1="62" y1="150.0" x2="682" y2="150.0" class="d-stroke" stroke-width="0.6" opacity="0.35"/>
+  <text x="54" y="154.0" class="d-text-sm" text-anchor="end">20</text>
+  <line x1="62" y1="88.0" x2="682" y2="88.0" class="d-stroke" stroke-width="0.6" opacity="0.35"/>
+  <text x="54" y="92.0" class="d-text-sm" text-anchor="end">29</text>
+  <line x1="62" y1="26.0" x2="682" y2="26.0" class="d-stroke" stroke-width="0.6" opacity="0.35"/>
+  <text x="54" y="30.0" class="d-text-sm" text-anchor="end">38</text>
+    <line x1="62" y1="26" x2="62" y2="274" class="d-stroke" stroke-width="1.2"/>
+    <line x1="62" y1="274" x2="682" y2="274" class="d-stroke" stroke-width="1.2"/>
+  <text x="62.0" y="294" class="d-text-sm" text-anchor="middle">0</text>
+  <text x="372.0" y="294" class="d-text-sm" text-anchor="middle">30</text>
+  <text x="682.0" y="294" class="d-text-sm" text-anchor="middle">60</text>
+    <text x="381" y="314" class="d-text-sm" text-anchor="middle">generation</text>
+    <text x="16" y="150" class="d-text-sm" text-anchor="middle" transform="rotate(-90 16 150)">nodes infected</text>
+
+    <path d="M62.0 256.9 L72.3 241.4 L82.7 231.6 L93.0 212.2 L103.3 203.3 L113.7 203.7 L124.0 183.3 L134.3 183.3 L144.7 170.6 L155.0 158.7 L165.3 153.1 L175.7 142.4 L186.0 135.7 L196.3 134.0 L206.7 128.7 L217.0 119.3 L227.3 113.6 L237.7 121.2 L248.0 113.8 L258.3 107.9 L268.7 112.1 L279.0 99.0 L289.3 107.1 L299.7 93.0 L310.0 95.4 L320.3 93.4 L330.7 91.0 L341.0 95.6 L351.3 103.8 L361.7 85.6 L372.0 93.7 L382.3 87.9 L392.7 97.0 L403.0 83.9 L413.3 81.9 L423.7 86.2 L434.0 90.8 L444.3 92.7 L454.7 77.7 L465.0 88.3 L475.3 87.5 L485.7 81.8 L496.0 73.5 L506.3 80.1 L516.7 66.9 L527.0 70.1 L537.3 71.4 L547.7 72.0 L558.0 66.5 L568.3 74.1 L578.7 84.1 L589.0 58.9 L599.3 62.9 L609.7 62.3 L620.0 62.6 L630.3 49.3 L640.7 50.2 L651.0 68.1 L661.3 57.6 L671.7 61.2 L682.0 55.9" fill="none" class="d-stroke" stroke-width="1.6" opacity="0.75"/>
+    <path d="M62.0 219.5 L72.3 189.0 L82.7 192.1 L93.0 179.5 L103.3 166.3 L113.7 166.3 L124.0 126.5 L134.3 136.4 L144.7 142.8 L155.0 123.4 L165.3 130.3 L175.7 114.9 L186.0 117.2 L196.3 117.7 L206.7 112.0 L217.0 108.9 L227.3 106.3 L237.7 101.8 L248.0 96.9 L258.3 92.6 L268.7 95.0 L279.0 86.9 L289.3 96.4 L299.7 82.9 L310.0 86.7 L320.3 84.1 L330.7 81.7 L341.0 85.5 L351.3 87.2 L361.7 77.9 L372.0 81.9 L382.3 81.9 L392.7 93.3 L403.0 78.6 L413.3 73.9 L423.7 78.4 L434.0 79.8 L444.3 83.8 L454.7 69.9 L465.0 77.0 L475.3 66.8 L485.7 70.8 L496.0 60.6 L506.3 68.9 L516.7 60.6 L527.0 61.3 L537.3 60.2 L547.7 61.8 L558.0 51.4 L568.3 59.4 L578.7 68.4 L589.0 48.6 L599.3 55.9 L609.7 50.9 L620.0 45.0 L630.3 45.7 L640.7 46.7 L651.0 59.2 L661.3 43.1 L671.7 51.2 L682.0 45.2" fill="none" class="d-stroke-acc" stroke-width="2" style="color:var(--accent)"/>
+
+    <rect x="532" y="26" width="140" height="44" rx="6" class="d-fill-bg"/>
+    <rect x="532" y="26" width="140" height="44" rx="6" class="d-stroke"/>
+    <line x1="542" y1="41" x2="564" y2="41" class="d-stroke-acc" stroke-width="2" style="color:var(--accent)"/>
+    <text x="570" y="45" class="d-text-sm">best_fitness</text>
+    <line x1="542" y1="59" x2="564" y2="59" class="d-stroke" stroke-width="1.6" opacity="0.75"/>
+    <text x="570" y="63" class="d-text-sm">mean_fitness</text>
+  </g>
+</svg>
+<figcaption>An actual run, not a sketch: 40 nodes, population 60, edge-edit genome,
+<code>epi_spread</code>, seed <code>20260821</code>. Best fitness climbs from 10.4 to 35.0 of 40
+nodes; the mean tracks it a little below, which is what a healthy run looks like. Regenerate with
+<code>tools/make_doc_figures.py</code>.</figcaption>
+</figure>
 
 <p>
   One row per logged iteration — every generation for
