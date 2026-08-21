@@ -73,16 +73,16 @@ drifted by as much as 250 lines, because nothing anchored them. The crate's own 
 the reference now.
 
 **There is no `status.html` either**, removed 2026-08-21 with the same sweep. It indexed the
-`planned` badges in one table; the badges and their `.plan-note` callouts now carry that
-information where the feature is actually described, and the roadmap lives in the tracker.
+`planned` badges in one table, and every feature it named had shipped by the time it came out. The
+badges went with it — see "There is no convention for unbuilt work" below.
 
 ---
 
 ## How the site works
 
 Every page is a complete HTML document containing only `<main>`. Everything around it — the
-sidebar, the on-page table of contents, the previous/next pager, the copy buttons on code blocks,
-the light/dark toggle — is built at load time by `assets/site.js`.
+sidebar, the on-page table of contents, the previous/next pager, the copy buttons on code blocks — is
+built at load time by `assets/site.js`.
 
 Three consequences worth internalising before you edit anything:
 
@@ -114,33 +114,25 @@ Three consequences worth internalising before you edit anything:
 | | |
 |---|---|
 | **Voice** | Second person, plain language. Both owners read every page and one of them does not write Rust. Prefer a worked example to a paragraph. |
-| **Callouts** | `.note` (blue, a fact worth pulling out) · `.tip` (green, advice) · `.warn` (amber, this will bite you) · `.plan-note` (violet, what exists today under a planned feature) |
-| **Badges** | `.badge-built` · `.badge-partial` · `.badge-planned`, used inline in headings and table rows |
-| **API items** | `.api-item` > `.api-sig` (the signature) + `.api-body` (prose, with a `.src` span carrying `path:line`) |
+| **Callouts** | `.note` (blue, a fact worth pulling out) · `.tip` (green, advice) · `.warn` (amber, this will bite you) · `.callout` (neutral, worth stopping on without claiming it is a warning) |
 | **Tables** | Always inside `<div class="table-wrap">` so wide tables scroll rather than breaking the page |
 | **Code** | `<pre><code class="language-rust">` — also `python`, `toml`, `text`, `bash`. `site.js` tints them. Add `data-no-tint` to a block the tinter mangles (ASCII diagrams, mostly) |
-| **Diagrams** | Inline SVG only, using the `d-fill-*` / `d-stroke*` / `d-text*` classes so they follow the theme. No diagram libraries |
+| **Diagrams** | Inline SVG only, using the `d-fill-*` / `d-stroke*` / `d-text*` classes so they take their colours from the palette. No diagram libraries |
 | **Escaping** | `<` and `>` inside signatures must be `&lt;` `&gt;`, or the generics disappear |
 
-### The `planned` convention — currently unused
+### There is no convention for unbuilt work, and that is deliberate
 
-The site documents GET **as `official_spec_sheet.md` designs it**, which is the repository's own
-rule: where the sheet and the code disagree, the sheet is the intent. A feature that is designed and
-agreed but not yet in `get/src/` is written **in the present tense, as though it works**, and
-carries two markers that always travel together:
+**Every page describes what the code does today.** A feature that is designed but not yet in
+`get/src/` does not appear on the site at all — not in the present tense, not behind a badge, not in
+a callout. The roadmap lives in the issue tracker, which is where someone can act on it.
 
-- a `<span class="badge badge-planned">planned</span>` badge where it appears, and
-- a `.plan-note` callout saying plainly what exists today and what to do instead.
+This replaced a `badge-planned` / `.plan-note` / `status.html` scheme that wrote unbuilt features up
+as though they worked and indexed them in one table. Every feature it marked has since shipped, so
+the set it described was empty before it was removed; the classes and the index page went with it
+2026-08-21. If the design gets ahead of the code again, file an issue — do not write the page early.
 
-**No page carries either marker as of 2026-08-21.** Every feature that did — replicate runs and
-`max_cores`, `ci_95`, the per-row `seed` and `run_index`, `save_logs`/`save_results`, and supplying
-a base graph — has since shipped, and the badges were removed with the How It Works condensation.
-The classes stay defined because the convention is still the right one the next time the sheet gets
-ahead of the code.
-
-The **opposite** case also occurs: places where the sheet's status claims are stale and the code is
-*ahead* of it. Those are documented from the code, with no badge. They want a `collab.md` item from
-an owner — an agent does not edit the sheet.
+If you find a page describing something the code does not do, that is a bug in the page. Fix it, or
+file it in the per-owner queue — `mdube_edits.md` or `jsargant_edits.md`, whichever is yours.
 
 ---
 
@@ -167,14 +159,10 @@ across all 16 pages.
 
 Honest gaps rather than bugs, for whoever extends this:
 
-- **No screenshots or rendered output.** Everything is described in prose and SVG. A page showing
-  an actual convergence plot and an actual evolved network would help more than another paragraph
-  anywhere.
-- **Anchors were verified, prose was not cross-read.** Each page is internally accurate against the
-  code or the spec sheet, but nobody has read them all in one pass looking for places where two
-  pages say the same thing slightly differently. The nine-into-three merge removed the worst of
-  that within How It Works; the boundary between a guide page and the route pages is less
-  settled.
+- **Anchors are verified mechanically; prose is not.** Each page was checked against the code
+  page by page, but nobody has read all 16 in one pass looking for places where two of them say
+  the same thing slightly differently. The nine-into-three merge removed the worst of that within
+  How It Works; the boundary between a guide page and the route pages is less settled.
 - **The four route pages overlap on purpose.** Each is meant to be read alone, so the config
   document and the seeding rule appear on more than one. Keep them in step.
 - **The Python config classes' mutability is stated conservatively.** Four of them are pyo3 complex
@@ -186,25 +174,18 @@ Honest gaps rather than bugs, for whoever extends this:
 
 ---
 
-## How this was produced, and how to continue it
+## How to work on it
 
-The source material is:
+Three rules, and they are the ones that keep independently-written pages looking like one site:
 
-1. **`official_spec_sheet.md`** at the repository root — the authority on the design, and the
-   source for every guide page. Where it and the code disagree, it wins.
-2. **Four subagent surveys of `get/src/`**, one per subsystem, each reading its files in full and
-   producing a structured note: public surface with `path:line`, data flow, worked examples,
-   invariants, a spec-vs-code table, and extension points.
-
-The surveys lived in the session scratchpad and are **not** checked in — they were working
-material, and their content is now in the guide pages. If you are continuing this work, the
-efficient shape is the same one that produced it:
-
-- Guide pages come from the spec sheet, which one agent can hold in context.
-- Route pages come from the runnable examples — `examples/*.py` and `get/examples/*.rs` — because a
-  page whose code is lifted from a program that CI runs cannot drift far from working.
-- Give agents the template, the CSS class list and the `data-page` rule; those are what keep
-  independently-written pages looking like one site.
+- **Pages come from the code, not from a design document.** Read the module you are documenting and
+  say what it does. If a page and the source disagree, the source is right and the page is a bug.
+- **Route pages come from the runnable examples** — `examples/*.py` and `get/examples/*.rs` —
+  because a page whose code is lifted from a program CI runs cannot drift far from working. Lift the
+  snippet; do not retype it.
+- **Give any new page the template, the CSS class list and the `data-page` rule** before it is
+  written. Those three are what the checker below enforces, and they are cheap to get right and
+  tedious to retrofit.
 
 ### Verification
 
@@ -250,32 +231,4 @@ print("checked", len(pages), "pages against", len(nav), "nav entries")
 EOF
 ```
 
-Silence means clean. Then open it and click through: both themes, a narrow window, and every
-sidebar link.
-
----
-
-## For the owners: three things the sheet should hear about
-
-Found while surveying the code, and **not acted on** — `official_spec_sheet.md` is changed only at
-a joint meeting, and an agent that finds the sheet wrong writes a `collab.md` item rather than
-fixing the sheet. Raising these is an owner's call:
-
-1. **Status table row 23 is stale.** It says the Python interface is built "except dispatch" and
-   that `GraphEvolver::run`'s body is still `todo!()`. `run` is fully implemented and all four
-   strategy × genome dispatch arms are tested end to end. The sheet's own note says a stale status
-   row "is the whole signal", so this one matters more than most.
-2. **§9's closing paragraph is stale.** It lists the one-mutation contract with `max_mutations` and
-   the cap-derived SDA alphabet as "decided here but not yet true of the code". Both are now true,
-   and the paragraph contradicts the sheet's own status table.
-3. **Three probabilities are unvalidated, and §7 does not ask for them to be.**
-   `crossover_rate`, `mutation_rate` and `infection_rate` accept negative values and values above
-   1. This is a gap in the design as much as in the code, which is why it is a sheet question
-   rather than an issue.
-
-Two smaller ones, for whoever is next in the relevant file: §3.1's description of `Swap` says "none
-of the three would-be edges already exists", but the code checks three pairs while creating only
-two edges — the third check is an extra rejection whose purpose is not documented anywhere and
-which has no test coverage. And the SDA derived-alphabet invariant holds by convention rather than
-by type: the constructor still accepts an arbitrary `num_chars`, so a hand-assembled population via
-the Rust route can silently reintroduce the clamping bias §3.2 exists to prevent.
+Silence means clean. Then open it and click through: a narrow window, and every sidebar link.
