@@ -46,11 +46,14 @@
         <td>Four steps, <b>per genome</b> — the chain exists twice.</td>
         <td>What counts as "one mutation" differs by representation, so there is no shared enum.
             Adding one for edge-edit does not touch SDA.</td></tr>
-    <tr><td><b>Scope</b> · <b>Replacement</b></td>
-        <td>Six and three steps respectively.</td>
-        <td>The other two axes beside selection — who is eligible, and who gets overwritten.
-            No guide page yet; follow <code>git grep -n "ADD A SCOPE STEP"</code> or
-            <code>"ADD A REPLACEMENT STEP"</code>, which carry the full procedure inline.</td></tr>
+    <tr><td><b><a href="new-scope.html">Scope</a></b></td>
+        <td>Six steps, four required.</td>
+        <td>Who is eligible for one breeding event. Its parameters are its own — that separation is
+            why any scheme now pairs with any strategy.</td></tr>
+    <tr><td><b><a href="new-replacement.html">Replacement Policy</a></b></td>
+        <td>Three steps — the shortest chain here.</td>
+        <td>Who gets overwritten, and steady-state's alone: generational rebuilds its population and
+            never asks. Consumes no randomness, so a policy cannot shift a seeded run's stream.</td></tr>
   </tbody>
 </table>
 </div>

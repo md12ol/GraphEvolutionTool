@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add a Scope · GET Docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/new-scope.html">
+<main>
+
+<p class="page-kicker">Extending GET</p>
+<h1>Add a Scope</h1>
+<p class="lede">
+  Choosing which slice of the population a single breeding event may touch. Six edits across five
+  files, and no strategy, genome or selection scheme is touched — scope is one of three independent
+  axes, and it answers only this question.
+</p>
+
+<h2>The One Question a Scope Answers</h2>
+
+<p>
+  A scope produces a list of population indices. Everything downstream works inside that list:
+  <code>[selection]</code> picks parents from it, <code>[replacement]</code> picks who the children
+  overwrite in it. The scope itself has no opinion about fitness — <code>Global</code> does not even
+  read it.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Axis</th><th>Question</th><th>Config</th></tr></thead>
+  <tbody>
+    <tr><td><b>Scope</b></td><td>who is eligible for this event</td><td><code>[scope]</code></td></tr>
+    <tr><td>Selection</td><td>who among them becomes a parent</td><td><code>[selection]</code></td></tr>
+    <tr><td>Replacement</td><td>who among them is overwritten</td><td><code>[evolution] replacement</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout">
+  <p>
+    <b>A variant's parameters are its own.</b> <code>size</code> belongs to <code>[scope]</code> and
+    nothing else reads it. That is the whole reason this axis exists as its own enum: steady-state
+    used to take its scope size from <code>[selection]</code>'s <code>tournament_size</code>, which
+    left a scheme with no tournament unable to say how large a scope it wanted.
+  </p>
+</div>
+
+<h2>What the User Ends Up Writing</h2>
+
+<p>Adding a scope called <code>Neighbourhood</code> is what makes this valid:</p>
+
+<pre><code class="language-toml">[scope]
+type   = "neighbourhood"
+radius = 3</code></pre>
+
+<p>
+  You never write the string <code>"neighbourhood"</code> anywhere in the code — it is derived from
+  the variant name, converted to snake_case, and the keys under it are your struct's field names.
+  Every config carries a <code>[scope]</code> block, generational included
+  (<code>type = "global"</code>).
+</p>
+
+<div class="note">
+  <b>Scope is an enum, not a trait, so it cannot be extended from outside the crate.</b> A program
+  that merely depends on GET gets the scopes GET ships. Adding one means editing your own copy, which
+  is what the steps below assume.
+</div>
+
+<h2>The Six Steps</h2>
+
+<p>Every step is marked at its own site. One command lists the chain:</p>
+
+<pre><code class="language-bash">git grep -n "ADD A SCOPE STEP" get/src config.example.toml</code></pre>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>get/src/evolver/scope.rs:49</code></td>
+        <td>the variant, and whatever it needs to locate a slice</td></tr>
+    <tr><td>2</td><td><code>get/src/evolver/scope.rs:103</code></td>
+        <td>the arm filling the buffer with your indices</td></tr>
+    <tr><td>3</td><td><code>get/src/config.rs:138</code></td>
+        <td>the variant a user names under <code>[scope]</code>, plus any constraint on it</td></tr>
+    <tr><td>4</td><td><code>get/src/dispatch.rs:937</code></td>
+        <td>the arm mapping that config variant onto the engine one</td></tr>
+    <tr><td>5</td><td><code>get/src/py_config.rs:264</code> and <code>:876</code></td>
+        <td>the Python mirror — optional</td></tr>
+    <tr><td>6</td><td><code>config.example.toml:156</code></td>
+        <td>a commented-out block naming your variant — optional, and the step people skip</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Steps 1 and 2 — The Engine Side</h2>
+
+<p>
+  Step 1 is the variant. Step 2 is the arm in the draw, and the match is exhaustive, so the compiler
+  finds it for you — these two are the pair you cannot forget.
+</p>
+
+<div class="warn">
+  <b>Three contracts the signature does not enforce.</b>
+  <ul>
+    <li><b>Every index must be in range</b> for the population. Nothing downstream re-checks, and an
+        out-of-range index is an assertion in a debug build and a silent misread otherwise.</li>
+    <li><b>Distinctness is load-bearing where a replacement policy names positions.</b>
+        <code>RandomSubset</code> draws without replacement precisely so that "the worst two members"
+        means something; over a multiset it does not. A scope that repeats an index has to be paired
+        with a policy that tolerates it.</li>
+    <li><b>Take every random value from the RNG you are handed.</b> A scope that reaches for a thread
+        RNG produces a run that cannot be reproduced from its seed.</li>
+  </ul>
+</div>
+
+<p>
+  <code>Global</code> consumes <b>no</b> randomness at all, which is worth knowing when comparing two
+  runs: switching a config from <code>global</code> to any drawing scope changes the whole downstream
+  stream, not just the scope.
+</p>
+
+<h2>Steps 3 and 4 — The Config Side</h2>
+
+<p>
+  These are one change split across two files: a config variant nothing maps is dead code, and a
+  dispatch arm for a variant that does not exist will not compile. Any constraint on your own
+  parameters goes in the config layer beside the variant.
+</p>
+
+<h2>Steps 5 and 6 — Python, and Optional</h2>
+
+<p>
+  Skipping step 5 makes the scope TOML-only: it still runs from a config file and from the Rust
+  library, and a Python caller simply cannot name it. Skipping step 6 costs nothing mechanically and
+  means most people never find it, because the shipped example is what a user copies from.
+</p>
+
+<h2>The Other Two Axes</h2>
+
+<p>
+  If what you want is <i>who becomes a parent</i> or <i>who gets overwritten</i>, those are their own
+  chains:
+</p>
+
+<pre><code class="language-bash">git grep -n "ADD A SELECTION STEP" get/src      # six steps
+git grep -n "ADD A REPLACEMENT STEP" get/src    # three steps</code></pre>
+
+<p>
+  See <a href="new-selection.html">Add a Selection Scheme</a> and
+  <a href="new-replacement.html">Add a Replacement Policy</a>.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

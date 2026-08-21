@@ -47,6 +47,8 @@
         ["guide/new-genome.html",             "Add a Genome"],
         ["guide/new-evolver.html",            "Add a Strategy"],
         ["guide/new-selection.html",          "Add a Selection Scheme"],
+        ["guide/new-scope.html",               "Add a Scope"],
+        ["guide/new-replacement.html",         "Add a Replacement Policy"],
         ["guide/new-crossover.html",          "Add a Crossover Operator"],
         ["guide/new-mutation.html",           "Add a Mutation Operator"]
       ]

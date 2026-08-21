@@ -138,7 +138,7 @@ file it in the per-owner queue — `mdube_edits.md` or `jsargant_edits.md`, whic
 
 ## Current state
 
-**All 16 pages in `NAV` exist and the site is complete as scoped.** The site was written
+**All 18 pages in `NAV` exist and the site is complete as scoped.** The site was written
 2026-08-12 at 38 pages; `reference/` came out on 2026-08-21 and How It Works was condensed from
 nine pages to three the same day.
 
@@ -148,12 +148,12 @@ nine pages to three the same day.
 | Landing | `index.html` |
 | Guide — how it works | `pipeline` (the loop, the graph, both genomes) · `variation` (the three rolls, selection, both strategies) · `fitness` (orientation, SIR, seeding, logs and results) |
 | Guide — using | `route-python-objects`, `route-python-toml`, `route-rust-library`, `route-rust-cli` — one per route |
-| Guide — extending | `extending`, `new-fitness`, `new-genome`, `new-evolver`, `new-selection`, `new-crossover`, `new-mutation` |
+| Guide — extending | `extending`, `new-fitness`, `new-genome`, `new-evolver`, `new-selection`, `new-scope`, `new-replacement`, `new-crossover`, `new-mutation` — one per extension chain, and every chain has one |
 | Project | `design-notes.html` |
 
 Verified 2026-08-21 with the script below: every `data-page` matches both its path and a `NAV`
 entry, every `NAV` entry has a file, and **zero broken internal links and zero broken anchors**
-across all 16 pages.
+across all 18 pages.
 
 ### Known thin spots
 
@@ -169,7 +169,7 @@ Honest gaps rather than bugs, for whoever extends this:
   enums whose variant fields carry no explicit accessor annotation; the pages say to treat those as
   read-only and rebuild the variant, rather than guessing. Worth verifying against pyo3 0.27 and
   then stating plainly.
-- **No search.** At 16 pages the sidebar is enough. If it grows past about 60, a build-free
+- **No search.** At 18 pages the sidebar is enough. If it grows past about 60, a build-free
   client-side index is the natural next step.
 
 ---
