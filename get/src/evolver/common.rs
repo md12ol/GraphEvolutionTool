@@ -865,9 +865,18 @@ mod tests {
         express_and_score(&population(3), &(), &Poisoned);
     }
 
+    /// `Selection::Best` in one place: what it picks, in what order, that a
+    /// tie goes to the lower index, and that it touches no randomness.
+    ///
+    /// Measured against the mutation corpus, none of these assertions catches
+    /// anything `steady_state`'s tests do not already catch — reversing the
+    /// sort, adding an RNG draw and dropping `rank`'s tie-break all fail there
+    /// too. They are kept because a failure here names `Selection::Best`
+    /// rather than a whole steady-state run, and merged into one test because
+    /// four separate ones bought four names for a single unit of localization.
     #[test]
-    fn best_selection_takes_the_fittest_of_the_scope_in_order() {
-        // Scope deliberately unordered and missing index 1, which is globally
+    fn best_selection_picks_the_fittest_of_its_scope_without_drawing() {
+        // Scope deliberately unordered and missing index 1, the globally
         // fittest: `Best` ranks what it was handed, not the population.
         let fitnesses = [5.0, 0.5, 9.0, 3.0, 7.0];
         let scope = [4, 2, 0, 3];
@@ -883,30 +892,20 @@ mod tests {
             Selection::Best.pick(&scope, &fitnesses, 4, &mut rng),
             vec![3, 0, 4, 2]
         );
-    }
 
-    #[test]
-    fn best_selection_consumes_no_randomness() {
-        // Steady-state draws its scope and then selects; if `Best` touched the
-        // stream, adding a scheme that does not would shift every seeded run.
-        let fitnesses = [5.0, 1.0, 9.0];
-        let mut rng = StdRng::seed_from_u64(42);
-        let mut untouched = StdRng::seed_from_u64(42);
-
-        Selection::Best.pick(&[0, 1, 2], &fitnesses, 2, &mut rng);
-
-        assert_eq!(rng.random::<u64>(), untouched.random::<u64>());
-    }
-
-    #[test]
-    fn best_selection_breaks_a_tie_toward_the_lower_index() {
-        let fitnesses = [2.0, 2.0, 9.0];
-        let mut rng = StdRng::seed_from_u64(1);
-
+        // A tie goes to the lower index, as everywhere else in the engine.
+        let tied = [2.0, 2.0, 9.0];
         assert_eq!(
-            Selection::Best.pick(&[2, 1, 0], &fitnesses, 1, &mut rng),
+            Selection::Best.pick(&[2, 1, 0], &tied, 1, &mut rng),
             vec![0]
         );
+
+        // Steady-state draws its scope and then selects; if `Best` touched the
+        // stream, adding a scheme that does not would shift every seeded run.
+        let mut untouched = StdRng::seed_from_u64(42);
+        let mut used = StdRng::seed_from_u64(42);
+        Selection::Best.pick(&[0, 1, 2], &tied, 2, &mut used);
+        assert_eq!(used.random::<u64>(), untouched.random::<u64>());
     }
 
     #[test]

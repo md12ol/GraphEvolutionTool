@@ -198,15 +198,13 @@ mod tests {
 
         graph.remove_edge(0, 1);
         assert_eq!(graph.weight(0, 1), 0);
-    }
 
-    #[test]
-    fn explicit_multiplicity_cap_is_enforced() {
-        let mut graph = Graph::new(2, 3);
-        graph.set_edge(0, 1, 5);
-
-        assert_eq!(graph.max_edge_multiplicity, 3);
-        assert_eq!(graph.weight(0, 1), 3);
+        // A third cap, neither the multigraph test's 5 nor this test's 1, so
+        // the clamp is pinned away from both boundaries.
+        let mut capped_at_three = Graph::new(2, 3);
+        capped_at_three.set_edge(0, 1, 5);
+        assert_eq!(capped_at_three.max_edge_multiplicity, 3);
+        assert_eq!(capped_at_three.weight(0, 1), 3);
     }
 
     #[test]
