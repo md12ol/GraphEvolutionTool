@@ -21,22 +21,16 @@
 
 <p>
   GET is a compiled module, so it installs rather than being copied in. The distribution is called
-  <code>graph-evolution-tool</code> and it imports as <code>get</code> — PyPI will not accept
-  <code>get</code> as a project name, but the module inside it is named by the crate and is
-  unaffected.
+  <code>graph-evolution-tool</code> and it imports as <code>get</code>: the short name was already
+  taken on PyPI and on crates.io and cannot be reclaimed, so the published name differs from the
+  import — the same arrangement as <code>pip install scikit-learn</code> giving you
+  <code>import sklearn</code>.
 </p>
 
 <pre><code class="language-bash">python3 -m venv .venv
 source .venv/bin/activate
-pip install .          # from a checkout of the repository
+pip install graph-evolution-tool
 python -c "import get; print(get.__name__)"</code></pre>
-
-<div class="note">
-  <b>After the first release this becomes <code>pip install graph-evolution-tool</code>.</b> The
-  distribution is not on PyPI yet, so today it installs from a checkout — <code>pip install .</code>
-  at the repository root, or <code>maturin develop</code> if you are changing GET itself. Nothing
-  below depends on which way it was installed.
-</div>
 
 
 
@@ -179,9 +173,10 @@ evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre
 <h2>A Complete Example</h2>
 
 <p>
-  <code>examples/python_inline.py</code> in the repository is this route end to end: several
-  replicates, an output directory per run, and all three files written per replicate. Run it with
-  <code>python examples/python_inline.py</code>.
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/python_inline.py"><code>python_inline.py</code></a> is this route end to end:
+  several replicates, an output directory per run, and all three files written per replicate. It
+  is not shipped in the wheel — the package carries the module and nothing else — so download it
+  and run <code>python python_inline.py</code>.
 </p>
 
 <h2>When to Use the Other Python Route</h2>

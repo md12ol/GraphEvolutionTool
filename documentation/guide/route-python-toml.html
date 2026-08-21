@@ -26,15 +26,8 @@
 
 <pre><code class="language-bash">python3 -m venv .venv
 source .venv/bin/activate
-pip install .          # from a checkout of the repository
+pip install graph-evolution-tool
 python -c "import get; print(get.__name__)"</code></pre>
-
-<div class="note">
-  <b>After the first release this becomes <code>pip install graph-evolution-tool</code>.</b> The
-  distribution is not on PyPI yet, so today it installs from a checkout — <code>pip install .</code>
-  at the repository root, or <code>maturin develop</code> if you are changing GET itself. Nothing
-  below depends on which way it was installed.
-</div>
 
 
 
@@ -184,18 +177,20 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
   If you would rather generate configurations than hand-write them, the same typed objects the other
   Python route uses will serialize to this format — useful for sweeping a parameter across many
   files. See <a href="route-python-objects.html">Python: Config Objects</a>, and
-  <code>examples/config_builder.py</code> in the repository, which builds configurations without
-  running anything.
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/config_builder.py"><code>config_builder.py</code></a>, which builds configurations
+  without running anything.
 </p>
 
 <h2>A Complete Example</h2>
 
 <p>
-  <code>examples/python_from_config.py</code> is this route end to end, taking the config path and
-  seed as arguments:
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/python_from_config.py"><code>python_from_config.py</code></a> is this route
+  end to end, taking the config path and seed as arguments. It is not shipped in the wheel, so
+  download it alongside
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/config.example.toml"><code>config.example.toml</code></a> and run:
 </p>
 
-<pre><code class="language-bash">python examples/python_from_config.py config.example.toml 7</code></pre>
+<pre><code class="language-bash">python python_from_config.py config.example.toml 7</code></pre>
 
 </main>
 <script src="../assets/site.js"></script>

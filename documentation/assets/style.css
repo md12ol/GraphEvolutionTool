@@ -442,6 +442,14 @@ figure {
   overflow-x: auto;
 }
 figure svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+
+/* On a phone the diagrams would otherwise shrink to fit, taking their 11px
+   labels down with them. `figure` already scrolls; this gives the SVG a floor
+   so the scroll actually engages instead. Gated below the desktop breakpoint,
+   so wide screens are unaffected. */
+@media (max-width: 700px) {
+  figure svg { min-width: 600px; }
+}
 figcaption {
   margin-top: .8rem;
   font-size: .82rem;

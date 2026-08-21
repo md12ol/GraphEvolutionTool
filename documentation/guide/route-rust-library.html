@@ -20,25 +20,30 @@
 
 <h2>Add the Dependency</h2>
 
+<pre><code class="language-bash">cargo add graph-evolution-tool</code></pre>
+
+<p>or, equivalently, by hand:</p>
+
 <pre><code class="language-toml"># Cargo.toml
 [dependencies]
-# Pin a commit — which this route has a particular reason to want.
-get = { git = "https://github.com/md12ol/GraphEvolutionTool", rev = "&lt;commit&gt;" }
-
-# Or a local checkout, if you are changing GET alongside your own code.
-get = { path = "../GraphEvolutionTool/get" }</code></pre>
+graph-evolution-tool = "0.9"</code></pre>
 
 <div class="note">
-  <b>After the first release, <code>get = "0.9"</code> works too.</b> The crate is not on crates.io
-  yet, so today it comes from the repository by commit or by path. For this route that is barely a
-  constraint — see below.
+  <b>The package is <code>graph-evolution-tool</code>; the crate you <code>use</code> is
+  <code>get</code>.</b> <code>get</code> was taken on crates.io in 2024 and on PyPI, and a taken
+  name cannot be reclaimed — so the published name differs from the import on both registries, the
+  same arrangement as <code>pip install scikit-learn</code> giving you <code>import sklearn</code>.
+  Every path below is <code>use get::…</code> and that does not change.
 </div>
 
 <div class="callout">
   <p>
-    <b>Pinning a commit is a feature of this route, not a workaround.</b> A frozen dependency is the
-    exact code behind a paper's numbers. Depending on a moving version makes results depend on
-    whichever one happened to be installed.
+    <b>Pin the version exactly if the numbers will be published.</b>
+    <code>graph-evolution-tool = "0.9"</code> is a caret requirement, so cargo is free to take any
+    later 0.9.x. Write <code>graph-evolution-tool = "=0.9.0"</code> and commit your
+    <code>Cargo.lock</code> when the dependency needs to
+    be the exact code behind a paper's results — this route exists for people who care about that,
+    and a moving version makes results depend on whichever one happened to be resolved.
   </p>
 </div>
 
@@ -225,6 +230,11 @@ for run_index in 0..n_runs {
   </tbody>
 </table>
 </div>
+
+<p>
+  These live in the crate's own repository rather than in the published package, so read them at
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/get/examples">get/examples</a>; from a clone of GET they run with:
+</p>
 
 <pre><code class="language-bash">cargo run -p get --features cli --example library_route</code></pre>
 
