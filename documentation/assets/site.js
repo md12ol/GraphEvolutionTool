@@ -12,8 +12,9 @@
 
   /* ---------- the site map -------------------------------------------- */
 
-  /* A group with no title renders as a bare link at the top of the sidebar --
-     Overview is one page, not a section, and a folder around it was noise. */
+  /* A group with no title renders as bare links with no collapsing header --
+     Overview and Design Notes are each one page, not a section, and a folder
+     around a single page was noise. */
   var NAV = [
     {
       title: null,
@@ -57,9 +58,8 @@
       ]
     },
     {
-      title: "Project",
+      title: null,
       items: [
-        ["status.html",                       "Implementation Status"],
         ["design-notes.html",                 "Design Notes"]
       ]
     }
