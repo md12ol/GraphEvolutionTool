@@ -900,9 +900,9 @@ pub struct RunSummary {
     /// The seed the run was made with. Private: `save_logs` stamps it onto
     /// every row, which is the only way it is meant to be read.
     seed: u64,
-    /// Which replicate this is, `0`-based. Private, and a hard `0` until GitHub
-    /// #20 — a reader would take a constant for something that varies. The
-    /// field stays so #20 does not change the CSV's column set under anyone.
+    /// Which replicate this is, `0`-based. Private for the same reason as
+    /// `seed`: the pair identifies a replicate, and `save_logs` stamping it
+    /// onto every row is the only way it is meant to be read.
     run_index: usize,
     /// The TOML document this run's config was parsed from. Private:
     /// `save_results` writes it to `{filename}.toml`.
@@ -1023,11 +1023,16 @@ pub fn utc_stamp() -> String {
     )
 }
 
-/// Where one replicate's files belong, creating the directory if needed.
+/// Where one replicate's files belong. Returns a path and creates nothing —
+/// every caller runs `create_dir_all` on the result itself. (The Python twin,
+/// `examples/_output_layout.run_output_dir`, does create it; the two are
+/// otherwise parallel.)
 ///
 /// `None` for `out_dir` means the working directory under fixed names, which
 /// is what `get-run` did before it took an output folder and what its route
-/// check in CI still expects.
+/// check in CI still expects. It ignores `run_index`, so it is only correct
+/// for a single replicate — `get-run` rejects `--runs N` above 1 without
+/// `--out` for exactly that reason.
 ///
 /// Public so every route lays its output out the same way. A library caller
 /// writing its own files (see `examples/library_route.rs`) gets the same
@@ -1094,14 +1099,23 @@ pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String>
 /// # Errors
 ///
 /// The config's own parse/validate error, or `[fitness] type = "python"` with
-/// nothing to call it. `n_runs` of zero yields an empty vector rather than an
-/// error — there is nothing wrong with asking for no runs, only with pretending
-/// one happened.
+/// nothing to call it. `n_runs` of zero is rejected, with the same wording
+/// [`GraphEvolver::run`] uses: asking for no runs returns nothing and is more
+/// likely a mistake than an intent, and the two front ends are meant to differ
+/// only in front end.
 pub fn run_many_from_toml(
     config_path: &str,
     seed: u64,
     n_runs: usize,
 ) -> Result<Vec<RunSummary>, String> {
+    if n_runs == 0 {
+        return Err(
+            "n_runs must be at least 1; asking for zero runs returns nothing and is \
+                    more likely a mistake than an intent"
+                .to_string(),
+        );
+    }
+
     let text = std::fs::read_to_string(config_path)
         .map_err(|err| format!("failed to load config: {}", ConfigError::Io(err)))?;
     let config =
@@ -1937,5 +1951,14 @@ mod tests {
                 .expect("registering against a python config succeeds");
             assert!(evolver.python_fitness().is_ok());
         });
+    }
+    /// Both front ends reject zero replicates, and the Rust one does so before
+    /// touching the config file — the path here does not exist.
+    #[test]
+    fn run_many_from_toml_rejects_zero_replicates() {
+        match run_many_from_toml("no/such/config.toml", 7, 0) {
+            Ok(_) => panic!("zero replicates should be rejected"),
+            Err(err) => assert!(err.contains("n_runs must be at least 1"), "got: {err}"),
+        }
     }
 }
