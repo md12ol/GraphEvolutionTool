@@ -100,8 +100,9 @@
         <td>Every individual is a candidate. Consumes no randomness.</td></tr>
     <tr><td><code>"random_subset"</code></td><td><code>size</code></td>
         <td><code>size</code> distinct individuals, drawn uniformly without replacement. At least 1
-            and at most <code>population_size</code>. Must also be large enough for what selection
-            and replacement need to draw from it.</td></tr>
+            and at most <code>population_size</code> — and <b>at least 4 under steady-state</b>,
+            which needs two parents and two distinct individuals for them to replace. Generational
+            has no such floor.</td></tr>
   </tbody>
 </table>
 </div>
