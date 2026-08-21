@@ -471,6 +471,14 @@ best.save_results("results.txt")      # best individual, with the run's config T
   them</b>. With the seed on every log row, that pair re-runs the experiment exactly.
 </p>
 
+<div class="tip">
+  <b><code>save_results</code> writes a loadable edge file, not a report.</b> The fitness, the
+  genome and the node count go in <code>#</code> comment lines above ordinary
+  <code>u,v,weight</code> rows — the same format <code>set_base_graph_from_file</code> reads. So the
+  winner of one run feeds straight into the next as a base graph, which is what makes
+  <a href="pipeline.html#genomes">stacking SDA into edge-edit</a> a two-line operation.
+</div>
+
 <h2>Writing Your Own Objective</h2>
 
 <p>

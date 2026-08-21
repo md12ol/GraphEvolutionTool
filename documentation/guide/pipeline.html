@@ -239,10 +239,17 @@ one mating event expresses and scores only the two new children, and logs once e
 <div class="warn">
   <b>The graph is silent, and that is the design.</b> Self-loops, out-of-range vertices and
   over-cap weights are ignored or clamped rather than rejected, so an impossible edit is simply a
-  no-op. Genome expression therefore never has to validate anything and cannot fail. Two
-  consequences bite in practice: feeding a cap-5 result into a cap-1 run silently collapses every
-  weight to 1, and five of the nine <a href="#operations">edge-edit operations</a> do nothing on an
-  empty graph.
+  no-op. Genome expression therefore never has to validate anything and cannot fail — and five of
+  the nine <a href="#operations">edge-edit operations</a> do nothing on an empty graph as a direct
+  consequence.
+  <br><br>
+  <b>The clamping is not reachable from Python.</b> <code>set_edge</code> itself still collapses an
+  over-cap weight, which is why the base-graph setter has to check at all — but
+  <code>set_base_graph</code> inspects every multiplicity first and raises
+  <code>ValueError</code> naming the offending edge, its weight and the configured cap. So feeding
+  a cap-5 result into a cap-1 run fails loudly rather than quietly flattening every weight to 1.
+  Keep <code>max_edge_multiplicity</code> the same or raise it when stacking runs. A Rust embedder
+  calling <code>set_edge</code> directly still faces the clamp.
 </div>
 
 <p>
