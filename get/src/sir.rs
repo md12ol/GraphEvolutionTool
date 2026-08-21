@@ -1,8 +1,8 @@
 //! One SIR epidemic over an expressed graph.
 //!
-//! Ported from `Graph::SIR` in `legacy/Graph.cpp`, which is the model this
-//! project has always simulated. That source is tracked and readable alongside
-//! this file; `legacy/README.md` says what it is and how the two now line up.
+//! Ported from `Graph::SIR` in the original C++, which is the model this
+//! project has always simulated. That source is no longer kept in the repo, so
+//! this file is the definition rather than a translation of one.
 //!
 //! The mechanics are unchanged from the port: an adjacency scan accumulates
 //! each susceptible node's total exposure, and one combined Bernoulli draw per
@@ -164,8 +164,8 @@ pub fn simulate_epidemics(
 /// length. An outbreak that infects nobody beyond patient zero has
 /// `length == 1`, `spread == 1` and `profile == [1, 0]`.
 ///
-/// These conventions match `legacy/Graph.cpp` deliberately, so scores stay
-/// comparable with the archived C++ results. See `decisions.md` 2026-08-04
+/// These conventions match the original C++ deliberately, so scores stay
+/// comparable with the archived results. See `decisions.md` 2026-08-04
 /// 17:40; the sheet previously specified the other convention.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Epidemic {

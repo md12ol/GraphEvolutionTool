@@ -541,8 +541,8 @@ impl EpiProfMatch {
     /// A method rather than an inline closure only because it is too long to
     /// read twice; the other two objectives inline theirs.
     ///
-    /// **The target sets the comparison, not the epidemic** (§5.2, matching
-    /// `legacy/main.cpp:545-553`), so the scoring is asymmetric: an epidemic
+    /// **The target sets the comparison, not the epidemic** — matching the
+    /// original C++ — so the scoring is asymmetric: an epidemic
     /// that ends early is penalised for the whole remaining target, while one
     /// that outlasts the target is not penalised at all. This rewards matching
     /// *or exceeding* the tail. See `decisions.md` 2026-08-04 18:13.
