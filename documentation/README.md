@@ -231,4 +231,45 @@ print("checked", len(pages), "pages against", len(nav), "nav entries")
 EOF
 ```
 
+### And the source references
+
+Every `file.rs:NNN` on the site points at an `ADD A ... STEP n` marker in `get/src` — that is the
+whole convention, and it is what makes them checkable rather than hopeful. Run this from the
+repository root:
+
+```bash
+python3 - <<'EOF'
+import re, os, glob
+MOD = {'documentation/guide/new-genome.html':  'get/src/genomes/mod.rs',
+       'documentation/guide/new-evolver.html': 'get/src/evolver/mod.rs'}
+def resolve(page, fn):
+    if fn == 'config.example.toml': return fn
+    if fn == 'mod.rs': return MOD[page]
+    for root, _, fs in os.walk('get/src'):
+        if fn in fs: return os.path.join(root, fn)
+
+bad = total = 0
+for page in glob.glob('documentation/**/*.html', recursive=True):
+    if '_template' in page: continue
+    last = None
+    for m in re.finditer(r'([a-z_]+\.rs|config\.example\.toml):(\d+)|<code>:(\d+)</code>',
+                         open(page).read()):
+        if m.group(1): fn, line, last = m.group(1), int(m.group(2)), m.group(1)
+        elif last:     fn, line = last, int(m.group(3))
+        else:          continue
+        total += 1
+        lines = open(resolve(page, fn)).read().splitlines()
+        text = lines[line - 1] if line <= len(lines) else '<past EOF>'
+        if 'ADD A' not in text:
+            bad += 1
+            print(f"{page} -> {fn}:{line} is not a marker: {text.strip()[:60]}")
+print(f"{total} references, {bad} not on a marker")
+EOF
+```
+
+**A bare `:NNN` continuation inherits the filename from the reference before it**, which is how the
+step tables are written and why the checker tracks `last`. Any edit to `get/src` can shift these —
+adding the objective chain's six markers moved 28 of them at once — so run it after touching the
+source, not only after touching a page.
+
 Silence means clean. Then open it and click through: a narrow window, and every sidebar link.

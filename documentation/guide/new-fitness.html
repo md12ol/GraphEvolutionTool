@@ -163,6 +163,33 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
 <h2>Route 2 — A Native Objective Inside the Crate</h2>
 
 <p>
+  Every step is marked in the source, the same way every other extension chain is. One command
+  lists the whole thing:
+</p>
+
+<pre><code class="language-bash">git grep -n "ADD AN OBJECTIVE STEP" get/src config.example.toml</code></pre>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>get/src/fitness.rs:235</code></td>
+        <td>implement the trait, and validate the objective's inputs in its constructor</td></tr>
+    <tr><td>2</td><td><code>get/src/config.rs:465</code>, <code>:491</code> and <code>:1083</code></td>
+        <td>the config variant, its type name, and its validation arm</td></tr>
+    <tr><td>3</td><td><code>get/src/dispatch.rs:219</code></td>
+        <td>the arm turning the variant into a boxed objective</td></tr>
+    <tr><td>4</td><td><code>get/src/py_config.rs:482</code> and <code>:706</code></td>
+        <td>the Python variant and its attribute paths — optional</td></tr>
+    <tr><td>5</td><td><code>config.example.toml:87</code></td>
+        <td>an example block, if the objective ships</td></tr>
+    <tr><td>6</td><td><code>get/src/dispatch.rs:1122</code></td>
+        <td>the test asserting the boxed objective reports its own direction</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
   <b>Five files, in six steps</b> — none of which touch a strategy or a genome. Five is the floor,
   not the ceiling: it is what an objective assembled from config values alone needs. One that brings
   data of its own also touches the loader it reads through and wherever its shared state lives, which

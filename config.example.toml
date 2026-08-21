@@ -84,6 +84,11 @@ num_epidemics  = 30
 # min_epidemic_length  = 3    # outbreaks shorter than this are re-simulated,
 # max_epidemic_retries = 5    # up to this many times. Set length 1 to disable.
 
+# ADD AN OBJECTIVE STEP 5 — an example block for your objective, commented out
+# beneath this one, if it ships. This file is what a user copies from, so an
+# objective missing from it is one most people never find. The last step is the
+# dispatch test -- search `ADD AN OBJECTIVE STEP 6` for it.
+
 # No seed appears anywhere in this file. One master seed goes to `run()`, and
 # the population, evolution, epidemics and replicates all derive from it.
 

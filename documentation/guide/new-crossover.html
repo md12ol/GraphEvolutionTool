@@ -77,12 +77,12 @@ some_param = 0.5</code></pre>
     <tr><td>3a</td><td><code>get/src/config.rs:213</code></td>
         <td>The mirrored variant on <code>enum CrossoverConfig</code> — the one whose name becomes
             <code>type = "my_crossover"</code>.</td></tr>
-    <tr><td>3b</td><td><code>get/src/config.rs:896</code></td>
+    <tr><td>3b</td><td><code>get/src/config.rs:908</code></td>
         <td><b>The one that gets forgotten.</b> One <code>(operator, genome)</code> pair per
             representation your operator can honour.</td></tr>
-    <tr><td>4</td><td><code>get/src/dispatch.rs:883</code></td>
+    <tr><td>4</td><td><code>get/src/dispatch.rs:898</code></td>
         <td>The arm mapping your <code>CrossoverConfig</code> onto the engine variant.</td></tr>
-    <tr><td>5</td><td><code>get/src/py_config.rs:322</code> and <code>:892</code></td>
+    <tr><td>5</td><td><code>get/src/py_config.rs:322</code> and <code>:908</code></td>
         <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
   </tbody>
 </table>
@@ -119,7 +119,7 @@ Crossover::MyCrossover { some_param } =&gt; { /* recombine `first` and `second` 
 <pre><code class="language-rust">// step 3a — config.rs:213
 MyCrossover { some_param: f64 },
 
-// step 3b — config.rs:896
+// step 3b — config.rs:908
 (CrossoverConfig::MyCrossover { .. }, GenomeConfig::Sda(_)) =&gt; Ok(()),
 (CrossoverConfig::MyCrossover { .. }, GenomeConfig::EdgeEdit(_)) =&gt;
     Err(invalid("crossover", "edge-edit cannot honour my_crossover")),</code></pre>
@@ -135,7 +135,7 @@ MyCrossover { some_param: f64 },
 
 <h2>Step 4 — Dispatch</h2>
 
-<pre><code class="language-rust">// step 4 — dispatch.rs:883
+<pre><code class="language-rust">// step 4 — dispatch.rs:898
 CrossoverConfig::MyCrossover { some_param } =&gt; {
     Crossover::MyCrossover { some_param: *some_param }
 }</code></pre>
@@ -149,7 +149,7 @@ CrossoverConfig::MyCrossover { some_param } =&gt; {
 <p>
   Leaving it out costs nothing elsewhere; the operator is then configurable from a TOML file but
   absent from the Python API. The variant goes at <code>get/src/py_config.rs:322</code> and its
-  matching arm at <code>:892</code>.
+  matching arm at <code>:908</code>.
 </p>
 
 <h2>Testing It</h2>

@@ -462,6 +462,15 @@ pub enum FitnessConfig {
         #[serde(default = "default_struct_weight")]
         density_weight: f64,
     },
+    // ADD AN OBJECTIVE STEP 2 — a variant here, carrying whatever the
+    // objective reads out of the file:
+    //
+    //     MyObjective { threshold: f64 },
+    //
+    // Then its `type_name` arm and, if any parameter is worth constraining,
+    // its validation arm — both further down this file, search
+    // `ADD AN OBJECTIVE STEP 2` again for each. `type_name` cannot be
+    // forgotten: the match is exhaustive, so omitting it fails to compile.
     /// A Python callable registered before the run. Its direction is declared
     /// at registration, not here (spec §7).
     Python,
@@ -479,6 +488,9 @@ impl FitnessConfig {
             FitnessConfig::EpiLength { .. } => "epi_length",
             FitnessConfig::EpiProfMatch { .. } => "epi_prof_match",
             FitnessConfig::StructMatch { .. } => "struct_match",
+            // ADD AN OBJECTIVE STEP 2 — the name a user writes under
+            // `[fitness] type`. Derived from nothing: this string is the
+            // whole mapping, and it is what error messages print.
             FitnessConfig::Python => "python",
         }
     }
@@ -1068,6 +1080,15 @@ impl Config {
             FitnessConfig::EpiLength { sir } => sir,
             FitnessConfig::EpiProfMatch { sir, .. } => sir,
             FitnessConfig::StructMatch { .. } => return self.validate_struct_match(),
+            // ADD AN OBJECTIVE STEP 2 — the validation arm, if any parameter
+            // is worth constraining. Two things are not obvious. It may not
+            // touch the filesystem — `validate` does no I/O, which is why
+            // `epi_prof_match` takes its target inline rather than as a path,
+            // and everything about a named file becomes step 3's problem. And
+            // it may constrain fields outside `[fitness]`: `struct_match`
+            // requires a top-level `max_edge_multiplicity` of 1. Return
+            // `Ok(())` if there is nothing to check. The step after this is
+            // the dispatch arm — search `ADD AN OBJECTIVE STEP 3` for it.
             FitnessConfig::Python => return Ok(()),
         };
 

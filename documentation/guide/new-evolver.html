@@ -95,16 +95,16 @@ num_my_events = 500</code></pre>
     <tr><td>2</td><td><code>get/src/config.rs:104</code></td>
         <td>An <code>EvolutionConfig</code> variant carrying your stopping condition, plus any axis
             that is <i>yours</i> rather than every strategy's.</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:829</code></td>
+    <tr><td>3</td><td><code>get/src/config.rs:841</code></td>
         <td><b>Optional.</b> A constraint arm in <code>validate_evolution_and_selection</code>. A
             strategy with nothing to constrain adds no arm.</td></tr>
-    <tr><td>4</td><td><code>get/src/dispatch.rs:806</code></td>
+    <tr><td>4</td><td><code>get/src/dispatch.rs:821</code></td>
         <td>One arm building your <code>TypeContext</code> and calling your evolver's
             <code>new</code> and <code>run</code>. The genome match is not touched.</td></tr>
-    <tr><td>5</td><td><code>get/src/dispatch.rs:847</code></td>
+    <tr><td>5</td><td><code>get/src/dispatch.rs:862</code></td>
         <td><b>Usually nothing, and that is the point.</b> <code>erase</code> is generic over the
             genome with no match on strategy inside it.</td></tr>
-    <tr><td>6</td><td><code>get/src/py_config.rs:221</code> and <code>:817</code></td>
+    <tr><td>6</td><td><code>get/src/py_config.rs:221</code> and <code>:833</code></td>
         <td><b>Optional.</b> The Python-side variant, and its <code>to_toml_value</code> arm.</td></tr>
   </tbody>
 </table>
@@ -124,7 +124,7 @@ MyStrategy {
     num_my_events: usize,
 },
 
-// step 3 — config.rs:829, optional
+// step 3 — config.rs:841, optional
 EvolutionConfig::MyStrategy { num_my_events, .. } =&gt; {
     if *num_my_events == 0 {
         return Err(invalid("num_my_events", "must be at least 1"));
@@ -143,7 +143,7 @@ EvolutionConfig::MyStrategy { num_my_events, .. } =&gt; {
 
 <h2>Steps 4 and 5 — Dispatch</h2>
 
-<pre><code class="language-rust">// step 4 — dispatch.rs:806
+<pre><code class="language-rust">// step 4 — dispatch.rs:821
 EvolutionConfig::MyStrategy { num_my_events } =&gt; {
     let type_context = MyStrategyContext {
         num_my_events: *num_my_events,
@@ -170,7 +170,7 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 <p>
   Leaving it out costs nothing elsewhere; the strategy is then configurable from a TOML file but
   absent from the Python API. The variant goes at <code>get/src/py_config.rs:221</code> and its
-  <code>to_toml_value</code> arm at <code>:817</code>.
+  <code>to_toml_value</code> arm at <code>:833</code>.
 </p>
 
 <h2>The Rules You Must Not Break</h2>

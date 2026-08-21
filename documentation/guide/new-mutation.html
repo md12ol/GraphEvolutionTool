@@ -87,10 +87,10 @@ mutation    = { type = "my_mutation", some_param = 0.5 }</code></pre>
     <tr><td>2</td><td><code>get/src/genomes/edge_edit.rs:287</code></td>
         <td>The arm in <code>EdgeEditGenome::mutate</code> that performs it.</td></tr>
     <tr><td>3</td><td><code>get/src/config.rs:300</code> and
-        <code>get/src/dispatch.rs:896</code></td>
+        <code>get/src/dispatch.rs:911</code></td>
         <td>The mirrored variant on <code>enum EdgeEditMutationConfig</code>, and the arm mapping it
             onto the engine enum.</td></tr>
-    <tr><td>4</td><td><code>get/src/py_config.rs:910</code> and <code>:936</code></td>
+    <tr><td>4</td><td><code>get/src/py_config.rs:926</code> and <code>:952</code></td>
         <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
   </tbody>
 </table>
@@ -107,7 +107,7 @@ EdgeEditMutation::MyMutation { some_param } =&gt; {
 // step 3a — config.rs:300
 MyMutation { some_param: f64 },
 
-// step 3b — dispatch.rs:896
+// step 3b — dispatch.rs:911
 EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
     EdgeEditMutation::MyMutation { some_param: *some_param }
 }</code></pre>
@@ -129,10 +129,10 @@ EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
     <tr><td>2</td><td><code>get/src/genomes/sda.rs:492</code></td>
         <td>The arm in <code>SdaGenome::mutate</code> that performs it.</td></tr>
     <tr><td>3</td><td><code>get/src/config.rs:360</code> and
-        <code>get/src/dispatch.rs:906</code></td>
+        <code>get/src/dispatch.rs:921</code></td>
         <td>The mirrored variant on <code>enum SdaMutationConfig</code>, and the arm mapping it onto
             the engine enum.</td></tr>
-    <tr><td>4</td><td><code>get/src/py_config.rs:950</code> and <code>:975</code></td>
+    <tr><td>4</td><td><code>get/src/py_config.rs:966</code> and <code>:991</code></td>
         <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
   </tbody>
 </table>
@@ -147,7 +147,7 @@ SdaMutation::MyMutation { some_param } =&gt; self.my_mutation(context, rng),
 // step 3a — config.rs:360
 MyMutation { some_param: f64 },
 
-// step 3b — dispatch.rs:906
+// step 3b — dispatch.rs:921
 SdaMutationConfig::MyMutation { some_param } =&gt; {
     SdaMutation::MyMutation { some_param: *some_param }
 }</code></pre>
