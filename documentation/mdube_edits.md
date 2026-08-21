@@ -80,41 +80,9 @@ belongs in `decisions.md`; this file only carries work that has not been done ye
 
 ## Pending
 
-Swept 2026-08-21 against the 16-page site. Ten entries left — eight applied, two moot when
-`reference/`, `status.html` and `HANDOFF.md` were deleted. What survives is the work the trim did
-not do, restated against pages that exist. The evidence for each disposition is in
-`.claude/work/archive/`'s `close-67` history.
+*Empty.* Swept 2026-08-21 against the 16-page site: twelve entries in, none out. Eight were applied
+by the trim itself, two went moot when `HANDOFF.md` was deleted, and the last two were fixed in the
+same PR that swept the queue — the `# nodes = N` header on the TOML route, and per-route setup
+(`maturin develop` from a checkout, and `libpython` on the loader path for the CLI route).
 
-## Edge files: the `# nodes = N` header is stated on one page out of four
-
-- **Pages:** `guide/route-python-toml.html`, `guide/route-rust-library.html`,
-  `guide/route-rust-cli.html`. `guide/route-python-objects.html:162` already has it.
-- **Not false, thin:** no page describes the format wrongly any more, and
-  `guide/fitness.html:475` correctly says `save_results` writes a loadable edge file. But three of
-  the four route pages never mention that an edge file a reader supplies must carry the header, so a
-  reader on those routes meets the rejection message before the rule.
-- **Should say:** the header is required rather than optional, and **why** — a node with no edges is
-  invisible to any count taken from the edges, so an inferred count is short by exactly the nodes
-  hardest to notice. A base-graph file whose header disagrees with `network_size` is rejected; a
-  reference file's count is its own and is expected to differ across the set.
-- **Narrowed 2026-08-21** from `#edge-files-state-their-node-count`, whose "now false" list is spent:
-  every page it named is deleted, and no surviving page repeats the claim.
-
-*#edge-file-header-missing-from-three-route-pages · filed 2026-08-20 09:40, narrowed 2026-08-21 — Michael.*
-
-## Per-route environment setup — still nothing on the site
-
-- **Pages:** the four route pages, one section each.
-- **Now wrong, and unchanged by the trim:** there are no environment setup instructions anywhere.
-  `grep -rl "maturin develop\|ensurepip" documentation/` is empty. A reader has to infer that the
-  Python routes need `ensurepip`, a venv, `maturin` and `maturin develop`, and that the Rust CLI
-  route needs a real Python on `PATH` because `cli` pulls `pyo3/auto-initialize` — without which the
-  run dies as exit 127 before printing a word. `guide/route-rust-cli.html` names
-  `auto-initialize` but does not turn it into a setup step.
-- **Should say:** for each of the four routes, the exact terminal commands in order. **Assume a bash
-  shell** — WSL, Ubuntu or macOS — and call out explicitly anywhere a platform differs rather than
-  leaving the reader to discover it. Also raised as a comment on GitHub #67.
-- **The extension-marker half of this entry is done** — PR #155 branch-qualified all eight markers
-  and the guide pages follow them. Only the setup instructions remain.
-
-*#per-route-setup-instructions · filed 2026-08-20 21:42, narrowed 2026-08-21 — Michael.*
+Dispositions are in `.claude/work/archive/`'s `close-67` history. File new entries under this line.

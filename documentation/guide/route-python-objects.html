@@ -34,6 +34,22 @@ python -c "import get; print(get.__name__)"</code></pre>
 
 
 
+<div class="tip">
+  <b>Building from a checkout instead.</b> If you want the working copy rather than the published
+  package — or the package is not on PyPI yet — build the extension module with
+  <a href="https://www.maturin.rs">maturin</a>. It compiles the Rust and installs it into the
+  active virtual environment under the import name <code>get</code>:
+  <pre><code class="language-bash">git clone https://github.com/md12ol/GraphEvolutionTool
+cd GraphEvolutionTool
+python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+python3 -m ensurepip --upgrade      # only if this Python has no pip
+pip install maturin
+maturin develop --release</code></pre>
+  A Rust toolchain is needed for this and not for <code>pip install</code>; get one from
+  <a href="https://rustup.rs">rustup.rs</a>. Re-run <code>maturin develop</code> after every change
+  to the Rust — the installed module does not track the source.
+</div>
+
 <h2>The Smallest Complete Run</h2>
 
 <pre><code class="language-python">import get

@@ -31,6 +31,22 @@ python -c "import get; print(get.__name__)"</code></pre>
 
 
 
+<div class="tip">
+  <b>Building from a checkout instead.</b> If you want the working copy rather than the published
+  package — or the package is not on PyPI yet — build the extension module with
+  <a href="https://www.maturin.rs">maturin</a>. It compiles the Rust and installs it into the
+  active virtual environment under the import name <code>get</code>:
+  <pre><code class="language-bash">git clone https://github.com/md12ol/GraphEvolutionTool
+cd GraphEvolutionTool
+python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+python3 -m ensurepip --upgrade      # only if this Python has no pip
+pip install maturin
+maturin develop --release</code></pre>
+  A Rust toolchain is needed for this and not for <code>pip install</code>; get one from
+  <a href="https://rustup.rs">rustup.rs</a>. Re-run <code>maturin develop</code> after every change
+  to the Rust — the installed module does not track the source.
+</div>
+
 <h2>The Config Document</h2>
 
 <p>
@@ -90,6 +106,16 @@ best.save_results("best_individual.txt")</code></pre>
   <code>run</code> always returns a list, one result per replicate, even for a single run — so code
   written for one does not need rewriting for twenty.
 </p>
+
+<div class="note">
+  <b>A base graph is set on the evolver, not in the document.</b> No key in the config names one.
+  Call <code>evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code> between
+  constructing the evolver and running it. The file is one edge per line and <b>must</b> carry a
+  <code># nodes = N</code> header — a node with no edges is invisible to any count taken from the
+  edges, so a count inferred from the rows is short by exactly the nodes hardest to notice. See
+  <a href="route-python-objects.html#starting-from-a-graph-you-already-have">Starting From a Graph
+  You Already Have</a>.
+</div>
 
 <h2>Reading a Result</h2>
 
