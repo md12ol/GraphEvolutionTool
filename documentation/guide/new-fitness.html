@@ -13,18 +13,31 @@
 <p class="page-kicker">Extending GET</p>
 <h1>Add an Objective</h1>
 <p class="lede">
-  Scoring graphs by something other than an epidemic. Three routes, in increasing order of effort:
-  a Python callable, a native objective in the crate, or your own Rust type outside it.
+  Scoring graphs by something other than an epidemic. Three routes, in increasing order of effort,
+  named for the way you will be running GET: a <b>Python</b> callable, a <b>Rust</b> type in your own
+  crate, or a native objective inside <b>GET itself</b>.
 </p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Route</th><th>You write</th><th>You edit GET</th><th>Selectable from a config file</th></tr></thead>
+  <tbody>
+    <tr><td><b>1 — Python</b></td><td>a Python function</td><td>no</td>
+        <td>yes, as <code>type = "python"</code></td></tr>
+    <tr><td><b>2 — Rust, as a library</b></td><td>a Rust type in your own crate</td><td>no</td>
+        <td>no — you hand it to the evolver directly</td></tr>
+    <tr><td><b>3 — Rust, inside GET</b></td><td>a Rust type in <code>get/src/</code></td><td>yes</td>
+        <td>yes, by name</td></tr>
+  </tbody>
+</table>
+</div>
 
 <div class="callout">
   <p>
-    <b>There is no <code>ADD AN OBJECTIVE STEP</code> chain in the source, and that is the point.</b>
-    Every other extension family — genome, strategy, selection, crossover, mutation, scope,
-    replacement — carries numbered markers because it has to be threaded through a match. The
-    objective is erased to a trait object <i>before</i> dispatch, so it never enters the
-    strategy × genome match and there is no chain to follow. If you grepped for one and found
-    nothing, nothing is missing.
+    <b>The middle column is the whole decision.</b> Route 2 buys you native speed without a fork and
+    without a config variant; what it cannot give you is a name a <code>config.toml</code> can
+    select, because the config schema lives inside the crate. Route 3 is the only one that produces
+    an objective someone else can run from a document, and it is the only one with steps to follow.
   </p>
 </div>
 
@@ -41,7 +54,7 @@
 <pre><code class="language-toml">[fitness]
 type = "python"</code></pre>
 
-<p>A native objective added inside the crate is selected the same way its own variant is named:</p>
+<p>An objective added inside GET (route 3) is selected the same way its own variant is named:</p>
 
 <pre><code class="language-toml">[fitness]
 type           = "my_objective"
@@ -56,11 +69,13 @@ some_parameter = 0.5</code></pre>
   <p>
     Route 1 is the exception worth knowing: <code>type = "python"</code> names no objective of its
     own. It says "a callable will be registered", and a run that reaches scoring without one is
-    rejected rather than silently scoring nothing.
+    rejected rather than silently scoring nothing. <b>Route 2 appears in no config document at
+    all</b> — a library caller hands the objective over directly, so there is nothing for
+    <code>[fitness]</code> to name.
   </p>
 </div>
 
-<h2>Route 1 — A Python Callable</h2>
+<h2>Route 1 — Python: A Registered Callable</h2>
 
 <p>
   Set <code>[fitness] type = "python"</code> in the config and register your function. No Rust, no
@@ -161,14 +176,67 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
       returning scores in the wrong <i>order</i> is neither, and will quietly evolve nonsense.</li>
 </ul>
 
-<h2>Route 2 — A Native Objective Inside the Crate</h2>
+<h2 id="rust-route">Route 2 — Rust: As a Library</h2>
 
 <p>
-  Every step is marked in the source, the same way every other extension chain is. One command
-  lists the whole thing:
+  If your objective is hot enough to matter and you do not want to fork GET, depend on it as a
+  library. This is the same route as <a href="route-rust-library.html">Rust: As a Library</a> — that
+  page is how you drive a run, this section is how you score one. It <b>never touches dispatch or
+  the config schema</b>:
+</p>
+
+<pre><code class="language-rust">use get::fitness::{Direction, Fitness};
+use get::graph::Graph;
+
+struct EdgeBudget { target: f64 }
+
+impl Fitness for EdgeBudget {
+    fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64 {
+        let mut total = 0.0;
+        for (_u, _v, w) in graph.get_edge_list() {
+            total += w as f64;
+        }
+        (total - self.target).abs()
+    }
+
+    fn direction(&amp;self) -&gt; Direction { Direction::Minimize }
+}</code></pre>
+
+<p>
+  Then build a population, a genome context and an evolver yourself and call <code>run</code> with
+  your objective. The evolver's <code>run</code> is generic over the objective, so a caller holding
+  a concrete type instantiates the evolver with it directly — no arm, no config variant, no
+  boxing.
+</p>
+
+<div class="note">
+  <b>Numbers you read from the outcome are in engine orientation</b> — lower is better, whatever
+  your direction said. That is the stated cost of converting only at the two edges of the system,
+  and the direction carried on the outcome is what you convert with. See
+  <a href="fitness.html">Fitness &amp; Output</a>.
+</div>
+
+<p>
+  Assembling contexts and populations by hand is genuinely awkward today; that is a known rough
+  edge of this route rather than a hint that you are doing it wrong.
+</p>
+
+<h2>Route 3 — Rust: Inside GET Itself</h2>
+
+<p>
+  This is the route that gives an objective a <b>name</b> — after it,
+  <code>type = "my_objective"</code> works in any config document, on every route, with no Rust at
+  the call site. It is also the only one of the three with a chain, and every step is marked in the
+  source the same way every other extension chain is. One command lists the whole thing:
 </p>
 
 <pre><code class="language-bash">git grep -n "ADD AN OBJECTIVE STEP" get/src config.example.toml</code></pre>
+
+<p>
+  Each step is named at more than one site, because a marker points forward to the next — go by the
+  step numbers rather than the number of lines the grep prints. The line numbers below were correct
+  when this page was written; if one has moved, the marker is the anchor that has not.
+</p>
 
 <div class="table-wrap">
 <table>
@@ -191,59 +259,10 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
 </div>
 
 <p>
-  <b>Five files, in six steps</b> — none of which touch a strategy or a genome. Five is the floor,
-  not the ceiling: it is what an objective assembled from config values alone needs. One that brings
-  data of its own also touches the loader it reads through and wherever its shared state lives, which
-  is why <code>struct_match</code> touched seven.
+  <b>Five files is the floor, not the ceiling.</b> That is what an objective assembled from config
+  values alone needs. One that brings data of its own also touches the loader it reads through and
+  wherever its shared state lives — <code>struct_match</code> touched seven for that reason.
 </p>
-
-<ol>
-  <li><b>Implement the <code>Fitness</code> trait</b> for your type. <code>evaluate</code> is the
-      only required method; add <code>direction</code> if bigger is better, and override
-      <code>evaluate_batch</code> if the default is wrong for you.
-      <br><b>Validate the objective's own inputs in its constructor</b>, and make it fallible if it
-      has any worth checking. Step 2's validation lives in the config layer, which the library route
-      never runs — a guard written only there does not exist for a caller depending on the crate.
-      The two sites are additive, not alternatives.</li>
-  <li><b>The config module — three edits, not one.</b> Add a variant to the fitness config enum
-      holding whatever the objective reads out of the file; add its arm to the type-name function,
-      which is the string error messages name it by; and add validation for any parameter worth
-      constraining. Only the first is what a user selects under <code>[fitness]</code>. The
-      type-name arm cannot be forgotten — the match is exhaustive, so omitting it fails to compile.
-      <br><b>That validation may not touch the filesystem</b>, which is why
-      <code>epi_prof_match</code> takes its target inline rather than as a path. An objective that
-      must name a file cannot check it here, and everything about that file's contents becomes step
-      3's problem. It <i>may</i> constrain fields outside <code>[fitness]</code>:
-      <code>struct_match</code> requires a top-level <code>max_edge_multiplicity</code> of 1.</li>
-  <li><b>Dispatch</b> — add the matching arm that turns the config variant into a boxed objective.
-      Steps 2 and 3 are one change split across two files: a variant nothing constructs is dead
-      code, and an arm for a variant that does not exist will not compile.
-      <br><b>This arm runs once per replicate</b>, not once per run. So it is where anything needing
-      the filesystem finally happens — an unreadable folder is reported from here — and anything
-      <b>expensive and immutable</b> should be built once and shared behind an <code>Arc</code>
-      rather than rebuilt per replicate. What a fresh objective per replicate buys is isolation of
-      per-run state; an objective with none has nothing to keep apart.</li>
-  <li><b>The Python config mirror</b>, if the objective should be reachable from Python. Leave it
-      out and everything else still works — a Python caller simply cannot name the objective. If
-      step 2's validation raises a new field name, that name also needs a Python attribute path
-      here, or a Python caller sees an error naming a TOML field they never wrote.</li>
-  <li><b><code>config.example.toml</code></b> — add an example block if the objective ships. The
-      example file is what a user copies from, so an objective missing from it is one most people
-      never find. It is parsed and validated by the test suite, so a broken example fails the build
-      rather than a user's afternoon.</li>
-  <li><b>The dispatch tests</b> — assert the new variant erases to a box that reports its own
-      direction. Worth writing because the failure it catches is silent: an objective whose
-      direction is lost runs the search backwards and looks merely unconverged.</li>
-</ol>
-
-<div class="note">
-  <b>Which steps are yours depends on which reader you are.</b> If you depend on GET from your own
-  program, <b>step 1 is the only one available</b> — and it is enough on its own: write your type,
-  implement the trait, hand it to the evolver. Steps 2–6 are unreachable rather than skipped, since
-  the config, dispatch and Python modules are private to the crate. Your objective is never named in
-  a config file. If you are editing your own copy of GET, all six are yours, and what that buys is
-  an objective selectable by name from <code>config.toml</code> with no Rust at the call site.
-</div>
 
 <h2>Step 1 — The Trait</h2>
 
@@ -417,49 +436,6 @@ MyObjective { threshold: f64 },
   simulation, so one run returns <code>{ length, spread, profile }</code> and each of the three SIR
   objectives is a thin reading of it. Adding a fourth reading of the same simulation is much
   cheaper than adding a fourth simulator.
-</p>
-
-<h2 id="rust-route">Route 3 — Your Own Crate, Outside GET</h2>
-
-<p>
-  If your objective is hot enough to matter and you do not want to fork GET, depend on it as a
-  library. This route <b>never touches dispatch or the config schema</b>:
-</p>
-
-<pre><code class="language-rust">use get::fitness::{Direction, Fitness};
-use get::graph::Graph;
-
-struct EdgeBudget { target: f64 }
-
-impl Fitness for EdgeBudget {
-    fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64 {
-        let mut total = 0.0;
-        for (_u, _v, w) in graph.get_edge_list() {
-            total += w as f64;
-        }
-        (total - self.target).abs()
-    }
-
-    fn direction(&amp;self) -&gt; Direction { Direction::Minimize }
-}</code></pre>
-
-<p>
-  Then build a population, a genome context and an evolver yourself and call <code>run</code> with
-  your objective. The evolver's <code>run</code> is generic over the objective, so a caller holding
-  a concrete type instantiates the evolver with it directly — no arm, no config variant, no
-  boxing.
-</p>
-
-<div class="note">
-  <b>Numbers you read from the outcome are in engine orientation</b> — lower is better, whatever
-  your direction said. That is the stated cost of converting only at the two edges of the system,
-  and the direction carried on the outcome is what you convert with. See
-  <a href="fitness.html">Fitness &amp; Output</a>.
-</div>
-
-<p>
-  Assembling contexts and populations by hand is genuinely awkward today; that is a known rough
-  edge of this route rather than a hint that you are doing it wrong.
 </p>
 
 <h2>Checklist, Whichever Route</h2>
