@@ -9,7 +9,9 @@
 //!
 //! With no `--out`, into the working directory under the fixed names
 //! `run_log.csv` and `best_individual.txt` (+ `.toml`) — which means a second
-//! invocation overwrites the first, and four runs need four directories.
+//! invocation overwrites the first, and four runs need four directories. That
+//! is why `--runs N` for `N > 1` requires `--out`: one invocation cannot be
+//! allowed to overwrite itself.
 //!
 //! With `--out <dir>`, into `<dir>/<timestamp>-<seed>/`, one directory per
 //! invocation, so nothing is ever overwritten and the directory name says which
@@ -32,7 +34,8 @@ const USAGE: &str = "usage: get-run <config.toml> [seed] [--runs N] [--out DIR]
 
   seed        master seed; random if omitted. Replicate `i` is reproduced by
               re-running with the same master seed and reading run_<i>.
-  --runs N    number of replicates from that master seed (default 1).
+  --runs N    number of replicates from that master seed (default 1). More
+              than one requires --out, which is what keeps them apart.
   --out DIR   write into DIR/<timestamp>-<seed>/ instead of the working
               directory, so nothing is overwritten between invocations.";
 
@@ -76,6 +79,16 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
 
     if positional.is_empty() || positional.len() > 2 {
         return Err("expected a config file and an optional seed".to_string());
+    }
+
+    // Without --out every replicate writes the same three fixed names in the
+    // working directory, so all but the last are lost with nothing said. Refuse
+    // rather than invent directories nobody asked for — that is what --out is.
+    if n_runs > 1 && out_dir.is_none() {
+        return Err(format!(
+            "--runs {n_runs} needs --out DIR; without it every replicate would \
+             overwrite the last in the working directory"
+        ));
     }
 
     let seed = match positional.get(1) {
@@ -172,4 +185,49 @@ fn main() -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_args;
+
+    /// `argv[0]` is the program name, which `parse_args` skips.
+    fn args(rest: &[&str]) -> Vec<String> {
+        let mut argv = vec!["get-run".to_string()];
+        for arg in rest {
+            argv.push((*arg).to_string());
+        }
+        argv
+    }
+
+    #[test]
+    fn several_replicates_without_out_is_rejected() {
+        // `unwrap_err` would need `Args: Debug`; matching keeps the test's
+        // needs out of the type the binary actually uses.
+        match parse_args(&args(&["c.toml", "7", "--runs", "3"])) {
+            Ok(_) => panic!("--runs 3 without --out should be rejected"),
+            Err(err) => assert!(err.contains("--out"), "error should name --out: {err}"),
+        }
+    }
+
+    #[test]
+    fn several_replicates_with_out_is_accepted() {
+        let parsed = parse_args(&args(&["c.toml", "7", "--runs", "3", "--out", "d"])).unwrap();
+        assert_eq!(parsed.n_runs, 3);
+        assert_eq!(parsed.out_dir.as_deref(), Some("d"));
+    }
+
+    /// The flat working-directory layout is still the default, and CI's route
+    /// check runs exactly this way.
+    #[test]
+    fn a_single_run_needs_no_out() {
+        let parsed = parse_args(&args(&["c.toml", "7"])).unwrap();
+        assert_eq!(parsed.n_runs, 1);
+        assert!(parsed.out_dir.is_none());
+    }
+
+    #[test]
+    fn zero_replicates_is_rejected() {
+        assert!(parse_args(&args(&["c.toml", "--runs", "0"])).is_err());
+    }
 }
