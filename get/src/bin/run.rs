@@ -96,6 +96,15 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
 
 fn main() -> ExitCode {
     let argv: Vec<String> = env::args().collect();
+
+    // Before parsing, so `--help` works without a config file. It is the first
+    // thing a new user runs, and printing usage to stderr with a failing exit
+    // code is the wrong answer to a question that was asked correctly.
+    if argv[1..].iter().any(|arg| arg == "--help" || arg == "-h") {
+        println!("{USAGE}");
+        return ExitCode::SUCCESS;
+    }
+
     let args = match parse_args(&argv) {
         Ok(args) => args,
         Err(problem) => {
