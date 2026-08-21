@@ -162,25 +162,60 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
 
 <h2>Route 2 — A Native Objective Inside the Crate</h2>
 
-<p>Six small edits, none of which touch a strategy or a genome:</p>
+<p>
+  <b>Five files, in six steps</b> — none of which touch a strategy or a genome. Five is the floor,
+  not the ceiling: it is what an objective assembled from config values alone needs. One that brings
+  data of its own also touches the loader it reads through and wherever its shared state lives, which
+  is why <code>struct_match</code> touched seven.
+</p>
 
 <ol>
-  <li>Add a variant to the fitness config enum, with whatever parameters it needs.</li>
-  <li>Add its name to the type-name function, which is what error messages print.</li>
-  <li>Add an arm to fitness validation if it has parameters worth constraining. Every constraint
-      lives there, not scattered through dispatch.</li>
-  <li>Implement the <code>Fitness</code> trait for your type: <code>evaluate</code> in your own
-      units, and <code>direction</code> if it is not minimize.</li>
-  <li>Add one arm to the objective-erasing match, which turns the config variant into a boxed
-      objective.</li>
-  <li>Mirror the variant on the Python config side, and add its attribute path to the error-mapping
-      table.</li>
+  <li><b>Implement the <code>Fitness</code> trait</b> for your type. <code>evaluate</code> is the
+      only required method; add <code>direction</code> if bigger is better, and override
+      <code>evaluate_batch</code> if the default is wrong for you.
+      <br><b>Validate the objective's own inputs in its constructor</b>, and make it fallible if it
+      has any worth checking. Step 2's validation lives in the config layer, which the library route
+      never runs — a guard written only there does not exist for a caller depending on the crate.
+      The two sites are additive, not alternatives.</li>
+  <li><b>The config module — three edits, not one.</b> Add a variant to the fitness config enum
+      holding whatever the objective reads out of the file; add its arm to the type-name function,
+      which is the string error messages name it by; and add validation for any parameter worth
+      constraining. Only the first is what a user selects under <code>[fitness]</code>. The
+      type-name arm cannot be forgotten — the match is exhaustive, so omitting it fails to compile.
+      <br><b>That validation may not touch the filesystem</b>, which is why
+      <code>epi_prof_match</code> takes its target inline rather than as a path. An objective that
+      must name a file cannot check it here, and everything about that file's contents becomes step
+      3's problem. It <i>may</i> constrain fields outside <code>[fitness]</code>:
+      <code>struct_match</code> requires a top-level <code>max_edge_multiplicity</code> of 1.</li>
+  <li><b>Dispatch</b> — add the matching arm that turns the config variant into a boxed objective.
+      Steps 2 and 3 are one change split across two files: a variant nothing constructs is dead
+      code, and an arm for a variant that does not exist will not compile.
+      <br><b>This arm runs once per replicate</b>, not once per run. So it is where anything needing
+      the filesystem finally happens — an unreadable folder is reported from here — and anything
+      <b>expensive and immutable</b> should be built once and shared behind an <code>Arc</code>
+      rather than rebuilt per replicate. What a fresh objective per replicate buys is isolation of
+      per-run state; an objective with none has nothing to keep apart.</li>
+  <li><b>The Python config mirror</b>, if the objective should be reachable from Python. Leave it
+      out and everything else still works — a Python caller simply cannot name the objective. If
+      step 2's validation raises a new field name, that name also needs a Python attribute path
+      here, or a Python caller sees an error naming a TOML field they never wrote.</li>
+  <li><b><code>config.example.toml</code></b> — add an example block if the objective ships. The
+      example file is what a user copies from, so an objective missing from it is one most people
+      never find. It is parsed and validated by the test suite, so a broken example fails the build
+      rather than a user's afternoon.</li>
+  <li><b>The dispatch tests</b> — assert the new variant erases to a box that reports its own
+      direction. Worth writing because the failure it catches is silent: an objective whose
+      direction is lost runs the search backwards and looks merely unconverged.</li>
 </ol>
 
-<p>
-  Then document it in <code>config.example.toml</code> — the shipped example is parsed and validated
-  by the test suite, so a broken example fails the build rather than a user's afternoon.
-</p>
+<div class="note">
+  <b>Which steps are yours depends on which reader you are.</b> If you depend on GET from your own
+  program, <b>step 1 is the only one available</b> — and it is enough on its own: write your type,
+  implement the trait, hand it to the evolver. Steps 2–6 are unreachable rather than skipped, since
+  the config, dispatch and Python modules are private to the crate. Your objective is never named in
+  a config file. If you are editing your own copy of GET, all six are yours, and what that buys is
+  an objective selectable by name from <code>config.toml</code> with no Rust at the call site.
+</div>
 
 <div class="warn">
   <b>Two traps in the trait itself.</b> Do not call <code>self.evaluate_batch</code> from inside

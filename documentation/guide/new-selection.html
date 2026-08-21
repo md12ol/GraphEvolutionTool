@@ -28,6 +28,35 @@
   strategy, and why there is no scheme-by-strategy compatibility check to extend.
 </p>
 
+<div class="callout">
+  <p>
+    <b>Three contracts the signature does not enforce.</b> Nothing fails to compile if you break
+    one, and two of the three fail silently.
+  </p>
+  <ul>
+    <li><b>Compare through the ranking helper, never a direction.</b> Fitnesses arrive already
+        oriented, so a scheme never asks whether bigger or smaller wins. One that decides for itself
+        runs the search backwards on half the objectives and looks merely unconverged.</li>
+    <li><b>Take every random value from the RNG you are handed.</b> Reaching for a thread RNG
+        instead produces a run that cannot be reproduced from its seed, which is the one guarantee
+        the whole seeding chain exists to give.</li>
+    <li><b>Draw only from the scope.</b> It is a list of indices someone else chose; an index from
+        outside it is a bug the assertion at the top of the draw will catch, and only in a debug
+        build.</li>
+  </ul>
+  <p>
+    Drawing <b>with replacement is allowed</b> — the tournament does it, so the same individual can
+    be both parents. That is deliberate, not an oversight to correct in a new scheme.
+  </p>
+</div>
+
+<div class="note">
+  <b>Selection is an enum, not a trait, so it cannot be extended from outside the crate.</b> Unlike
+  an objective, a genome or a strategy, a program that merely depends on GET gets the schemes GET
+  ships and no others — adding one means editing your own copy. The steps below assume that is what
+  you are doing.
+</div>
+
 <h2>What the User Ends Up Writing</h2>
 
 <p>

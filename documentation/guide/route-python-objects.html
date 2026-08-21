@@ -178,6 +178,15 @@ evolver.set_base_graph(40, [(0, 1, 1), (1, 2, 1)], min_node_index=0)
 # or from a file, one edge per line, with a `# nodes = N` header
 evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre>
 
+<div class="warn">
+  <b>These loaders warn rather than raise on three things</b>, so a run can start from data you did
+  not mean to supply and nothing will stop it. A repeated edge — canonical, so <code>2,5</code> and
+  <code>5,2</code> are one edge — overwrites, with the <b>last</b> occurrence winning; a zero-weight
+  edge is dropped; an empty file loads an empty base graph. Each raises a Python
+  <code>UserWarning</code>, so <code>warnings.simplefilter("error")</code> turns them into failures
+  if you would rather find out loudly.
+</div>
+
 <div class="callout">
   <p>
     <b>The first loader you call fixes the run's node numbering, and results come back in it.</b>
