@@ -53,6 +53,7 @@ documentation/
 ├── design-notes.html     the decisions behind the design, and the non-goals
 ├── _template.html        page skeleton — copy this to add a page
 ├── serve.sh
+├── check_refs.py         verifies (and --fix repairs) every `path:line` on the site
 ├── README.md             this file — how the site works
 ├── assets/
 │   ├── style.css         the entire stylesheet. Tokens, layout, components
@@ -239,71 +240,32 @@ EOF
 ### And the source references
 
 Every `file.rs:NNN` on the site points at an `ADD A ... STEP n` marker in `get/src` — that is the
-whole convention, and it is what makes them checkable rather than hopeful. Run this from the
-repository root:
+whole convention, and it is what makes them checkable rather than hopeful. `check_refs.py` verifies
+that each one lands on a marker **of that page's own chain**, and repairs them if not:
 
 ```bash
-python3 - <<'EOF'
-import re, os, glob
-MOD = {'documentation/guide/new-genome.html':  'get/src/genomes/mod.rs',
-       'documentation/guide/new-evolver.html': 'get/src/evolver/mod.rs'}
-def resolve(page, fn):
-    if fn == 'config.example.toml': return fn
-    if fn == 'mod.rs': return MOD[page]
-    for root, _, fs in os.walk('get/src'):
-        if fn in fs: return os.path.join(root, fn)
-
-bad = total = 0
-for page in glob.glob('documentation/**/*.html', recursive=True):
-    if '_template' in page: continue
-    last = None
-    for m in re.finditer(r'([a-z_]+\.rs|config\.example\.toml):(\d+)|<code>:(\d+)</code>',
-                         open(page).read()):
-        if m.group(1): fn, line, last = m.group(1), int(m.group(2)), m.group(1)
-        elif last:     fn, line = last, int(m.group(3))
-        else:          continue
-        total += 1
-        lines = open(resolve(page, fn)).read().splitlines()
-        text = lines[line - 1] if line <= len(lines) else '<past EOF>'
-        if 'ADD A' not in text:
-            bad += 1
-            print(f"{page} -> {fn}:{line} is not a marker: {text.strip()[:60]}")
-print(f"{total} references, {bad} not on a marker")
-EOF
+python3 documentation/check_refs.py          # report; exits 1 if anything is wrong
+python3 documentation/check_refs.py --fix    # snap each reference to its marker
 ```
+
+**Run it after touching `get/src`, not only after touching a page.** Any insertion moves these:
+adding the objective chain's six markers shifted 28 references at once, and merging one upstream PR
+that added two lines to `dispatch.rs` shifted 18 more. `--fix` is what makes that a command rather
+than an afternoon.
+
+Two details in it are load-bearing. A **bare `:NNN` continuation** inherits the filename from the
+reference before it, which is how the step tables are written. And only a *declaration* marker
+counts — the name, then an em dash introducing what to do. A cross-reference (`` search `ADD A
+CROSSOVER STEP 3` `` ) is wrapped in backticks and carries no dash; snapping a reference to one of
+those would point the reader at prose about a different step, which is exactly what an earlier
+version of the script did.
 
 ### And the step counts
 
-Each `new-*.html` page walks one marker chain, and its step table must match that chain's markers in
-the source — same count, same numbers. This catches a page that stops one step short, which both the
-crossover and strategy pages did (each was missing the `config.example.toml` step):
+`check_refs.py` also checks that each `new-*.html`'s step table matches its chain's markers — same
+count, same numbers. A page that stops one step short is not a wrong line number, so the reference
+check alone cannot see it; this is what caught the crossover page listing five steps and the strategy
+page six, where the source has six and seven (both were missing the `config.example.toml` step).
 
-```bash
-python3 - <<'EOF'
-import re, glob, os, subprocess
-CHAIN = {'new-fitness': 'OBJECTIVE', 'new-genome': 'GENOME', 'new-evolver': 'STRATEGY',
-         'new-selection': 'SELECTION', 'new-scope': 'SCOPE', 'new-replacement': 'REPLACEMENT',
-         'new-crossover': 'CROSSOVER', 'new-mutation': 'MUTATION'}
-for page, chain in sorted(CHAIN.items()):
-    path = f'documentation/guide/{page}.html'
-    rows = {n.rstrip('ab') for n, _ in
-            re.findall(r'<tr><td>(\d+[ab]?)</td>(.*?)</tr>', open(path).read(), re.S)}
-    out = subprocess.run(['git', 'grep', '-ohE', f'ADD AN? {chain} STEP [0-9]+',
-                          '--', 'get/src', 'config.example.toml'],
-                         capture_output=True, text=True).stdout
-    marks = {m.split()[-1] for m in out.splitlines()}
-    print(f"{page:16} page={sorted(rows, key=int)}  source={sorted(marks, key=int)}"
-          f"{'' if rows == marks else '   <-- MISMATCH'}")
-EOF
-```
-
-Every step-numbered reference is also checked against the marker it names — that the marker belongs
-to *this* page's chain, and that its number matches the row. A shifted line can easily land on a
-marker from a different chain, which a bare "is it a marker" check happily accepts.
-
-**A bare `:NNN` continuation inherits the filename from the reference before it**, which is how the
-step tables are written and why the checker tracks `last`. Any edit to `get/src` can shift these —
-adding the objective chain's six markers moved 28 of them at once — so run it after touching the
-source, not only after touching a page.
-
-Silence means clean. Then open it and click through: a narrow window, and every sidebar link.
+Both scripts silent means clean. Then open it and click through: a narrow window, and every
+sidebar link.
