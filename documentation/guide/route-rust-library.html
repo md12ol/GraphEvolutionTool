@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rust: As a Library · GET docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/route-rust-library.html">
+<main>
+
+<p class="page-kicker">Using GET</p>
+<h1>Rust: As a Library</h1>
+<p class="lede">
+  Depend on the crate, write your objective as a Rust type, and drive an evolver directly. No config
+  file and no Python anywhere in the loop — you assemble the run yourself, which is what makes a
+  native objective fast and an embedded GET possible.
+</p>
+
+<h2>Add the Dependency</h2>
+
+<pre><code class="language-toml"># Cargo.toml
+[dependencies]
+get = { path = "../GraphEvolutionTool/get" }
+
+# or from a clone you pin yourself
+get = { git = "https://github.com/md12ol/GraphEvolutionTool", rev = "&lt;commit&gt;" }</code></pre>
+
+<div class="callout">
+  <p>
+    <b>Pinning a commit is a feature of this route, not a workaround.</b> A frozen dependency is the
+    exact code behind a paper's numbers. Depending on a moving version makes results depend on
+    whichever one happened to be installed.
+  </p>
+</div>
+
+<h2>Your Objective Is a Type</h2>
+
+<p>
+  Implement <code>Fitness</code>. Score the graph in your own units and in the natural direction —
+  the engine converts, so do not pre-negate for a maximizing objective.
+</p>
+
+<pre><code class="language-rust">use get::fitness::{Direction, Fitness};
+use get::graph::Graph;
+
+/// How many nodes sit at exactly `target_degree`. Larger is better.
+struct Regularity {
+    target_degree: usize,
+}
+
+impl Fitness for Regularity {
+    fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64 {
+        let mut at_target = 0;
+        for node in 0..graph.num_nodes() {
+            if graph.degree(node) == self.target_degree {
+                at_target += 1;
+            }
+        }
+        at_target as f64
+    }
+
+    fn direction(&amp;self) -&gt; Direction {
+        Direction::Maximize
+    }
+}</code></pre>
+
+<h2>Assembling a Run, in Four Parts</h2>
+
+<p>
+  There is no config document on this route: you build each piece and hand it over. The parts are
+  the population, the genome's run configuration, what the engine owns, and the strategy's own
+  settings.
+</p>
+
+<pre><code class="language-rust">use get::evolver::{Evolver, GenerationalContext, GenerationalEvolver, SharedEvolutionContext};
+use get::evolver::common::{Crossover, Selection};
+use get::evolver::scope::Scope;
+use get::genomes::{Genome, SdaContext, SdaGenome, SdaMutation};
+
+// 1. The population.
+let mut population = Vec::with_capacity(POPULATION_SIZE);
+for _ in 0..POPULATION_SIZE {
+    population.push(
+        SdaGenome::random_with_edge_multiplicity_cap(
+            NUM_STATES,
+            MAX_EDGE_MULTIPLICITY,
+            4,               // max_resp_len
+            &amp;mut rng,
+        )
+        .expect("dimensions are within the genome's storage limits"),
+    );
+}
+
+// 2. How a genome becomes a graph. Run configuration, never evolved state --
+//    `mutate` and `crossover` never see it.
+let genome_context = SdaContext {
+    num_nodes: NUM_NODES,
+    init_state: 0,
+    max_edge_multiplicity: MAX_EDGE_MULTIPLICITY,
+    init_char_mutation_rate: 0.1,
+    transition_vs_response_rate: 0.5,
+    mutation: SdaMutation::RedrawOne,
+};
+
+// 3. What the engine owns: the two variation rolls, who breeds, and from where.
+//    A strategy never rolls these itself.
+let shared = SharedEvolutionContext {
+    genome_context,
+    crossover_rate: 0.8,
+    mutation_rate: 0.9,
+    max_mutations: 3,
+    selection: Selection::Tournament { tournament_size: 7 },
+    scope: Scope::Global,
+    crossover: Crossover::TwoPoint,
+};
+
+// 4. The strategy's own configuration, and the run.
+let strategy = GenerationalContext { num_generations: 200, elite_count: 1 };
+let fitness = Regularity { target_degree: 4 };
+
+let mut evolver = GenerationalEvolver::new(shared, strategy, population);
+let outcome = evolver.run(&amp;fitness, seed);</code></pre>
+
+<h2>The Two Strategies</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th></th><th>Generational</th><th>Steady-state</th></tr></thead>
+  <tbody>
+    <tr><td><b>Evolver</b></td><td><code>GenerationalEvolver</code></td><td><code>SteadyStateEvolver</code></td></tr>
+    <tr><td><b>Context</b></td><td><code>GenerationalContext</code></td><td><code>SteadyStateContext</code></td></tr>
+    <tr><td><b>Stops after</b></td><td><code>num_generations</code></td><td><code>num_mating_events</code></td></tr>
+    <tr><td><b>Its own knob</b></td><td><code>elite_count</code> — how many survive intact</td><td><code>replacement</code> — who the children overwrite</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  Both take the same <code>SharedEvolutionContext</code>, and both are generic over the genome — so
+  swapping <code>SdaGenome</code> for <code>EdgeEditGenome</code> changes the population and the
+  context you build, and nothing else.
+</p>
+
+<h2>Reading the Outcome</h2>
+
+<pre><code class="language-rust">println!("best fitness  = {}", outcome.best_fitness);
+println!("edges         = {}", outcome.best_graph.edge_count());
+println!("genome        = {}", outcome.best_genome.print());
+
+for row in &amp;outcome.history {
+    println!("{} {} {}", row.iteration, row.best_fitness, row.mean_fitness);
+}</code></pre>
+
+<div class="callout">
+  <p>
+    <b>Scores come back in your units, not the engine's.</b> The engine minimizes internally and
+    converts on the way out, so a <code>Maximize</code> objective's <code>best_fitness</code> is the
+    number your <code>evaluate</code> returned — not its negation.
+  </p>
+</div>
+
+<h2>Seeding and Replicates</h2>
+
+<p>
+  You own the loop, so replicates are yours to run. Derive each seed from one master value so the
+  set is reproducible, and keep the pair <code>(master seed, index)</code> — that is what reproduces
+  a replicate.
+</p>
+
+<pre><code class="language-rust">use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
+
+for run_index in 0..n_runs {
+    let mut master = ChaCha8Rng::seed_from_u64(seed);
+    let run_seed: u64 = master.random();
+    let outcome = one_run(run_seed);
+    // ... write this replicate's files
+}</code></pre>
+
+<h2>Complete Examples</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Example</th><th>Shows</th></tr></thead>
+  <tbody>
+    <tr><td><code>library_route.rs</code></td><td>The whole route: a custom <code>Fitness</code>, SDA genome, generational strategy, replicates and output files.</td></tr>
+    <tr><td><code>edge_edit_generational.rs</code></td><td>Edge-edit genome under the generational strategy.</td></tr>
+    <tr><td><code>edge_edit_steady_state.rs</code></td><td>The same genome under steady-state, including replacement.</td></tr>
+    <tr><td><code>sda_steady_state.rs</code></td><td>SDA under steady-state.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<pre><code class="language-bash">cargo run -p get --features cli --example library_route</code></pre>
+
+<h2>Adding to GET Itself</h2>
+
+<p>
+  Everything above uses GET from outside. If you want a new genome, strategy, selection scheme or
+  variation operator <i>inside</i> the crate — selectable by name from a config file, and available
+  to every route — that is a different job with its own guides: see
+  <a href="extending.html">Extension Points</a>.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

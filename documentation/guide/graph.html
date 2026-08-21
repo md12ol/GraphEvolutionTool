@@ -99,7 +99,7 @@
 </svg>
 <figcaption>Five nodes, six edges, one of which is doubled. The matrix is always
 <code>network_size × network_size</code> however sparse the graph is — which is why
-<a href="performance.html">memory scales with the square of the node count</a>.</figcaption>
+<a href="route-python-objects.html">memory scales with the square of the node count</a>.</figcaption>
 </figure>
 
 <h2>Behaviours that will surprise you</h2>
@@ -116,7 +116,7 @@
     <tr>
       <td><code>set_edge</code> <b>clamps</b> to the cap rather than rejecting</td>
       <td>Feeding a cap-5 result into a cap-1 run silently collapses every weight to 1. This is the
-          main trap when <a href="python-api.html#base-graph">stacking two runs</a>.</td>
+          main trap when <a href="route-python-objects.html">stacking two runs</a>.</td>
     </tr>
     <tr>
       <td>Self-loops and out-of-range vertices are <b>silently ignored</b> by <code>set_edge</code>
@@ -183,7 +183,7 @@
 </div>
 
 <p>Exact signatures and line numbers are on the
-   <a href="../reference/graph.html">graph.rs reference page</a>.</p>
+   graph.rs reference page.</p>
 
 <h2 id="not">What it deliberately is not</h2>
 
@@ -200,12 +200,12 @@
   <li><b>No node or edge attributes.</b> An edge is an integer count and nothing else.</li>
   <li><b>No sparse storage.</b> The dense matrix is what makes every operation
       <code>O(1)</code> and expression cheap; the cost is memory, and it is
-      <a href="performance.html">quadratic in the node count</a>.</li>
+      <a href="route-python-objects.html">quadratic in the node count</a>.</li>
 </ul>
 
 <div class="note">
   <b>The cap is not an SDA-only concern.</b> <code>max_edge_multiplicity</code> motivates the
-  <a href="genomes.html#alphabet">SDA alphabet</a>, but it applies under every genome: a cap of
+  <a href="genomes.html#alphabet">SDA Alphabet</a>, but it applies under every genome: a cap of
   <code>0</code> would clamp every edge to zero weight and give a permanently empty graph, which
   looks like a broken fitness function rather than a bad config. Validation therefore requires
   <code>1 ≤ cap ≤ 255</code>.

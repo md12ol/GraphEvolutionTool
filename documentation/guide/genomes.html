@@ -48,7 +48,7 @@
   <b>They stack.</b> Because a run returns <code>(u, v, multiplicity)</code> triples and an
   edge-edit run starts from a graph, you can evolve a topology with SDA and then refine it with
   edge-edit, with no new data format in between. See
-  <a href="python-api.html#base-graph">supplying a base graph</a>.
+  <a href="route-python-objects.html">supplying a base graph</a>.
 </div>
 
 <h2>The contract both satisfy</h2>
@@ -69,7 +69,7 @@
       crossover.</li>
   <li><b><code>mutate</code> applies exactly one mutation per call.</b> This is a trait-level
       contract, not a per-representation choice — see
-      <a href="variation.html">Crossover &amp; mutation</a> for why.</li>
+      <a href="variation.html">Crossover &amp; Mutation</a> for why.</li>
   <li><b><code>print</code> is the type-erasure hook.</b> It lets the non-generic Python entry
       point record <i>which individual won</i> without knowing its representation.</li>
   <li><b><code>Context</code> carries run-level configuration</b> and is the authority on graph
@@ -151,7 +151,7 @@ v4 = payload / n³  % n</code></pre>
 </div>
 
 <p>Exact preconditions, and precisely how each one fails, are on the
-   <a href="../reference/edge-edit-operations.html">operations reference page</a>.</p>
+   operations reference page.</p>
 
 <div class="warn">
   <b>Five of the nine are inert on an empty base graph.</b> <code>Swap</code>, <code>Hop</code> and
@@ -165,7 +165,7 @@ v4 = payload / n³  % n</code></pre>
 
 <p>
   The nine operations are drawn from a weighted mix you set in
-  <a href="configuration.html">config</a>. The weights are <b>relative, not percentages</b> — they
+  <a href="route-python-toml.html">Python: TOML File</a>. The weights are <b>relative, not percentages</b> — they
   need not sum to anything. <code>0.0</code> disables an operation outright, and at least one must
   be positive.
 </p>
@@ -333,7 +333,7 @@ v4 = payload / n³  % n</code></pre>
 <p>
   Implement <code>Genome</code>, add one config variant, and add one startup function and one
   dispatch arm. The strategy match is generic, so evolvers are untouched. Full recipe on
-  <a href="new-genome.html">Add a genome</a>.
+  <a href="new-genome.html">Add a Genome</a>.
 </p>
 
 </main>

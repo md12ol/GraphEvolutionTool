@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Add an objective · GET docs</title>
+<title>Add an Objective · GET docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,13 +11,56 @@
 <main>
 
 <p class="page-kicker">Extending GET</p>
-<h1>Add an objective</h1>
+<h1>Add an Objective</h1>
 <p class="lede">
   Scoring graphs by something other than an epidemic. Three routes, in increasing order of effort:
   a Python callable, a native objective in the crate, or your own Rust type outside it.
 </p>
 
-<h2>Route 1 — a Python callable</h2>
+<div class="callout">
+  <p>
+    <b>There is no <code>ADD AN OBJECTIVE STEP</code> chain in the source, and that is the point.</b>
+    Every other extension family — genome, strategy, selection, crossover, mutation, scope,
+    replacement — carries numbered markers because it has to be threaded through a match. The
+    objective is erased to a trait object <i>before</i> dispatch, so it never enters the
+    strategy × genome match and there is no chain to follow. If you grepped for one and found
+    nothing, nothing is missing.
+  </p>
+</div>
+
+<h2>What the User Ends Up Writing</h2>
+
+<p>
+  A GET run is configured by a <b>TOML document</b> — see the
+  <a href="route-python-toml.html">Python: TOML File</a> for its full shape, and
+  <a href="route-python-objects.html">Python: Config Objects</a> for how to run one. The objective is the
+  <code>[fitness]</code> section. A Python callable is selected by name, and registered separately
+  through the evolver:
+</p>
+
+<pre><code class="language-toml">[fitness]
+type = "python"</code></pre>
+
+<p>A native objective added inside the crate is selected the same way its own variant is named:</p>
+
+<pre><code class="language-toml">[fitness]
+type           = "my_objective"
+some_parameter = 0.5</code></pre>
+
+<div class="callout">
+  <p>
+    <b>You never write that string in the code.</b> It is derived from your
+    <code>FitnessConfig</code> variant's name, converted to snake_case — the same rule every other
+    section follows. The keys under it are your struct's field names.
+  </p>
+  <p>
+    Route 1 is the exception worth knowing: <code>type = "python"</code> names no objective of its
+    own. It says "a callable will be registered", and a run that reaches scoring without one is
+    rejected rather than silently scoring nothing.
+  </p>
+</div>
+
+<h2>Route 1 — a Python Callable</h2>
 
 <p>
   Set <code>[fitness] type = "python"</code> in the config and register your function. No Rust, no
@@ -46,7 +89,7 @@ evolver = get.GraphEvolver.from_config(config)
 evolver.set_fitness_function(total_weight, "maximize")
 result = evolver.run(20260812)</code></pre>
 
-<h3>The contract</h3>
+<h3>The Contract</h3>
 
 <div class="table-wrap">
 <table>
@@ -63,9 +106,11 @@ result = evolver.run(20260812)</code></pre>
         <td>Declared at registration — <code>"minimize"</code> or <code>"maximize"</code>,
             case-insensitive. Nothing can infer it from your function, and this is the only place
             it can be said.</td></tr>
-    <tr><td><b>Values</b></td>
-        <td>Finite or <code>±inf</code>. <b><code>NaN</code> is rejected</b> and will fail the
-            run.</td></tr>
+    <tr><td><b>What you may return</b></td>
+        <td>Any real number, and <code>±inf</code> to mark an individual unusable.
+            <b><code>NaN</code> stops the run</b> — it is not skipped or scored as a loss. Watch
+            for a zero denominator, <code>0.0/0.0</code> and <code>inf - inf</code>: an empty graph
+            puts all three within reach.</td></tr>
   </tbody>
 </table>
 </div>
@@ -78,14 +123,7 @@ result = evolver.run(20260812)</code></pre>
   your function body remains.
 </div>
 
-<div class="tip">
-  The interface is modelled on <b>pymoo's <code>Problem._evaluate</code></b> — a batch of
-  solutions in, an array of objective values out, vectorized in numpy. That idiom is already
-  familiar to the audience, and it is the shape the performance argument demands, so the ergonomic
-  choice and the fast choice agree.
-</div>
-
-<h3>Vectorising it properly</h3>
+<h3>Vectorising It Properly</h3>
 
 <pre><code class="language-python">import numpy as np
 
@@ -102,7 +140,7 @@ def clustering_penalty(batch):
 
 evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
 
-<h3>Things that will bite you</h3>
+<h3>Things That Will Bite You</h3>
 
 <ul>
   <li><b>Registration is refused if the config did not select <code>python</code>.</b> Silently
@@ -110,7 +148,7 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
       errors instead.</li>
   <li><b>Use generational, not steady-state.</b> Steady-state scores two children per mating event,
       so a Python objective pays one crossing <i>per event</i> instead of per generation. See
-      <a href="evolvers.html">Evolution strategies</a>.</li>
+      <a href="evolvers.html">Evolution Strategies</a>.</li>
   <li><b>Replicates run sequentially under a Python objective</b>, chosen by the engine rather than
       by you — <code>n</code> concurrent runs would be <code>n</code> threads contending for one
       lock.</li>
@@ -120,7 +158,7 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
       returning scores in the wrong <i>order</i> is neither, and will quietly evolve nonsense.</li>
 </ul>
 
-<h2>Route 2 — a native objective inside the crate</h2>
+<h2>Route 2 — a Native Objective Inside the Crate</h2>
 
 <p>Six small edits, none of which touch a strategy or a genome:</p>
 
@@ -149,7 +187,7 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
   you override <code>evaluate_batch</code>, remember it must produce results in input order.
 </div>
 
-<h3>Sharing one simulation between objectives</h3>
+<h3>Sharing One Simulation Between Objectives</h3>
 
 <p>
   If your objective needs an epidemic, read the existing pattern first: the expensive part is the
@@ -158,7 +196,7 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
   cheaper than adding a fourth simulator.
 </p>
 
-<h2 id="rust-route">Route 3 — your own crate, outside GET</h2>
+<h2 id="rust-route">Route 3 — Your Own Crate, Outside GET</h2>
 
 <p>
   If your objective is hot enough to matter and you do not want to fork GET, depend on it as a
@@ -193,7 +231,7 @@ impl Fitness for EdgeBudget {
   <b>Numbers you read from the outcome are in engine orientation</b> — lower is better, whatever
   your direction said. That is the stated cost of converting only at the two edges of the system,
   and the direction carried on the outcome is what you convert with. See
-  <a href="fitness.html">Fitness &amp; orientation</a>.
+  <a href="fitness.html">Fitness &amp; Orientation</a>.
 </div>
 
 <p>
@@ -201,7 +239,7 @@ impl Fitness for EdgeBudget {
   edge of this route rather than a hint that you are doing it wrong.
 </p>
 
-<h2>Checklist, whichever route</h2>
+<h2>Checklist, Whichever Route</h2>
 
 <ul>
   <li>Return values in <b>your own units and sign</b>. Nothing is normalized for you, and nothing

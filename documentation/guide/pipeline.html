@@ -117,7 +117,7 @@
 
 <h3>1. Config in, validated once</h3>
 <p>
-  A run starts from a <a href="configuration.html">config document</a>. Whether you wrote it as
+  A run starts from a <a href="route-python-toml.html">Python: TOML File</a>. Whether you wrote it as
   TOML by hand or built it out of Python objects, it ends up as the same Rust <code>Config</code>
   struct, and <code>Config::validate</code> checks it <b>before a single graph is allocated</b>.
   A bad config is a user mistake, so it comes back as a Python exception naming the offending field
@@ -146,7 +146,7 @@
   The engine is <b>statically generic</b> over the genome — <code>Evolver::run</code> is a generic
   method, so there is no <code>Box&lt;dyn Evolver&gt;</code> and no <code>dyn Genome</code>.
   Runtime choice is resolved by a <code>match</code> in
-  <a href="../reference/dispatch.html">dispatch.rs</a> that instantiates real types.
+  dispatch.rs that instantiates real types.
 </p>
 <p>
   The two axes are not symmetric, and only one of them is a match:
@@ -164,7 +164,7 @@
 <p>
   The practical consequence: <b>adding an objective is one match arm and never touches
   dispatch</b>, while adding a genome or a strategy multiplies the dispatch table. See
-  <a href="new-fitness.html">Add an objective</a>.
+  <a href="new-fitness.html">Add an Objective</a>.
 </p>
 
 <div class="warn">
@@ -185,7 +185,7 @@
 <h3>5. Score — graph to a number</h3>
 <p>
   Each graph gets one <code>f64</code>. For the three built-in objectives that means running
-  <code>num_epidemics</code> <a href="sir.html">SIR simulations</a> on the graph and reading one
+  <code>num_epidemics</code> <a href="sir.html">SIR Simulations</a> on the graph and reading one
   number off them. Scoring is <b>batched</b>: the whole population goes over in one call, which is
   what makes a Python objective viable at all.
 </p>
@@ -211,7 +211,7 @@
 <p>
   A run produces an <code>EvolutionOutcome</code>: the best genome, its already-expressed graph,
   its fitness, and the full run history. The Python boundary converts fitness back into your units
-  on the way out. See <a href="output.html">Logs &amp; results</a>.
+  on the way out. See <a href="output.html">Logs &amp; Results</a>.
 </p>
 
 <h2>The three bounds that make it parallel</h2>
@@ -240,7 +240,7 @@
 <p>
   Net effect: expression and native scoring are both parallel and free of the Python GIL. That
   property is exactly what makes the batched Python objective design work — see
-  <a href="performance.html">Performance &amp; memory</a>.
+  <a href="route-python-objects.html">Python: Config Objects</a>.
 </p>
 
 <h2>Two rules worth memorising</h2>

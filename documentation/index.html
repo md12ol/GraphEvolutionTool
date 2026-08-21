@@ -20,21 +20,31 @@
 </p>
 
 <div class="cards">
-  <a class="card" href="guide/getting-started.html">
-    <h3>Getting started →</h3>
-    <p>Build the extension module, write a config, run your first evolution, read the result.</p>
+  <a class="card" href="guide/route-python-objects.html">
+    <h3>Python: config objects →</h3>
+    <p>Build a run out of typed objects and read the results back as Python values. No file to
+       maintain.</p>
+  </a>
+  <a class="card" href="guide/route-python-toml.html">
+    <h3>Python: TOML file →</h3>
+    <p>Keep the parameters in a document you can archive, diff and hand to someone else.</p>
+  </a>
+  <a class="card" href="guide/route-rust-library.html">
+    <h3>Rust: as a library →</h3>
+    <p>Depend on the crate, write your objective as a Rust type, drive an evolver directly.</p>
+  </a>
+  <a class="card" href="guide/route-rust-cli.html">
+    <h3>Rust: the get-run CLI →</h3>
+    <p>One command, one config file, three output files. No interpreter in the loop.</p>
   </a>
   <a class="card" href="guide/pipeline.html">
     <h3>How it works →</h3>
-    <p>The genome → graph → fitness loop, drawn out, with every stage explained in plain language.</p>
+    <p>The genome → graph → fitness loop, drawn out, with every stage explained in plain
+       language.</p>
   </a>
-  <a class="card" href="guide/configuration.html">
-    <h3>Configuration →</h3>
-    <p>Every key GET accepts, what it does, what it defaults to, and what makes it invalid.</p>
-  </a>
-  <a class="card" href="reference/index.html">
-    <h3>Source reference →</h3>
-    <p>One page per module in <code>get/src/</code>, with the public types and where they live.</p>
+  <a class="card" href="guide/extending.html">
+    <h3>Extending GET →</h3>
+    <p>Add an objective, genome, strategy, selection scheme or variation operator.</p>
   </a>
 </div>
 
@@ -151,8 +161,8 @@ print(len(result.history))           # the convergence log, one row per generati
 
 <p>
   Line by line, with every option spelled out, on the
-  <a href="guide/python-api.html">Python API</a> page. The same experiment as a TOML file is on
-  <a href="guide/configuration.html">Configuration</a> — the two front ends
+  <a href="guide/route-python-objects.html">Python: Config Objects</a> page. The same experiment as a TOML file is on
+  <a href="guide/route-python-toml.html">Python: TOML File</a> — the two front ends
   <a href="guide/pipeline.html#two-front-ends">converge before anything is parsed</a>, so neither
   can accept something the other rejects.
 </p>
@@ -164,22 +174,22 @@ print(len(result.history))           # the convergence log, one row per generati
   <thead><tr><th>If you want to…</th><th>Read</th></tr></thead>
   <tbody>
     <tr><td>run an experiment and get numbers out</td>
-        <td><a href="guide/getting-started.html">Getting started</a> →
-            <a href="guide/configuration.html">Configuration</a> →
-            <a href="guide/output.html">Logs &amp; results</a></td></tr>
+        <td><a href="guide/route-python-objects.html">Python: Config Objects</a> →
+            <a href="guide/route-python-toml.html">Python: TOML File</a> →
+            <a href="guide/output.html">Logs &amp; Results</a></td></tr>
     <tr><td>understand why a run behaves the way it does</td>
-        <td><a href="guide/fitness.html">Fitness &amp; orientation</a> →
-            <a href="guide/sir.html">The SIR model</a> →
-            <a href="guide/reproducibility.html">Seeds &amp; reproducibility</a></td></tr>
+        <td><a href="guide/fitness.html">Fitness &amp; Orientation</a> →
+            <a href="guide/sir.html">The SIR Model</a> →
+            <a href="guide/reproducibility.html">Seeds &amp; Reproducibility</a></td></tr>
     <tr><td>score graphs by something other than an epidemic</td>
-        <td><a href="guide/new-fitness.html">Add an objective</a></td></tr>
+        <td><a href="guide/new-fitness.html">Add an Objective</a></td></tr>
     <tr><td>add a new representation or strategy</td>
-        <td><a href="guide/new-genome.html">Add a genome</a> ·
-            <a href="guide/new-evolver.html">Add a strategy</a></td></tr>
+        <td><a href="guide/new-genome.html">Add a Genome</a> ·
+            <a href="guide/new-evolver.html">Add a Strategy</a></td></tr>
     <tr><td>find the code behind a concept</td>
-        <td><a href="reference/index.html">Module map</a></td></tr>
+        <td>Module Map</td></tr>
     <tr><td>know what is actually built today</td>
-        <td><a href="status.html">Implementation status</a></td></tr>
+        <td><a href="status.html">Implementation Status</a></td></tr>
   </tbody>
 </table>
 </div>

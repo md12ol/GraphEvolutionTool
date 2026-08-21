@@ -41,7 +41,7 @@
             <a href="guide/genomes.html#alphabet">→</a></td></tr>
     <tr><td>The Python front end accepting what a file would reject</td>
         <td>Making Python a builder for TOML, not a second parser.
-            <a href="guide/python-api.html">→</a></td></tr>
+            <a href="guide/route-python-objects.html">→</a></td></tr>
     <tr><td>Reproducibility evaporating under load</td>
         <td>Per-run objective state, never shared across concurrent runs.
             <a href="guide/reproducibility.html">→</a></td></tr>
@@ -77,7 +77,7 @@
   down to strategy × genome, and makes adding an objective free of dispatch entirely.
 </p>
 
-<p>See <a href="guide/extending.html">Extension points</a> for what that costs each kind of
+<p>See <a href="guide/extending.html">Extension Points</a> for what that costs each kind of
    addition.</p>
 
 <h2>One conversion, at one gate</h2>
@@ -145,7 +145,7 @@
   Dense storage is the other half. Every operation is constant time and expression is cheap; the
   cost is memory that grows with the <i>square</i> of the node count, and multiplies by the
   population and the concurrency. That trade is
-  <a href="guide/performance.html">documented rather than hidden</a>, because the failure mode —
+  <a href="guide/route-python-objects.html">documented rather than hidden</a>, because the failure mode —
   raising the core count and exhausting memory on hardware that coped before — is genuinely
   unintuitive.
 </p>
@@ -294,7 +294,7 @@
 
 <p>
   What is built and what is still designed-only is on
-  <a href="status.html">Implementation status</a>.
+  <a href="status.html">Implementation Status</a>.
 </p>
 
 </main>

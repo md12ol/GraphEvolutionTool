@@ -33,38 +33,38 @@
   <thead><tr><th>Component</th><th></th><th>Documented on</th></tr></thead>
   <tbody>
     <tr><td>The <code>Graph</code> type</td><td><span class="badge badge-built">built</span></td>
-        <td><a href="guide/graph.html">Guide</a> · <a href="reference/graph.html">Reference</a></td></tr>
+        <td><a href="guide/graph.html">Guide</a> · Reference</td></tr>
     <tr><td>Both genomes, and the mutation contract</td>
         <td><span class="badge badge-built">built</span></td>
         <td><a href="guide/genomes.html">Guide</a> ·
-            <a href="reference/sda.html">sda</a> ·
-            <a href="reference/edge-edit.html">edge-edit</a></td></tr>
+            sda ·
+            edge-edit</td></tr>
     <tr><td>Selection, population scoring, logging statistics</td>
         <td><span class="badge badge-built">built</span></td>
-        <td><a href="reference/evolver-common.html">evolver/common</a></td></tr>
+        <td>evolver/common</td></tr>
     <tr><td>Generational evolver</td><td><span class="badge badge-built">built</span></td>
         <td><a href="guide/evolvers.html#generational">Guide</a> ·
-            <a href="reference/generational.html">Reference</a></td></tr>
+            Reference</td></tr>
     <tr><td>Steady-state evolver</td><td><span class="badge badge-built">built</span></td>
         <td><a href="guide/evolvers.html#steady-state">Guide</a> ·
-            <a href="reference/steady-state.html">Reference</a></td></tr>
+            Reference</td></tr>
     <tr><td>The SIR simulator</td><td><span class="badge badge-built">built</span></td>
-        <td><a href="guide/sir.html">Guide</a> · <a href="reference/sir.html">Reference</a></td></tr>
+        <td><a href="guide/sir.html">Guide</a> · Reference</td></tr>
     <tr><td>All three SIR objectives, with epidemic seeding</td>
         <td><span class="badge badge-built">built</span></td>
         <td><a href="guide/fitness.html">Guide</a> ·
-            <a href="reference/fitness.html">Reference</a></td></tr>
+            Reference</td></tr>
     <tr><td>Config parsing, and one validator covering both front ends</td>
         <td><span class="badge badge-built">built</span></td>
-        <td><a href="guide/configuration.html">Guide</a> ·
-            <a href="reference/config.html">Reference</a></td></tr>
+        <td><a href="guide/route-python-toml.html">Python: TOML File</a> ·
+            Reference</td></tr>
     <tr><td>The Python module, config builders, <code>set_fitness_function</code></td>
         <td><span class="badge badge-built">built</span></td>
-        <td><a href="guide/python-api.html">Guide</a> ·
-            <a href="reference/py-config.html">Reference</a></td></tr>
+        <td><a href="guide/route-python-objects.html">Python: Config Objects</a> ·
+            Reference</td></tr>
     <tr><td>Dispatch — all four strategy × genome combinations, end to end</td>
         <td><span class="badge badge-built">built</span></td>
-        <td><a href="reference/dispatch.html">Reference</a></td></tr>
+        <td>Reference</td></tr>
   </tbody>
 </table>
 </div>
@@ -85,7 +85,7 @@
           master seed feeds a stream whose draw <code>i</code> is run <code>i</code>'s seed.</td>
       <td><code>run(seed)</code> performs exactly one run. Looping in Python works, but you choose
           the seeds yourself and lose the stream property — so record them.</td>
-      <td><a href="guide/python-api.html">Python API</a> ·
+      <td><a href="guide/route-python-objects.html">Python: Config Objects</a> ·
           <a href="guide/reproducibility.html">Reproducibility</a></td>
     </tr>
     <tr>
@@ -93,7 +93,7 @@
       <td>One cap governing both replicate-level and population-level concurrency, with the pool
           built per call rather than globally.</td>
       <td>No cap and no pool construction. Parallelism uses the default global pool.</td>
-      <td><a href="guide/performance.html">Performance &amp; memory</a></td>
+      <td><a href="guide/route-python-objects.html">Python: Config Objects</a></td>
     </tr>
     <tr>
       <td><b><code>ci_95</code>, and the per-row seed and run index</b></td>
@@ -101,15 +101,15 @@
           and still separated.</td>
       <td>Four columns: <code>iteration</code>, <code>best_fitness</code>,
           <code>mean_fitness</code>, <code>std_dev</code>.</td>
-      <td><a href="guide/output.html">Logs &amp; results</a></td>
+      <td><a href="guide/output.html">Logs &amp; Results</a></td>
     </tr>
     <tr>
       <td><b><code>save_logs</code> / <code>save_results</code></b></td>
       <td>Write the convergence CSV, and the best individual alongside the generated TOML as the
           provenance record.</td>
       <td>Both raise.</td>
-      <td><a href="guide/output.html">Logs &amp; results</a> ·
-          <a href="reference/lib.html">lib.rs</a></td>
+      <td><a href="guide/output.html">Logs &amp; Results</a> ·
+          lib.rs</td>
     </tr>
     <tr>
       <td><b>Supplying a base graph</b></td>
@@ -119,15 +119,15 @@
       <td>There is no setter. Every edge-edit run starts from an empty graph, which leaves five of
           the nine operations inert until <code>Add</code>/<code>Toggle</code> build
           structure.</td>
-      <td><a href="guide/python-api.html#base-graph">Python API</a> ·
-          <a href="guide/configuration.html">Configuration</a></td>
+      <td><a href="guide/route-python-objects.html">Python: Config Objects</a> ·
+          <a href="guide/route-python-toml.html">Python: TOML File</a></td>
     </tr>
     <tr>
       <td><b>Base-graph validation</b></td>
       <td>The twelfth item on the validation list: node count and cap narrowing checked with
           everything else, before anything runs.</td>
       <td>Deferred explicitly in the code, since there is nothing to validate yet.</td>
-      <td><a href="guide/configuration.html">Configuration</a></td>
+      <td><a href="guide/route-python-toml.html">Python: TOML File</a></td>
     </tr>
   </tbody>
 </table>
@@ -137,7 +137,7 @@
 
 <p>
   These are decisions rather than gaps, and they are documented so their absence reads as
-  intentional. Reasoning on <a href="design-notes.html#non-goals">Design notes</a>.
+  intentional. Reasoning on <a href="design-notes.html#non-goals">Design Notes</a>.
 </p>
 
 <div class="table-wrap">
