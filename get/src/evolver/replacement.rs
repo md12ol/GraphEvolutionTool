@@ -1,4 +1,5 @@
-//! Who a breeding event's children overwrite.
+//! Who a breeding event's children overwrite. Steady-state only — generational
+//! rebuilds its whole population and never asks.
 
 use super::common::rank;
 use rand::Rng;
@@ -48,6 +49,7 @@ impl Replacement {
                 victims
             }
             Replacement::Random => {
+                // Scope entries are distinct; with repeats this would not terminate.
                 let mut victims = Vec::with_capacity(count);
                 while victims.len() < count {
                     let candidate = scope[rng.random_range(0..scope.len())];
