@@ -1019,6 +1019,10 @@ mod tests {
     // module. Test helpers cannot be imported across sibling `#[cfg(test)]`
     // modules without giving them a home in the lib target, which GitHub #56
     // calls out as a decision to make on purpose rather than by default.
+    const SIR_FITNESS: &str =
+        "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.05\nnum_epidemics = 30\n";
+    const PYTHON_FITNESS: &str = "[fitness]\ntype = \"python\"\n";
+
     /// The four `[..]` blocks that choose how a breeding event behaves, each
     /// mapped onto the engine variant it names.
     ///
@@ -1048,10 +1052,6 @@ mod tests {
         assert_eq!(replacement(&ReplacementConfig::Worst), Replacement::Worst);
         assert_eq!(crossover(&CrossoverConfig::TwoPoint), Crossover::TwoPoint);
     }
-
-    const SIR_FITNESS: &str =
-        "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.05\nnum_epidemics = 30\n";
-    const PYTHON_FITNESS: &str = "[fitness]\ntype = \"python\"\n";
 
     /// A config whose `[fitness]` block is exactly `fitness_block`.
     fn config_with(fitness_block: &str) -> Config {
