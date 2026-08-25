@@ -242,7 +242,7 @@ impl Fitness for EdgeBudget {
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/fitness.rs:235</code></td>
+    <tr><td>1</td><td><code>get/src/fitness.rs:242</code></td>
         <td>implement the trait, and validate the objective's inputs in its constructor</td></tr>
     <tr><td>2</td><td><code>get/src/config.rs:465</code>, <code>:491</code> and <code>:1083</code></td>
         <td>the config variant, its type name, and its validation arm</td></tr>
@@ -252,8 +252,11 @@ impl Fitness for EdgeBudget {
         <td>the Python variant and its attribute paths — optional</td></tr>
     <tr><td>5</td><td><code>config.example.toml:87</code></td>
         <td>an example block, if the objective ships</td></tr>
-    <tr><td>6</td><td><code>get/src/dispatch.rs:1124</code></td>
-        <td>the test asserting the boxed objective reports its own direction</td></tr>
+    <tr><td>6</td><td><code>get/src/dispatch.rs:1122</code></td>
+        <td>a helper returning the objective's <code>[fitness]</code> block — skippable, see
+            below</td></tr>
+    <tr><td>7</td><td><code>get/src/dispatch.rs:1156</code></td>
+        <td>the test case asserting the boxed objective reports its own direction</td></tr>
   </tbody>
 </table>
 </div>
@@ -271,7 +274,7 @@ impl Fitness for EdgeBudget {
   with the type and its implementation, in <code>get/src/fitness.rs</code>:
 </p>
 
-<pre><code class="language-rust" data-example>// step 1 — fitness.rs:235
+<pre><code class="language-rust" data-example>// step 1 — fitness.rs:242
 pub struct MyObjective {
     threshold: f64,
 }
@@ -399,9 +402,46 @@ MyObjective { threshold: f64 },
   user's afternoon.
 </p>
 
-<h2>Step 6 — The Test That Catches a Silent Failure</h2>
+<h2>Step 6 — A Block Helper, If the Block Needs One</h2>
 
-<pre><code class="language-rust">// step 6 — dispatch.rs:1124   one entry in the existing `cases` array
+<p>
+  <b>The one step you can skip.</b> The test below feeds each objective a <code>[fitness]</code>
+  block as a <code>String</code>, and two things make that string worth putting behind a function
+  rather than writing it out:
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Helper</th><th>What it does</th><th>Write your own when</th></tr></thead>
+  <tbody>
+    <tr><td><code>sir_block(type_name, extra)</code></td>
+        <td>Formats a block for <code>type_name</code> carrying the <code>infection_rate</code> and
+            <code>num_epidemics</code> keys every SIR objective needs, plus whatever
+            <code>extra</code> adds.</td>
+        <td>your objective shares required keys with others — the helper is what stops three cases
+            restating them and disagreeing</td></tr>
+    <tr><td><code>struct_match_block(name)</code></td>
+        <td>Writes a real reference set — two triangles and a four-cycle — into a fresh temporary
+            folder, then returns a block whose <code>reference_folder</code> names it.</td>
+        <td>your objective reads something off disk. <code>objective()</code> is what reads it, so
+            a block naming a folder that does not exist fails there, not in the test</td></tr>
+  </tbody>
+</table>
+</div>
+
+<pre><code class="language-rust">// step 6 — dispatch.rs:1122   beside `sir_block` and `struct_match_block`
+fn my_objective_block(threshold: f64) -> String {
+    format!("[fitness]\ntype = \"my_objective\"\nthreshold = {threshold}\n")
+}</code></pre>
+
+<p>
+  Needing neither? Skip it and write the block inline at step 7 — there is nothing for a helper to
+  do.
+</p>
+
+<h2>Step 7 — The Test That Catches a Silent Failure</h2>
+
+<pre><code class="language-rust">// step 7 — dispatch.rs:1156   one entry in the existing `cases` array
 let cases = [
     (sir_block("epi_spread", ""), Direction::Maximize),
     (sir_block("epi_length", ""), Direction::Maximize),
@@ -410,7 +450,10 @@ let cases = [
         Direction::Minimize,
     ),
     (struct_match_block("direction"), Direction::Minimize),
-    // yours: a helper if the block needs setting up, inline if it does not
+    // yours, using the step 6 helper:
+    (my_objective_block(3.0), Direction::Maximize),
+    // or inline, if you wrote no helper. The `\n`s are the line breaks of the
+    // TOML: `[fitness]`, then `type`, then the objective's own keys.
     (
         "[fitness]\ntype = \"my_objective\"\nthreshold = 3.0\n".to_string(),
         Direction::Maximize,
@@ -418,10 +461,9 @@ let cases = [
 ];</code></pre>
 
 <p>
-  Each case is a <code>[fitness]</code> block and the direction it must come back with. The three
-  SIR objectives use the <code>sir_block</code> helper because they share a block;
-  <code>struct_match</code> uses <code>struct_match_block</code>, which writes real reference files
-  into a temp folder first. An objective needing neither writes its block inline, as above.
+  Each case is a <code>[fitness]</code> block, as a <code>String</code>, and the direction it must
+  come back with. <code>.to_string()</code> on the inline form only because the array holds
+  <code>String</code>s and a literal is a <code>&amp;str</code>.
 </p>
 
 <p>
