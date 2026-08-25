@@ -1,20 +1,9 @@
 //! What a run hands back to Python: [`PyRunResult`] and its log rows.
 //!
-//! # Why these are a separate mirror rather than `#[pyclass]` on the engine's own types
-//!
-//! Two reasons, and each on its own would be enough.
-//! [`crate::evolver::EvolutionOutcome`] is generic over the genome, and a
-//! `#[pyclass]` cannot carry a type parameter. And
-//! [`crate::evolver::GenerationStats`] holds engine-oriented numbers —
-//! lower-is-better, whatever the objective actually computes — which are not the
-//! numbers a user should ever see.
-//!
-//! So the dispatch layer erases the genome and converts the orientation, and this
-//! module is what that erased result becomes on the way out.
-//!
-//! **Everything here is in the objective's own units.** Nothing in this module
-//! converts anything; the dispatch layer's `erase` is the one place that
-//! happens.
+//! **Every number here is in the objective's own units and sign.** Nothing in
+//! this module converts anything — the dispatch layer's `erase` is where the
+//! engine's lower-is-better orientation is undone, and converting again here
+//! would silently flip every result.
 
 use std::fs::File;
 use std::io::Write;
@@ -26,10 +15,8 @@ use crate::dispatch::ErasedOutcome;
 
 /// Turn a value into `#` comment lines, **every** line of it.
 ///
-/// `Genome::print` is free to return several lines — `SdaGenome`'s is a whole
-/// transition table — and a saved result is a loadable edge file, so a line
-/// that escaped the `#` would reach the parser as a malformed row. Commenting
-/// only the first line is exactly the bug this exists to prevent.
+/// `Genome::print` may return many lines and the file is a loadable edge list,
+/// so a line that escaped the `#` would reach the parser as a malformed row.
 pub(crate) fn as_comment(label: &str, value: &str) -> String {
     let mut out = String::new();
     let mut first = true;
@@ -52,9 +39,6 @@ pub(crate) fn as_comment(label: &str, value: &str) -> String {
 ///
 /// `iteration` counts generations under the generational strategy and mating
 /// events under steady-state.
-///
-/// Frozen, and every field read-only: this is a record of something that already
-/// happened, so there is nothing a caller could correctly change.
 #[pyclass(name = "GenerationStats", frozen, get_all)]
 #[derive(Debug, Clone)]
 pub struct PyGenerationStats {
@@ -64,19 +48,12 @@ pub struct PyGenerationStats {
     pub best_fitness: f64,
     /// Population mean fitness at this iteration.
     pub mean_fitness: f64,
-    /// **Population** standard deviation — divides by `n`, not `n - 1`, because
-    /// these are all the individuals there are rather than a sample of some
-    /// larger group. A population of one therefore has a deviation of zero.
-    ///
-    /// Unconverted, and correctly so: a spread is identical under negation, so
-    /// this reads the same whichever direction the objective runs in.
+    /// **Population** standard deviation, dividing by `n`. Zero for a
+    /// population of one.
     pub std_dev: f64,
     /// Half-width of the 95% confidence interval on `mean_fitness`, using the
-    /// **sample** deviation (divides by `n - 1`) rather than `std_dev`'s
-    /// population deviation — estimating the mean's uncertainty is a
-    /// sample-deviation question even though `std_dev` beside it is not. Zero
-    /// when the population has one individual, never `NaN`. Unconverted, like
-    /// `std_dev`, for the same reason.
+    /// **sample** deviation, dividing by `n - 1` — not `std_dev` beside it.
+    /// Zero for a population of one, never `NaN`.
     pub ci_95: f64,
 }
 
@@ -92,38 +69,26 @@ impl PyGenerationStats {
 
 /// Everything one run produced.
 ///
-/// Returned by [`crate::GraphEvolver::run`]. There is deliberately no accessor on
-/// the evolver for reading any of this: the run's state lives here, so the
-/// evolver holds nothing stale from a previous run and is reusable across
-/// repeated runs.
+/// Returned by [`crate::GraphEvolver::run`]. The evolver keeps none of it, so it
+/// is reusable across runs and never reports a previous one's numbers.
 #[pyclass(name = "RunResult", frozen)]
 #[derive(Debug)]
 pub struct PyRunResult {
     /// Best fitness found, in the **objective's own units and sign**.
     ///
-    /// This is the best of the **final** population, not the best ever seen —
-    /// it matches `history`'s last row rather than the highest `best_fitness`
-    /// across every row. Under a stochastic objective an earlier generation
-    /// can score higher by a lucky draw that a later, better-adapted
-    /// individual does not repeat; reporting that draw instead would credit
-    /// noise rather than the search.
+    /// The best of the **final** population, not the best ever seen: it matches
+    /// `history`'s last row, which under a stochastic objective may score worse
+    /// than an earlier row.
     #[pyo3(get)]
     pub best_fitness: f64,
     /// The best individual's expressed network, as `(u, v, multiplicity)`.
     #[pyo3(get)]
     pub best_edges: Vec<(usize, usize, u32)>,
-    /// How many nodes that network has, isolated ones included.
-    ///
-    /// Not derivable from `best_edges` — an isolated node appears in no edge —
-    /// which is the same reason a file has to state its size rather than have
-    /// it inferred.
+    /// How many nodes that network has, isolated ones included. Not derivable
+    /// from `best_edges`, since an isolated node appears in no edge.
     #[pyo3(get)]
     pub num_nodes: usize,
     /// The best individual's genome, via `Genome::print`.
-    ///
-    /// This is the record of *which* individual won, in a form the entry point
-    /// can carry without knowing the representation — which it cannot, since it
-    /// is not generic over the genome.
     #[pyo3(get)]
     pub best_genome_repr: String,
     /// The convergence log, one row per logged iteration.
@@ -133,22 +98,14 @@ pub struct PyRunResult {
     #[pyo3(get)]
     pub history: Vec<PyGenerationStats>,
     /// The seed `run` was called with.
-    ///
-    /// Run-level rather than per-row: it lives here once and `save_logs`
-    /// stamps it onto every CSV row it writes, rather than every in-memory
-    /// row carrying its own copy of a value that never varies within a run.
     #[pyo3(get)]
     pub seed: u64,
-    /// Which replicate this is, `0`-based.
-    ///
-    /// A hard `0` until GitHub #20 gives `run` more than one replicate to
-    /// number — reserved now so the CSV schema does not change under users
-    /// once it does.
+    /// Which replicate this is, `0`-based. Always `0` today; the field exists so
+    /// the CSV schema does not change when `run` gains replicates.
     #[pyo3(get)]
     pub run_index: usize,
-    /// The TOML document this run's config was parsed from — the provenance
-    /// record `save_results` writes alongside the best individual, so the run
-    /// can be reproduced verbatim.
+    /// The TOML document this run's config was parsed from. `save_results`
+    /// writes it beside the best individual, so the run can be reproduced.
     #[pyo3(get)]
     pub config_toml: String,
 }
@@ -166,10 +123,8 @@ impl PyRunResult {
 
     /// Write the convergence log to `filename` as CSV.
     ///
-    /// Header, then one row per logged iteration: §6.4's five columns, then
-    /// `seed` and `run_index` last — both are run-level and so identical on
-    /// every row, which is what lets several runs' logs be concatenated and
-    /// still be separable.
+    /// `seed` and `run_index` come last and repeat on every row, so several
+    /// runs' logs concatenate into one file and stay separable.
     pub fn save_logs(&self, filename: &str) -> PyResult<()> {
         let mut file = File::create(filename)
             .map_err(|err| PyIOError::new_err(format!("could not create {filename}: {err}")))?;
@@ -199,16 +154,12 @@ impl PyRunResult {
     }
 
     /// Write the best individual to `filename`, and the run's config TOML
-    /// alongside it at `{filename}.toml` — the provenance record §8 promises,
-    /// derived rather than a second argument so callers cannot forget it.
+    /// alongside it at `{filename}.toml`.
     ///
-    /// **The file is a loadable edge list**, not a report that happens to
-    /// contain one: the fitness, the genome string and the node count are `#`
-    /// comments, which `graph_io` skips, and the rows below them are the
-    /// `u,v,weight` the loader reads. So a run's winner goes straight back in
-    /// as the next run's base graph, or into a reference folder, with no
-    /// editing step in between — and the `# nodes` line the loader requires is
-    /// written from the graph rather than left for someone to count.
+    /// **The file is a loadable edge list.** Fitness, genome and node count are
+    /// `#` comments that `graph_io` skips; the rows below are the `u,v,weight`
+    /// the loader reads. A run's winner goes straight back in as the next run's
+    /// base graph with no editing step.
     pub fn save_results(&self, filename: &str) -> PyResult<()> {
         let mut file = File::create(filename)
             .map_err(|err| PyIOError::new_err(format!("could not create {filename}: {err}")))?;
