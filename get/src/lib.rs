@@ -98,6 +98,60 @@ pub(crate) fn emit_load_warnings_maybe(
     }
 }
 
+/// Load the base graph a config names, resolved against the config file itself.
+///
+/// `Ok(None)` when the genome is not edge-edit, or names no base graph. The
+/// path is relative to the config file's directory rather than the working
+/// directory, so a folder holding a config and the graph it names runs from
+/// wherever it is unpacked; an absolute path is taken as given.
+///
+/// The two routes that reach this both load a `Config` *from a path*, which is
+/// what makes the key resolvable at all. A config assembled in Python has no
+/// directory to resolve against, so it has no such key and uses
+/// [`GraphEvolver::set_base_graph_from_file`] — which is also the way in for a
+/// file numbered from anything but 0, since this route has no
+/// `min_node_index` to declare one.
+fn config_base_graph(
+    py: Option<Python<'_>>,
+    config: &Config,
+    config_path: &Path,
+) -> PyResult<Option<Graph>> {
+    let GenomeConfig::EdgeEdit(edge_edit) = &config.genome else {
+        return Ok(None);
+    };
+    let Some(named) = &edge_edit.base_graph else {
+        return Ok(None);
+    };
+
+    let named = Path::new(named);
+    let path = match config_path.parent() {
+        Some(directory) if named.is_relative() => directory.join(named),
+        _ => named.to_path_buf(),
+    };
+
+    let loaded =
+        graph_io::load_edge_file(&path, config.network_size, config.max_edge_multiplicity, 0)
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+
+    emit_load_warnings_maybe(py, &loaded.source, &loaded.warnings)?;
+
+    // The same disagreement `set_base_graph_from_file` rejects: the loader
+    // refuses a header above `network_size`, so below it is what lands here,
+    // and a file the writer believes is 200 nodes but which says 180 would
+    // otherwise load as 200 padded with isolated nodes nobody asked for.
+    if loaded.num_nodes != config.network_size {
+        return Err(PyValueError::new_err(format!(
+            "`{}` states `# nodes = {}` but network_size is {}; the graph an \
+             edit script is applied to must be the size the run evolves",
+            loaded.source, loaded.num_nodes, config.network_size,
+        )));
+    }
+
+    let mut graph = Graph::new(config.network_size, config.max_edge_multiplicity);
+    graph.set_edges(&loaded.edges);
+    Ok(Some(graph))
+}
+
 /// Python-facing entry point to the graph-evolution engine.
 ///
 /// Constructed from a `config.toml` path; `run` dispatches on the configured
@@ -134,7 +188,7 @@ pub struct GraphEvolver {
 impl GraphEvolver {
     /// Load configuration from a `config.toml` file.
     #[new]
-    pub fn new(config_path: String) -> PyResult<Self> {
+    pub fn new(py: Python<'_>, config_path: String) -> PyResult<Self> {
         // Read here rather than through `Config::from_path`, which does not hand
         // back the raw text the provenance record needs.
         let text = std::fs::read_to_string(&config_path).map_err(|err| {
@@ -145,10 +199,14 @@ impl GraphEvolver {
         config
             .validate()
             .map_err(|err| PyValueError::new_err(format!("failed to load config: {err}")))?;
+        // Loaded here rather than at `run`, so a bad path is an error where the
+        // config was named. A later `set_base_graph` call overwrites it: the
+        // setter is the more specific instruction and it arrives second.
+        let base_graph = config_base_graph(Some(py), &config, Path::new(&config_path))?;
         Ok(Self {
             config,
             fitness_function: None,
-            base_graph: None,
+            base_graph,
             min_node_index: None,
             struct_match_reference: OnceLock::new(),
             config_toml: text,
@@ -790,10 +848,15 @@ pub fn run_many_from_toml(
         .validate()
         .map_err(|err| format!("failed to load config: {err}"))?;
 
+    // `None` for the GIL: this route never acquires one, so a load warning is
+    // printed to stderr rather than raised as a `UserWarning`.
+    let base_graph =
+        config_base_graph(None, &config, Path::new(config_path)).map_err(|err| err.to_string())?;
+
     let evolver = GraphEvolver {
         config,
         fitness_function: None,
-        base_graph: None,
+        base_graph,
         min_node_index: None,
         struct_match_reference: OnceLock::new(),
         config_toml: text.clone(),
@@ -1050,6 +1113,155 @@ mod tests {
         std::fs::write(&path, format!("{text}# nodes = {nodes}\n"))
             .expect("the fixture is written");
         path
+    }
+
+    /// A directory holding a config that names `base_graph.csv`, and the file
+    /// itself, the way a downloaded folder of examples is laid out.
+    ///
+    /// Under a uniquely named directory so the *relative* path in the config
+    /// can only resolve one way. That is the property under test: the working
+    /// directory during `cargo test` is the crate root, where no such file
+    /// exists, so a test that passes has resolved against the config.
+    fn folder_holding(name: &str, config_body: &str, graph: Option<&str>) -> std::path::PathBuf {
+        let directory = std::env::temp_dir().join(format!("get_base_graph_{name}"));
+        std::fs::create_dir_all(&directory).expect("the fixture directory is made");
+        let config = directory.join("config.toml");
+        std::fs::write(&config, config_body).expect("the config is written");
+        if let Some(text) = graph {
+            std::fs::write(directory.join("base_graph.csv"), text).expect("the graph is written");
+        }
+        config
+    }
+
+    /// [`config_with`], with extra lines appended to its `[genome]` block.
+    ///
+    /// The block is the last thing `config_with` writes before the fitness
+    /// block, so a `[genome]` key has to be spliced in rather than appended.
+    fn config_text_with_genome_keys(extra: &str) -> String {
+        let text = format!(
+            "population_size = 10\nnetwork_size = 8\nmax_edge_multiplicity = 1\n\
+             crossover_rate = 0.8\nmutation_rate = 0.2\n\n\
+             [evolution]\ntype = \"generational\"\nnum_generations = 5\nelite_count = 1\n\n\
+             [scope]\ntype = \"global\"\n\n\
+             [selection]\ntype = \"tournament\"\ntournament_size = 4\n\n\
+             [genome]\ntype = \"edge_edit\"\ngene_length = 16\n{extra}\n\n{PYTHON_FITNESS}"
+        );
+        text
+    }
+
+    #[test]
+    fn a_config_naming_a_base_graph_loads_it_from_beside_the_config() {
+        let config_path = folder_holding(
+            "beside",
+            &config_text_with_genome_keys("base_graph = \"base_graph.csv\""),
+            Some("0,1,1\n1,2,1\n# nodes = 8\n"),
+        );
+        let config = Config::from_toml_str(
+            &std::fs::read_to_string(&config_path).expect("the fixture reads"),
+        )
+        .expect("the fixture parses");
+
+        let graph = config_base_graph(None, &config, &config_path)
+            .expect("the file is there and agrees with the run")
+            .expect("a base graph was named, so one comes back");
+
+        // Read as 0-indexed, which is what this route promises and the only
+        // numbering it can express.
+        assert_eq!(graph.get_edge_list(), vec![(0, 1, 1), (1, 2, 1)]);
+    }
+
+    #[test]
+    fn a_config_naming_no_base_graph_starts_from_the_empty_graph() {
+        let config = config_with(PYTHON_FITNESS);
+        let resolved = config_base_graph(None, &config, std::path::Path::new("config.toml"))
+            .expect("naming nothing is not an error");
+        assert!(resolved.is_none());
+    }
+
+    #[test]
+    fn an_sda_config_cannot_name_a_base_graph() {
+        // SDA generates its graph rather than editing one, so the key is not on
+        // its config at all. `deny_unknown_fields` is what refuses it — no
+        // check of ours runs, and this pins that the free rejection is real.
+        let text = "[genome]\ntype = \"sda\"\nnum_states = 5\nmax_resp_len = 3\n\
+                    base_graph = \"base_graph.csv\"\n";
+        let parsed: toml::Value = toml::from_str(text).expect("it is still valid TOML");
+        let genome: Result<GenomeConfig, _> = parsed["genome"].clone().try_into();
+        let message = genome
+            .expect_err("an SDA genome has no base_graph")
+            .to_string();
+        assert!(message.contains("base_graph"), "{message}");
+    }
+
+    #[test]
+    fn a_base_graph_whose_header_disagrees_with_network_size_is_rejected() {
+        let config_path = folder_holding(
+            "disagrees",
+            &config_text_with_genome_keys("base_graph = \"base_graph.csv\""),
+            // The run is 8 nodes; a file saying 6 would otherwise load as 8,
+            // padded with two isolated nodes nobody asked for.
+            Some("0,1,1\n# nodes = 6\n"),
+        );
+        let config = Config::from_toml_str(
+            &std::fs::read_to_string(&config_path).expect("the fixture reads"),
+        )
+        .expect("the fixture parses");
+
+        Python::attach(|_| {
+            let message = config_base_graph(None, &config, &config_path)
+                .expect_err("6 is not 8")
+                .to_string();
+            assert!(message.contains("# nodes = 6"), "{message}");
+            assert!(message.contains("network_size is 8"), "{message}");
+        });
+    }
+
+    #[test]
+    fn a_base_graph_the_config_names_but_the_folder_lacks_says_which_path() {
+        let config_path = folder_holding(
+            "missing",
+            &config_text_with_genome_keys("base_graph = \"base_graph.csv\""),
+            None,
+        );
+        let config = Config::from_toml_str(
+            &std::fs::read_to_string(&config_path).expect("the fixture reads"),
+        )
+        .expect("the fixture parses");
+
+        Python::attach(|_| {
+            let message = config_base_graph(None, &config, &config_path)
+                .expect_err("the file is not there")
+                .to_string();
+            // The resolved path, not the bare name the config wrote: a reader
+            // needs to know where it was looked for.
+            assert!(message.contains("get_base_graph_missing"), "{message}");
+            assert!(message.contains("base_graph.csv"), "{message}");
+        });
+    }
+
+    #[test]
+    fn an_absolute_base_graph_path_is_taken_as_given() {
+        // Written into one directory and named absolutely from a config in
+        // another, so resolving against the config's folder would miss it.
+        let elsewhere = folder_holding("absolute_graph", "unused", Some("0,1,1\n# nodes = 8\n"));
+        let graph_path = elsewhere
+            .parent()
+            .expect("the fixture has a directory")
+            .join("base_graph.csv");
+        let config_path = folder_holding(
+            "absolute_config",
+            &config_text_with_genome_keys(&format!("base_graph = \"{}\"", graph_path.display())),
+            None,
+        );
+        let config = Config::from_toml_str(
+            &std::fs::read_to_string(&config_path).expect("the fixture reads"),
+        )
+        .expect("the fixture parses");
+
+        let graph = config_base_graph(None, &config, &config_path)
+            .expect("an absolute path needs no resolving")
+            .expect("a base graph was named");
+        assert_eq!(graph.get_edge_list(), vec![(0, 1, 1)]);
     }
 
     #[test]
