@@ -865,6 +865,76 @@ mod tests {
         express_and_score(&population(3), &(), &Poisoned);
     }
 
+    /// `Selection::Best` in one place: what it picks, in what order, that a
+    /// tie goes to the lower index, and that it touches no randomness.
+    ///
+    /// Measured against the mutation corpus, none of these assertions catches
+    /// anything `steady_state`'s tests do not already catch — reversing the
+    /// sort, adding an RNG draw and dropping `rank`'s tie-break all fail there
+    /// too. They are kept because a failure here names `Selection::Best`
+    /// rather than a whole steady-state run, and merged into one test because
+    /// four separate ones bought four names for a single unit of localization.
+    #[test]
+    fn best_selection_picks_the_fittest_of_its_scope_without_drawing() {
+        // Scope deliberately unordered and missing index 1, the globally
+        // fittest: `Best` ranks what it was handed, not the population.
+        let fitnesses = [5.0, 0.5, 9.0, 3.0, 7.0];
+        let scope = [4, 2, 0, 3];
+        let mut rng = StdRng::seed_from_u64(1);
+
+        // Best first, so a caller pairing parents gets the two fittest in a
+        // defined order rather than whichever the sort happened to leave.
+        assert_eq!(
+            Selection::Best.pick(&scope, &fitnesses, 2, &mut rng),
+            vec![3, 0]
+        );
+        assert_eq!(
+            Selection::Best.pick(&scope, &fitnesses, 4, &mut rng),
+            vec![3, 0, 4, 2]
+        );
+
+        // A tie goes to the lower index, as everywhere else in the engine.
+        let tied = [2.0, 2.0, 9.0];
+        assert_eq!(
+            Selection::Best.pick(&[2, 1, 0], &tied, 1, &mut rng),
+            vec![0]
+        );
+
+        // Steady-state draws its scope and then selects; if `Best` touched the
+        // stream, adding a scheme that does not would shift every seeded run.
+        let mut untouched = StdRng::seed_from_u64(42);
+        let mut used = StdRng::seed_from_u64(42);
+        Selection::Best.pick(&[0, 1, 2], &tied, 2, &mut used);
+        assert_eq!(used.random::<u64>(), untouched.random::<u64>());
+    }
+
+    #[test]
+    fn the_reported_best_is_the_lowest_fitness_and_ties_go_to_the_lower_index() {
+        // What both evolvers package as the run's winner. Nothing else here
+        // exercises it, and a tie at the top is exactly where an argmin that
+        // keeps the later of two equals reports the wrong individual.
+        assert_eq!(best_index(&[5.0, 1.0, 9.0, 3.0]), 1);
+        assert_eq!(best_index(&[7.0]), 0);
+        assert_eq!(best_index(&[2.0, 2.0, 2.0]), 0, "a tie keeps the first");
+        assert_eq!(best_index(&[9.0, 4.0, 4.0]), 1);
+        // Engine orientation is lower-is-better, so the largest value never
+        // wins however it is spelled.
+        assert_eq!(best_index(&[f64::INFINITY, 0.0]), 1);
+        // `orient` rejects NaN long before this, so the guard is defensive —
+        // but a plain `<` comparison would silently report a poisoned slot as
+        // the run's answer, because every comparison against NaN is false.
+        // `total_cmp` sorts NaN above every real number instead, matching how
+        // the tournament and the replacement policy already treat it.
+        assert_eq!(best_index(&[f64::NAN, 5.0]), 1);
+        assert_eq!(best_index(&[5.0, f64::NAN]), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot pick a best of no individuals")]
+    fn the_best_of_an_empty_population_is_a_bug() {
+        best_index(&[]);
+    }
+
     #[test]
     fn a_size_one_tournament_is_uniform_random_sampling() {
         let selection = Selection::Tournament { tournament_size: 1 };

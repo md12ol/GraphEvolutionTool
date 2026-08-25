@@ -252,7 +252,7 @@ impl Fitness for EdgeBudget {
         <td>the Python variant and its attribute paths — optional</td></tr>
     <tr><td>5</td><td><code>config.example.toml:87</code></td>
         <td>an example block, if the objective ships</td></tr>
-    <tr><td>6</td><td><code>get/src/dispatch.rs:1124</code></td>
+    <tr><td>6</td><td><code>get/src/dispatch.rs:1154</code></td>
         <td>the test asserting the boxed objective reports its own direction</td></tr>
   </tbody>
 </table>
@@ -401,7 +401,7 @@ MyObjective { threshold: f64 },
 
 <h2>Step 6 — The Test That Catches a Silent Failure</h2>
 
-<pre><code class="language-rust">// step 6 — dispatch.rs:1124   one line in the existing `cases` array
+<pre><code class="language-rust">// step 6 — dispatch.rs:1154   one line in the existing `cases` array
 (
     "[fitness]\ntype = \"my_objective\"\nthreshold = 3.0\n".to_string(),
     Direction::Maximize,

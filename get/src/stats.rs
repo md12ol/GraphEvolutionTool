@@ -663,9 +663,9 @@ impl ReferenceStatistics {
 #[cfg(test)]
 mod tests {
     use super::{
-        HistogramAxes, PerFamily, ReferenceStatistics, StatsError, bin_index, clustering_histogram,
-        degree_histogram, density, normalize, normalized_laplacian, spectral_histogram,
-        symmetric_eigenvalues,
+        FamilyReference, HistogramAxes, PerFamily, ReferenceStatistics, StatsError, bin_index,
+        clustering_histogram, degree_histogram, density, normalize, normalized_laplacian,
+        spectral_histogram, symmetric_eigenvalues,
     };
     use crate::graph::Graph;
 
@@ -1366,6 +1366,52 @@ mod tests {
         }
     }
 
+    /// Standardizing against the reference set's own spread is the whole
+    /// reason this score weights *what the reference set agrees about*, and
+    /// dropping it leaves a kernel that treats every bin alike. Nothing else
+    /// here separates the two: a matching candidate scores zero either way, a
+    /// dissimilar one scores worse either way, and the deviation floor is
+    /// reached either way. What only standardizing gets right is which of two
+    /// candidates is worse when they miss in different bins.
+    #[test]
+    fn a_bin_the_reference_set_agrees_on_outweighs_one_it_varies_on() {
+        // Bin 0 is unanimous at 0.5; bin 1 ranges over 0.0..0.6, mean 0.3,
+        // deviation sqrt(0.05) ~ 0.2236.
+        let family = FamilyReference::build(vec![
+            vec![0.5, 0.0],
+            vec![0.5, 0.2],
+            vec![0.5, 0.4],
+            vec![0.5, 0.6],
+        ]);
+
+        // Misses the unanimous bin by 0.01 and sits exactly on the mean of the
+        // contested one.
+        let off_in_the_agreed_bin = family.error(&[0.51, 0.3], 1.0);
+        // Misses the contested bin by 0.30 — thirty times as far in raw terms
+        // — and sits exactly on the unanimous one.
+        let off_in_the_varying_bin = family.error(&[0.5, 0.6], 1.0);
+
+        assert!(
+            off_in_the_agreed_bin > off_in_the_varying_bin,
+            "0.01 off a bin the references agree on ({off_in_the_agreed_bin}) must \
+             cost more than 0.30 off a bin they disagree on ({off_in_the_varying_bin})"
+        );
+
+        // Against a deviation of 1e-6 the first candidate is thousands of
+        // standard deviations out, so every kernel term underflows to zero.
+        assert!(
+            (off_in_the_agreed_bin - 1.0).abs() < 1e-9,
+            "{off_in_the_agreed_bin}"
+        );
+        // Hand-computed: standardized 1.3416 against -1.3416, -0.4472, 0.4472
+        // and 1.3416 gives squared distances 7.2, 3.2, 0.8 and 0, so the mean
+        // similarity is 0.3727.
+        assert!(
+            (off_in_the_varying_bin - 0.6273).abs() < 1e-3,
+            "{off_in_the_varying_bin}"
+        );
+    }
+
     /// A bin every reference graph agrees on has deviation zero. Without the
     /// floor that is a division by zero, and the NaN reaches the fitness value.
     #[test]
@@ -1480,5 +1526,54 @@ mod tests {
         let stats = ReferenceStatistics::from_graphs(&reference, axes()).unwrap();
 
         assert!(stats.density_penalty(&ring(6)).abs() < 1e-12);
+    }
+
+    /// A distance, so being *below* the reference mean costs exactly what
+    /// being the same amount above it does. The objective is minimized, so an
+    /// unsigned difference here would not merely mis-rank a sparse candidate:
+    /// it would pay one, without limit, for every edge it failed to have.
+    #[test]
+    fn the_density_penalty_is_a_distance_in_both_directions() {
+        // A 6-node ring is 6 of the 15 possible edges, so the reference mean
+        // density is 0.4.
+        let reference = vec![ring(6), ring(6)];
+        let stats = ReferenceStatistics::from_graphs(&reference, axes()).unwrap();
+        assert!((stats.mean_density() - 0.4).abs() < 1e-12);
+
+        // 3 of 15 edges: density 0.2, which is 0.2 below the mean.
+        let mut sparser = Graph::new(6, 1);
+        for (u, v) in [(0, 1), (2, 3), (4, 5)] {
+            sparser.set_edge(u, v, 1);
+        }
+
+        // 9 of 15 edges: density 0.6, the same 0.2 above it.
+        let mut denser = Graph::new(6, 1);
+        for (u, v) in [
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (1, 2),
+            (1, 3),
+            (2, 3),
+            (0, 4),
+            (1, 4),
+            (2, 4),
+        ] {
+            denser.set_edge(u, v, 1);
+        }
+
+        assert!(
+            (density(&sparser) - 0.2).abs() < 1e-12,
+            "{}",
+            density(&sparser)
+        );
+        assert!(
+            (density(&denser) - 0.6).abs() < 1e-12,
+            "{}",
+            density(&denser)
+        );
+
+        assert!((stats.density_penalty(&sparser) - 0.2).abs() < 1e-12);
+        assert!((stats.density_penalty(&denser) - 0.2).abs() < 1e-12);
     }
 }
