@@ -1,8 +1,8 @@
 //! `get-run` — drive an evolution run from a `config.toml`, with no Python
 //! interpreter and no built extension module.
 //!
-//! `cargo run --features cli --bin get-run -- <config.toml> [seed]`. The binary
-//! is not built without the `cli` feature.
+//! `cargo run --release --features cli --bin get-run -- <config.toml> [seed]`.
+//! The `cli` feature is required, and a debug build is too slow to be useful.
 //!
 //! Files land in the working directory under fixed names, or under `--out DIR`
 //! in `DIR/<timestamp>-<seed>/`. There, replicates each get a `run_<index>/`
