@@ -118,6 +118,11 @@ Four checks, each catching something the others cannot:
 | **Signatures** | every `fn` line shown on the site appears verbatim in `get/src` |
 | **Structure** | `data-page`, `NAV` membership, internal links and anchors |
 
+**CI runs it on every pull request**, as the `documentation references` step of the
+`test, clippy and rustfmt` job, so a shifted reference now fails a check rather than waiting for
+someone to notice. Run it locally anyway before you push — it needs no build and answers in under a
+second, where the runner takes a minute to tell you the same thing.
+
 **Run it after touching `get/src`, not only after touching a page.** Any insertion moves the line
 references: adding one marker chain shifted 28 of them at once, and merging one upstream pull request
 that added two lines to `dispatch.rs` shifted 18 more. `--fix` is what makes that a command rather
