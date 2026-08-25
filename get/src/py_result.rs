@@ -1,9 +1,7 @@
 //! What a run hands back to Python: [`PyRunResult`] and its log rows.
 //!
-//! **Every number here is in the objective's own units and sign.** Nothing in
-//! this module converts anything — the dispatch layer's `erase` is where the
-//! engine's lower-is-better orientation is undone, and converting again here
-//! would silently flip every result.
+//! **Numbers here are already in the objective's units and sign.** They are
+//! converted on the way in, so converting again would flip every result.
 
 use std::fs::File;
 use std::io::Write;
@@ -74,34 +72,28 @@ impl PyGenerationStats {
 #[pyclass(name = "RunResult", frozen)]
 #[derive(Debug)]
 pub struct PyRunResult {
-    /// Best fitness found, in the **objective's own units and sign**.
-    ///
-    /// The best of the **final** population, not the best ever seen: it matches
-    /// `history`'s last row, which under a stochastic objective may score worse
-    /// than an earlier row.
+    /// Best of the **final** population, in the **objective's own units and
+    /// sign**. Matches `history`'s last row, which a stochastic objective may
+    /// have scored worse than an earlier one.
     #[pyo3(get)]
     pub best_fitness: f64,
     /// The best individual's expressed network, as `(u, v, multiplicity)`.
     #[pyo3(get)]
     pub best_edges: Vec<(usize, usize, u32)>,
-    /// How many nodes that network has, isolated ones included. Not derivable
-    /// from `best_edges`, since an isolated node appears in no edge.
+    /// How many nodes that network has, isolated ones included.
     #[pyo3(get)]
     pub num_nodes: usize,
     /// The best individual's genome, via `Genome::print`.
     #[pyo3(get)]
     pub best_genome_repr: String,
     /// The convergence log, one row per logged iteration.
-    ///
-    /// Each access builds a fresh list of new `GenerationStats` objects, so bind
-    /// it once (`rows = result.history`) rather than re-reading it in a loop.
     #[pyo3(get)]
     pub history: Vec<PyGenerationStats>,
     /// The seed `run` was called with.
     #[pyo3(get)]
     pub seed: u64,
-    /// Which replicate this is, `0`-based. Always `0` today; the field exists so
-    /// the CSV schema does not change when `run` gains replicates.
+    /// Which replicate this is, `0`-based. With `seed`, the pair that
+    /// reproduces this exact run.
     #[pyo3(get)]
     pub run_index: usize,
     /// The TOML document this run's config was parsed from. `save_results`
@@ -123,8 +115,8 @@ impl PyRunResult {
 
     /// Write the convergence log to `filename` as CSV.
     ///
-    /// `seed` and `run_index` come last and repeat on every row, so several
-    /// runs' logs concatenate into one file and stay separable.
+    /// Every row carries `seed` and `run_index`, so logs from several runs
+    /// concatenate into one file and stay separable.
     pub fn save_logs(&self, filename: &str) -> PyResult<()> {
         let mut file = File::create(filename)
             .map_err(|err| PyIOError::new_err(format!("could not create {filename}: {err}")))?;
@@ -156,10 +148,7 @@ impl PyRunResult {
     /// Write the best individual to `filename`, and the run's config TOML
     /// alongside it at `{filename}.toml`.
     ///
-    /// **The file is a loadable edge list.** Fitness, genome and node count are
-    /// `#` comments that `graph_io` skips; the rows below are the `u,v,weight`
-    /// the loader reads. A run's winner goes straight back in as the next run's
-    /// base graph with no editing step.
+    /// **The file is a loadable edge list**, which GET reads back unedited.
     pub fn save_results(&self, filename: &str) -> PyResult<()> {
         let mut file = File::create(filename)
             .map_err(|err| PyIOError::new_err(format!("could not create {filename}: {err}")))?;
@@ -190,15 +179,8 @@ impl PyRunResult {
 }
 
 impl PyRunResult {
-    /// Wrap an erased outcome for the trip out to Python.
-    ///
-    /// No conversion happens here — `dispatch::erase` has already done it, and
-    /// doing it twice would put a maximizing objective's numbers back into
-    /// engine orientation while every one of them still looked plausible.
-    ///
-    /// `seed`, `run_index` and `config_toml` are run-level rather than part of
-    /// `ErasedOutcome`: dispatch knows nothing of the config document or which
-    /// replicate it's building, so those three arrive from the caller instead.
+    /// Wrap a run's outcome, its genome type already dropped, for the trip out
+    /// to Python.
     pub(crate) fn from_erased(
         outcome: ErasedOutcome,
         seed: u64,
