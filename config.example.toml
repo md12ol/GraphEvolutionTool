@@ -110,6 +110,7 @@ num_epidemics  = 30
 # type              = "steady_state"
 # num_mating_events = 100000
 # replacement       = { type = "worst" }   # the default; keeps the scope's best
+# replacement       = { type = "random" }  # uniform; the scope's best can be overwritten
 #
 # [scope]
 # # Steady-state needs at least 4 — two parents and the two they replace must

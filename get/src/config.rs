@@ -160,14 +160,15 @@ pub enum ReplacementConfig {
     /// self-elitist: the scope's best is never among those overwritten.
     #[default]
     Worst,
+    /// Distinct members of the scope, drawn uniformly. Not self-elitist.
+    Random,
     // ADD A REPLACEMENT STEP 3 (for SteadyState) — the variant a user names under
     // `[evolution] replacement`, mirroring the one added to `Replacement`:
     //
-    //     Random,
+    //     Tournament { size: usize },
     //
     // Then the arm building it in `dispatch::replacement`. Say at the variant
-    // what the policy gives up: anything that can overwrite the scope's best
-    // removes the self-elitism the default guarantees.
+    // what the policy gives up, the way `Random` does.
 }
 
 /// Parent-selection strategy. Maps onto [`crate::evolver::common::Selection`],
@@ -1779,6 +1780,7 @@ num_epidemics  = 30
         match config.evolution {
             EvolutionConfig::SteadyState { replacement, .. } => match replacement {
                 ReplacementConfig::Worst => {}
+                other => panic!("expected the worst default, got {other:?}"),
             },
             other => panic!("expected steady_state, got {other:?}"),
         }

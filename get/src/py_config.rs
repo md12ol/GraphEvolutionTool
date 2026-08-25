@@ -240,10 +240,12 @@ pub enum PyEvolutionConfig {
 pub enum PyReplacementConfig {
     #[pyo3(constructor = ())]
     Worst {},
+    #[pyo3(constructor = ())]
+    Random {},
     // ADD A REPLACEMENT STEP 3 (for SteadyState, Python half) — optional, and nothing checks it:
     //
-    //     #[pyo3(constructor = ())]
-    //     Random {},
+    //     #[pyo3(constructor = (size))]
+    //     Tournament { size: usize },
     //
     // Then its arm in the conversion below. Skipped, the policy still works
     // from TOML and from Rust.
@@ -854,6 +856,9 @@ impl PyReplacementConfig {
         match self {
             PyReplacementConfig::Worst {} => {
                 table.insert("type".to_string(), Value::String("worst".to_string()));
+            }
+            PyReplacementConfig::Random {} => {
+                table.insert("type".to_string(), Value::String("random".to_string()));
             } // ADD A REPLACEMENT STEP 3 (for SteadyState) — the matching arm for your variant.
         }
         Ok(Value::Table(table))
@@ -1372,6 +1377,7 @@ mod tests {
                 // renders it rather than that the default filled it in.
                 match replacement {
                     ReplacementConfig::Worst => {}
+                    other => panic!("expected worst, got {other:?}"),
                 }
             }
             other => panic!("expected steady_state, got {other:?}"),

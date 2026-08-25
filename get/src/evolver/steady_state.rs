@@ -110,7 +110,7 @@ impl<G: Genome> SteadyStateEvolver<G> {
         let worst =
             self.context
                 .replacement
-                .pick(&self.scope_buffer, fitnesses, REPLACED_PER_EVENT);
+                .pick(&self.scope_buffer, fitnesses, REPLACED_PER_EVENT, rng);
 
         let mut children = children.into_iter();
         let mut scores = scores.into_iter();

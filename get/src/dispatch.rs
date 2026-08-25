@@ -957,6 +957,7 @@ fn scope(config: &ScopeConfig) -> Scope {
 fn replacement(config: &ReplacementConfig) -> Replacement {
     match config {
         ReplacementConfig::Worst => Replacement::Worst,
+        ReplacementConfig::Random => Replacement::Random,
         // ADD A REPLACEMENT STEP 3 (for SteadyState, second half) — the arm turning your config
         // variant into the engine one:
         //
