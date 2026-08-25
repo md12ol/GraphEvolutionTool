@@ -13,7 +13,7 @@
 <p class="page-kicker">Extending GET</p>
 <h1>Add a Selection Scheme</h1>
 <p class="lede">
-  Choosing which members of a scope become parents. Six edits across four files, and no strategy
+  Choosing which members of a scope become parents. Six edits across five files, and no strategy
   or genome is touched — selection is one of three independent axes, and it answers only this
   question.
 </p>
@@ -177,8 +177,10 @@ SelectionConfig::Roulette { pressure } =&gt; {
 <p>
   Leaving these out costs nothing elsewhere; the scheme is then configurable from a TOML file but
   absent from the Python API. Step 5 is the mirrored variant on <code>PySelectionConfig</code>
-  (<code>get/src/py_config.rs:292</code>) and its matching arm (<code>:896</code>); step 6 is the
-  <code>to_toml_value</code> arm that writes the section back out.
+  (<code>get/src/py_config.rs:292</code>) and its matching arm (<code>:896</code>). Write
+  <b>your own parameters and no other block's</b> — the arm is building the
+  <code>[selection]</code> table alone. Step 6 is a commented-out block in
+  <code>config.example.toml:162</code>.
 </p>
 
 <div class="callout">
@@ -199,8 +201,9 @@ SelectionConfig::Roulette { pressure } =&gt; {
 </p>
 
 <p>
-  Then add the keys to <code>config.example.toml</code>, which the test suite parses and validates
-  — so a broken example fails the build.
+  Step 6 is the other half of that: the commented-out block you add to
+  <code>config.example.toml</code> is parsed and validated by the test suite, so a block that does
+  not parse fails the suite rather than a user's afternoon.
 </p>
 
 <h2>The Other Two Axes</h2>
