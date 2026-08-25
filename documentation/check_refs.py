@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Check — and with --fix, repair — the site's `path:line` references.
 
-Every `file.rs:NNN` on the site points at an `ADD A ... STEP n` marker in the
-source. Run from the repository root.
+Every `file.rs:NNN` on the site points at the `ADD A ... STEP n` marker for
+*that* step — the exact line where the reader makes the edit the page is
+describing. Both halves are checked: the chain the page belongs to, and the
+step it names. Chain alone is not enough, because one file can carry several of
+a chain's markers and landing on a neighbour's sends the reader to the wrong
+edit. Run from the repository root.
 
     python3 documentation/check_refs.py          # report
     python3 documentation/check_refs.py --fix    # snap each reference to its marker
@@ -36,6 +40,20 @@ REF = re.compile(r"([a-z_]+\.rs|config\.example\.toml):(\d+)|<code>:(\d+)</code>
 # — is wrapped in backticks and carries no dash, and must not count: a
 # reference that snapped to one would point at prose about a different step.
 MARKER = re.compile(r"ADD AN? ([A-Z]+) STEP (\d+)(?: \([^)]*\))? \u2014")
+# The step a reference belongs to, from whatever names it last before the
+# reference itself: a step table's first cell, a code block's `// step n —`, or
+# prose saying `Step n is ...`. A letter suffix is part of the page's numbering,
+# not the marker's — 3a and 3b are both STEP 3. `Steps 4 and 5` is deliberately
+# not a cue: the code block under that heading carries its own.
+STEP_CUE = re.compile(r"<td>(\d+)[a-z]?</td>|[Ss]tep (\d+)[a-z]?[  ]")
+
+
+def cued_step(text, before):
+    """The step number a reference at `before` belongs to, or None."""
+    found = None
+    for cue in STEP_CUE.finditer(text, 0, before):
+        found = cue.group(1) or cue.group(2)
+    return int(found) if found else None
 
 
 def resolve(page, name):
@@ -49,13 +67,19 @@ def resolve(page, name):
     raise SystemExit(f"{page}: no source file named {name}")
 
 
-def markers(path, chain):
-    """Line numbers in `path` carrying a marker for `chain`, 1-based."""
+def markers(path, chain, step=None):
+    """Line numbers in `path` carrying a marker for `chain`, 1-based.
+
+    With `step`, only that step's markers. One file can hold several markers of
+    one chain for one step — `py_config.rs` carries REPLACEMENT step 3 twice —
+    so this narrows the candidates rather than picking among them.
+    """
     out = []
     for number, line in enumerate(open(path).read().splitlines(), 1):
         found = MARKER.search(line)
         if found and (chain is None or found.group(1) == chain):
-            out.append(number)
+            if step is None or int(found.group(2)) == step:
+                out.append(number)
     return out
 
 
@@ -218,20 +242,34 @@ def main(fix):
             lines = open(source).read().splitlines()
             here = lines[line - 1] if line <= len(lines) else ""
             found = MARKER.search(here)
+            step = cued_step(text, ref.start())
+            # The step matters as much as the chain. Two markers of one chain
+            # can sit in one file, and a reference that lands on the wrong one
+            # of them is a live failure rather than a near miss: it sends the
+            # reader to a different edit than the one the page is describing.
+            right_chain = found and (chain is None or found.group(1) == chain)
+            right_step = found and (step is None or int(found.group(2)) == step)
 
-            if found and (chain is None or found.group(1) == chain):
+            if right_chain and right_step:
                 out.append(ref.group(0))
                 continue
 
             wrong += 1
-            # Snap to the nearest marker of this page's chain in this file.
-            candidates = markers(source, chain)
+            # Snap to the nearest marker for this page's chain *and* step. The
+            # step narrows first, so a whole-file nearest match cannot pull a
+            # reference onto its neighbour's marker.
+            candidates = markers(source, chain, step)
+            if not candidates and step is not None:
+                print(f"  {page} -> {last}:{line}: no {chain} step {step} marker"
+                      f" in {source}")
+                candidates = markers(source, chain)
             if not candidates:
                 print(f"  {page} -> {last}:{line}: no {chain} marker in {source}")
                 out.append(ref.group(0))
                 continue
             best = min(candidates, key=lambda n: abs(n - line))
-            print(f"  {page} -> {last}:{line} is not a {chain} marker"
+            wanted = f"{chain} step {step}" if step is not None else f"{chain}"
+            print(f"  {page} -> {last}:{line} is not a {wanted} marker"
                   f"{f'; nearest is :{best}' if fix else ''}")
             out.append(template % best if fix else ref.group(0))
             repaired += fix
