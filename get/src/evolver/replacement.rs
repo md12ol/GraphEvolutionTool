@@ -3,54 +3,17 @@
 use super::common::rank;
 
 /// Which members of a scope are replaced by the children bred within it.
-///
-/// The counterpart to [`super::common::Selection`]: that answers who breeds,
-/// this who dies, both inside the slice [`super::scope::Scope`] drew. Keeping
-/// them apart is what stops a scheme from having to supply a replacement draw
-/// it has no theory for.
-///
-/// **Consumes no randomness** — every policy reads the scope's fitnesses and
-/// nothing else, so a replacement choice cannot shift a seeded run's stream.
-///
-/// # Adding a policy
-///
-/// 1. **This enum** — the variant and its parameters.
-/// 2. **`Replacement::pick`** — the arm; the match is exhaustive.
-/// 3. **`config::ReplacementConfig`**, `dispatch::replacement` and
-///    `py_config::PyReplacementConfig` — what a user names under
-///    `[evolution] replacement`, the arm building it, and the Python mirror.
-///
-/// It is read from the strategy's own table rather than a block of its own
-/// because it belongs to whichever strategy displaces individuals, the way
-/// `elite_count` belongs to generational.
-///
-/// A policy needing anything the engine does not record per individual — an
-/// age, a lineage, a distance — needs that recorded first, which is a wider
-/// change than a variant.
-///
-/// **Every step is marked at its own site.** Search the repo for
-/// `ADD A REPLACEMENT STEP 2 (for SteadyState)`, or any other number. Every
-/// marker carries `(for SteadyState)` because this axis is that strategy's
-/// alone — generational rebuilds its whole population and never asks who to
-/// overwrite, so a reader extending it has no step in this chain to take:
-///
-/// ```text
-/// git grep -n "ADD A REPLACEMENT STEP"    # all three, in one list
-/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Replacement {
-    /// The scope's least fit members, worst first. Never the scope's best,
-    /// which is what makes a strategy using it self-elitist whatever scheme
-    /// chose the parents.
+    /// The scope's least fit members, worst first.
+    ///
+    /// **Consumes no randomness today** — it reads the scope's fitnesses and
+    /// nothing else, so the choice cannot shift a seeded run's stream. A policy
+    /// that draws could be added later.
     Worst,
     // ADD A REPLACEMENT STEP 1 (for SteadyState) — a variant here, plus any parameters:
     //
     //     Random,
-    //
-    // Note what a policy gives up: `Worst` is what makes a strategy using it
-    // self-elitist, and one that can overwrite the scope's best removes that
-    // guarantee. Say so at the variant rather than leaving it to be discovered.
-    // Then the arm choosing victims — search `ADD A REPLACEMENT STEP 2 (for SteadyState)`.
 }
 
 impl Replacement {
@@ -75,19 +38,12 @@ impl Replacement {
                 }
                 victims
             } // ADD A REPLACEMENT STEP 2 (for SteadyState) — the arm naming who the children
-              // overwrite:
+              // overwrite, as indices into the population:
               //
-              //     Replacement::Random => {
-              //         // needs an `rng` parameter; `pick` takes none today
-              //         // precisely because no shipped policy draws.
-              //     }
+              //     Replacement::Random => { /* ... */ }
               //
-              // Return indices into the *population*, not into `scope`, and in
-              // the order children should take the slots. Adding a policy that
-              // consumes randomness changes this signature and shifts every
-              // seeded run's RNG stream — a real cost, not a formality. To make
-              // it selectable from a config file, search
-              // `ADD A REPLACEMENT STEP 3 (for SteadyState)`.
+              // A policy that draws needs an `rng` parameter here, which changes
+              // this signature and shifts every seeded run's stream.
         }
     }
 }
