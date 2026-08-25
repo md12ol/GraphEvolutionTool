@@ -1,12 +1,6 @@
 //! `get-run` — drive an evolution run from a `config.toml`, with no Python
-//! interpreter and no built extension module.
-//!
-//! `cargo run --release --features cli --bin get-run -- <config.toml> [seed]`.
-//! The `cli` feature is required, and a debug build is too slow to be useful.
-//!
-//! Files land in the working directory under fixed names, or under `--out DIR`
-//! in `DIR/<timestamp>-<seed>/`. There, replicates each get a `run_<index>/`
-//! sub-directory; a single run's files sit in the timestamped directory itself.
+//! interpreter and no built extension module. `USAGE` below is the whole
+//! interface.
 
 use std::env;
 use std::process::ExitCode;
@@ -20,6 +14,10 @@ struct Args {
 }
 
 const USAGE: &str = "usage: get-run <config.toml> [seed] [--runs N] [--out DIR]
+
+Writes run_log.csv and best_individual.txt (+ .toml) into the working directory,
+or into DIR/<timestamp>-<seed>/ with --out, where each replicate of a multi-run
+invocation gets its own run_<index>/ sub-directory.
 
   seed        master seed; random if omitted. Replicate `i` is reproduced by
               re-running with the same master seed and reading run_<i>.
