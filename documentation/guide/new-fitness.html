@@ -401,11 +401,21 @@ MyObjective { threshold: f64 },
 
 <h2>Step 6 — The Test That Catches a Silent Failure</h2>
 
-<pre><code class="language-rust">// step 6 — dispatch.rs:1124   one line in the existing `cases` array
-(
-    "[fitness]\ntype = \"my_objective\"\nthreshold = 3.0\n".to_string(),
-    Direction::Maximize,
-),</code></pre>
+<pre><code class="language-rust">// step 6 — dispatch.rs:1124   one entry in the existing `cases` array
+let cases = [
+    (sir_block("epi_spread", ""), Direction::Maximize),
+    (sir_block("epi_length", ""), Direction::Maximize),
+    (
+        sir_block("epi_prof_match", "target_profile = [1, 3, 7, 2]\n"),
+        Direction::Minimize,
+    ),
+    (struct_match_block("direction"), Direction::Minimize),
+    // yours: a helper if the block needs setting up, inline if it does not
+    (
+        "[fitness]\ntype = \"my_objective\"\nthreshold = 3.0\n".to_string(),
+        Direction::Maximize,
+    ),
+];</code></pre>
 
 <p>
   Each case is a <code>[fitness]</code> block and the direction it must come back with. The three
