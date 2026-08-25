@@ -268,22 +268,57 @@
       ? /(^|\n)(\s*#[^\n]*)/g
       : /(\/\/[^\n]*)/g;
 
-    out = out.replace(/(&quot;|")([^"\n]*)(&quot;|")/g, '<span class="tok-str">$1$2$3</span>');
-    out = out.replace(commentRe, function (m, a, b) {
-      return (b === undefined) ? '<span class="tok-com">' + m + '</span>'
-                               : a + '<span class="tok-com">' + b + '</span>';
+    /* Comments and strings are finished once tinted, so they are lifted out
+       behind a placeholder rather than left in place. A tinted region left in
+       place is still *text* to the number and keyword passes below, and their
+       spans nest inside it -- the inner colour wins, so `1124` in a comment
+       renders in the number colour and every `for`, `in`, `as` and `type` in
+       English prose renders as a keyword. The placeholder is a private-use
+       character between NULs: no digit and no word character, so neither pass
+       can match it. */
+    var held = [];
+    function hold(html) {
+      held.push(html);
+      return "\u0000" + String.fromCharCode(0xe000 + held.length - 1) + "\u0000";
+    }
+
+    out = out.replace(/(&quot;|")([^"\n]*)(&quot;|")/g, function (m, a, b, c) {
+      return hold('<span class="tok-str">' + a + b + c + '</span>');
     });
-    /* Every pass from here on runs only on the text between tags. The string
-       and comment passes above have already inserted `class="tok-..."`
-       attributes, and `class` is a Python keyword -- matching it inside an
+    /* The two regexes capture different numbers of groups -- the hash form
+       keeps the newline before the comment, the `//` form has nothing to keep
+       -- so the second argument is a capture in one case and `replace`'s
+       offset argument in the other. Test what it *is*, not whether it is
+       there: `b === undefined` is never true for the `//` form, which sent
+       every Rust comment down the two-group branch and printed the offset
+       into the page as a grey number at the end of the line. */
+    out = out.replace(commentRe, function (m, a, b) {
+      return (typeof b === "string") ? a + hold('<span class="tok-com">' + b + '</span>')
+                                     : hold('<span class="tok-com">' + m + '</span>');
+    });
+    /* Every pass from here on runs only on the text between tags. Holding the
+       spans aside already keeps them out of reach, so this is now the second
+       of two guards -- kept because it is what the first failure needed:
+       `class` is a Python keyword, and matching it inside an inserted
        attribute produced `<span <span class="tok-key">class</span>="tok-str">`,
-       which a browser renders as a stray `="tok-str">` in the middle of the
-       code. Any Python block containing a string hit this. */
+       which a browser renders as a stray `="tok-str">` mid-code. Any Python
+       block containing a string hit that. */
     out = outsideTags(out, /\b(\d+\.?\d*)\b/g, '<span class="tok-num">$1</span>');
     (KEYWORDS[lang] || []).forEach(function (kw) {
       out = outsideTags(out, new RegExp("\\b" + kw + "\\b", "g"),
                         '<span class="tok-key">' + kw + "</span>");
     });
+    /* Restoring is a loop, not one pass: a string inside a comment is held
+       first, so the comment's own held HTML contains that placeholder, and a
+       single pass would put the comment back and leave the string's marker
+       sitting in the page as text. */
+    var placeholder = /\u0000([\ue000-\uf8ff])\u0000/g;
+    while (placeholder.test(out)) {
+      placeholder.lastIndex = 0;
+      out = out.replace(placeholder, function (m, slot) {
+        return held[slot.charCodeAt(0) - 0xe000];
+      });
+    }
     return out;
   }
 

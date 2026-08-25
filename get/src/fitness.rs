@@ -3,9 +3,9 @@
 //!
 //! # Adding your own objective
 //!
-//! An objective touches five files, in six steps — two of the files want
-//! more than one edit, and `dispatch.rs` appears twice, once for the code and
-//! once for the test.
+//! An objective touches five files, in seven steps — two of the files want
+//! more than one edit, and `dispatch.rs` appears three times: once for the
+//! code, and twice in its tests, for a block helper and for the case using it.
 //!
 //! **Five is the floor, not the ceiling.** It is what an objective assembled
 //! from config values alone needs, which is what all three of the originals
@@ -13,18 +13,19 @@
 //! touch the loader it reads through and wherever its shared state lives;
 //! `struct_match` touched seven files for that reason.
 //!
-//! How many of the six steps are yours depends on which way you are using GET,
+//! How many of the seven steps are yours depends on which way you are using GET,
 //! so start by working out which reader you are:
 //!
 //! - **You depend on this crate from your own program.** Step 1 is the only
 //!   one available to you, and it is enough on its own: write your type,
-//!   implement [`Fitness`] for it, and pass it to `Evolver::run`. Steps 2–6
+//!   implement [`Fitness`] for it, and pass it to `Evolver::run`. Steps 2–7
 //!   are unreachable rather than skipped: `config`, `dispatch` and `py_config`
 //!   are private modules, so nothing outside this crate can add a config
 //!   variant or a dispatch arm, and the example file and the tests live in the
 //!   GET repository rather than yours. Your objective reaches the evolver by
 //!   being handed over directly, and is never named in a config file.
-//! - **You are editing your own copy of GET.** All six steps are yours. What that
+//! - **You are editing your own copy of GET.** All seven steps are yours, though
+//!   step 6 is skippable. What that
 //!   buys, and what the first reader structurally cannot have, is an objective
 //!   selectable by name from `config.toml` and runnable by the `get-run`
 //!   binary, with no Rust written at the call site.
@@ -93,10 +94,16 @@
 //! 5. **`config.example.toml`** — add an example block if the objective ships.
 //!    The example file is what a user copies from, so an objective missing
 //!    from it is one most people never find.
-//! 6. **The dispatch tests** — assert the new variant erases to a box that
-//!    reports its own [`Direction`]. Worth writing because the failure it
-//!    catches is silent: an objective whose direction is lost runs the search
-//!    backwards and looks merely unconverged.
+//! 6. **The dispatch tests, a block helper** — a function returning your
+//!    objective's `[fitness]` block, alongside `sir_block` and
+//!    `struct_match_block`. **The one skippable step.** It earns its place
+//!    when the block carries keys shared with other objectives, or when the
+//!    objective reads something off disk that has to exist before the test
+//!    runs. An objective needing neither writes its block inline at step 7.
+//! 7. **The dispatch tests, the case** — assert the new variant erases to a
+//!    box that reports its own [`Direction`]. Worth writing because the
+//!    failure it catches is silent: an objective whose direction is lost runs
+//!    the search backwards and looks merely unconverged.
 //!
 //! # What `Direction` costs you if you get it wrong
 //!

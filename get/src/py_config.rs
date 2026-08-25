@@ -429,7 +429,7 @@ pub enum PyGenomeConfig {
 /// objective. Skipping it costs nothing anywhere else — the objective still
 /// runs from a TOML config and from Rust — so it is only needed if Python
 /// should be able to select it. The steps before it are the `FitnessConfig`
-/// variant and its `dispatch` arm; `crate::fitness`'s module doc has all six.
+/// variant and its `dispatch` arm; `crate::fitness`'s module doc has all seven.
 #[pyclass(name = "FitnessConfig")]
 #[derive(Debug, Clone)]
 pub enum PyFitnessConfig {
