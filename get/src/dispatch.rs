@@ -314,7 +314,7 @@ impl GraphEvolver {
         let mut max_degree = 0;
         for graph in &graphs {
             for node in 0..graph.num_nodes {
-                let degree = graph.degree(node);
+                let degree = graph.neighbor_count(node);
                 if degree > max_degree {
                     max_degree = degree;
                 }

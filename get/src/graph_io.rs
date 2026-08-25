@@ -716,7 +716,7 @@ mod tests {
         // Nodes 3, 4 and 5 are real and isolated: present in the graph, absent
         // from every edge, and counted by anything that reads degrees.
         let graph = loaded.to_graph(3);
-        assert_eq!(graph.degree(5), 0);
+        assert_eq!(graph.neighbor_count(5), 0);
     }
 
     /// Missing is an error, not a fallback. The alternative — infer when the
@@ -1075,7 +1075,7 @@ mod tests {
         assert_eq!(graph.num_nodes, 3);
         for node in 0..3 {
             assert_eq!(
-                graph.degree(node),
+                graph.neighbor_count(node),
                 2,
                 "every node of a triangle has degree 2"
             );
@@ -1091,7 +1091,7 @@ mod tests {
 
         let graph = file.to_graph(1);
         assert_eq!(graph.num_nodes, 5);
-        assert_eq!(graph.degree(4), 0);
+        assert_eq!(graph.neighbor_count(4), 0);
         assert_eq!(file.warnings, vec![LoadWarning::EmptyFile]);
 
         // Zero is expressible too, and means what it says.

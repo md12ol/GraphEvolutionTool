@@ -73,7 +73,7 @@ impl Fitness for Regularity {
     fn evaluate(&self, graph: &Graph) -> f64 {
         let mut at_target = 0;
         for node in 0..NUM_NODES {
-            if graph.degree(node) == self.target_degree {
+            if graph.neighbor_count(node) == self.target_degree {
                 at_target += 1;
             }
         }

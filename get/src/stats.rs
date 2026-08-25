@@ -80,7 +80,7 @@ pub fn degree_histogram(graph: &Graph, max_degree: usize, num_bins: usize) -> Ve
     }
 
     for node in 0..graph.num_nodes {
-        let degree = graph.degree(node) as f64;
+        let degree = graph.neighbor_count(node) as f64;
         // Degree 0 is a real observation — an isolated node — so it belongs in
         // bin 0 rather than being skipped.
         let index = bin_index(degree, max_degree as f64, num_bins);
@@ -172,7 +172,7 @@ fn normalized_laplacian(graph: &Graph) -> Vec<Vec<f64>> {
     let n = graph.num_nodes;
     let mut inverse_sqrt_degree = Vec::with_capacity(n);
     for node in 0..n {
-        let degree = graph.degree(node);
+        let degree = graph.neighbor_count(node);
         if degree > 0 {
             inverse_sqrt_degree.push(1.0 / (degree as f64).sqrt());
         } else {
@@ -185,7 +185,7 @@ fn normalized_laplacian(graph: &Graph) -> Vec<Vec<f64>> {
     for u in 0..n {
         // An isolated node keeps an all-zero row, including the diagonal: it
         // has no self-similarity to subtract from.
-        if graph.degree(u) > 0 {
+        if graph.neighbor_count(u) > 0 {
             laplacian[u][u] = 1.0;
         }
         for v in 0..n {

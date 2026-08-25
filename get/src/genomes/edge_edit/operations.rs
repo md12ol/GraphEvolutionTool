@@ -80,7 +80,7 @@ impl GraphOperation {
         second_neighbor_index: usize,
     ) -> Option<(usize, usize)> {
         let first_neighbor = graph.get_neighbor_at_index(start, first_neighbor_index)?;
-        if graph.degree(first_neighbor) < 2 {
+        if graph.neighbor_count(first_neighbor) < 2 {
             return None;
         }
         let endpoint = graph.get_neighbor_at_index(first_neighbor, second_neighbor_index)?;
@@ -166,8 +166,8 @@ impl GraphOperation {
             || first_vertex >= graph.num_nodes
             || second_vertex >= graph.num_nodes
             || first_vertex == second_vertex
-            || graph.degree(first_vertex) <= 2
-            || graph.degree(second_vertex) <= 2
+            || graph.neighbor_count(first_vertex) <= 2
+            || graph.neighbor_count(second_vertex) <= 2
             || graph.has_edge(first_vertex, second_vertex)
         {
             return;
