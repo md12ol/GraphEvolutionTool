@@ -107,7 +107,7 @@ some_dimension = 256</code></pre>
             <code>Context</code> associated type. All five are required.</td></tr>
     <tr><td>2</td><td><code>get/src/genomes/genome.rs:260</code></td>
         <td>Declare the <code>Context</code> type your genome named.</td></tr>
-    <tr><td>3</td><td><code>get/src/genomes/mod.rs:16</code></td>
+    <tr><td>3</td><td><code>get/src/genomes.rs:16</code></td>
         <td><code>pub mod</code> your module and re-export the type and its context.</td></tr>
     <tr><td>4</td><td><code>get/src/config.rs:245</code> and <code>:951</code></td>
         <td>A <code>GenomeConfig</code> variant plus the struct it carries, <i>and</i> its arm in
@@ -144,7 +144,7 @@ pub struct MyContext {
     pub some_mutation_rate: f64,
 }
 
-// step 3 — genomes/mod.rs:16
+// step 3 — genomes.rs:16
 pub mod my_genome;
 pub use my_genome::MyGenome;</code></pre>
 

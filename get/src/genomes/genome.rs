@@ -55,7 +55,7 @@
 //!    it is not" below — deciding what goes on the context rather than on the
 //!    genome is a design call this trait makes you take deliberately, and it is
 //!    easy to get wrong in a way nothing reports.
-//! 3. **`genomes/mod.rs`** — declare the module and re-export the type and its
+//! 3. **`genomes.rs`** — declare the module and re-export the type and its
 //!    context, so callers name them from `crate::genomes` rather than from the
 //!    private path.
 //! 4. **`config.rs`** — add a `GenomeConfig` variant carrying the dimensions
