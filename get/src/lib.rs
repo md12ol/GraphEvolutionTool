@@ -598,6 +598,13 @@ impl GraphEvolver {
     /// a setter that stored one would be keeping data no objective would ever
     /// look at. The reader is the caller until an objective needs one.
     ///
+    /// **A reference graph may be larger than the network being evolved**, and
+    /// usually is — these are real data, matched on normalized distributions, so
+    /// their size does not have to relate to `network_size` at all. The only
+    /// ceiling is a sanity bound against a file indexed the wrong way, and it is
+    /// the one the objective itself applies, so anything a run can score against
+    /// can be read back here.
+    ///
     /// ```python
     /// graphs = evolver.load_reference_graphs("references/", min_node_index=1)
     /// name, num_nodes, edges = graphs[0]
@@ -647,9 +654,15 @@ impl GraphEvolver {
     ) -> PyResult<Vec<NamedGraph>> {
         self.check_min_node_index(min_node_index)?;
 
+        // The loader wants one node count for the whole folder, and reference
+        // graphs differ in size. This is an upper bound that still catches a
+        // wild index; the same bound the objective uses, so a folder a run
+        // scores against is a folder this can read back.
+        let index_cap = self.config.network_size.max(dispatch::MAX_REFERENCE_NODES);
+
         let loaded = graph_io::load_edge_folder(
             std::path::Path::new(&folder),
-            self.config.network_size,
+            index_cap,
             self.config.max_edge_multiplicity,
             min_node_index,
         )
@@ -900,9 +913,9 @@ pub struct RunSummary {
     /// The seed the run was made with. Private: `save_logs` stamps it onto
     /// every row, which is the only way it is meant to be read.
     seed: u64,
-    /// Which replicate this is, `0`-based. Private, and a hard `0` until GitHub
-    /// #20 — a reader would take a constant for something that varies. The
-    /// field stays so #20 does not change the CSV's column set under anyone.
+    /// Which replicate this is, `0`-based. Private for the same reason as
+    /// `seed`: the pair identifies a replicate, and `save_logs` stamping it
+    /// onto every row is the only way it is meant to be read.
     run_index: usize,
     /// The TOML document this run's config was parsed from. Private:
     /// `save_results` writes it to `{filename}.toml`.
@@ -1023,11 +1036,16 @@ pub fn utc_stamp() -> String {
     )
 }
 
-/// Where one replicate's files belong, creating the directory if needed.
+/// Where one replicate's files belong. Returns a path and creates nothing —
+/// every caller runs `create_dir_all` on the result itself. (The Python twin,
+/// `examples/_output_layout.run_output_dir`, does create it; the two are
+/// otherwise parallel.)
 ///
 /// `None` for `out_dir` means the working directory under fixed names, which
 /// is what `get-run` did before it took an output folder and what its route
-/// check in CI still expects.
+/// check in CI still expects. It ignores `run_index`, so it is only correct
+/// for a single replicate — `get-run` rejects `--runs N` above 1 without
+/// `--out` for exactly that reason.
 ///
 /// Public so every route lays its output out the same way. A library caller
 /// writing its own files (see `examples/library_route.rs`) gets the same
@@ -1094,14 +1112,23 @@ pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String>
 /// # Errors
 ///
 /// The config's own parse/validate error, or `[fitness] type = "python"` with
-/// nothing to call it. `n_runs` of zero yields an empty vector rather than an
-/// error — there is nothing wrong with asking for no runs, only with pretending
-/// one happened.
+/// nothing to call it. `n_runs` of zero is rejected, with the same wording
+/// [`GraphEvolver::run`] uses: asking for no runs returns nothing and is more
+/// likely a mistake than an intent, and the two front ends are meant to differ
+/// only in front end.
 pub fn run_many_from_toml(
     config_path: &str,
     seed: u64,
     n_runs: usize,
 ) -> Result<Vec<RunSummary>, String> {
+    if n_runs == 0 {
+        return Err(
+            "n_runs must be at least 1; asking for zero runs returns nothing and is \
+                    more likely a mistake than an intent"
+                .to_string(),
+        );
+    }
+
     let text = std::fs::read_to_string(config_path)
         .map_err(|err| format!("failed to load config: {}", ConfigError::Io(err)))?;
     let config =
@@ -1652,6 +1679,59 @@ mod tests {
         });
     }
 
+    /// GitHub #152: the objective reads a reference folder under a sanity
+    /// bound, not under `network_size`, and this call has to agree with it or a
+    /// set a run scores against cannot be inspected from Python.
+    #[test]
+    fn a_reference_graph_larger_than_network_size_is_read() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            let folder = std::env::temp_dir().join("get_lib_big_reference");
+            let _ = std::fs::remove_dir_all(&folder);
+            std::fs::create_dir_all(&folder).expect("temp folder");
+
+            // 50 against the fixtures' network_size of 8 — the ordinary case,
+            // since reference data is matched on normalized distributions.
+            std::fs::write(folder.join("a.csv"), "# nodes = 50\n0,49,1\n")
+                .expect("the fixture is written");
+
+            let graphs = evolver
+                .load_reference_graphs(py, folder.display().to_string(), 0)
+                .expect("a reference graph may be larger than the evolved network");
+
+            assert_eq!(graphs.len(), 1);
+            assert_eq!(graphs[0].1, 50, "the file's own node count comes back");
+
+            std::fs::remove_dir_all(&folder).expect("cleanup");
+        });
+    }
+
+    /// The other half of #152: raising the cap is not removing it. A file
+    /// indexed the wrong way — a global dataset index, say — still fails.
+    #[test]
+    fn a_reference_graph_above_the_sanity_bound_is_still_rejected() {
+        Python::attach(|py| {
+            let mut evolver = evolver_with(PYTHON_FITNESS);
+            let folder = std::env::temp_dir().join("get_lib_absurd_reference");
+            let _ = std::fs::remove_dir_all(&folder);
+            std::fs::create_dir_all(&folder).expect("temp folder");
+
+            let nodes = dispatch::MAX_REFERENCE_NODES + 1;
+            std::fs::write(folder.join("a.csv"), format!("# nodes = {nodes}\n0,1,1\n"))
+                .expect("the fixture is written");
+
+            let err = evolver
+                .load_reference_graphs(py, folder.display().to_string(), 0)
+                .expect_err("above the sanity bound is still an error");
+            assert!(
+                err.to_string().contains(&nodes.to_string()),
+                "the message names the count it rejected: {err}"
+            );
+
+            std::fs::remove_dir_all(&folder).expect("cleanup");
+        });
+    }
+
     #[test]
     fn shift_out_is_a_no_op_without_a_loader() {
         let mut edges = vec![(0, 1, 1), (2, 3, 2)];
@@ -1937,5 +2017,14 @@ mod tests {
                 .expect("registering against a python config succeeds");
             assert!(evolver.python_fitness().is_ok());
         });
+    }
+    /// Both front ends reject zero replicates, and the Rust one does so before
+    /// touching the config file — the path here does not exist.
+    #[test]
+    fn run_many_from_toml_rejects_zero_replicates() {
+        match run_many_from_toml("no/such/config.toml", 7, 0) {
+            Ok(_) => panic!("zero replicates should be rejected"),
+            Err(err) => assert!(err.contains("n_runs must be at least 1"), "got: {err}"),
+        }
     }
 }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Add a genome · GET docs</title>
+<title>Add a Genome · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,19 +11,19 @@
 <main>
 
 <p class="page-kicker">Extending GET</p>
-<h1>Add a genome</h1>
+<h1>Add a Genome</h1>
 <p class="lede">
-  A third representation — a different way of describing a graph compactly. Four edits, and the
+  A third representation — a different way of describing a graph compactly. Seven steps, six of them required, and the
   evolvers are untouched, because the strategy match is generic over the genome type.
 </p>
 
-<h2>What you have to implement</h2>
+<h2>What You Have to Implement</h2>
 
 <pre><code class="language-rust">pub trait Genome: Clone + Send + Sync {
     type Context: Send + Sync;
     fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph;
     fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R);
-    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, rng: &amp;mut R);
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, context: &amp;Self::Context, rng: &amp;mut R);
     fn print(&amp;self) -&gt; String;
 }</code></pre>
 
@@ -32,9 +32,9 @@
   <thead><tr><th>Method</th><th>Must</th></tr></thead>
   <tbody>
     <tr><td><code>express</code></td>
-        <td>Build a <a href="graph.html">graph</a> from the genome and the run context.
+        <td>Build a <a href="pipeline.html#graph">graph</a> from the genome and the run context.
             <b>Deterministic</b> — the same genome and context must always give the same graph, or
-            reproducibility breaks and the two evolvers stop agreeing about the winner.</td></tr>
+            reproducibility breaks and the two strategies stop agreeing about the winner.</td></tr>
     <tr><td><code>crossover</code></td>
         <td>Recombine <b>in place</b>, leaving one child in each parent. Both are kept. Tolerate
             unequal sizes defensively even though nothing produces them.</td></tr>
@@ -56,30 +56,158 @@
   <b>The one-mutation rule is a contract, not a convention.</b> A genome that rolls its own count
   internally makes <code>max_mutations</code> mean nothing for that representation — and nothing
   reports the disagreement, so a user comparing two representations at the same setting silently
-  compares two different things. See <a href="variation.html">Crossover &amp; mutation</a>.
+  compares two different things. See <a href="variation.html">Variation &amp; Selection</a>.
 </div>
 
-<h2>The four edits</h2>
+<h2>What the User Ends Up Writing</h2>
 
-<ol>
-  <li><b>Implement the trait</b> in a new module under <code>genomes/</code>, alongside a
-      constructor that mints a random individual and any dimension validation it needs.</li>
-  <li><b>Add a config variant</b> for it, with its dimensions as fields, plus the mirrored Python
-      class and its serialization.</li>
-  <li><b>Add a startup function</b> beside the two that exist — the thing that validates the
-      dimensions, mints <code>population_size</code> individuals, and builds the context. Dispatch
-      builds the population precisely because this knowledge lives here.</li>
-  <li><b>Add one arm to the genome match</b> in dispatch, calling your startup function and handing
-      the population to the generic strategy function. The strategy match is <b>not</b>
-      touched.</li>
-</ol>
+<p>
+  A GET run is configured by a <b>TOML document</b> — see the
+  <a href="route-python-toml.html">Python: TOML File</a> for its full shape, and
+  <a href="route-python-objects.html">Python: Config Objects</a> for how to run one. The representation is the
+  <code>[genome]</code> section. Adding one called <code>MyGenome</code> is what makes this valid:
+</p>
+
+<pre><code class="language-toml">[genome]
+type           = "my_genome"
+some_dimension = 256</code></pre>
+
+<div class="callout">
+  <p>
+    <b>You never write the string <code>"my_genome"</code> anywhere in the code.</b> It is derived
+    from your variant's name, converted to snake_case. Name the variant and the config name follows;
+    the keys under it are your struct's field names, the same way.
+  </p>
+  <p>
+    This is not specific to the command-line route. The same document is read by the CLI and by the
+    Rust library, and a Python caller builds the same section through a config object instead of
+    typing it. Skipping the optional step 7 below is what makes a genome TOML-only.
+  </p>
+</div>
+
+<h2>The Seven Steps</h2>
+
+<p>
+  Every location carries a literal marker in the source, so you can jump to any step by searching
+  its number. The line numbers below were correct when this page was written; if one has moved, the
+  marker is the anchor that has not.
+</p>
+
+<pre><code class="language-bash">git grep -n "ADD A GENOME STEP" get/src config.example.toml    # the seven steps, in one list</code></pre>
+
+<p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>get/src/genomes/genome.rs:148</code></td>
+        <td>Implement <code>Genome</code> for your type — <code>express</code>,
+            <code>crossover</code>, <code>mutate</code>, <code>print</code>, and the
+            <code>Context</code> associated type. All five are required.</td></tr>
+    <tr><td>2</td><td><code>get/src/genomes/genome.rs:260</code></td>
+        <td>Declare the <code>Context</code> type your genome named.</td></tr>
+    <tr><td>3</td><td><code>get/src/genomes/mod.rs:16</code></td>
+        <td><code>pub mod</code> your module and re-export the type and its context.</td></tr>
+    <tr><td>4</td><td><code>get/src/config.rs:245</code> and <code>:951</code></td>
+        <td>A <code>GenomeConfig</code> variant plus the struct it carries, <i>and</i> its arm in
+            <code>validate_genome</code>.</td></tr>
+    <tr><td>5</td><td><code>get/src/dispatch.rs:403</code></td>
+        <td>A start builder beside <code>sda_start</code>: validate the dimensions once, mint
+            <code>population_size</code> individuals, build the context.</td></tr>
+    <tr><td>6</td><td><code>get/src/dispatch.rs:667</code></td>
+        <td>One arm in the genome match, calling your step-5 builder. The <b>strategy</b> match is
+            not touched — it is generic over the genome.</td></tr>
+    <tr><td>7</td><td><code>get/src/py_config.rs:407</code> and <code>:677</code></td>
+        <td><b>Optional.</b> The Python-side variant and its <code>to_toml_value</code> arm, plus
+            one line in <code>python_attribute_path</code> per field step 4 validates by name.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Steps 1 to 3 — The Representation</h2>
+
+<pre><code class="language-rust">// step 1 — genomes/genome.rs:148
+impl Genome for MyGenome {
+    type Context = MyContext;
+
+    fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph { ... }
+    fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R) { ... }
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, context: &amp;Self::Context, rng: &amp;mut R) { ... }
+    fn print(&amp;self) -&gt; String { ... }
+}
+
+// step 2 — genomes/genome.rs:260
+#[derive(Clone, Debug)]
+pub struct MyContext {
+    pub num_nodes: usize,
+    pub some_mutation_rate: f64,
+}
+
+// step 3 — genomes/mod.rs:16
+pub mod my_genome;
+pub use my_genome::MyGenome;</code></pre>
+
+<div class="callout">
+  <p>
+    <b>The context is run configuration only, never evolved state.</b> The test is "can variation
+    change it" — anything variation cannot change belongs on the context rather than on the genome.
+  </p>
+  <p>
+    <b><code>mutate</code> must make exactly one change per call.</b> The engine's
+    <code>max_mutations</code> counts calls, not changes, so a genome that applies several silently
+    makes the user's configured rate untrue and nothing reports it.
+  </p>
+</div>
+
+<h2>Steps 4 to 6 — Config and Dispatch</h2>
+
+<pre><code class="language-rust">// step 4a — config.rs:245
+MyGenome(MyGenomeConfig),
+
+// step 4b — config.rs:951
+GenomeConfig::MyGenome(mine) =&gt; {
+    if mine.some_dimension == 0 {
+        return Err(invalid("some_dimension", "must be at least 1"));
+    }
+}
+
+// step 5 — dispatch.rs:403
+pub(crate) fn my_genome_start&lt;R: Rng + ?Sized&gt;(
+    config: &amp;Config,
+    mine: &amp;MyGenomeConfig,
+    rng: &amp;mut R,
+) -&gt; PyResult&lt;(MyContext, Vec&lt;MyGenome&gt;)&gt; { ... }
+
+// step 6 — dispatch.rs:667
+GenomeConfig::MyGenome(mine) =&gt; {
+    let (genome_context, population) = my_genome_start(config, mine, &amp;mut rng)?;
+    ...
+}</code></pre>
+
+<h2>Step 7 — Python, and Optional</h2>
+
+<p>
+  Leaving it out costs nothing elsewhere; the genome is then configurable from a TOML file but
+  absent from the Python API. The variant goes at <code>get/src/py_config.rs:407</code>, and the
+  <code>python_attribute_path</code> lines at <code>:677</code>.
+</p>
+
+<div class="callout">
+  <p>
+    <b>Half-finishing step 7 is the trap.</b> If step 4's validation raises a field by name and
+    <code>python_attribute_path</code> has no line for it, a Python caller gets an error naming a
+    TOML field they never wrote. <code>every_validation_field_maps_to_a_python_attribute</code> is
+    the test that catches it.
+  </p>
+</div>
 
 <p>Then add the keys to <code>config.example.toml</code>, which the test suite parses and validates
    — so a broken example fails the build.</p>
 
-<h2>Design questions worth answering first</h2>
+<h2>Design Questions Worth Answering First</h2>
 
-<h3>Where does the size of the graph come from?</h3>
+<h3>Where Does the Size of the Graph Come From?</h3>
 
 <p>
   From your context, and from nowhere else. Config carries <code>network_size</code> and
@@ -88,10 +216,10 @@
   the authority during expression.
 </p>
 
-<h3>Does anything derive from the edge cap?</h3>
+<h3>Does Anything Derive From the Edge Cap?</h3>
 
 <p>
-  It might. The <a href="genomes.html#alphabet">SDA alphabet</a> is derived as
+  It might. The <a href="pipeline.html#alphabet">SDA Alphabet</a> is derived as
   <code>max_edge_multiplicity + 1</code> so that every character it can emit is a legal edge weight
   and nothing is ever clamped. If your representation produces weights in any indirect way, work
   out what the equivalent invariant is before writing the constructor, because the failure is
@@ -109,7 +237,7 @@
   in the constructor rather than in a comment.
 </div>
 
-<h3>What is run configuration, and what is genome data?</h3>
+<h3>What Is Run Configuration, and What Is Genome Data?</h3>
 
 <p>
   If mutation and crossover never touch it, it belongs on the context, not in the genome. SDA's
@@ -117,7 +245,7 @@
   the genome would waste mutation budget on something that should not vary within a run.
 </p>
 
-<h3>Can expression fail?</h3>
+<h3>Can Expression Fail?</h3>
 
 <p>
   It cannot — <code>express</code> returns a graph, not a result. That is deliberate, and the
@@ -127,7 +255,7 @@
   mid-run.
 </p>
 
-<h3>Degenerate sizes</h3>
+<h3>Degenerate Sizes</h3>
 
 <p>
   Decide what your representation does at zero and one node before you find out by accident. Both
@@ -136,7 +264,7 @@
   runs there.
 </p>
 
-<h2>Testing it</h2>
+<h2>Testing It</h2>
 
 <ul>
   <li><b>Express twice, compare.</b> Determinism is the property everything else rests on.</li>
@@ -151,14 +279,14 @@
       because the evolver takes a population rather than minting one.</li>
 </ul>
 
-<h2>What you get for free</h2>
+<h2>What You Get for Free</h2>
 
 <p>
   Everything except expression. Selection, both evolution strategies, the whole
   <a href="variation.html">variation scheme</a>, orientation and <code>NaN</code> rejection,
-  logging, all three SIR objectives and any Python objective work with your representation the
+  logging, all four built-in objectives and any Python objective work with your representation the
   moment dispatch can build it — because none of them know what a genome <i>is</i>. That is what the
-  static-generic design buys, and it is the reason a new genome costs four edits rather than
+  static-generic design buys, and it is the reason a new genome costs six required steps rather than
   four files.
 </p>
 

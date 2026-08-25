@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Extension points · GET docs</title>
+<title>Extension Points · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,33 +11,49 @@
 <main>
 
 <p class="page-kicker">Extending GET</p>
-<h1>Extension points</h1>
+<h1>Extension Points</h1>
 <p class="lede">
-  Four things you can add, and they cost wildly different amounts. Knowing which axis you are on
+  Seven things you can add, and they cost wildly different amounts. Knowing which axis you are on
   before you start saves the most time of anything on this page.
 </p>
 
-<h2>The cost of each axis</h2>
+<h2>The Cost of Each Axis</h2>
 
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Add a…</th><th>Costs</th><th>Because</th></tr></thead>
+  <thead><tr><th>Add a…</th><th>Integration steps</th><th>Because</th></tr></thead>
   <tbody>
     <tr><td><b><a href="new-fitness.html">Objective</a></b></td>
-        <td><b>One arm.</b> Cheapest by a wide margin — and in Python, no Rust at all.</td>
+        <td>Six steps, four required — but only <b>one dispatch arm</b>, which is what makes it the cheapest by a wide margin. In Python, no Rust at all.</td>
         <td>The objective is erased to a trait object <i>before</i> dispatch, so it never enters
             the strategy × genome match.</td></tr>
     <tr><td><b><a href="new-genome.html">Genome</a></b></td>
-        <td>One config variant, one startup function, one dispatch arm.</td>
+        <td>Seven steps, six required — one of them a dispatch arm.</td>
         <td>The strategy match is generic over the genome, so evolvers are untouched.</td></tr>
     <tr><td><b><a href="new-evolver.html">Strategy</a></b></td>
-        <td>One config variant, one arm in the strategy match, one trait implementation.</td>
+        <td>Seven steps, three required — one of them an arm in the strategy match.</td>
         <td>The genome match is untouched, for the same reason in reverse.</td></tr>
-    <tr><td><b>Selection scheme</b></td>
-        <td>One enum variant and one match arm.</td>
-        <td>Selection is already an enum for exactly this reason. Note that the validation function
-            destructures it irrefutably on purpose, so adding a variant <i>stops compiling</i>
-            there and forces you to answer the "does this need a constraint?" question.</td></tr>
+    <tr><td><b><a href="new-selection.html">Selection Scheme</a></b></td>
+        <td>Six steps, four required.</td>
+        <td>Selection is already an enum for exactly this reason, and it answers only "who
+            breeds", so no strategy or genome is touched.</td></tr>
+    <tr><td><b><a href="new-crossover.html">Crossover Operator</a></b></td>
+        <td>Six steps, four required — one is a compatibility pair per genome.</td>
+        <td><code>[crossover]</code> is a shared section, so the operator has to declare which
+            representations can honour it. The match is exhaustive on purpose: adding a variant
+            stops it compiling until you do.</td></tr>
+    <tr><td><b><a href="new-mutation.html">Mutation Operator</a></b></td>
+        <td>Four steps, three required, <b>per genome</b> — the chain exists twice.</td>
+        <td>What counts as "one mutation" differs by representation, so there is no shared enum.
+            Adding one for edge-edit does not touch SDA.</td></tr>
+    <tr><td><b><a href="new-scope.html">Scope</a></b></td>
+        <td>Six steps, four required.</td>
+        <td>Who is eligible for one breeding event. Its parameters are its own — that separation is
+            why any scheme now pairs with any strategy.</td></tr>
+    <tr><td><b><a href="new-replacement.html">Replacement Policy</a></b></td>
+        <td>Three steps — the shortest chain here.</td>
+        <td>Who gets overwritten, and steady-state's alone: generational rebuilds its population and
+            never asks. Consumes no randomness, so a policy cannot shift a seeded run's stream.</td></tr>
   </tbody>
 </table>
 </div>
@@ -83,7 +99,7 @@ objective down to strategy × genome — and it is why an objective is so much c
 anything else.</figcaption>
 </figure>
 
-<h2>Why the two axes are not symmetric</h2>
+<h2>Why the Two Axes Are Not Symmetric</h2>
 
 <p>
   <b>Genome cannot be a trait object.</b> Its mutation and crossover methods are generic over the
@@ -114,7 +130,7 @@ anything else.</figcaption>
   </ul>
 </div>
 
-<h2>Two front doors, and neither is a fallback</h2>
+<h2>Two Front Doors, and Neither Is a Fallback</h2>
 
 <div class="table-wrap">
 <table>
@@ -146,7 +162,7 @@ anything else.</figcaption>
   the schema means nothing user-supplied is ever deserialized, so there is nothing new to validate.
 </div>
 
-<h3>What dispatch must keep public</h3>
+<h3>What Dispatch Must Keep Public</h3>
 
 <p>
   Dispatch must not become the <i>only</i> way to construct a run. Narrowing any of these would
@@ -166,7 +182,7 @@ anything else.</figcaption>
   objectives through the config enum instead.
 </p>
 
-<h2>The one rule that is not optional</h2>
+<h2>The One Rule That Is Not Optional</h2>
 
 <div class="warn">
   <b>Score through <code>express_and_score</code>.</b> The engine never calls
@@ -175,10 +191,10 @@ anything else.</figcaption>
   both — producing values that compare backwards under a maximizing objective, and letting a
   <code>NaN</code> through that will take over the population. Neither failure announces itself.
   Any new evolution strategy scores its population through this function or it is wrong. Detail on
-  <a href="fitness.html#gate">Fitness &amp; orientation</a>.
+  <a href="fitness.html#gate">Fitness &amp; Output</a>.
 </div>
 
-<h2>Practical notes for any of them</h2>
+<h2>Practical Notes for Any of Them</h2>
 
 <ul>
   <li><b>Add the key to <code>config.example.toml</code>.</b> The shipped example is parsed

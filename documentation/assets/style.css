@@ -4,71 +4,9 @@
 /* ---------- tokens ---------------------------------------------------- */
 
 :root {
-  --bg:           #fbfbfd;
-  --bg-raised:    #ffffff;
-  --bg-sunken:    #f2f3f7;
-  --bg-code:      #f6f7f9;
-  --border:       #e2e5ea;
-  --border-firm:  #cbd1da;
-  --text:         #1c1f24;
-  --text-muted:   #5c6470;
-  --text-faint:   #8a929e;
-  --accent:       #2f5bd6;
-  --accent-soft:  #eaf0ff;
-  --accent-line:  #b9caf6;
-  --warn:         #9a5b00;
-  --warn-soft:    #fdf3e2;
-  --warn-line:    #f0d5a8;
-  --good:         #1f6f43;
-  --good-soft:    #e8f5ee;
-  --good-line:    #b6dcc6;
-  --plan:         #6b4bab;
-  --plan-soft:    #f1ecfb;
-  --plan-line:    #d3c4ee;
-
-  --sidebar-w: 17.5rem;
-  --toc-w: 15rem;
-  --radius: 8px;
-
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
-          "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-          "Liberation Mono", monospace;
-
-  color-scheme: light;
-}
-
-/* Dark palette. Declared twice on purpose: once behind the system preference so
-   a dark-mode reader never sees a light flash before site.js runs, and once
-   behind an explicit `data-theme` so the toggle wins in both directions. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg:           #14161a;
-    --bg-raised:    #1b1e24;
-    --bg-sunken:    #101216;
-    --bg-code:      #1c2027;
-    --border:       #2b3038;
-    --border-firm:  #3d444f;
-    --text:         #e6e9ee;
-    --text-muted:   #a3abb8;
-    --text-faint:   #7b8492;
-    --accent:       #8caaff;
-    --accent-soft:  #1c2540;
-    --accent-line:  #33447a;
-    --warn:         #e5b567;
-    --warn-soft:    #2b2419;
-    --warn-line:    #4d3f24;
-    --good:         #7fce9f;
-    --good-soft:    #16261d;
-    --good-line:    #2a4635;
-    --plan:         #c1a8f0;
-    --plan-soft:    #221c33;
-    --plan-line:    #3d3159;
-    color-scheme: dark;
-  }
-}
-
-:root[data-theme="dark"] {
+  /* One palette: the site ships a single dark theme. The toggle, the
+     prefers-color-scheme block and the data-theme block were removed
+     2026-08-21. */
   --bg:           #14161a;
   --bg-raised:    #1b1e24;
   --bg-sunken:    #101216;
@@ -88,11 +26,20 @@
   --good-soft:    #16261d;
   --good-line:    #2a4635;
   --plan:         #c1a8f0;
-  --plan-soft:    #221c33;
-  --plan-line:    #3d3159;
 
   color-scheme: dark;
+
+  --sidebar-w: 17.5rem;
+  --toc-w: 15rem;
+  --layout-max: 96rem;
+  --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+          "Liberation Mono", monospace;
 }
+
+
 
 /* ---------- base ------------------------------------------------------ */
 
@@ -212,6 +159,11 @@ pre code { background: none; border: 0; padding: 0; font-size: 1em; }
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   min-height: 100vh;
+  /* Past this width the whole page centres rather than growing: the sidebar
+     stops drifting away from the text, and the reading column stays put
+     instead of sliding left as the window widens. */
+  max-width: var(--layout-max);
+  margin: 0 auto;
 }
 
 .sidebar {
@@ -237,6 +189,14 @@ pre code { background: none; border: 0; padding: 0; font-size: 1em; }
 .brand .mark {
   width: 26px; height: 26px; flex: none;
 }
+.brand-repo {
+  display: block;
+  padding: 0 1.1rem;
+  margin: -.15rem 0 .9rem;
+  font-size: .78rem;
+  color: var(--text-muted);
+}
+.brand-repo:hover { color: var(--accent); text-decoration: none; }
 .brand .tag {
   font-size: .68rem;
   color: var(--text-faint);
@@ -246,15 +206,38 @@ pre code { background: none; border: 0; padding: 0; font-size: 1em; }
   margin-left: auto;
 }
 
-.nav-group { padding: .8rem 0 .1rem; }
-.nav-group > .nav-title {
+.nav-group { padding: .35rem 0 .1rem; }
+.nav-group > a.nav-title {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
   font-size: .7rem;
   text-transform: uppercase;
   letter-spacing: .09em;
   color: var(--text-faint);
   font-weight: 650;
-  padding: 0 1.1rem .35rem;
+  padding: .35rem 1.1rem .35rem .9rem;
 }
+.sidebar a.nav-title:hover { color: var(--text); text-decoration: none; }
+
+/* The caret is drawn rather than typed, so it inherits colour and needs no
+   font that might be missing. */
+.nav-group > a.nav-title::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform .15s ease;
+}
+.nav-group.open > a.nav-title::before { transform: rotate(90deg); }
+.nav-group.open > a.nav-title { color: var(--text-muted); }
+
+/* Collapsed sections are hidden outright rather than height-animated: the
+   click navigates, so the section is gone before any transition could play. */
+.nav-items { display: none; }
+.nav-group.open > .nav-items { display: block; }
 .sidebar a.nav-link {
   display: block;
   padding: .3rem 1.1rem .3rem 1.15rem;
@@ -274,10 +257,14 @@ pre code { background: none; border: 0; padding: 0; font-size: 1em; }
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--toc-w);
   gap: 2.5rem;
-  max-width: 68rem;
+  /* No max-width: the grid fills the space beside the sidebar so the contents
+     rail sits against the right edge. The reading column is capped by `main`
+     below instead, which is what should be limited -- capping the grid put the
+     rail in the middle of the page with empty space to its right. */
   padding: 2.4rem 2.2rem 6rem;
 }
-.content.no-toc { grid-template-columns: minmax(0, 1fr); max-width: 54rem; }
+.content > main { max-width: 54rem; }
+.content.no-toc { grid-template-columns: minmax(0, 1fr); }
 
 main { min-width: 0; }
 
@@ -368,7 +355,7 @@ th {
 tbody tr:hover { background: var(--bg-sunken); }
 td code { white-space: nowrap; }
 
-.note, .warn, .tip, .plan-note {
+.callout, .note, .warn, .tip {
   border: 1px solid var(--border);
   border-left: 3px solid var(--border-firm);
   border-radius: var(--radius);
@@ -377,29 +364,16 @@ td code { white-space: nowrap; }
   background: var(--bg-raised);
   font-size: .93rem;
 }
-.note > :last-child, .warn > :last-child,
-.tip > :last-child, .plan-note > :last-child { margin-bottom: 0; }
+.callout > :last-child, .note > :last-child, .warn > :last-child,
+.tip > :last-child { margin-bottom: 0; }
 .note  { border-left-color: var(--accent); background: var(--accent-soft); }
 .warn  { border-left-color: var(--warn);   background: var(--warn-soft); }
 .tip   { border-left-color: var(--good);   background: var(--good-soft); }
-.plan-note { border-left-color: var(--plan); background: var(--plan-soft); }
-.note b, .warn b, .tip b, .plan-note b { font-weight: 650; }
-
-.badge {
-  display: inline-block;
-  font-size: .68rem;
-  font-weight: 650;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  padding: .08rem .45rem;
-  border-radius: 20px;
-  border: 1px solid;
-  vertical-align: middle;
-  white-space: nowrap;
-}
-.badge-built   { color: var(--good); background: var(--good-soft); border-color: var(--good-line); }
-.badge-planned { color: var(--plan); background: var(--plan-soft); border-color: var(--plan-line); }
-.badge-partial { color: var(--warn); background: var(--warn-soft); border-color: var(--warn-line); }
+/* Neutral by design: a callout marks something worth stopping on without
+   claiming it is a warning. Left border only, no tinted fill. */
+.callout { border-left-color: var(--border-firm); }
+.callout ul { margin-bottom: 0; }
+.callout b, .note b, .warn b, .tip b { font-weight: 650; }
 
 /* card grid, used on the landing page */
 .cards {
@@ -420,33 +394,6 @@ td code { white-space: nowrap; }
 .card h3 { margin: 0 0 .3rem; font-size: 1rem; color: var(--accent); }
 .card p  { margin: 0; font-size: .88rem; color: var(--text-muted); }
 
-/* definition list for API items */
-.api-item {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin: 0 0 1rem;
-  overflow: hidden;
-  background: var(--bg-raised);
-}
-.api-item > .api-sig {
-  background: var(--bg-code);
-  border-bottom: 1px solid var(--border);
-  padding: .6rem .9rem;
-  font-family: var(--mono);
-  font-size: .83rem;
-  overflow-x: auto;
-  white-space: pre;
-}
-.api-item > .api-body { padding: .8rem .9rem; font-size: .93rem; }
-.api-item > .api-body > :last-child { margin-bottom: 0; }
-.src {
-  float: right;
-  font-family: var(--mono);
-  font-size: .74rem;
-  color: var(--text-faint);
-  font-weight: 400;
-}
-
 /* figures / diagrams */
 figure {
   margin: 0 0 1.6rem;
@@ -457,6 +404,14 @@ figure {
   overflow-x: auto;
 }
 figure svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+
+/* On a phone the diagrams would otherwise shrink to fit, taking their 11px
+   labels down with them. `figure` already scrolls; this gives the SVG a floor
+   so the scroll actually engages instead. Gated below the desktop breakpoint,
+   so wide screens are unaffected. */
+@media (max-width: 700px) {
+  figure svg { min-width: 600px; }
+}
 figcaption {
   margin-top: .8rem;
   font-size: .82rem;
@@ -477,22 +432,6 @@ figcaption {
 .d-text-mono { fill: var(--text); font-family: var(--mono); font-size: 12px; }
 .d-text-acc  { fill: var(--accent); font-family: var(--font); font-size: 12px; font-weight: 600; }
 
-/* theme toggle */
-.theme-toggle {
-  position: fixed;
-  top: .9rem; right: 1rem;
-  z-index: 40;
-  width: 2rem; height: 2rem;
-  display: grid; place-items: center;
-  border: 1px solid var(--border-firm);
-  border-radius: 50%;
-  background: var(--bg-raised);
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: .9rem;
-  line-height: 1;
-}
-.theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
 
 /* mobile nav toggle */
 .nav-toggle { display: none; }
@@ -501,7 +440,18 @@ figcaption {
 
 @media (max-width: 1100px) {
   .content { grid-template-columns: minmax(0, 1fr); }
-  .toc { display: none; }
+  /* Above the text rather than gone. Below it, the contents would sit past the
+     end of the page they index, which is no use to anyone. */
+  .toc {
+    order: -1;
+    position: static;
+    max-height: none;
+    overflow: visible;
+    border-left: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 0 1rem;
+    margin-bottom: .5rem;
+  }
 }
 
 @media (max-width: 820px) {
@@ -532,6 +482,6 @@ figcaption {
 }
 
 @media print {
-  .sidebar, .toc, .theme-toggle, .nav-toggle, .pager, .copy-btn { display: none; }
+  .sidebar, .toc, .nav-toggle, .pager, .copy-btn { display: none; }
   .layout, .content { display: block; max-width: none; }
 }

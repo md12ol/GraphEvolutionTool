@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Python: Config Objects · GET Docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/route-python-objects.html">
+<main>
+
+<p class="page-kicker">Using GET</p>
+<h1>Python: Config Objects</h1>
+<p class="lede">
+  Build a run out of typed objects, hand it to <code>GraphEvolver</code>, and read the results back
+  as Python values. Nothing to look up in another file — the whole run reads top to bottom.
+</p>
+
+<h2>Install</h2>
+
+<p>
+  GET is a compiled module, so it installs rather than being copied in. The distribution is called
+  <code>graph-evolution-tool</code> and it imports as <code>get</code>: the short name was already
+  taken on PyPI and on crates.io and cannot be reclaimed, so the published name differs from the
+  import — the same arrangement as <code>pip install scikit-learn</code> giving you
+  <code>import sklearn</code>.
+</p>
+
+<pre><code class="language-bash">python3 -m venv .venv
+source .venv/bin/activate
+pip install graph-evolution-tool
+python -c "import get; print(get.__name__)"</code></pre>
+
+
+
+<div class="tip">
+  <b>Building from a checkout instead.</b> If you want the working copy rather than the published
+  package — or the package is not on PyPI yet — build the extension module with
+  <a href="https://www.maturin.rs">maturin</a>. It compiles the Rust and installs it into the
+  active virtual environment under the import name <code>get</code>:
+  <pre><code class="language-bash">git clone https://github.com/md12ol/GraphEvolutionTool
+cd GraphEvolutionTool
+python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+python3 -m ensurepip --upgrade      # only if this Python has no pip
+pip install maturin
+maturin develop --release</code></pre>
+  A Rust toolchain is needed for this and not for <code>pip install</code>; get one from
+  <a href="https://rustup.rs">rustup.rs</a>. Re-run <code>maturin develop</code> after every change
+  to the Rust — the installed module does not track the source.
+</div>
+
+<h2>The Smallest Complete Run</h2>
+
+<pre><code class="language-python">import get
+
+config = get.Config(
+    population_size=60,
+    network_size=40,
+    crossover_rate=0.9,
+    mutation_rate=0.2,
+    evolution=get.EvolutionConfig.Generational(num_generations=50, elite_count=1),
+    scope=get.ScopeConfig.Global(),
+    selection=get.SelectionConfig.Tournament(tournament_size=5),
+    genome=get.GenomeConfig.EdgeEdit(gene_length=256),
+    fitness=get.FitnessConfig.EpiSpread(
+        sir=get.SirParams(infection_rate=0.5, num_epidemics=30)
+    ),
+)
+
+evolver = get.GraphEvolver.from_config(config)
+results = evolver.run(seed=7, n_runs=1)
+
+best = results[0]
+print(best.best_fitness, len(best.best_edges))</code></pre>
+
+<p>
+  <code>run</code> always returns a list, one result per replicate, even for
+  <code>n_runs=1</code>. That is deliberate: code written against a single run does not have to be
+  rewritten when you ask for twenty.
+</p>
+
+<h2>Reading a Result</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Attribute</th><th>What it holds</th></tr></thead>
+  <tbody>
+    <tr><td><code>best_fitness</code></td><td>The winning score, in the direction you asked for.</td></tr>
+    <tr><td><code>best_edges</code></td><td><code>(u, v, multiplicity)</code> triples, <code>u &lt; v</code>. Pairs with no edge are absent.</td></tr>
+    <tr><td><code>num_nodes</code></td><td>Node count of the winning graph.</td></tr>
+    <tr><td><code>history</code></td><td>One row per logged iteration: <code>iteration</code>, <code>best_fitness</code>, <code>mean_fitness</code>, <code>std_dev</code>, <code>ci_95</code>.</td></tr>
+    <tr><td><code>config_toml</code></td><td>The exact configuration this run used, as text. Archive it beside the results.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<pre><code class="language-python">first = best.history[0].best_fitness
+last  = best.history[-1]
+print(f"{first:.3f} -> {last.best_fitness:.3f} over {last.iteration} generations")
+
+best.save_logs("run_log.csv")
+best.save_results("best_individual.txt")   # also writes best_individual.txt.toml</code></pre>
+
+<div class="callout">
+  <p>
+    <b>Write <code>config_toml</code> out with your results.</b> On this route the parameters live
+    in a program someone will edit, so the file is the only record of what a given set of numbers
+    was actually produced by. <code>save_results</code> writes it for you as
+    <code>&lt;name&gt;.toml</code>.
+  </p>
+</div>
+
+<h2>Several Replicates</h2>
+
+<p>
+  One master seed goes in; GET derives a seed per replicate from it. Asking for more replicates does
+  not change the ones you already had, and a replicate is reproduced by re-running with the same
+  master seed and reading the same index — not by feeding its derived seed back in.
+</p>
+
+<pre><code class="language-python">import os
+
+results = evolver.run(seed=7, n_runs=8)
+
+for run_index, result in enumerate(results):
+    print(run_index, result.best_fitness)
+    os.makedirs(f"output/run_{run_index}", exist_ok=True)
+    result.save_logs(f"output/run_{run_index}/run_log.csv")</code></pre>
+
+<div class="warn">
+  <b><code>save_logs</code> and <code>save_results</code> do not create directories.</b> They write
+  the file you name and raise <code>OSError</code> if its folder is missing, so make the folder
+  first. The <code>get-run</code> CLI is different — <code>--out</code> builds the whole tree for
+  you.
+</div>
+
+<p>
+  Replicates are spread across cores. Cap that with <code>max_cores</code> if you are sharing the
+  machine: <code>evolver.run(seed=7, n_runs=8, max_cores=4)</code>. Peak memory scales with
+  <code>min(max_cores, n_runs)</code>, so lowering it lowers memory too.
+</p>
+
+<h2>Your Own Objective</h2>
+
+<p>
+  Score graphs with a Python function instead of a built-in. Select
+  <code>FitnessConfig.Python()</code>, then register the callable and say which direction wins:
+</p>
+
+<pre><code class="language-python">def total_edges(batch):
+    """One score per individual, in the same order."""
+    return [float(len(edges)) for (num_nodes, edges) in batch]
+
+config = get.Config(
+    ...,
+    fitness=get.FitnessConfig.Python(),
+)
+
+evolver = get.GraphEvolver.from_config(config)
+evolver.set_fitness_function(total_edges, "maximize")
+results = evolver.run(seed=7, n_runs=1)</code></pre>
+
+<div class="callout">
+  <p><b>Three things the contract requires:</b></p>
+  <ul>
+    <li><b>It takes the whole population at once</b> — a list of
+        <code>(num_nodes, edge_list)</code> pairs — and returns one number per input,
+        <b>in the same order</b>. A per-individual function is not just slower here; it is
+        dramatically slower, because every call pays the interpreter round trip.</li>
+    <li><b>Direction is declared, never inferred.</b> <code>"minimize"</code> or
+        <code>"maximize"</code>. Nothing can work it out from your function.</li>
+    <li><b><code>NaN</code> stops the run.</b> Infinity is allowed, but pick the right one: it is
+        <code>+inf</code> under <code>"minimize"</code> and <code>-inf</code> under
+        <code>"maximize"</code> that mean "invalid, never select this". The opposite infinity is
+        the <i>best</i> possible score, so it wins every tournament it enters. Watch for a zero
+        denominator and <code>0.0/0.0</code> — an empty graph puts both within reach.</li>
+  </ul>
+</div>
+
+<h2>Starting From a Graph You Already Have</h2>
+
+<pre><code class="language-python">evolver = get.GraphEvolver.from_config(config)
+
+# Call ONE of these, not both — a second loader that disagrees about the
+# numbering raises, and one run has one numbering.
+
+# from memory: (u, v, multiplicity), in your own node numbering
+evolver.set_base_graph(40, [(0, 1, 1), (1, 2, 1)], min_node_index=0)
+
+# from a file: one edge per line, with a `# nodes = N` header
+evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre>
+
+<div class="warn">
+  <b>These loaders warn rather than raise on three things</b>, so a run can start from data you did
+  not mean to supply and nothing will stop it.
+  <ul>
+    <li><b>A repeated edge</b> — canonical, so <code>2,5</code> and <code>5,2</code> are the same
+        edge — takes the <b>last</b> occurrence's weight. Earlier rows for that pair are
+        overwritten, not added to.</li>
+    <li><b>A zero-weight row is accepted and adds no edge.</b> Weight 0 <i>is</i> the absence of an
+        edge, so the row is read, counted as valid, and leaves the pair unconnected — it is not an
+        edge with weight zero sitting in the graph, and it will not appear in
+        <code>best_edges</code>. The warning's phrase is "kept as given", which means the number you
+        wrote was stored verbatim rather than treated as an error.</li>
+    <li><b>An empty file</b> loads an empty base graph.</li>
+  </ul>
+  Each raises a Python <code>UserWarning</code> naming the file and the line, so
+  <code>warnings.simplefilter("error")</code> turns them into failures if you would rather find out
+  loudly.
+  <p>
+    A weight <i>above</i> <code>max_edge_multiplicity</code> is the opposite case and <b>raises</b>,
+    naming the file, the line and the cap rather than clamping silently.
+  </p>
+</div>
+
+<div class="callout">
+  <p>
+    <b>The first loader you call fixes the run's node numbering, and results come back in it.</b>
+    Load 1-indexed data and <code>best_edges</code> is 1-indexed too. A second loader that disagrees
+    is rejected rather than quietly mixed in — one run has one numbering.
+  </p>
+</div>
+
+<h2>A Complete Example</h2>
+
+<p>
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/python_inline.py"><code>python_inline.py</code></a> is this route end to end:
+  several replicates, an output directory per run, and all three files written per replicate. It
+  is not shipped in the wheel — the package carries the module and nothing else — so download it
+  and run <code>python python_inline.py</code>.
+</p>
+
+<h2>When to Use the Other Python Route</h2>
+
+<p>
+  If you would rather keep the parameters in a document you can archive, diff and hand to someone
+  else, write them as TOML instead — see <a href="route-python-toml.html">Python: TOML File</a>. The
+  two routes accept exactly the same configurations; only where the parameters live differs.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

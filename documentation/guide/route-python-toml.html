@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Python: TOML File · GET Docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/route-python-toml.html">
+<main>
+
+<p class="page-kicker">Using GET</p>
+<h1>Python: TOML File</h1>
+<p class="lede">
+  Keep the parameters in a document instead of in code. Point <code>GraphEvolver</code> at the file,
+  run it, read the results back as Python values. The configuration is something you can archive,
+  diff and send to someone else.
+</p>
+
+<h2>Install</h2>
+
+<p>
+  The distribution is <code>graph-evolution-tool</code>; it imports as <code>get</code>.
+</p>
+
+<pre><code class="language-bash">python3 -m venv .venv
+source .venv/bin/activate
+pip install graph-evolution-tool
+python -c "import get; print(get.__name__)"</code></pre>
+
+
+
+<div class="tip">
+  <b>Building from a checkout instead.</b> If you want the working copy rather than the published
+  package — or the package is not on PyPI yet — build the extension module with
+  <a href="https://www.maturin.rs">maturin</a>. It compiles the Rust and installs it into the
+  active virtual environment under the import name <code>get</code>:
+  <pre><code class="language-bash">git clone https://github.com/md12ol/GraphEvolutionTool
+cd GraphEvolutionTool
+python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+python3 -m ensurepip --upgrade      # only if this Python has no pip
+pip install maturin
+maturin develop --release</code></pre>
+  A Rust toolchain is needed for this and not for <code>pip install</code>; get one from
+  <a href="https://rustup.rs">rustup.rs</a>. Re-run <code>maturin develop</code> after every change
+  to the Rust — the installed module does not track the source.
+</div>
+
+<h2>The Config Document</h2>
+
+<p>
+  Four tagged sections plus a handful of top-level keys. Each <code>type</code> selects a variant,
+  and the rest of that section's keys depend on which one you chose.
+</p>
+
+<pre><code class="language-toml">population_size       = 200
+network_size          = 100
+max_edge_multiplicity = 1     # 1 = unweighted (the default)
+crossover_rate        = 0.9
+mutation_rate         = 0.2   # is this child mutated at all?
+max_mutations         = 1     # if so, how many
+
+[evolution]                   # generational | steady_state
+type            = "generational"
+num_generations = 500
+elite_count     = 1
+
+[scope]                       # who is eligible to breed
+type = "global"
+
+[selection]                   # best | tournament
+type            = "tournament"
+tournament_size = 5
+
+[genome]                      # edge_edit | sda
+type        = "edge_edit"
+gene_length = 256
+
+[fitness]                     # epi_spread | epi_length | epi_prof_match | struct_match | python
+type           = "epi_spread"
+infection_rate = 0.05
+num_epidemics  = 30</code></pre>
+
+<div class="warn">
+  <b>The ordering rule that bites everyone once.</b> Top-level keys must appear <i>before</i> the
+  first <code>[section]</code> header. Once a table header opens, every following key belongs to
+  that table — so a <code>population_size</code> written below <code>[evolution]</code> becomes
+  <code>evolution.population_size</code>, and the error you get is a <i>missing</i>
+  <code>population_size</code>.
+</div>
+
+<p>
+  Every key this document can carry, with its default and what rejects it, is in the
+  <a href="configuration.html">Configuration Reference</a>.
+</p>
+
+<h2>Running It</h2>
+
+<pre><code class="language-python">import get
+
+evolver = get.GraphEvolver("config.toml")
+results = evolver.run(seed=7, n_runs=1)
+
+best = results[0]
+print(best.best_fitness, len(best.best_edges))
+best.save_logs("run_log.csv")
+best.save_results("best_individual.txt")</code></pre>
+
+<p>
+  <code>run</code> always returns a list, one result per replicate, even for a single run — so code
+  written for one does not need rewriting for twenty.
+</p>
+
+<div class="note">
+  <b>A base graph is set on the evolver, not in the document.</b> No key in the config names one.
+  Call <code>evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code> between
+  constructing the evolver and running it. The file is one edge per line and <b>must</b> carry a
+  <code># nodes = N</code> header — a node with no edges is invisible to any count taken from the
+  edges, so a count inferred from the rows is short by exactly the nodes hardest to notice. See
+  <a href="route-python-objects.html#starting-from-a-graph-you-already-have">Starting From a Graph
+  You Already Have</a>.
+</div>
+
+<h2>Reading a Result</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Attribute</th><th>What it holds</th></tr></thead>
+  <tbody>
+    <tr><td><code>best_fitness</code></td><td>The winning score, in the direction the objective asked for.</td></tr>
+    <tr><td><code>best_edges</code></td><td><code>(u, v, multiplicity)</code> triples, <code>u &lt; v</code>.</td></tr>
+    <tr><td><code>num_nodes</code></td><td>Node count of the winning graph.</td></tr>
+    <tr><td><code>history</code></td><td>Per logged iteration: <code>iteration</code>, <code>best_fitness</code>, <code>mean_fitness</code>, <code>std_dev</code>, <code>ci_95</code>.</td></tr>
+    <tr><td><code>config_toml</code></td><td>The configuration this run used, as text.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Validation Happens Once, Up Front</h2>
+
+<p>
+  The document is parsed and checked when you construct the evolver, not part-way through a run. In
+  most sections an unknown key is an error rather than a silent default — a misspelled
+  <code>tournament_sise</code> stops you immediately instead of quietly running a different
+  experiment.
+</p>
+
+<div class="warn">
+  <b><code>[fitness]</code> is the exception, and it is worth knowing.</b> Its variants flatten
+  their SIR block into the section, and a flattened block is the one place serde cannot refuse an
+  unrecognised key — so a typo there is <b>ignored</b>, leaving the default in place. Two keys are
+  singled out and rejected by name because they are the mistakes that change a run silently:
+  <code>seed</code>, which belongs on <code>run</code>, and <code>target_profile</code> under a
+  variant that has no use for it. Anything else misspelled under <code>[fitness]</code> passes
+  quietly, so check that section by eye.
+</div>
+
+<pre><code class="language-python">try:
+    evolver = get.GraphEvolver("config.toml")
+except ValueError as err:
+    print("bad config:", err)   # names the field and the constraint</code></pre>
+
+<h2>Several Replicates</h2>
+
+<pre><code class="language-python">results = evolver.run(seed=7, n_runs=8, max_cores=4)
+
+for run_index, result in enumerate(results):
+    result.save_logs(f"output/run_{run_index}/run_log.csv")
+    result.save_results(f"output/run_{run_index}/best_individual.txt")</code></pre>
+
+<p>
+  One master seed in, one derived seed per replicate. Asking for more replicates never changes the
+  ones you already had. Reproduce a replicate with the same master seed and the same index — its
+  derived seed is not a handle you can pass back in.
+</p>
+
+<h2>An Objective Written in Python</h2>
+
+<p>
+  Set <code>type = "python"</code> in the document and register the callable before running. The
+  section names no objective of its own — it says "one will be registered", and a run that reaches
+  scoring without one is rejected rather than silently scoring nothing.
+</p>
+
+<pre><code class="language-toml">[fitness]
+type = "python"</code></pre>
+
+<pre><code class="language-python">def total_edges(batch):
+    return [float(len(edges)) for (num_nodes, edges) in batch]
+
+evolver = get.GraphEvolver("config.toml")
+evolver.set_fitness_function(total_edges, "maximize")
+results = evolver.run(seed=7, n_runs=1)</code></pre>
+
+<div class="callout">
+  <p>
+    The function takes the <b>whole population at once</b> and returns one number per individual in
+    the same order. Direction is declared here, never inferred. <code>NaN</code> stops the run.
+    Infinity is allowed, but which one means "invalid" follows the direction: <code>+inf</code>
+    under minimize, <code>-inf</code> under maximize — the opposite one is the best possible score.
+  </p>
+</div>
+
+<h2>Building the Document From Python</h2>
+
+<p>
+  If you would rather generate configurations than hand-write them, the same typed objects the other
+  Python route uses will serialize to this format — useful for sweeping a parameter across many
+  files. See <a href="route-python-objects.html">Python: Config Objects</a>, and
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/config_builder.py"><code>config_builder.py</code></a>, which builds configurations
+  without running anything.
+</p>
+
+<h2>A Complete Example</h2>
+
+<p>
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/python_from_config.py"><code>python_from_config.py</code></a> is this route
+  end to end, taking the config path and seed as arguments. It is not shipped in the wheel, so
+  download it alongside
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/config.example.toml"><code>config.example.toml</code></a> and run:
+</p>
+
+<pre><code class="language-bash">python python_from_config.py config.example.toml 7</code></pre>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

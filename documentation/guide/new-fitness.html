@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Add an objective · GET docs</title>
+<title>Add an Objective · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,13 +11,71 @@
 <main>
 
 <p class="page-kicker">Extending GET</p>
-<h1>Add an objective</h1>
+<h1>Add an Objective</h1>
 <p class="lede">
-  Scoring graphs by something other than an epidemic. Three routes, in increasing order of effort:
-  a Python callable, a native objective in the crate, or your own Rust type outside it.
+  Scoring graphs by something other than an epidemic. Three routes, in increasing order of effort,
+  named for the way you will be running GET: a <b>Python</b> callable, a <b>Rust</b> type in your own
+  crate, or a native objective inside <b>GET itself</b>.
 </p>
 
-<h2>Route 1 — a Python callable</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Route</th><th>You write</th><th>You edit GET</th><th>Selectable from a config file</th></tr></thead>
+  <tbody>
+    <tr><td><b>1 — Python</b></td><td>a Python function</td><td>no</td>
+        <td>yes, as <code>type = "python"</code></td></tr>
+    <tr><td><b>2 — Rust, as a library</b></td><td>a Rust type in your own crate</td><td>no</td>
+        <td>no — you hand it to the evolver directly</td></tr>
+    <tr><td><b>3 — Rust, inside GET</b></td><td>a Rust type in <code>get/src/</code></td><td>yes</td>
+        <td>yes, by name</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout">
+  <p>
+    <b>The middle column is the whole decision.</b> Route 2 buys you native speed without a fork and
+    without a config variant; what it cannot give you is a name a <code>config.toml</code> can
+    select, because the config schema lives inside the crate. Route 3 is the only one that produces
+    an objective someone else can run from a document, and it is the only one with steps to follow.
+  </p>
+</div>
+
+<h2>What the User Ends Up Writing</h2>
+
+<p>
+  A GET run is configured by a <b>TOML document</b> — see the
+  <a href="route-python-toml.html">Python: TOML File</a> for its full shape, and
+  <a href="route-python-objects.html">Python: Config Objects</a> for how to run one. The objective is the
+  <code>[fitness]</code> section. A Python callable is selected by name, and registered separately
+  through the evolver:
+</p>
+
+<pre><code class="language-toml">[fitness]
+type = "python"</code></pre>
+
+<p>An objective added inside GET (route 3) is selected the same way its own variant is named:</p>
+
+<pre><code class="language-toml">[fitness]
+type           = "my_objective"
+some_parameter = 0.5</code></pre>
+
+<div class="callout">
+  <p>
+    <b>You never write that string in the code.</b> It is derived from your
+    <code>FitnessConfig</code> variant's name, converted to snake_case — the same rule every other
+    section follows. The keys under it are your struct's field names.
+  </p>
+  <p>
+    Route 1 is the exception worth knowing: <code>type = "python"</code> names no objective of its
+    own. It says "a callable will be registered", and a run that reaches scoring without one is
+    rejected rather than silently scoring nothing. <b>Route 2 appears in no config document at
+    all</b> — a library caller hands the objective over directly, so there is nothing for
+    <code>[fitness]</code> to name.
+  </p>
+</div>
+
+<h2>Route 1 — Python: A Registered Callable</h2>
 
 <p>
   Set <code>[fitness] type = "python"</code> in the config and register your function. No Rust, no
@@ -33,6 +91,7 @@ config = get.Config(
     network_size    = 60,
     crossover_rate  = 0.9,
     mutation_rate   = 0.2,
+    scope           = get.ScopeConfig.Global(),
     selection       = get.SelectionConfig.Tournament(tournament_size=5),
     genome          = get.GenomeConfig.EdgeEdit(gene_length=128),
     fitness         = get.FitnessConfig.Python(),      # note the empty parentheses
@@ -46,7 +105,7 @@ evolver = get.GraphEvolver.from_config(config)
 evolver.set_fitness_function(total_weight, "maximize")
 result = evolver.run(20260812)</code></pre>
 
-<h3>The contract</h3>
+<h3>The Contract</h3>
 
 <div class="table-wrap">
 <table>
@@ -63,9 +122,13 @@ result = evolver.run(20260812)</code></pre>
         <td>Declared at registration — <code>"minimize"</code> or <code>"maximize"</code>,
             case-insensitive. Nothing can infer it from your function, and this is the only place
             it can be said.</td></tr>
-    <tr><td><b>Values</b></td>
-        <td>Finite or <code>±inf</code>. <b><code>NaN</code> is rejected</b> and will fail the
-            run.</td></tr>
+    <tr><td><b>What you may return</b></td>
+        <td>Any real number. To mark an individual invalid use the infinity that sorts
+            <i>worst</i> for your direction — <code>+inf</code> under minimize,
+            <code>-inf</code> under maximize; the other one wins every tournament.
+            <b><code>NaN</code> stops the run</b> — it is not skipped or scored as a loss. Watch
+            for a zero denominator, <code>0.0/0.0</code> and <code>inf - inf</code>: an empty graph
+            puts all three within reach.</td></tr>
   </tbody>
 </table>
 </div>
@@ -78,14 +141,7 @@ result = evolver.run(20260812)</code></pre>
   your function body remains.
 </div>
 
-<div class="tip">
-  The interface is modelled on <b>pymoo's <code>Problem._evaluate</code></b> — a batch of
-  solutions in, an array of objective values out, vectorized in numpy. That idiom is already
-  familiar to the audience, and it is the shape the performance argument demands, so the ergonomic
-  choice and the fast choice agree.
-</div>
-
-<h3>Vectorising it properly</h3>
+<h3>Vectorising It Properly</h3>
 
 <pre><code class="language-python">import numpy as np
 
@@ -102,7 +158,7 @@ def clustering_penalty(batch):
 
 evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
 
-<h3>Things that will bite you</h3>
+<h3>Things That Will Bite You</h3>
 
 <ul>
   <li><b>Registration is refused if the config did not select <code>python</code>.</b> Silently
@@ -110,7 +166,7 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
       errors instead.</li>
   <li><b>Use generational, not steady-state.</b> Steady-state scores two children per mating event,
       so a Python objective pays one crossing <i>per event</i> instead of per generation. See
-      <a href="evolvers.html">Evolution strategies</a>.</li>
+      <a href="variation.html#strategies">Variation &amp; Selection</a>.</li>
   <li><b>Replicates run sequentially under a Python objective</b>, chosen by the engine rather than
       by you — <code>n</code> concurrent runs would be <code>n</code> threads contending for one
       lock.</li>
@@ -120,49 +176,13 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
       returning scores in the wrong <i>order</i> is neither, and will quietly evolve nonsense.</li>
 </ul>
 
-<h2>Route 2 — a native objective inside the crate</h2>
-
-<p>Six small edits, none of which touch a strategy or a genome:</p>
-
-<ol>
-  <li>Add a variant to the fitness config enum, with whatever parameters it needs.</li>
-  <li>Add its name to the type-name function, which is what error messages print.</li>
-  <li>Add an arm to fitness validation if it has parameters worth constraining. Every constraint
-      lives there, not scattered through dispatch.</li>
-  <li>Implement the <code>Fitness</code> trait for your type: <code>evaluate</code> in your own
-      units, and <code>direction</code> if it is not minimize.</li>
-  <li>Add one arm to the objective-erasing match, which turns the config variant into a boxed
-      objective.</li>
-  <li>Mirror the variant on the Python config side, and add its attribute path to the error-mapping
-      table.</li>
-</ol>
-
-<p>
-  Then document it in <code>config.example.toml</code> — the shipped example is parsed and validated
-  by the test suite, so a broken example fails the build rather than a user's afternoon.
-</p>
-
-<div class="warn">
-  <b>Two traps in the trait itself.</b> Do not call <code>self.evaluate_batch</code> from inside
-  <code>evaluate</code> — the default <code>evaluate_batch</code> calls <code>evaluate</code>, so
-  that is infinite recursion and a stack overflow at runtime rather than a compile error. And if
-  you override <code>evaluate_batch</code>, remember it must produce results in input order.
-</div>
-
-<h3>Sharing one simulation between objectives</h3>
-
-<p>
-  If your objective needs an epidemic, read the existing pattern first: the expensive part is the
-  simulation, so one run returns <code>{ length, spread, profile }</code> and each of the three SIR
-  objectives is a thin reading of it. Adding a fourth reading of the same simulation is much
-  cheaper than adding a fourth simulator.
-</p>
-
-<h2 id="rust-route">Route 3 — your own crate, outside GET</h2>
+<h2 id="rust-route">Route 2 — Rust: As a Library</h2>
 
 <p>
   If your objective is hot enough to matter and you do not want to fork GET, depend on it as a
-  library. This route <b>never touches dispatch or the config schema</b>:
+  library. This is the same route as <a href="route-rust-library.html">Rust: As a Library</a> — that
+  page is how you drive a run, this section is how you score one. It <b>never touches dispatch or
+  the config schema</b>:
 </p>
 
 <pre><code class="language-rust">use get::fitness::{Direction, Fitness};
@@ -193,7 +213,7 @@ impl Fitness for EdgeBudget {
   <b>Numbers you read from the outcome are in engine orientation</b> — lower is better, whatever
   your direction said. That is the stated cost of converting only at the two edges of the system,
   and the direction carried on the outcome is what you convert with. See
-  <a href="fitness.html">Fitness &amp; orientation</a>.
+  <a href="fitness.html">Fitness &amp; Output</a>.
 </div>
 
 <p>
@@ -201,13 +221,230 @@ impl Fitness for EdgeBudget {
   edge of this route rather than a hint that you are doing it wrong.
 </p>
 
-<h2>Checklist, whichever route</h2>
+<h2>Route 3 — Rust: Inside GET Itself</h2>
+
+<p>
+  This is the route that gives an objective a <b>name</b> — after it,
+  <code>type = "my_objective"</code> works in any config document, on every route, with no Rust at
+  the call site. It is also the only one of the three with a chain, and every step is marked in the
+  source the same way every other extension chain is. One command lists the whole thing:
+</p>
+
+<pre><code class="language-bash">git grep -n "ADD AN OBJECTIVE STEP" get/src config.example.toml</code></pre>
+
+<p>
+  Each step is named at more than one site, because a marker points forward to the next — go by the
+  step numbers rather than the number of lines the grep prints. The line numbers below were correct
+  when this page was written; if one has moved, the marker is the anchor that has not.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>get/src/fitness.rs:235</code></td>
+        <td>implement the trait, and validate the objective's inputs in its constructor</td></tr>
+    <tr><td>2</td><td><code>get/src/config.rs:465</code>, <code>:491</code> and <code>:1083</code></td>
+        <td>the config variant, its type name, and its validation arm</td></tr>
+    <tr><td>3</td><td><code>get/src/dispatch.rs:219</code></td>
+        <td>the arm turning the variant into a boxed objective</td></tr>
+    <tr><td>4</td><td><code>get/src/py_config.rs:482</code> and <code>:706</code></td>
+        <td>the Python variant and its attribute paths — optional</td></tr>
+    <tr><td>5</td><td><code>config.example.toml:87</code></td>
+        <td>an example block, if the objective ships</td></tr>
+    <tr><td>6</td><td><code>get/src/dispatch.rs:1124</code></td>
+        <td>the test asserting the boxed objective reports its own direction</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  <b>Five files is the floor, not the ceiling.</b> That is what an objective assembled from config
+  values alone needs. One that brings data of its own also touches the loader it reads through and
+  wherever its shared state lives — <code>struct_match</code> touched seven for that reason.
+</p>
+
+<h2>Step 1 — The Trait</h2>
+
+<p>
+  Everything below assumes an objective called <code>MyObjective</code> with one parameter. Start
+  with the type and its implementation, in <code>get/src/fitness.rs</code>:
+</p>
+
+<pre><code class="language-rust" data-example>// step 1 — fitness.rs:235
+pub struct MyObjective {
+    threshold: f64,
+}
+
+impl MyObjective {
+    /// Fallible because `threshold` can be wrong, and step 2's validation
+    /// does not run on the library route.
+    pub fn new(threshold: f64) -&gt; Result&lt;Self, &amp;'static str&gt; {
+        if !threshold.is_finite() {
+            return Err("threshold must be finite");
+        }
+        Ok(Self { threshold })
+    }
+}
+
+impl Fitness for MyObjective {
+    fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64 {
+        let mut over = 0;
+        for node in 0..graph.num_nodes {
+            if graph.degree(node) as f64 &gt; self.threshold {
+                over += 1;
+            }
+        }
+        over as f64
+    }
+
+    fn direction(&amp;self) -&gt; Direction {
+        Direction::Maximize
+    }
+}</code></pre>
+
+<div class="warn">
+  <b>Validate in the constructor as well as in step 2, not instead of it.</b> Step 2's checks live
+  in the config layer, which the <a href="route-rust-library.html">library route</a> never runs — so
+  a guard written only there does not exist for a caller who depends on the crate. The two sites are
+  additive. <code>EpiProfMatch::new</code> rejects an empty or non-finite target for exactly this
+  reason, and <code>StructMatch::new</code> rejects a non-finite weight.
+</div>
+
+<h2>Step 2 — The Config Side, Three Edits</h2>
+
+<p>All in <code>get/src/config.rs</code>. The variant, its name, and its constraints:</p>
+
+<pre><code class="language-rust">// step 2a — config.rs:465   the variant a user selects
+MyObjective { threshold: f64 },
+
+// step 2b — config.rs:491   the string `[fitness] type` is written as
+FitnessConfig::MyObjective { .. } =&gt; "my_objective",
+
+// step 2c — config.rs:1083  the validation arm, if anything can be wrong
+FitnessConfig::MyObjective { threshold } =&gt; {
+    if !threshold.is_finite() {
+        return Err(invalid("threshold", "must be finite"));
+    }
+    return Ok(());
+}</code></pre>
+
+<p>
+  You never write <code>"my_objective"</code> as a config key — the variant name converted to
+  snake_case is what a user types. <b>Step 2b cannot be forgotten:</b> the match is exhaustive, so
+  omitting it fails to compile. Steps 2a and 2c can.
+</p>
+
+<div class="warn">
+  <b>Two things about that validation are not obvious.</b>
+  <ul>
+    <li><b>It may not touch the filesystem.</b> <code>Config::validate</code> does no I/O, which is
+        why <code>epi_prof_match</code> takes its target curve inline rather than as a path. An
+        objective that must name a file cannot check the file here — everything about its contents
+        becomes step 3's problem.</li>
+    <li><b>It may constrain fields outside <code>[fitness]</code>.</b> <code>struct_match</code>
+        requires a top-level <code>max_edge_multiplicity</code> of 1, because its statistics count
+        neighbours rather than summing weights, and it rejects the whole config if that is not
+        so.</li>
+  </ul>
+</div>
+
+<h2>Step 3 — Dispatch</h2>
+
+<pre><code class="language-rust">// step 3 — dispatch.rs:219
+FitnessConfig::MyObjective { threshold } =&gt; {
+    let objective = MyObjective::new(*threshold).map_err(PyValueError::new_err)?;
+    Ok(Box::new(objective))
+}</code></pre>
+
+<p>
+  Steps 2 and 3 are <b>one change split across two files</b>: a variant nothing constructs is dead
+  code, and an arm for a variant that does not exist will not compile.
+</p>
+
+<div class="warn">
+  <b>This arm runs once per <i>replicate</i>, not once per run.</b> Two consequences:
+  <ul>
+    <li>It is where anything needing the <b>filesystem</b> finally happens, since step 2 could not.
+        An unreadable folder or an empty reference set is reported from here.</li>
+    <li>Anything <b>expensive and immutable</b> should be built once and shared behind an
+        <code>Arc</code> rather than rebuilt per replicate — see
+        <code>GraphEvolver::struct_match_reference</code>. What a fresh objective per replicate buys
+        is isolation of per-run state; an objective with none has nothing to keep apart, and
+        rebuilding its data is pure waste.</li>
+  </ul>
+</div>
+
+<h2>Steps 4 and 5 — Python and the Example, Both Optional</h2>
+
+<pre><code class="language-rust">// step 4 — py_config.rs:482   the Python-side variant
+#[pyo3(constructor = (threshold))]
+MyObjective { threshold: f64 },
+
+// step 4 — py_config.rs:706   an attribute path per validated field
+"threshold" =&gt; Some("config.fitness.threshold"),</code></pre>
+
+<p>
+  Leaving step 4 out costs nothing elsewhere — the objective is then TOML-only and a Python caller
+  simply cannot name it. But <b>if step 2c raised a new field name, that name needs its attribute
+  path</b>, or a Python caller who trips your check sees an error naming a TOML field they never
+  wrote. The test <code>every_validation_field_maps_to_a_python_attribute</code> catches a missing
+  one.
+</p>
+
+<p>
+  Step 5 is a commented-out block in <code>config.example.toml:87</code>. The example file is what a
+  user copies from, so an objective missing from it is one most people never find — and the test
+  suite parses and validates that file, so a block that does not parse fails the build rather than a
+  user's afternoon.
+</p>
+
+<h2>Step 6 — The Test That Catches a Silent Failure</h2>
+
+<pre><code class="language-rust">// step 6 — dispatch.rs:1124   one line in the existing `cases` array
+(
+    "[fitness]\ntype = \"my_objective\"\nthreshold = 3.0\n".to_string(),
+    Direction::Maximize,
+),</code></pre>
+
+<p>
+  Each case is a <code>[fitness]</code> block and the direction it must come back with. The three
+  SIR objectives use the <code>sir_block</code> helper because they share a block;
+  <code>struct_match</code> uses <code>struct_match_block</code>, which writes real reference files
+  into a temp folder first. An objective needing neither writes its block inline, as above.
+</p>
+
+<p>
+  <code>each_objective_erases_to_a_box_carrying_its_own_direction</code> asserts that your variant
+  survives being boxed with its direction intact. <b>Worth writing because the failure it catches is
+  silent:</b> <code>Fitness::direction</code> defaults to <code>Minimize</code>, so an objective
+  whose direction is lost runs the search <i>backwards</i> and looks merely unconverged. Nothing
+  panics and no number looks wrong.
+</p>
+
+<div class="warn">
+  <b>Two traps in the trait itself.</b> Do not call <code>self.evaluate_batch</code> from inside
+  <code>evaluate</code> — the default <code>evaluate_batch</code> calls <code>evaluate</code>, so
+  that is infinite recursion and a stack overflow at runtime rather than a compile error. And if
+  you override <code>evaluate_batch</code>, remember it must produce results in input order.
+</div>
+
+<h3>Sharing One Simulation Between Objectives</h3>
+
+<p>
+  If your objective needs an epidemic, read the existing pattern first: the expensive part is the
+  simulation, so one run returns <code>{ length, spread, profile }</code> and each of the three SIR
+  objectives is a thin reading of it. Adding a fourth reading of the same simulation is much
+  cheaper than adding a fourth simulator.
+</p>
+
+<h2>Checklist, Whichever Route</h2>
 
 <ul>
-  <li>Return values in <b>your own units and sign</b>. Nothing is normalized for you, and nothing
+  <li>Return values in <b>your own units and sign</b>. Nothing is normalised for you, and nothing
       should be pre-negated.</li>
   <li>Declare <code>direction</code> honestly. A negated value <i>and</i> a
-      <code>Maximize</code> declaration cancel into a run that optimizes backwards, and looks
+      <code>Maximize</code> declaration cancel into a run that optimises backwards, and looks
       exactly like one that simply is not converging.</li>
   <li>Never return <code>NaN</code>. Use <code>+inf</code> under minimize to mean "invalid, never
       select this".</li>

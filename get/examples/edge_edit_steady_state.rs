@@ -3,7 +3,7 @@
 //! Run it with:
 //!
 //! ```text
-//! cargo run -p get --example edge_edit_steady_state
+//! cargo run -p graph-evolution-tool --example edge_edit_steady_state
 //! ```
 //!
 //! One of four programs covering every genome × evolver combination from

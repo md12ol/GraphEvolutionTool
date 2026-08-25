@@ -8,7 +8,10 @@ go through the same parser and the same validation, so neither accepts a
 configuration the other would reject.
 
 - **TOML** — copy [`config.example.toml`](config.example.toml) and adjust it.
-  Every field is documented in place, with the alternatives commented out.
+  It holds two complete setups, one live and one commented out beneath it;
+  switching between them is commenting one block out and uncommenting the
+  other, not editing scattered keys. What each key means is on the
+  documentation site — open [`documentation/index.html`](documentation/index.html).
 - **Python** — build the same thing as objects. Worked examples for all four
   objectives, both genomes and both evolution strategies are in
   [`examples/config_builder.py`](examples/config_builder.py).
@@ -22,6 +25,7 @@ config = get.Config(
     crossover_rate=0.9,
     mutation_rate=0.2,
     evolution=get.EvolutionConfig.Generational(num_generations=500),
+    scope=get.ScopeConfig.Global(),
     selection=get.SelectionConfig.Tournament(tournament_size=5),
     genome=get.GenomeConfig.EdgeEdit(gene_length=256),
     fitness=get.FitnessConfig.EpiSpread(

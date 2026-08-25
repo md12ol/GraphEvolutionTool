@@ -12,73 +12,52 @@
 
   /* ---------- the site map -------------------------------------------- */
 
+  /* A group with no title renders as bare links with no collapsing header --
+     Overview and Design Notes are each one page, not a section, and a folder
+     around a single page was noise. */
   var NAV = [
     {
-      title: "Start here",
+      title: null,
       items: [
-        ["index.html",                    "Overview"],
-        ["guide/getting-started.html",    "Getting started"],
-        ["guide/glossary.html",           "Glossary"]
+        ["index.html",                        "Overview"]
       ]
     },
     {
-      title: "How it works",
+      title: "How It Works",
       items: [
-        ["guide/pipeline.html",           "The pipeline"],
-        ["guide/graph.html",              "The graph"],
-        ["guide/genomes.html",            "Genomes"],
-        ["guide/variation.html",          "Crossover & mutation"],
-        ["guide/fitness.html",            "Fitness & orientation"],
-        ["guide/sir.html",                "The SIR model"],
-        ["guide/evolvers.html",           "Evolution strategies"],
-        ["guide/reproducibility.html",    "Seeds & reproducibility"],
-        ["guide/output.html",             "Logs & results"]
+        ["guide/pipeline.html",               "The Pipeline"],
+        ["guide/variation.html",              "Variation & Selection"],
+        ["guide/fitness.html",                "Fitness & Output"]
       ]
     },
     {
       title: "Using GET",
       items: [
-        ["guide/configuration.html",      "Configuration reference"],
-        ["guide/python-api.html",         "Python API"],
-        ["examples/index.html",           "Examples"],
-        ["guide/performance.html",        "Performance & memory"],
-        ["guide/troubleshooting.html",    "Troubleshooting"]
+        ["guide/route-python-objects.html",   "Python: Config Objects"],
+        ["guide/route-python-toml.html",      "Python: TOML File"],
+        ["guide/route-rust-library.html",     "Rust: As a Library"],
+        ["guide/route-rust-cli.html",         "Rust: The get-run CLI"],
+        ["guide/configuration.html",          "Configuration Reference"]
       ]
     },
     {
       title: "Extending GET",
       items: [
-        ["guide/extending.html",          "Extension points"],
-        ["guide/new-fitness.html",        "Add an objective"],
-        ["guide/new-genome.html",         "Add a genome"],
-        ["guide/new-evolver.html",        "Add a strategy"]
+        ["guide/extending.html",              "Extension Points"],
+        ["guide/new-fitness.html",            "Add an Objective"],
+        ["guide/new-genome.html",             "Add a Genome"],
+        ["guide/new-evolver.html",            "Add a Strategy"],
+        ["guide/new-selection.html",          "Add a Selection Scheme"],
+        ["guide/new-scope.html",              "Add a Scope"],
+        ["guide/new-replacement.html",        "Add a Replacement Policy"],
+        ["guide/new-crossover.html",          "Add a Crossover Operator"],
+        ["guide/new-mutation.html",           "Add a Mutation Operator"]
       ]
     },
     {
-      title: "Source reference",
+      title: null,
       items: [
-        ["reference/index.html",              "Module map"],
-        ["reference/lib.html",                "lib.rs"],
-        ["reference/graph.html",              "graph.rs"],
-        ["reference/genome-trait.html",       "genomes/genome.rs"],
-        ["reference/sda.html",                "genomes/sda.rs"],
-        ["reference/edge-edit.html",          "genomes/edge_edit.rs"],
-        ["reference/edge-edit-operations.html", "edge_edit/operations.rs"],
-        ["reference/evolver-common.html",     "evolver/common.rs"],
-        ["reference/generational.html",       "evolver/generational.rs"],
-        ["reference/steady-state.html",       "evolver/steady_state.rs"],
-        ["reference/fitness.html",            "fitness.rs"],
-        ["reference/sir.html",                "sir.rs"],
-        ["reference/config.html",             "config.rs"],
-        ["reference/py-config.html",          "py_config.rs"],
-        ["reference/dispatch.html",           "dispatch.rs"]
-      ]
-    },
-    {
-      title: "Project",
-      items: [
-        ["status.html",                   "Implementation status"],
-        ["design-notes.html",             "Design notes"]
+        ["design-notes.html",                 "Design Notes"]
       ]
     }
   ];
@@ -108,25 +87,52 @@
       '<g fill="currentColor" style="color:var(--accent)">' +
       '<circle cx="16" cy="8" r="3"/><circle cx="8" cy="22" r="3"/><circle cx="24" cy="22" r="3"/>' +
       '</g></svg>' +
-      '<a href="' + href("index.html") + '">GET docs</a>' +
-      '<span class="tag">v0.1</span>';
+      '<a href="' + href("index.html") + '">GET Docs</a>' +
+      '<span class="tag">v0.9</span>';
     aside.appendChild(brand);
 
+    /* The repository, once, in the site chrome -- so every page can reach the
+       source without any route page having to assume the reader has a clone.
+       Same tab deliberately: nothing here is a form to lose. */
+    var repo = document.createElement("a");
+    repo.className = "brand-repo";
+    repo.href = "https://github.com/md12ol/GraphEvolutionTool";
+    repo.textContent = "Source on GitHub \u2197";
+    aside.appendChild(repo);
+
+    /* One section open at a time: the one holding the current page. A title is
+       a link to its own first page, so following it lands you there and the
+       next page load opens that section and closes this one -- the accordion
+       needs no state of its own, and a shared link always arrives showing the
+       same thing. */
     var nav = document.createElement("nav");
     NAV.forEach(function (group) {
+      var holdsPage = group.items.some(function (i) { return i[0] === page; });
+
       var g = document.createElement("div");
-      g.className = "nav-group";
-      var t = document.createElement("div");
-      t.className = "nav-title";
-      t.textContent = group.title;
-      g.appendChild(t);
+      // A titleless group has nothing to collapse, so it is always open.
+      g.className = "nav-group" + (holdsPage || !group.title ? " open" : "");
+
+      if (group.title) {
+        var t = document.createElement("a");
+        t.className = "nav-title";
+        t.href = href(group.items[0][0]);
+        t.textContent = group.title;
+        /* Deliberately NOT aria-expanded: this is a link to the section's first
+           page, not a control that expands anything on the current page. */
+        g.appendChild(t);
+      }
+
+      var list = document.createElement("div");
+      list.className = "nav-items";
       group.items.forEach(function (item) {
         var a = document.createElement("a");
         a.className = "nav-link" + (item[0] === page ? " active" : "");
         a.href = href(item[0]);
         a.textContent = item[1];
-        g.appendChild(a);
+        list.appendChild(a);
       });
+      g.appendChild(list);
       nav.appendChild(g);
     });
     aside.appendChild(nav);
@@ -152,7 +158,7 @@
     toc.className = "toc";
     var title = document.createElement("div");
     title.className = "toc-title";
-    title.textContent = "On this page";
+    title.textContent = "On This Page";
     toc.appendChild(title);
 
     Array.prototype.forEach.call(heads, function (h) {
@@ -245,6 +251,17 @@
 
   /* A deliberately small highlighter: comments, strings, numbers, keywords.
      It tints; it does not parse. Anything it gets wrong is cosmetic. */
+  /* Apply `re` to the parts of `html` that are not inside a tag, so a
+     replacement cannot corrupt an attribute inserted by an earlier pass. */
+  function outsideTags(html, re, replacement) {
+    var parts = html.split(/(<[^>]*>)/);
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].charAt(0) === "<") continue;
+      parts[i] = parts[i].replace(re, replacement);
+    }
+    return parts.join("");
+  }
+
   function tint(src, lang) {
     var out = escapeHtml(src);
     var commentRe = lang === "python" || lang === "toml" || lang === "bash"
@@ -256,9 +273,15 @@
       return (b === undefined) ? '<span class="tok-com">' + m + '</span>'
                                : a + '<span class="tok-com">' + b + '</span>';
     });
-    out = out.replace(/\b(\d+\.?\d*)\b/g, '<span class="tok-num">$1</span>');
+    /* Every pass from here on runs only on the text between tags. The string
+       and comment passes above have already inserted `class="tok-..."`
+       attributes, and `class` is a Python keyword -- matching it inside an
+       attribute produced `<span <span class="tok-key">class</span>="tok-str">`,
+       which a browser renders as a stray `="tok-str">` in the middle of the
+       code. Any Python block containing a string hit this. */
+    out = outsideTags(out, /\b(\d+\.?\d*)\b/g, '<span class="tok-num">$1</span>');
     (KEYWORDS[lang] || []).forEach(function (kw) {
-      out = out.replace(new RegExp("\\b" + kw + "\\b", "g"),
+      out = outsideTags(out, new RegExp("\\b" + kw + "\\b", "g"),
                         '<span class="tok-key">' + kw + "</span>");
     });
     return out;
@@ -292,53 +315,30 @@
       btn.className = "copy-btn";
       btn.type = "button";
       btn.textContent = "copy";
+      /* The label is the status, so it has to be announced -- a silent failure
+         looks identical to a success to anyone not watching the button. */
+      btn.setAttribute("aria-live", "polite");
       btn.addEventListener("click", function () {
-        var done = function () {
-          btn.textContent = "copied";
+        var reset = function () {
           setTimeout(function () { btn.textContent = "copy"; }, 1200);
         };
+        var done = function () { btn.textContent = "copied"; reset(); };
+        var failed = function () { btn.textContent = "copy failed"; reset(); };
         if (navigator.clipboard) {
-          navigator.clipboard.writeText(raw).then(done, function () {});
+          navigator.clipboard.writeText(raw).then(done, failed);
         } else {
           var ta = document.createElement("textarea");
           ta.value = raw;
           document.body.appendChild(ta);
           ta.select();
-          try { document.execCommand("copy"); done(); } catch (e) {}
+          try {
+            if (document.execCommand("copy")) { done(); } else { failed(); }
+          } catch (e) { failed(); }
           document.body.removeChild(ta);
         }
       });
       wrap.appendChild(btn);
     });
-  }
-
-  /* ---------- theme ----------------------------------------------------- */
-
-  function initTheme() {
-    var stored = null;
-    try { stored = localStorage.getItem("get-docs-theme"); } catch (e) {}
-    var prefersDark = window.matchMedia &&
-                      window.matchMedia("(prefers-color-scheme: dark)").matches;
-    var theme = stored || (prefersDark ? "dark" : "light");
-    document.documentElement.setAttribute("data-theme", theme);
-
-    var btn = document.createElement("button");
-    btn.className = "theme-toggle";
-    btn.type = "button";
-    btn.setAttribute("aria-label", "Toggle colour theme");
-    var paint = function () {
-      btn.textContent =
-        document.documentElement.getAttribute("data-theme") === "dark" ? "☀" : "☾";
-    };
-    paint();
-    btn.addEventListener("click", function () {
-      var next = document.documentElement.getAttribute("data-theme") === "dark"
-        ? "light" : "dark";
-      document.documentElement.setAttribute("data-theme", next);
-      try { localStorage.setItem("get-docs-theme", next); } catch (e) {}
-      paint();
-    });
-    document.body.appendChild(btn);
   }
 
   /* ---------- mobile nav ------------------------------------------------ */
@@ -348,15 +348,31 @@
     btn.className = "nav-toggle";
     btn.type = "button";
     btn.setAttribute("aria-label", "Toggle navigation");
+    btn.setAttribute("aria-controls", "sidebar");
+    btn.setAttribute("aria-expanded", "false");
     btn.textContent = "☰";
+
+    /* One place that sets the class and the attribute together, so the two
+       cannot disagree about whether the menu is open. */
+    function setOpen(open) {
+      document.body.classList.toggle("nav-open", open);
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
     btn.addEventListener("click", function () {
-      document.body.classList.toggle("nav-open");
+      setOpen(!document.body.classList.contains("nav-open"));
     });
     document.body.appendChild(btn);
     document.addEventListener("click", function (e) {
       if (!document.body.classList.contains("nav-open")) return;
       if (e.target.closest && (e.target.closest(".sidebar") || e.target.closest(".nav-toggle"))) return;
-      document.body.classList.remove("nav-open");
+      setOpen(false);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      if (!document.body.classList.contains("nav-open")) return;
+      setOpen(false);
+      btn.focus();
     });
   }
 
@@ -385,7 +401,6 @@
     if (pager) main.appendChild(pager);
 
     decorateCode();
-    initTheme();
     initNavToggle();
   }
 

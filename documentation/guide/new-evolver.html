@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Add a strategy · GET docs</title>
+<title>Add a Strategy · GET Docs</title>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
@@ -11,13 +11,14 @@
 <main>
 
 <p class="page-kicker">Extending GET</p>
-<h1>Add a strategy</h1>
+<h1>Add a Strategy</h1>
 <p class="lede">
-  A third evolution strategy — a different answer to "who breeds and who gets replaced". Three
-  edits, and the genome match is untouched, because your evolver is generic over the representation.
+  A third evolution strategy — a different answer to "who breeds and who gets replaced". Seven steps,
+  three of them required, and the genome match is untouched, because your evolver is generic over the
+  representation.
 </p>
 
-<h2>What you have to implement</h2>
+<h2>What You Have to Implement</h2>
 
 <pre><code class="language-rust">pub trait Evolver&lt;G: Genome&gt; {
     type TypeContext;
@@ -33,8 +34,10 @@
         <td>Whatever <i>your</i> strategy needs and the others do not — the generational one carries
             its generation count and elite count, the steady-state one its mating-event count.</td></tr>
     <tr><td><code>SharedEvolutionContext</code></td>
-        <td>What every strategy needs: the genome context, the rates, <code>max_mutations</code>,
-            and the selection strategy. Nothing else — see below.</td></tr>
+        <td>What every strategy needs: the genome context; <code>crossover_rate</code>,
+            <code>mutation_rate</code> and <code>max_mutations</code>; and the configured
+            <code>scope</code>, <code>selection</code> and <code>crossover</code> operator. Nothing
+            else — see below.</td></tr>
     <tr><td><code>population</code></td>
         <td>Handed in, already built. You never mint genomes.</td></tr>
     <tr><td><code>run</code></td>
@@ -44,18 +47,147 @@
 </table>
 </div>
 
-<h2>The three edits</h2>
+<h2>What the User Ends Up Writing</h2>
 
-<ol>
-  <li><b>Implement the trait</b> in a new module under <code>evolver/</code>.</li>
-  <li><b>Add a config variant</b> for it under <code>[evolution]</code>, plus the mirrored Python
-      class, and any strategy-specific constraint in the evolution/selection validator.</li>
-  <li><b>Add one arm to the strategy match</b>, building your type context and calling
-      <code>Evolver::run</code>. That function is generic over the genome, so the genome match is
-      <b>not</b> touched.</li>
-</ol>
+<p>
+  A GET run is configured by a <b>TOML document</b> — see the
+  <a href="route-python-toml.html">Python: TOML File</a> for its full shape, and
+  <a href="route-python-objects.html">Python: Config Objects</a> for how to run one. The strategy is the
+  <code>[evolution]</code> section. Adding one called <code>MyStrategy</code> is what makes this
+  valid:
+</p>
 
-<h2>The rules you must not break</h2>
+<pre><code class="language-toml">[evolution]
+type          = "my_strategy"
+num_my_events = 500</code></pre>
+
+<div class="callout">
+  <p>
+    <b>You never write the string <code>"my_strategy"</code> anywhere in the code.</b> It is derived
+    from your variant's name, converted to snake_case. Name the variant and the config name follows;
+    the keys under it are your struct's field names, the same way.
+  </p>
+  <p>
+    This is not specific to the command-line route. The same document is read by the CLI and by the
+    Rust library, and a Python caller builds the same section through a config object instead of
+    typing it. Skipping the optional Python step below is what makes a strategy TOML-only.
+  </p>
+</div>
+
+<h2>The Seven Steps</h2>
+
+<p>
+  Every location carries a literal marker in the source, so you can jump to any step by searching
+  its number. The line numbers below were correct when this page was written; if one has moved, the
+  marker is the anchor that has not.
+</p>
+
+<pre><code class="language-bash">git grep -n "ADD A STRATEGY STEP" get/src config.example.toml    # all seven</code></pre>
+
+<p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>get/src/evolver/mod.rs:23</code></td>
+        <td>A new module beside the two that exist, its <code>pub mod</code> and re-export lines,
+            and the <code>Evolver</code> implementation inside it.</td></tr>
+    <tr><td>2</td><td><code>get/src/config.rs:104</code></td>
+        <td>An <code>EvolutionConfig</code> variant carrying your stopping condition, plus any axis
+            that is <i>yours</i> rather than every strategy's.</td></tr>
+    <tr><td>3</td><td><code>get/src/config.rs:841</code></td>
+        <td><b>Optional.</b> A constraint arm in <code>validate_evolution_and_selection</code>. A
+            strategy with nothing to constrain adds no arm.</td></tr>
+    <tr><td>4</td><td><code>get/src/dispatch.rs:823</code></td>
+        <td>One arm building your <code>TypeContext</code> and calling your evolver's
+            <code>new</code> and <code>run</code>. The genome match is not touched.</td></tr>
+    <tr><td>5</td><td><code>get/src/dispatch.rs:864</code></td>
+        <td><b>Usually nothing, and that is the point.</b> <code>erase</code> is generic over the
+            genome with no match on strategy inside it.</td></tr>
+    <tr><td>6</td><td><code>get/src/py_config.rs:221</code> and <code>:833</code></td>
+        <td><b>Optional.</b> The Python-side variant, and its <code>to_toml_value</code> arm.</td></tr>
+    <tr><td>7</td><td><code>config.example.toml:153</code></td>
+        <td><b>Optional, and the step people skip.</b> A commented-out <code>[evolution]</code>
+            block for your strategy. The shipped example is what a user copies from, so a strategy
+            missing from it is one most people never find.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Step 1 — The Module</h2>
+
+<pre><code class="language-rust">// step 1 — evolver/mod.rs:23
+pub mod my_strategy;
+
+pub use my_strategy::MyStrategyEvolver;</code></pre>
+
+<h2>Steps 2 and 3 — The Config Side</h2>
+
+<pre><code class="language-rust">// step 2 — config.rs:104
+MyStrategy {
+    num_my_events: usize,
+},
+
+// step 3 — config.rs:841, optional
+EvolutionConfig::MyStrategy { num_my_events, .. } =&gt; {
+    if *num_my_events == 0 {
+        return Err(invalid("num_my_events", "must be at least 1"));
+    }
+}</code></pre>
+
+<div class="callout">
+  <p>
+    <b>Put only what is yours in step 2.</b> <code>elite_count</code> and <code>replacement</code>
+    are each one strategy's business — how generational carries individuals forward, and how
+    steady-state makes room for a child — and neither means anything to the other. What every
+    strategy shares, <code>[scope]</code> and <code>[selection]</code>, already sits on
+    <code>Config</code> and needs nothing from you.
+  </p>
+</div>
+
+<h2>Steps 4 and 5 — Dispatch</h2>
+
+<pre><code class="language-rust">// step 4 — dispatch.rs:823
+EvolutionConfig::MyStrategy { num_my_events } =&gt; {
+    let type_context = MyStrategyContext {
+        num_my_events: *num_my_events,
+    };
+    let mut evolver = MyStrategyEvolver::new(shared, type_context, population);
+    erase(evolver.run(fitness, seed))
+}</code></pre>
+
+<div class="callout">
+  <p>
+    <b><code>shared</code> already carries the scope and the selection scheme</b>, built once above
+    this match, so your strategy reads them without asking. Only what is yours goes in the
+    <code>TypeContext</code>.
+  </p>
+  <p>
+    <b>Step 5 is usually not a step at all.</b> <code>erase</code> is generic over the genome with
+    no match on strategy inside it — touch it only if your <code>EvolutionOutcome</code> needs
+    conversion the existing loop does not cover. None of the shipped strategies do.
+  </p>
+</div>
+
+<h2>Steps 6 and 7 — Python and the Example, Both Optional</h2>
+
+<p>
+  Leaving step 6 out costs nothing elsewhere; the strategy is then configurable from a TOML file but
+  absent from the Python API. The variant goes at <code>get/src/py_config.rs:221</code> and its
+  <code>to_toml_value</code> arm at <code>:833</code>.
+</p>
+
+<p>
+  Step 7 is a commented-out <code>[evolution]</code> block in
+  <code>config.example.toml:153</code>, beside generational's and steady-state's. <b>It is the step
+  people skip</b>, and it costs nothing mechanically — the example file is simply what a user copies
+  from, so a strategy missing from it is one most people never find. The test suite parses and
+  validates that file, so a block that does not parse fails the build rather than a user's
+  afternoon.
+</p>
+
+<h2>The Rules You Must Not Break</h2>
 
 <div class="warn">
   <b>1. Score through <code>express_and_score</code>, always.</b> The engine never calls
@@ -63,7 +195,7 @@
   function is both the direction conversion and the <code>NaN</code> gate. Calling the trait
   yourself produces values that compare backwards under a maximizing objective <i>and</i> lets a
   <code>NaN</code> through that will win every tournament it enters — and neither failure announces
-  itself. Detail on <a href="fitness.html#gate">Fitness &amp; orientation</a>.
+  itself. Detail on <a href="fitness.html#gate">Fitness &amp; Output</a>.
 </div>
 
 <div class="warn">
@@ -86,9 +218,9 @@
   strategies.
 </div>
 
-<h2>Decisions your strategy has to make</h2>
+<h2>Decisions Your Strategy Has to Make</h2>
 
-<h3>How much of the population turns over?</h3>
+<h3>How Much of the Population Turns Over?</h3>
 
 <p>
   This is the whole design space. Generational replaces everything but its elites each round;
@@ -117,7 +249,7 @@
   its documentation.
 </p>
 
-<h3>Where does elitism come from?</h3>
+<h3>Where Does Elitism Come From?</h3>
 
 <p>
   Generational is explicitly elitist via <code>elite_count</code>. Steady-state is
@@ -126,7 +258,7 @@
   which.
 </p>
 
-<h3>How often do you log?</h3>
+<h3>How Often Do You Log?</h3>
 
 <p>
   Once per meaningful unit of progress, and <b>log the starting population as iteration 0</b>. Both
@@ -135,7 +267,7 @@
   is not a log — pick an interval that makes your history readable at your largest realistic run.
 </p>
 
-<h3>What do you report as the best?</h3>
+<h3>What Do You Report as the Best?</h3>
 
 <p>
   <b>The best of the final population</b>, matching both existing strategies — not a running best
@@ -145,26 +277,30 @@
   a total order rather than an unwrapped partial comparison.
 </p>
 
-<h2>Constraints and validation</h2>
+<h2>Constraints and Validation</h2>
 
 <p>
   If your strategy needs something the others do not, put it in the validator, not in the evolver's
-  setup. Steady-state's <code>tournament_size ≥ 4</code> is the worked example: it is strategy
-  specific, so it is checked only when that strategy is selected, and switching strategies can
-  therefore make a previously valid selection block invalid.
+  setup. Steady-state's <code>[scope] size ≥ 4</code> is the worked example — two parents and the
+  two they replace must be distinct. It is strategy specific, so it is checked only when that
+  strategy is selected, and switching strategies can therefore make a previously valid scope
+  invalid. Note <code>tournament_size</code> and <code>[scope] size</code> are deliberately
+  independent: the first sizes a tournament and has no floor beyond 1, the second sizes the pool
+  that tournament draws from.
 </p>
 
 <div class="note">
   <b>The engine's own assertions are backstops, not validation.</b> They exist for direct library
   use — tests, embedding — where no config was involved. A config-driven run must never reach one,
   because a bad config has to surface as a proper exception naming the field, not as a panic
-  crossing the Python boundary. Note there is already one asymmetry of this kind: the validator
-  enforces <code>population_size ≥ tournament_size</code> for both strategies while the
-  generational evolver deliberately omits that assertion, so the config path is stricter than the
-  engine.
+  crossing the FFI boundary. Note the validator constrains the <i>scope</i> against the population
+  — <code>[scope] size</code> must be at least 1 and at most <code>population_size</code>, because
+  distinct individuals cannot be drawn from fewer — while <code>tournament_size</code> is left
+  unbounded above, since a tournament samples with replacement and may legitimately exceed the
+  population.
 </div>
 
-<h2>Testing it</h2>
+<h2>Testing It</h2>
 
 <ul>
   <li><b>Run it twice from one seed</b> and compare the outcome and the whole history.</li>
@@ -181,12 +317,12 @@
       against both.</li>
 </ul>
 
-<h2>What you get for free</h2>
+<h2>What You Get for Free</h2>
 
 <p>
   Every representation, every objective, both front ends, orientation, <code>NaN</code> rejection,
   the variation scheme, and the statistics. Your strategy is a loop over machinery that already
-  exists — which is why three edits is a realistic estimate rather than an optimistic one.
+  exists — which is why five required steps is a realistic estimate rather than an optimistic one.
 </p>
 
 </main>

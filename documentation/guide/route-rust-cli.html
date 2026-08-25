@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rust: The get-run CLI · GET Docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/route-rust-cli.html">
+<main>
+
+<p class="page-kicker">Using GET</p>
+<h1>Rust: The get-run CLI</h1>
+<p class="lede">
+  One command, one config file, three output files. No Python interpreter and no compiled module to
+  install — this is the route for reproducing a run from a pinned copy of the source and a document.
+</p>
+
+<h2>Build It</h2>
+
+<p>
+  <b>This is the one route that starts at the repository.</b> <code>get-run</code> is built from a
+  checkout rather than installed from a package, and that is deliberate: this route serves someone
+  who wants a frozen copy of the code behind a set of numbers, so the source you built from is part
+  of the result. Take a tagged release for a run you intend to cite, or <code>main</code> to track
+  development.
+</p>
+
+<pre><code class="language-bash">git clone https://github.com/md12ol/GraphEvolutionTool
+cd GraphEvolutionTool
+git checkout &lt;tag&gt;               # a release tag — omit to build main instead
+
+cargo build --release -p graph-evolution-tool --features cli --bin get-run
+./target/release/get-run --help</code></pre>
+
+<p>
+  Releases are listed at
+  <a href="https://github.com/md12ol/GraphEvolutionTool/releases">github.com/md12ol/GraphEvolutionTool/releases</a>;
+  a release is an annotated tag on <code>main</code>, so the tag name is the whole provenance record
+  you need to reproduce a build. The other three routes install a published package instead and
+  never need the repository — see <a href="route-rust-library.html">Rust: As a Library</a> if you
+  want the crate rather than the binary.
+</p>
+
+<div class="warn">
+  <b>A real Python must be on <code>PATH</code> to build it</b>, even though you never write any
+  Python and the binary never runs an interpreter. The <code>cli</code> feature pulls in the
+  Python bindings' auto-initialize support; without a Python present the build fails, and a stale
+  binary can die at startup rather than printing anything useful.
+</div>
+
+<div class="warn">
+  <b>The same interpreter's <code>libpython</code> must be findable at run time too</b>, which is a
+  separate failure from the one above and looks nothing like it: the build succeeds and the binary
+  dies before printing a word. It bites when Python was installed somewhere the dynamic loader does
+  not search — a <code>pyenv</code> or CI interpreter rather than the system one.
+</div>
+
+<p>Point the loader at it:</p>
+
+<pre><code class="language-bash">export LD_LIBRARY_PATH="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"</code></pre>
+
+<p>
+  Derive the directory rather than hardcoding a version, so upgrading Python does not break it. On
+  macOS the variable is <code>DYLD_LIBRARY_PATH</code>.
+</p>
+
+<h2>Run It</h2>
+
+<pre><code class="language-bash">get-run config.toml 7</code></pre>
+
+<p>
+  The first argument is the config document, the second an optional master seed. Omit the seed and
+  one is drawn at random — fine for a look around, useless for anything you want to repeat.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Argument</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>&lt;config.toml&gt;</code></td><td>Required. The run's configuration.</td></tr>
+    <tr><td><code>[seed]</code></td><td>Master seed. Random if omitted.</td></tr>
+    <tr><td><code>--runs N</code></td><td>Replicates from that master seed. Above 1 requires <code>--out</code>.</td></tr>
+    <tr><td><code>--out DIR</code></td><td>Write into <code>DIR/&lt;timestamp&gt;-&lt;seed&gt;/</code> instead of the working directory.</td></tr>
+    <tr><td><code>--help</code></td><td>Print the usage above and exit. <code>-h</code> works too.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>The Config Document</h2>
+
+<pre><code class="language-toml">population_size       = 200
+network_size          = 100
+max_edge_multiplicity = 1
+crossover_rate        = 0.9
+mutation_rate         = 0.2
+max_mutations         = 1
+
+[evolution]                   # generational | steady_state
+type            = "generational"
+num_generations = 500
+elite_count     = 1
+
+[scope]                       # who is eligible to breed
+type = "global"
+
+[selection]                   # best | tournament
+type            = "tournament"
+tournament_size = 5
+
+[genome]                      # edge_edit | sda
+type        = "edge_edit"
+gene_length = 256
+
+[fitness]                     # epi_spread | epi_length | epi_prof_match | struct_match
+type           = "epi_spread"
+infection_rate = 0.05
+num_epidemics  = 30</code></pre>
+
+<div class="warn">
+  <b>Top-level keys go before the first <code>[section]</code> header.</b> Once a table opens, every
+  following key belongs to it — a <code>population_size</code> written under
+  <code>[evolution]</code> becomes <code>evolution.population_size</code>, and the error you get is
+  a <i>missing</i> <code>population_size</code>.
+</div>
+
+<div class="callout">
+  <p>
+    <b><code>type = "python"</code> is the one objective this route cannot use.</b> There is no
+    interpreter here to call, so a config selecting it is rejected up front rather than failing
+    part-way through a run. Every other objective works exactly as it does elsewhere.
+  </p>
+</div>
+
+<p>
+  Every key the document can carry is in the <a href="configuration.html">Configuration
+  Reference</a>.
+</p>
+
+<h2>Where the Files Go</h2>
+
+<p>With no <code>--out</code>, three files land in the working directory:</p>
+
+<pre><code class="language-bash">$ get-run config.toml 7
+run_log.csv                 # one row per logged iteration
+best_individual.txt         # the winner as a loadable edge list
+best_individual.txt.toml    # the exact config this run used</code></pre>
+
+<p>
+  A second invocation overwrites them. With <code>--out</code>, each invocation gets its own
+  timestamped directory and nothing is ever overwritten:
+</p>
+
+<pre><code class="language-bash">$ get-run config.toml 7 --out output
+output/20260821-141233-7/run_log.csv
+output/20260821-141233-7/best_individual.txt
+output/20260821-141233-7/best_individual.txt.toml</code></pre>
+
+<h2>Several Replicates</h2>
+
+<pre><code class="language-bash">get-run config.toml 7 --runs 4 --out output</code></pre>
+
+<pre><code class="language-bash">output/20260821-141233-7/run_0/run_log.csv
+output/20260821-141233-7/run_1/run_log.csv
+output/20260821-141233-7/run_2/run_log.csv
+output/20260821-141233-7/run_3/run_log.csv</code></pre>
+
+<div class="callout">
+  <p>
+    <b><code>--runs</code> above 1 requires <code>--out</code>, and the command refuses without it.</b>
+    Every replicate writes the same three fixed names, so without a directory to separate them all
+    but the last would be silently lost.
+  </p>
+  <p>
+    One master seed goes in and GET derives one seed per replicate. Reproduce a replicate by
+    re-running with the same master seed and reading the same <code>run_&lt;i&gt;</code> — the
+    derived seed is not something you pass back in.
+  </p>
+</div>
+
+<h2>Reading the Log</h2>
+
+<p>
+  <code>run_log.csv</code> has a header row and one row per logged iteration:
+  <code>iteration</code>, <code>best_fitness</code>, <code>mean_fitness</code>,
+  <code>std_dev</code>, <code>ci_95</code>, and the seed and replicate index the row came from.
+</p>
+
+<pre><code class="language-bash"># best-of-run per replicate, across a --runs sweep
+for f in output/*/run_*/run_log.csv; do
+  printf "%s  " "$f"
+  tail -n1 "$f" | cut -d, -f2
+done</code></pre>
+
+<h2>What This Route Promises</h2>
+
+<p>
+  <b>Configurations are portable; the command line is not.</b> A config document this accepts is one
+  every other route accepts, because all of them converge on the same parser and the same validator
+  before anything is constructed. The binary's own surface — argument order, the names of the three
+  files, that they land in the working directory — may change between versions. Pin a commit if you
+  are depending on it, which is what this route is for.
+</p>
+
+<h2>When You Want More Than a Config File</h2>
+
+<p>
+  A config document can only select the objectives GET ships. To score graphs with your own function
+  and still stay in Rust, use the crate directly — see
+  <a href="route-rust-library.html">Rust: As a Library</a>.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

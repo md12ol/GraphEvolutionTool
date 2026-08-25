@@ -3,7 +3,7 @@
 //! Run it with:
 //!
 //! ```text
-//! cargo run -p get --example library_route
+//! cargo run -p graph-evolution-tool --example library_route
 //! ```
 //!
 //! This is the route for someone who wants a native objective, or who is

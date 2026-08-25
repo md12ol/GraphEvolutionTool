@@ -104,7 +104,7 @@ pub(crate) struct ErasedOutcome {
 /// in size, so there is no single right value; this is a sanity bound that
 /// still catches a file indexed the wrong way (a global TUDataset index, say)
 /// while admitting any plausible reference graph.
-const MAX_REFERENCE_NODES: usize = 100_000;
+pub(crate) const MAX_REFERENCE_NODES: usize = 100_000;
 
 /// The parts of dispatch that need the evolver itself, not just its config.
 ///
@@ -216,6 +216,21 @@ impl GraphEvolver {
             // The one arm that is not built from config alone: the callable
             // arrived through a setter, so `python_fitness` owns the "nothing
             // registered" error and this stays one call.
+            // ADD AN OBJECTIVE STEP 3 — the arm turning your config variant
+            // into a `Box<dyn Fitness>`:
+            //
+            //     FitnessConfig::MyObjective { threshold } => {
+            //         Ok(Box::new(MyObjective::new(*threshold)))
+            //     }
+            //
+            // Steps 2 and 3 are one change split across two files: a variant
+            // nothing constructs is dead code, and an arm for a variant that
+            // does not exist will not compile. This arm runs **once per
+            // replicate**, so it is where anything needing the filesystem
+            // finally happens — step 2 could not — and anything expensive and
+            // immutable belongs behind an `Arc` rather than being rebuilt, the
+            // way `struct_match_reference` does it. The step after this is the
+            // Python mirror — search `ADD AN OBJECTIVE STEP 4` for it.
             FitnessConfig::Python => self.python_fitness(),
         }
     }
@@ -275,6 +290,8 @@ impl GraphEvolver {
         // The loader wants one node count for the whole folder, and reference
         // graphs differ in size. This is an upper bound that still catches a
         // wild index; each graph's real size comes from `EdgeFile::to_graph`.
+        // `load_reference_graphs` computes the same bound, so what a run reads
+        // and what a caller can inspect are the same set of files.
         let index_cap = self.config.network_size.max(MAX_REFERENCE_NODES);
 
         let loaded = graph_io::load_edge_folder(
@@ -1134,9 +1151,8 @@ mod tests {
 
     #[test]
     fn each_objective_erases_to_a_box_carrying_its_own_direction() {
-        // Last step of the chain that adds an objective: a new
-        // `FitnessConfig` variant gets a case here. `crate::fitness`'s module
-        // doc walks all six steps.
+        // ADD AN OBJECTIVE STEP 6 — a case here for your new variant, and the
+        // last step of the chain. `crate::fitness`'s module doc walks all six.
         //
         // The failure this exists for is silent. `Fitness::direction` has a
         // default of `Minimize`, so a boxed objective whose direction is not
