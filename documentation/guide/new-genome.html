@@ -105,10 +105,10 @@ some_dimension = 256</code></pre>
         <td>Implement <code>Genome</code> for your type — <code>express</code>,
             <code>crossover</code>, <code>mutate</code>, <code>print</code>, and the
             <code>Context</code> associated type. All five are required.</td></tr>
-    <tr><td>2</td><td><code>get/src/genomes/genome.rs:260</code></td>
-        <td>Declare the <code>Context</code> type your genome named.</td></tr>
-    <tr><td>3</td><td><code>get/src/genomes.rs:16</code></td>
-        <td><code>pub mod</code> your module and re-export the type and its context.</td></tr>
+    <tr><td>2</td><td><code>get/src/genomes/genome.rs:261</code></td>
+        <td>Declare the <code>Context</code> type your genome named, struct and fields <code>pub</code>.</td></tr>
+    <tr><td>3</td><td><code>get/src/genomes.rs:8</code></td>
+        <td><code>pub mod</code> your module, then extend both re-export lists.</td></tr>
     <tr><td>4</td><td><code>get/src/config.rs:245</code> and <code>:951</code></td>
         <td>A <code>GenomeConfig</code> variant plus the struct it carries, <i>and</i> its arm in
             <code>validate_genome</code>.</td></tr>
@@ -137,16 +137,17 @@ impl Genome for MyGenome {
     fn print(&amp;self) -&gt; String { ... }
 }
 
-// step 2 — genomes/genome.rs:260
+// step 2 — genomes/genome.rs:261
 #[derive(Clone, Debug)]
 pub struct MyContext {
     pub num_nodes: usize,
     pub some_mutation_rate: f64,
 }
 
-// step 3 — genomes.rs:16
+// step 3 — genomes.rs:8
 pub mod my_genome;
-pub use my_genome::MyGenome;</code></pre>
+pub use my_genome::{MyGenome, MyOperators};
+pub use genome::{MyContext, MyMutation};</code></pre>
 
 <div class="callout">
   <p>

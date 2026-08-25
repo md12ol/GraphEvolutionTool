@@ -50,14 +50,15 @@
 //!    `mutate` carry a contract about mutation *count* that the engine depends
 //!    on — it is stated on [`Genome::mutate`], and is the one part of this
 //!    trait a representation cannot reinterpret locally.
-//! 2. **Your context type**, declared beside the representation or here next to
-//!    [`EdgeEditContext`] and [`SdaContext`]. See "What `Context` is, and what
-//!    it is not" below — deciding what goes on the context rather than on the
-//!    genome is a design call this trait makes you take deliberately, and it is
-//!    easy to get wrong in a way nothing reports.
-//! 3. **`genomes.rs`** — declare the module and re-export the type and its
-//!    context, so callers name them from `crate::genomes` rather than from the
-//!    private path.
+//! 2. **Your context type**, declared here next to [`EdgeEditContext`] and
+//!    [`SdaContext`], with the struct and every field `pub`. See "What
+//!    `Context` is, and what it is not" below — deciding what goes on the
+//!    context rather than on the genome is a design call this trait makes you
+//!    take deliberately, and it is easy to get wrong in a way nothing reports.
+//! 3. **`genomes.rs`** — declare the module, re-export the types your module
+//!    owns, and add your context and mutation kind to the `genome::` list, so
+//!    callers name them from `crate::genomes` rather than from the private
+//!    path.
 //! 4. **`config.rs`** — add a `GenomeConfig` variant carrying the dimensions
 //!    random individuals are built from, and validate them in
 //!    `Config::validate_genome`. A dimension that would panic during expression
@@ -257,8 +258,8 @@ pub trait Genome: Clone + Send + Sync {
     fn print(&self) -> String;
 }
 
-// ADD A GENOME STEP 2 — declare your context type, here or beside your
-// representation.
+// ADD A GENOME STEP 2 — declare your context type here, beside the other two.
+// Make the struct and every field `pub`.
 //
 //     #[derive(Clone, Debug)]
 //     pub struct MyContext {
