@@ -45,7 +45,7 @@ MARKER = re.compile(r"ADD AN? ([A-Z]+) STEP (\d+)(?: \([^)]*\))? \u2014")
 # prose saying `Step n is ...`. A letter suffix is part of the page's numbering,
 # not the marker's — 3a and 3b are both STEP 3. `Steps 4 and 5` is deliberately
 # not a cue: the code block under that heading carries its own.
-STEP_CUE = re.compile(r"<td>(\d+)[a-z]?</td>|[Ss]tep (\d+)[a-z]?[  ]")
+STEP_CUE = re.compile(r"<td>(\d+)[a-z]?</td>|[Ss]tep (\d+)[a-z]?\b")
 
 
 def cued_step(text, before):
