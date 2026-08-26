@@ -90,7 +90,7 @@ some_param = 0.5</code></pre>
         <td>The arm mapping your <code>CrossoverConfig</code> onto the engine variant.</td></tr>
     <tr><td>5</td><td><code>get/src/py_config.rs:218</code> and <code>:706</code></td>
         <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
-    <tr><td>6</td><td><code>config.example.toml:167</code></td>
+    <tr><td>6</td><td><code>config.example.toml:174</code></td>
         <td><b>Optional, and the step people skip.</b> A commented-out <code>[crossover]</code>
             block. The shipped example is what a user copies from.</td></tr>
   </tbody>
@@ -163,7 +163,7 @@ CrossoverConfig::MyCrossover { some_param } =&gt; {
 
 <p>
   Step 6 is a commented-out <code>[crossover]</code> block in
-  <code>config.example.toml:167</code>. <b>It is the step people skip</b>, and it costs nothing
+  <code>config.example.toml:174</code>. <b>It is the step people skip</b>, and it costs nothing
   mechanically — the example file is simply what a user copies from, so an operator missing from it
   is one most people never find. The test suite parses and validates that file, so a block that does
   not parse fails the build rather than a user's afternoon.
