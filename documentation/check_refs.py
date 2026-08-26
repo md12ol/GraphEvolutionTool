@@ -42,7 +42,8 @@ def resolve(page, name):
     if name == "config.example.toml":
         return name
     if name == "mod.rs":
-        return MOD[page]
+        # glob yields backslashes on Windows; MOD's keys are written with "/".
+        return MOD[page.replace(os.sep, "/")]
     for root, _, files in os.walk("get/src"):
         if name in files:
             return os.path.join(root, name)
@@ -52,7 +53,7 @@ def resolve(page, name):
 def markers(path, chain):
     """Line numbers in `path` carrying a marker for `chain`, 1-based."""
     out = []
-    for number, line in enumerate(open(path).read().splitlines(), 1):
+    for number, line in enumerate(open(path, encoding="utf-8").read().splitlines(), 1):
         found = MARKER.search(line)
         if found and (chain is None or found.group(1) == chain):
             out.append(number)
@@ -64,7 +65,7 @@ def structure():
     pages = [os.path.relpath(os.path.join(d, f), "documentation")
              for d, _, fs in os.walk("documentation") for f in fs if f.endswith(".html")]
     nav = set(re.findall(r'\["([^"]+\.html)",',
-                         open("documentation/assets/site.js").read()))
+                         open("documentation/assets/site.js", encoding="utf-8").read()))
 
     def slug(text):
         text = re.sub(r"<[^>]+>", "", text).replace("&amp;", "and")
@@ -72,7 +73,7 @@ def structure():
 
     ids = {}
     for page in pages:
-        body = open(os.path.join("documentation", page)).read()
+        body = open(os.path.join("documentation", page), encoding="utf-8").read()
         ids[page] = set(re.findall(r'\sid="([^"]+)"', body)) | {
             slug(t) for _, t in re.findall(r"<(h[23])[^>]*>(.*?)</\1>", body, re.S)}
 
@@ -84,8 +85,11 @@ def structure():
     for page in sorted(pages):
         if page == "_template.html":
             continue
-        body = open(os.path.join("documentation", page)).read()
+        body = open(os.path.join("documentation", page), encoding="utf-8").read()
         declared = re.search(r'data-page="([^"]+)"', body)
+        # `pages` comes from glob, which yields backslashes on Windows; the
+        # attribute in the HTML is always written with "/".
+        page = page.replace(os.sep, "/")
         if not declared or declared.group(1) != page:
             print(f"  bad data-page: {page}")
             bad += 1
@@ -125,7 +129,7 @@ def signatures():
     for root, _, files in os.walk("get/src"):
         for name in files:
             if name.endswith(".rs"):
-                source += "\n" + open(os.path.join(root, name)).read()
+                source += "\n" + open(os.path.join(root, name), encoding="utf-8").read()
 
     def flat(text):
         text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
@@ -146,7 +150,7 @@ def signatures():
         # which is where the one real staleness this check has found was.
         for block in re.finditer(
                 r'<code class="language-rust"( data-example)?>(.*?)</code>',
-                open(page).read(), re.S):
+                open(page, encoding="utf-8").read(), re.S):
             if block.group(1):
                 continue
             body = html.unescape(re.sub(r"<[^>]+>", "", block.group(2)))
@@ -171,12 +175,12 @@ def step_tables():
     for page, chain in sorted(CHAIN.items()):
         path = f"documentation/guide/{page}.html"
         rows = {n.rstrip("ab") for n, _ in re.findall(
-            r"<tr><td>(\d+[ab]?)</td>(.*?)</tr>", open(path).read(), re.S)}
+            r"<tr><td>(\d+[ab]?)</td>(.*?)</tr>", open(path, encoding="utf-8").read(), re.S)}
         marks = set()
         for source in ["config.example.toml"] + [
                 os.path.join(r, f) for r, _, fs in os.walk("get/src")
                 for f in fs if f.endswith(".rs")]:
-            for line in open(source).read().splitlines():
+            for line in open(source, encoding="utf-8").read().splitlines():
                 found = MARKER.search(line)
                 if found and found.group(1) == chain:
                     marks.add(found.group(2))
@@ -197,7 +201,7 @@ def main(fix):
     total = wrong = repaired = 0
     for page in sorted(pages):
         chain = CHAIN.get(os.path.basename(page)[:-5])
-        text = open(page).read()
+        text = open(page, encoding="utf-8").read()
         out, last, cursor, touched = [], None, 0, False
 
         for ref in REF.finditer(text):
@@ -215,7 +219,7 @@ def main(fix):
 
             total += 1
             source = resolve(page, last)
-            lines = open(source).read().splitlines()
+            lines = open(source, encoding="utf-8").read().splitlines()
             here = lines[line - 1] if line <= len(lines) else ""
             found = MARKER.search(here)
 
@@ -241,7 +245,7 @@ def main(fix):
         # Only pages that actually changed, so a repair run does not restamp
         # every file on the site.
         if touched:
-            open(page, "w").write("".join(out))
+            open(page, "w", encoding="utf-8", newline="").write("".join(out))
 
     print(f"{total} references, {wrong} wrong" + (f", {repaired} repaired" if fix else ""))
     bad_tables = step_tables()

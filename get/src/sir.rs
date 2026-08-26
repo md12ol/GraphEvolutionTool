@@ -82,13 +82,10 @@ pub fn simulate_epidemics(
     params: &SirSampleParams,
     batch_seed: u64,
 ) -> Vec<Epidemic> {
-    assert!(
-        params.num_epidemics > 0,
-        "num_epidemics must be at least 1; spec 7 validates this at config load",
-    );
+    assert!(params.num_epidemics > 0, "num_epidemics must be at least 1",);
     assert!(
         params.max_epidemic_retries > 0,
-        "max_epidemic_retries must be at least 1; spec 7 validates this at config load",
+        "max_epidemic_retries must be at least 1",
     );
 
     let seeds = epidemic_seeds(
