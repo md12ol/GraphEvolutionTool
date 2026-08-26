@@ -9,9 +9,9 @@ target/
 # Running examples/config_builder.py leaves examples/__pycache__/ behind, which
 # showed up as untracked for whoever ran it. Byte-code, never shared.
 __pycache__/
-# The legacy C++ is TRACKED, in legacy/. It used to be ignored at the repo root, which meant the
-# implementation the Rust is ported from lived on one laptop — and a doc comment citing it pointed
-# at a file nobody else had. It is reference, not a build target; see legacy/README.md.
+# Two hand-written notes from the C++ port, still sitting in working trees. The C++ itself was
+# deleted in b613984 (2026-08-21) once nothing referenced it; these are personal notes, never
+# tracked, and the rule stays so they do not show up untracked for whoever still has them.
 handoff_transfer_from_c++.md
 handoff_edge_multiplicity_cap_simplification.md
 **/target/
