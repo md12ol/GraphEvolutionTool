@@ -230,8 +230,10 @@ impl Genome for EdgeEditGenome {
 
                 let gene_index = rng.random_range(0..self.genes.len());
                 self.genes[gene_index] = Self::generate_gene(rng, &self.operators.distribution);
-            } // ADD A MUTATION STEP 2 (for EdgeEdit) — the arm performing your variant. Keep
-              // the exactly-one-mutation contract this method's own doc states.
+            } // ADD A MUTATION STEP 2 (for EdgeEdit) — the arm performing your variant,
+              // changing exactly one gene:
+              //
+              //     EdgeEditMutation::MyMutation { some_param } => self.my_mutation(some_param, rng),
         }
     }
 
