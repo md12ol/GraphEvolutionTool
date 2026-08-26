@@ -1,75 +1,51 @@
 //! One SIR epidemic over an expressed graph.
 //!
-//! Ported from `Graph::SIR` in the original C++, which is the model this
-//! project has always simulated. That source is no longer kept in the repo, so
-//! this file is the definition rather than a translation of one.
-//!
-//! The mechanics are unchanged from the port: an adjacency scan accumulates
-//! each susceptible node's total exposure, and one combined Bernoulli draw per
-//! node decides infection. **The reporting matches it too** — `length` counts
-//! the burnout step and `profile` carries a terminating zero, as of the §5.2
-//! amendment of 2026-08-04. Two things are genuinely ours: the draw is written
-//! `1 - (1 - rate)^k` rather than `1 - exp(k · ln(1 - alpha))`, which avoids a
-//! `ln(0)` at `infection_rate = 1.0`, and the RNG is passed in rather than
-//! taken from a global, which is what lets one seed drive a whole batch of graphs.
-//!
-//! The model is SIR with a **one-timestep infectious period**. A node infected
-//! during a step spends the *following* step infectious, transmitting to each
-//! still-susceptible neighbour with probability `infection_rate` per edge, then
-//! recovers and never infects again. A single patient zero seeds the outbreak,
-//! which runs until no infected nodes remain.
+//! The infectious period is **one timestep**: a node infected during a step
+//! spends the *following* step infectious, transmitting to each
+//! still-susceptible neighbour with probability `infection_rate` per edge copy,
+//! then recovers and never infects again. A single patient zero seeds the
+//! outbreak, which runs until no infected nodes remain.
 
-// Both traits must be in scope to call their methods (.random(),
-// .seed_from_u64()) below — Rust requires the trait import even when the
-// concrete type (ChaCha8Rng) is already imported.
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use crate::graph::Graph;
 
 /// Parameters of one epidemic.
-///
-/// This is deliberately a plain struct rather than the config type: wiring the
-/// simulator to `[fitness]` is a separate piece of work, and `sir_sim` has no
-/// business depending on the config schema.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SirParams {
     /// Per-contact probability of transmission along one edge in one timestep.
+    /// Outside `0.0..=1.0` the per-node draw is silently not a probability.
     pub infection_rate: f64,
     /// Which node seeds the outbreak; `None` draws a fresh one per epidemic.
     pub patient_zero: Option<usize>,
 }
 
-/// How one graph's epidemics are sampled (spec §5.2).
+/// How one graph's epidemics are sampled.
 ///
-/// A graph's score averages over `num_epidemics` outbreaks, and re-rolls ones
-/// that fizzle — a short outbreak says the dice went badly, not that the
-/// network is poor.
+/// A graph's score averages over `num_epidemics` outbreaks, re-rolling any that
+/// come out shorter than `min_epidemic_length`.
 ///
-/// **The re-roll is a biased resample, not variance reduction.** It pushes
+/// **That re-roll is a biased resample, not variance reduction.** It pushes
 /// expected fitness up by an amount that depends on how often a graph fizzles,
-/// so it is not a substitute for raising `num_epidemics`. Kept for
-/// comparability with the archived C++ results.
+/// so it is not a substitute for raising `num_epidemics`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SirSampleParams {
     /// The epidemic itself — rate and patient zero.
     pub epidemic: SirParams,
     /// How many outbreaks one graph's score averages over. At least 1.
     pub num_epidemics: usize,
-    /// Outbreaks shorter than this are re-rolled. C++ default 3; **set to 1 to
-    /// disable the re-roll**, since every epidemic has `length >= 1`.
+    /// Outbreaks shorter than this are re-rolled. **Set to 1 to disable the
+    /// re-roll**, since every epidemic has `length >= 1`.
     pub min_epidemic_length: usize,
-    /// Attempts before keeping whatever came out. C++ default 5. At least 1.
+    /// Attempts before keeping whatever came out. At least 1.
     pub max_epidemic_retries: usize,
 }
 
 /// The seeds one batch draws its epidemics from.
 ///
-/// Epidemic `i` attempt `a` uses `seeds[i * max_epidemic_retries + a]` — the
-/// same scheme §8.1 uses for replicates, applied to the epidemic index. Do not
-/// replace it with `xor`; nearby batch seeds would then collide.
-///
-/// Two properties depend on the fixed position, and both break quietly:
+/// Epidemic `i` attempt `a` uses `seeds[i * max_epidemic_retries + a]`. Two
+/// properties depend on that fixed position, and both break quietly:
 ///
 /// - **Every graph in a batch draws from this same pool**, so fitness
 ///   differences reflect the graph rather than the dice. A retry only changes
@@ -77,9 +53,9 @@ pub struct SirSampleParams {
 /// - **Extending appends.** Raising `num_epidemics` leaves earlier epidemics
 ///   replaying unchanged.
 ///
-/// Drawing sequentially instead would break both: a graph that retries consumes
-/// extra draws, shifting every later epidemic out of step with graphs that did
-/// not retry.
+/// Both break under sequential drawing, where a retrying graph consumes extra
+/// draws and shifts every later epidemic, and under `xor`, where nearby batch
+/// seeds collide.
 pub(crate) fn epidemic_seeds(
     batch_seed: u64,
     num_epidemics: usize,
@@ -96,17 +72,11 @@ pub(crate) fn epidemic_seeds(
 
 /// Run one graph's epidemics, re-rolling short ones.
 ///
-/// This is what an objective calls; each of the three SIR objectives is just a
-/// reading over the epidemics it returns.
-///
-/// The epidemics run **sequentially** (§5.2) — parallelism comes from the
-/// replicate and graph-batch levels above.
-///
 /// # Panics
 ///
-/// If `num_epidemics` or `max_epidemic_retries` is zero. Config validation
-/// rejects both (§7), and no epidemics at all would leave the objective averaging
-/// nothing, producing the `NaN` the `Fitness` contract forbids.
+/// If `num_epidemics` or `max_epidemic_retries` is zero. With no epidemics at
+/// all the objective would average nothing, producing the `NaN` the `Fitness`
+/// contract forbids; config validation rejects both at load.
 pub fn simulate_epidemics(
     graph: &Graph,
     params: &SirSampleParams,
@@ -129,9 +99,6 @@ pub fn simulate_epidemics(
     let mut epidemics = Vec::with_capacity(params.num_epidemics);
 
     for epidemic in 0..params.num_epidemics {
-        // Starts empty and is filled on every attempt; the .expect() below is
-        // safe because the inner loop always runs at least once
-        // (max_epidemic_retries > 0 is asserted above).
         let mut kept = None;
 
         for attempt in 0..params.max_epidemic_retries {
@@ -153,27 +120,17 @@ pub fn simulate_epidemics(
     epidemics
 }
 
-/// Everything the three SIR objectives read from one epidemic.
+/// The readings one epidemic reports.
 ///
-/// The epidemic is the expensive part and all three objectives want the same
-/// one, so a single epidemic reports all three readings (spec §5.2).
-///
-/// The three are consistent by construction: `profile[0]` is patient zero and
-/// the profile ends in a terminating zero, so `spread` is the sum of the
-/// profile — the zero contributes nothing — and `length` is one less than its
-/// length. An outbreak that infects nobody beyond patient zero has
-/// `length == 1`, `spread == 1` and `profile == [1, 0]`.
-///
-/// These conventions match the original C++ deliberately, so scores stay
-/// comparable with the archived results. See `decisions.md` 2026-08-04
-/// 17:40; the sheet previously specified the other convention.
+/// Consistent by construction: `spread` is the sum of `profile`, and `length`
+/// is one less than its length. An outbreak that infects nobody beyond patient
+/// zero has `length == 1`, `spread == 1` and `profile == [1, 0]`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Epidemic {
     /// Timesteps the epidemic occupied, **including** the final one in which
     /// the last infectious node recovers without transmitting.
     pub length: usize,
-    /// Total ever-infected, including patient zero. Unaffected by the trailing
-    /// zero, and the one reading the C++ and the sheet never disagreed on.
+    /// Total ever-infected, including patient zero.
     pub spread: usize,
     /// Count of **newly infected** nodes at each timestep. `profile[0] == 1` is
     /// patient zero, and the last element is the terminating zero.
@@ -182,10 +139,10 @@ pub struct Epidemic {
 
 /// One node's position in the epidemic.
 ///
-/// `JustInfected` is the staging state the reference implementation uses to
-/// keep a step's transmissions simultaneous: a node infected during a step must
-/// not transmit until the following one, so it is held here until every
-/// susceptible node has been resolved.
+/// `JustInfected` is the staging state that keeps a step's transmissions
+/// simultaneous: a node infected during a step must not transmit until the
+/// following one, so it is held here until every susceptible node has been
+/// resolved.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum State {
     Susceptible,
@@ -196,20 +153,12 @@ enum State {
 
 /// Run one epidemic to completion.
 ///
-/// `patient_zero` is assumed to be a valid node; a config-driven run has
-/// already checked that, and an out-of-range value here yields an outbreak that
-/// infects nobody rather than a panic.
+/// A `patient_zero` outside the graph yields an outbreak that infects nobody
+/// rather than a panic.
 ///
-/// **A graph with no nodes returns `length == 0` with an empty profile, and
-/// that is deliberate — do not "fix" it to `1` for consistency.** Since the
-/// §5.2 amendment every real epidemic has `length >= 1`, because a lone patient
-/// zero still occupies the burnout step. Zero therefore means *no epidemic
-/// existed to measure*, which is a different statement from *nobody was
-/// infected*, and only a nodeless graph can make it. Agreed 2026-08-04.
-// `R: Rng + ?Sized` accepts either a concrete RNG type or a `&mut dyn Rng`
-// trait object — `?Sized` opts out of Rust's default "must have a known
-// size" requirement, which a trait object doesn't satisfy. Same bound, same
-// reason, on `transmits` below.
+/// **A graph with no nodes returns `length == 0`, deliberately — do not "fix"
+/// it to `1`.** Every real epidemic has `length >= 1`, so `0` means *no
+/// epidemic existed to measure*, not *nobody was infected*.
 pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) -> Epidemic {
     let num_nodes = graph.num_nodes;
     if num_nodes == 0 {
@@ -244,8 +193,6 @@ pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) 
         // multiplicity of `k` contributes `k`, because parallel edges are `k`
         // independent chances to transmit, not one.
         exposure.fill(0);
-        // Iterating with .iter()/&mut state yields references, not values —
-        // the * below dereferences to read or assign the underlying State.
         for (node, node_state) in state.iter().enumerate() {
             if *node_state != State::Infectious {
                 continue;
@@ -266,8 +213,8 @@ pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) 
             }
         }
 
-        // Advance every node at once: this step's infectious nodes recover, and
-        // this step's new infections become next step's infectious set.
+        // Advance every node at once, so a node infected during this step does
+        // not transmit until the next.
         currently_infectious = 0;
         for node_state in &mut state {
             match *node_state {
@@ -281,26 +228,22 @@ pub fn sir_sim<R: Rng + ?Sized>(graph: &Graph, params: &SirParams, rng: &mut R) 
         }
 
         // The final pass carries no new infections, and its zero is recorded
-        // rather than suppressed: §5.2 counts that burnout step in `length`,
-        // and `profile` terminates with it. `length` needs no adjustment for
-        // this — the profile grows by one element, so `profile.len() - 1`
-        // becomes the burnout-inclusive count on its own.
+        // rather than suppressed: `length` counts that burnout step and
+        // `profile` terminates with it.
         profile.push(currently_infectious);
     }
 
     Epidemic {
         length: profile.len() - 1,
         spread: profile.iter().sum(),
-        profile, // shorthand for `profile: profile` — the local var name matches the field name
+        profile,
     }
 }
 
 /// Whether a node with this total exposure is infected during one timestep.
 ///
 /// `exposure` independent chances at `infection_rate` each, resolved as one
-/// draw against `1 - (1 - rate)^exposure`. The reference implementation writes
-/// this as `1 - exp(n * ln(1 - alpha))`, which is the same quantity; the direct
-/// form avoids the `ln(0)` that an `infection_rate` of exactly 1.0 produces.
+/// draw against `1 - (1 - rate)^exposure`.
 fn transmits<R: Rng + ?Sized>(exposure: u32, infection_rate: f64, rng: &mut R) -> bool {
     let escape = (1.0 - infection_rate).powi(exposure as i32);
     rng.random::<f64>() < 1.0 - escape
