@@ -1041,6 +1041,36 @@ mod tests {
         "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.05\nnum_epidemics = 30\n";
     const PYTHON_FITNESS: &str = "[fitness]\ntype = \"python\"\n";
 
+    /// The four `[..]` blocks that choose how a breeding event behaves, each
+    /// mapped onto the engine variant it names.
+    ///
+    /// Nothing tested these mappings. A wrong arm is invisible at run time —
+    /// the run completes, produces a history and reports a winner, having
+    /// searched by a scheme the config did not ask for. The three-axis split
+    /// exists precisely so the axes can be chosen independently, so each one
+    /// carrying its own parameters across is the thing worth pinning.
+    #[test]
+    fn every_config_axis_maps_onto_the_engine_variant_it_names() {
+        assert_eq!(scope(&ScopeConfig::Global), Scope::Global);
+        assert_eq!(
+            scope(&ScopeConfig::RandomSubset { size: 7 }),
+            Scope::RandomSubset { size: 7 },
+            "the scope's own size must travel, not a default"
+        );
+
+        // `matches!` rather than `assert_eq!` only because `Selection` is the
+        // one axis enum of the four that derives neither `Debug` nor
+        // `PartialEq`; the other three are compared directly above and below.
+        assert!(matches!(selection(&SelectionConfig::Best), Selection::Best));
+        assert!(matches!(
+            selection(&SelectionConfig::Tournament { tournament_size: 5 }),
+            Selection::Tournament { tournament_size: 5 }
+        ));
+
+        assert_eq!(replacement(&ReplacementConfig::Worst), Replacement::Worst);
+        assert_eq!(crossover(&CrossoverConfig::TwoPoint), Crossover::TwoPoint);
+    }
+
     /// A config whose `[fitness]` block is exactly `fitness_block`.
     fn config_with(fitness_block: &str) -> Config {
         let text = format!(
@@ -1120,13 +1150,29 @@ mod tests {
         )
     }
 
+    // ADD AN OBJECTIVE STEP 6 — a helper returning your objective's
+    // `[fitness]` block, if writing one takes more than a string literal:
+    //
+    //     fn my_objective_block(threshold: f64) -> String {
+    //         format!("[fitness]\ntype = \"my_objective\"\nthreshold = {threshold}\n")
+    //     }
+    //
+    // Two things make a helper worth writing rather than a literal. Shared
+    // required keys: every SIR objective needs `infection_rate` and
+    // `num_epidemics`, and `sir_block` above is what stops three cases
+    // restating them and disagreeing. And setup on disk: `struct_match_block`
+    // writes a real reference set into a fresh temporary folder before naming
+    // it, because `objective()` is what reads that folder — a block naming one
+    // that does not exist fails there rather than here.
+    //
+    // An objective needing neither skips this step and writes its block inline
+    // in the array below. Either way the last step is that array — search
+    // `ADD AN OBJECTIVE STEP 7` for it.
+
     #[test]
     fn each_objective_erases_to_a_box_carrying_its_own_direction() {
-        // ADD AN OBJECTIVE STEP 6 — a case here for your new variant, and the
-        // last step of the chain. `crate::fitness`'s module doc walks all six.
-        //
-        // The failure this exists for is silent. `Fitness::direction` has a
-        // default of `Minimize`, so a boxed objective whose direction is not
+        // The failure this test exists for is silent. `Fitness::direction` has
+        // a default of `Minimize`, so a boxed objective whose direction is not
         // forwarded reports "minimize" whatever it holds — and both maximizing
         // objectives then run the search backwards while merely looking
         // unconverged (§5.1). Nothing panics and no number looks wrong.
@@ -1138,6 +1184,21 @@ mod tests {
                 Direction::Minimize,
             ),
             (struct_match_block("direction"), Direction::Minimize),
+            // ADD AN OBJECTIVE STEP 7 — one entry here, and the last step of
+            // the chain. `crate::fitness`'s module doc walks all seven. Your
+            // step 6 helper if you wrote one:
+            //
+            //     (my_objective_block(3.0), Direction::Maximize),
+            //
+            // or the block inline if you did not. It is a `String`, and the
+            // `\n`s are the line breaks of the TOML the objective would be
+            // selected by — `[fitness]`, then `type`, then its own keys:
+            //
+            //     (
+            //         "[fitness]\ntype = \"my_objective\"\nthreshold = 3.0\n"
+            //             .to_string(),
+            //         Direction::Maximize,
+            //     ),
         ];
 
         for (block, expected) in cases {

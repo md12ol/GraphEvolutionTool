@@ -286,6 +286,38 @@ mod tests {
         graph.set_edge(0, 1, 0);
         GraphOperation::Toggle.apply(&mut graph, 0, 1, 0, 0);
         assert_eq!(graph.weight(0, 1), 1);
+
+        // `direction` is a decoded gene field, not a flag, and only its parity
+        // is read. Exercised at 0 and 1 alone, any rule agreeing with parity on
+        // those two passes — so the values above pin nothing about parity, and
+        // these do.
+        graph.set_edge(0, 1, 2);
+        GraphOperation::Toggle.apply(&mut graph, 0, 1, 2, 0);
+        assert_eq!(graph.weight(0, 1), 1, "2 is even, so it removes");
+
+        GraphOperation::Toggle.apply(&mut graph, 0, 1, 7, 0);
+        assert_eq!(graph.weight(0, 1), 2, "7 is odd, so it adds");
+
+        GraphOperation::Toggle.apply(&mut graph, 0, 1, 12, 0);
+        assert_eq!(graph.weight(0, 1), 1, "12 is even, so it removes");
+    }
+
+    #[test]
+    fn swap_declines_between_two_vertices_that_are_already_adjacent() {
+        // Swapping across an existing edge is what the guard exists to stop:
+        // 0 and 1 are joined, and rewiring their neighbours around them would
+        // move edges without the pair of disjoint edges a swap is defined on.
+        let graph = graph_with_edges(6, &[(0, 1, 1), (0, 2, 1), (0, 3, 1), (1, 4, 1), (1, 5, 1)]);
+        let before = graph.get_edge_list();
+
+        // Both have degree 3, so nothing else in the guard declines for them,
+        // and indices 1 and 1 name neighbours 2 and 4 — a quartet that is
+        // otherwise perfectly swappable.
+        for direction in 0..4 {
+            let mut candidate = graph.clone();
+            GraphOperation::Swap.apply(&mut candidate, 0, 1, 1, direction);
+            assert_eq!(candidate.get_edge_list(), before, "direction {direction}");
+        }
     }
 
     #[test]

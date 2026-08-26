@@ -340,6 +340,46 @@ mod tests {
     }
 
     #[test]
+    fn exposure_accumulates_across_every_infectious_neighbour() {
+        // A square: patient zero 0 reaches 3 only through 1 and 2, so when
+        // both are infectious in the same timestep node 3 faces two
+        // independent chances, not one. Every other test in this module gives
+        // a susceptible node at most one infectious neighbour, so an exposure
+        // that overwrites instead of accumulating scores identically in all
+        // of them — the profile stays the right length and the curve is wrong.
+        let mut graph = Graph::new(4, 1);
+        for (u, v) in [(0, 1), (0, 2), (1, 3), (2, 3)] {
+            graph.set_edge(u, v, 1);
+        }
+        let params = SirParams {
+            infection_rate: 0.5,
+            patient_zero: Some(0),
+        };
+
+        let mut rng = rng();
+        let trials = 2000;
+        let mut reached_all_four = 0;
+        for _ in 0..trials {
+            if sir_sim(&graph, &params, &mut rng).spread == 4 {
+                reached_all_four += 1;
+            }
+        }
+
+        // Every route to all four nodes, at rate 0.5:
+        //   both 1 and 2 infected (0.25), then 3 against exposure 2 (0.75)
+        //     -> 0.1875
+        //   only 1 infected (0.25), then 3 (0.5), then 3 infects 2 the long
+        //     way round (0.5) -> 0.0625, and the same again for only 2
+        // which is 0.3125, or about 625 of 2000. Seeing one neighbour instead
+        // of both makes the first route's second factor 0.5, for 0.25 overall
+        // and about 500 — below this band.
+        assert!(
+            (555..=695).contains(&reached_all_four),
+            "{reached_all_four} of {trials} reached every node"
+        );
+    }
+
+    #[test]
     fn parallel_edges_are_independent_chances_to_transmit() {
         // A single edge, at multiplicity 1 versus multiplicity 4. With a
         // per-contact rate of 0.3 the escape probabilities are 0.7 and
@@ -619,6 +659,25 @@ mod tests {
     fn no_attempts_at_all_is_rejected() {
         let (graph, params) = coin_flip_sample(4, 1, 0);
         simulate_epidemics(&graph, &params, 1);
+    }
+
+    /// `sir_sim` is public and documents that a stray patient zero is an
+    /// outbreak that infects nobody rather than a panic. A config-driven run
+    /// has validated the index long before this, so the guard inside is the
+    /// only thing standing between a direct caller and `state[patient_zero]`.
+    #[test]
+    fn an_out_of_range_patient_zero_yields_no_epidemic_rather_than_panicking() {
+        let graph = path_graph(4);
+        let params = SirParams {
+            infection_rate: 1.0,
+            patient_zero: Some(9),
+        };
+
+        let epidemic = sir_sim(&graph, &params, &mut rng());
+
+        assert_eq!(epidemic.length, 0);
+        assert_eq!(epidemic.spread, 0);
+        assert!(epidemic.profile.is_empty());
     }
 
     /// Zero here means *no epidemic existed*, not *nobody was infected* — since

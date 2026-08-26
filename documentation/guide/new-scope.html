@@ -18,6 +18,12 @@
   axes, and it answers only this question.
 </p>
 
+<div class="warn not-in-release">
+  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet — only
+  <a href="new-fitness.html">adding an objective</a> is ready to use today. This note is removed
+  once the chain is finished and documented.
+</div>
+
 <h2>The One Question a Scope Answers</h2>
 
 <p>
@@ -88,7 +94,7 @@ radius = 3</code></pre>
         <td>the arm mapping that config variant onto the engine one</td></tr>
     <tr><td>5</td><td><code>get/src/py_config.rs:264</code> and <code>:876</code></td>
         <td>the Python mirror — optional</td></tr>
-    <tr><td>6</td><td><code>config.example.toml:156</code></td>
+    <tr><td>6</td><td><code>config.example.toml:157</code></td>
         <td>a commented-out block naming your variant — optional, and the step people skip</td></tr>
   </tbody>
 </table>
@@ -200,7 +206,7 @@ PyScopeConfig::Neighbourhood { radius } =&gt; {
 <p>
   Write <b>your own parameters and no other block's</b> — the arm is building the
   <code>[scope]</code> table alone. Step 6 is a commented-out block in
-  <code>config.example.toml:156</code>.
+  <code>config.example.toml:157</code>.
 </p>
 
 <div class="callout">

@@ -1,5 +1,5 @@
-# Runs the Rust checks that nothing else runs: the test suite, the two lint
-# gates, and the `get/examples/` programs. Until this existed, `get/src`'s unit
+# Runs the checks that nothing else runs: the site's source references, the
+# test suite, the two lint gates, and the `get/examples/` programs. Until this existed, `get/src`'s unit
 # tests ran only when a maintainer remembered to run them locally, so the
 # convention of committing each step once its own check has passed rested on a
 # gate nobody's push met.
@@ -61,8 +61,23 @@ jobs:
           echo "LD_LIBRARY_PATH=${libdir}:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
           echo "libpython dir: ${libdir}"
 
-      # Formatting first: it is the cheapest check and needs no build, so a
-      # formatting-only failure reports in seconds instead of after a compile.
+      # Ahead of the Rust checks because it needs no build at all, and
+      # because what it catches is invisible to every one of them: adding a
+      # line to a file that carries an `ADD A ... STEP n` marker shifts the
+      # site's `path:line` references to it, and nothing in the crate can
+      # notice. It ran only when someone remembered to, which is the gate
+      # `documentation/README.md` describes and PR #159 walked straight past —
+      # its new `dispatch.rs` tests moved a marker 30 lines and left two pages
+      # pointing at the wrong one. It matches the step number as well as the
+      # chain, so a reference cannot pass by landing on the marker next door.
+      # A step here, rather than a job of its own,
+      # so the `main` ruleset's required check keeps the name it already has.
+      - name: documentation references
+        run: python3 documentation/check_refs.py
+
+      # First of the Rust checks: it is the cheapest of them and needs no
+      # build, so a formatting-only failure reports in seconds instead of
+      # after a compile.
       - name: cargo fmt --check
         run: cargo fmt -p graph-evolution-tool --check
 

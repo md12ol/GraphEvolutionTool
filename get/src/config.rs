@@ -1806,6 +1806,34 @@ num_epidemics  = 30
     }
 
     #[test]
+    fn a_scope_of_nobody_is_rejected() {
+        // The `size > population_size` half of this rule has its own test; the
+        // zero end had none. Steady-state's floor of four hides it there, so
+        // the case that actually reaches this branch is a subset scope under
+        // generational, which has no floor of its own.
+        let mut config = valid_config();
+        config.evolution = EvolutionConfig::Generational {
+            num_generations: 500,
+            elite_count: 1,
+        };
+        config.scope = ScopeConfig::RandomSubset { size: 0 };
+
+        assert_eq!(validation_field(&config), "size");
+    }
+
+    #[test]
+    fn a_tournament_of_nobody_is_rejected() {
+        // The other settings that retire the search each have their own test;
+        // this one had none. Left to run, `Selection::pick` asserts on it deep
+        // inside the first breeding event, so the user gets a panic partway
+        // through a run instead of a named field before it starts.
+        let mut config = valid_config();
+        config.selection = SelectionConfig::Tournament { tournament_size: 0 };
+
+        assert_eq!(validation_field(&config), "tournament_size");
+    }
+
+    #[test]
     fn an_elite_count_equal_to_the_population_is_rejected() {
         // Equal, not merely greater: equal already means nothing breeds and the
         // run is a fixed point.

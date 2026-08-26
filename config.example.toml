@@ -87,7 +87,8 @@ num_epidemics  = 30
 # ADD AN OBJECTIVE STEP 5 — an example block for your objective, commented out
 # beneath this one, if it ships. This file is what a user copies from, so an
 # objective missing from it is one most people never find. The last step is the
-# dispatch test -- search `ADD AN OBJECTIVE STEP 6` for it.
+# dispatch test -- search `ADD AN OBJECTIVE STEP 6` for the block helper it
+# may want first, and `ADD AN OBJECTIVE STEP 7` for the case itself.
 
 # No seed appears anywhere in this file. One master seed goes to `run()`, and
 # the population, evolution, epidemics and replicates all derive from it.
@@ -178,7 +179,7 @@ num_epidemics  = 30
 # alongside `redraw_one`.
 #
 # An objective is the same shape of addition: the module doc at the top of
-# `get/src/fitness.rs` walks all six of its steps.
+# `get/src/fitness.rs` walks all seven of its steps.
 
 
 # =============================================================================

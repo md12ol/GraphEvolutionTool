@@ -3,9 +3,9 @@
 //!
 //! # Adding your own objective
 //!
-//! An objective touches five files, in six steps — two of the files want
-//! more than one edit, and `dispatch.rs` appears twice, once for the code and
-//! once for the test.
+//! An objective touches five files, in seven steps — two of the files want
+//! more than one edit, and `dispatch.rs` appears three times: once for the
+//! code, and twice in its tests, for a block helper and for the case using it.
 //!
 //! **Five is the floor, not the ceiling.** It is what an objective assembled
 //! from config values alone needs, which is what all three of the originals
@@ -13,18 +13,19 @@
 //! touch the loader it reads through and wherever its shared state lives;
 //! `struct_match` touched seven files for that reason.
 //!
-//! How many of the six steps are yours depends on which way you are using GET,
+//! How many of the seven steps are yours depends on which way you are using GET,
 //! so start by working out which reader you are:
 //!
 //! - **You depend on this crate from your own program.** Step 1 is the only
 //!   one available to you, and it is enough on its own: write your type,
-//!   implement [`Fitness`] for it, and pass it to `Evolver::run`. Steps 2–6
+//!   implement [`Fitness`] for it, and pass it to `Evolver::run`. Steps 2–7
 //!   are unreachable rather than skipped: `config`, `dispatch` and `py_config`
 //!   are private modules, so nothing outside this crate can add a config
 //!   variant or a dispatch arm, and the example file and the tests live in the
 //!   GET repository rather than yours. Your objective reaches the evolver by
 //!   being handed over directly, and is never named in a config file.
-//! - **You are editing your own copy of GET.** All six steps are yours. What that
+//! - **You are editing your own copy of GET.** All seven steps are yours, though
+//!   step 6 is skippable. What that
 //!   buys, and what the first reader structurally cannot have, is an objective
 //!   selectable by name from `config.toml` and runnable by the `get-run`
 //!   binary, with no Rust written at the call site.
@@ -93,10 +94,16 @@
 //! 5. **`config.example.toml`** — add an example block if the objective ships.
 //!    The example file is what a user copies from, so an objective missing
 //!    from it is one most people never find.
-//! 6. **The dispatch tests** — assert the new variant erases to a box that
-//!    reports its own [`Direction`]. Worth writing because the failure it
-//!    catches is silent: an objective whose direction is lost runs the search
-//!    backwards and looks merely unconverged.
+//! 6. **The dispatch tests, a block helper** — a function returning your
+//!    objective's `[fitness]` block, alongside `sir_block` and
+//!    `struct_match_block`. **The one skippable step.** It earns its place
+//!    when the block carries keys shared with other objectives, or when the
+//!    objective reads something off disk that has to exist before the test
+//!    runs. An objective needing neither writes its block inline at step 7.
+//! 7. **The dispatch tests, the case** — assert the new variant erases to a
+//!    box that reports its own [`Direction`]. Worth writing because the
+//!    failure it catches is silent: an objective whose direction is lost runs
+//!    the search backwards and looks merely unconverged.
 //!
 //! # What `Direction` costs you if you get it wrong
 //!
@@ -1141,6 +1148,20 @@ def fitness(batch):
         graph
     }
 
+    /// A star: node 0 joined to every other, and nothing else joined.
+    ///
+    /// The fixture that separates `length` from `spread`, which `path_graph`
+    /// cannot: at rate 1.0 every leaf is infected in the same step, so a
+    /// 6-node star is 6 nodes wide and 2 timesteps long. A path of 6 is 6 and
+    /// 6, and so scores the same whichever field an objective reads.
+    fn star_graph(num_nodes: usize) -> Graph {
+        let mut graph = Graph::new(num_nodes, 1);
+        for leaf in 1..num_nodes {
+            graph.set_edge(0, leaf, 1);
+        }
+        graph
+    }
+
     /// Rate 1.0 from a pinned patient zero, so every epidemic is identical and
     /// no test depends on the seed.
     fn certain_batch(num_epidemics: usize) -> SirSampleParams {
@@ -1187,6 +1208,13 @@ def fitness(batch):
             6.0,
             "every node of the path is reached at rate 1.0",
         );
+        // The path cannot tell spread from length — it is 6 of both. The star
+        // is 6 wide and 2 long, so only a reading of `spread` scores it 6.
+        assert_eq!(
+            objective.evaluate(&star_graph(6)),
+            6.0,
+            "all six nodes are infected, in two timesteps",
+        );
         assert_eq!(objective.direction(), Direction::Maximize);
     }
 
@@ -1198,6 +1226,14 @@ def fitness(batch):
             objective.evaluate(&path_graph(6)),
             6.0,
             "one step per edge, plus the burnout step (spec 5.2)",
+        );
+        // Both readings give 6 on the path, and 1 on an isolated node, so
+        // neither case below can tell them apart. The star can: every leaf
+        // falls in the same step, making it 6 nodes wide and 2 steps long.
+        assert_eq!(
+            objective.evaluate(&star_graph(6)),
+            2.0,
+            "one step to infect every leaf, plus the burnout step",
         );
         assert_eq!(
             objective.evaluate(&Graph::new(4, 1)),
@@ -1413,7 +1449,9 @@ def fitness(batch):
     /// point, so this is what catches the two drifting apart.
     #[test]
     fn both_entry_points_use_the_same_reading() {
-        let graph = path_graph(6);
+        // The star, not the path: a path scores 6 under either reading, so the
+        // two entry points would agree here even if they read different fields.
+        let graph = star_graph(6);
 
         // certain_batch is deterministic, so the two differing seeds cannot
         // account for any difference in the scores.
