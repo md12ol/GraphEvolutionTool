@@ -56,16 +56,16 @@
   <!-- the loop -->
   <rect x="260" y="20" width="480" height="330" rx="12" class="d-fill-bg"/>
   <rect x="260" y="20" width="480" height="330" rx="12" class="d-stroke" stroke-dasharray="5 4"/>
-  <text x="500" y="43" class="d-text-acc" text-anchor="middle">the evolution loop — generational shape</text>
+  <text x="500" y="43" class="d-text-acc" text-anchor="middle">the evolution loop — generational shape *</text>
 
   <rect x="330" y="60" width="185" height="52" rx="8" class="d-fill-acc"/>
   <rect x="330" y="60" width="185" height="52" rx="8" class="d-stroke"/>
-  <text x="422" y="82" class="d-text" text-anchor="middle" font-weight="600">express</text>
+  <text x="422" y="82" class="d-text" text-anchor="middle" font-weight="600">express *</text>
   <text x="422" y="99" class="d-text-sm" text-anchor="middle">genomes → graphs, in parallel</text>
 
   <rect x="330" y="132" width="185" height="52" rx="8" class="d-fill-good"/>
   <rect x="330" y="132" width="185" height="52" rx="8" class="d-stroke"/>
-  <text x="422" y="154" class="d-text" text-anchor="middle" font-weight="600">score</text>
+  <text x="422" y="154" class="d-text" text-anchor="middle" font-weight="600">score *</text>
   <text x="422" y="171" class="d-text-sm" text-anchor="middle">one f64 per individual</text>
 
   <rect x="330" y="204" width="185" height="52" rx="8" class="d-fill-warn"/>
@@ -81,12 +81,12 @@
 
   <rect x="555" y="132" width="165" height="52" rx="8" class="d-fill-box"/>
   <rect x="555" y="132" width="165" height="52" rx="8" class="d-stroke"/>
-  <text x="637" y="154" class="d-text" text-anchor="middle" font-weight="600">select</text>
+  <text x="637" y="154" class="d-text" text-anchor="middle" font-weight="600">select *</text>
   <text x="637" y="171" class="d-text-sm" text-anchor="middle">scope · select · replace</text>
 
   <rect x="555" y="204" width="165" height="52" rx="8" class="d-fill-box"/>
   <rect x="555" y="204" width="165" height="52" rx="8" class="d-stroke"/>
-  <text x="637" y="226" class="d-text" text-anchor="middle" font-weight="600">crossover + mutate</text>
+  <text x="637" y="226" class="d-text" text-anchor="middle" font-weight="600">crossover * + mutate *</text>
   <text x="637" y="243" class="d-text-sm" text-anchor="middle">three rolls, engine-owned</text>
 
   <!-- dispatch hands the starting population to express -->
@@ -122,7 +122,11 @@
 population and logs a row.
 <a href="variation.html#steady-state">Steady-state</a> runs the same stages in the same order, but
 one mating event expresses and scores only the two new children, and logs once every
-<code>population_size</code> events rather than every iteration.</figcaption>
+<code>population_size</code> events rather than every iteration.
+<b>*</b> marks a stage you choose rather than one that is fixed — the genome you express, the
+objective you score against, the loop's shape, and each of scope, selection, replacement, crossover
+and mutation. Every one is set from the config and has an
+<a href="extending.html">extension chain</a> behind it; the unmarked stages are the engine.</figcaption>
 </figure>
 
 <div class="table-wrap">

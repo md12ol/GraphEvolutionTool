@@ -7,10 +7,14 @@ and no network access at any point.
 
 ## Reading it
 
-Open `index.html` in a browser. That is all — `file://` works fully, because nothing on the site
-uses `fetch`, a CDN or a module import.
+**The published site is <https://md12ol.github.io/GraphEvolutionTool/>**, deployed from `main` by
+`.github/workflows/pages.yml`. That is the copy to send someone; everything below is for working on
+the site rather than reading it.
 
-For a local server instead:
+From a clone, open `index.html` in a browser. That is all — `file://` works fully, because nothing
+on the site uses `fetch`, a CDN or a module import.
+
+For a local server instead — which is how you check a page before it is published:
 
 ```bash
 ./serve.sh            # then open http://localhost:8000
@@ -120,7 +124,8 @@ Four checks, each catching something the others cannot:
 
 **CI runs it on every pull request**, as the `documentation references` step of the
 `test, clippy and rustfmt` job, so a shifted reference now fails a check rather than waiting for
-someone to notice. Run it locally anyway before you push — it needs no build and answers in under a
+someone to notice. **The `pages` workflow runs it again before deploying**, because a
+`workflow_dispatch` run can publish a commit no pull request ever gated. Run it locally anyway before you push — it needs no build and answers in under a
 second, where the runner takes a minute to tell you the same thing.
 
 **Run it after touching `get/src`, not only after touching a page.** Any insertion moves the line

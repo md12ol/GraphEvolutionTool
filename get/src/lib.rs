@@ -829,6 +829,21 @@ pub fn run_many_from_toml(
     Ok(summaries)
 }
 
+/// Evolve networks against an objective you choose.
+///
+/// Describe a run either way, and both go through the same validation:
+///
+/// - **Config objects.** Build `Config` from the typed pieces — `EvolutionConfig`,
+///   `SelectionConfig`, `GenomeConfig`, `FitnessConfig` and the rest — then
+///   `GraphEvolver.from_config(config)`.
+/// - **A TOML file.** `GraphEvolver(path)`, the constructor. `config.to_toml()`
+///   returns the document that was actually parsed, so a run reproduces verbatim.
+///
+/// `run()` returns a `RunResult`: the best graph found, its fitness **as the
+/// objective measured it**, and a `GenerationStats` row per logged generation.
+///
+/// Full documentation, including every configuration key:
+/// https://md12ol.github.io/GraphEvolutionTool/
 #[pymodule]
 fn get(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GraphEvolver>()?;

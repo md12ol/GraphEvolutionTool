@@ -136,7 +136,9 @@ def markers(path, chain, step=None, branch=None):
 
 def structure():
     """data-page, NAV membership, internal links and anchors, across every page."""
-    pages = [os.path.relpath(os.path.join(d, f), "documentation")
+    # Posix separators: these are compared against `data-page` and NAV, which
+    # use forward slashes on every platform.
+    pages = [os.path.relpath(os.path.join(d, f), "documentation").replace(os.sep, "/")
              for d, _, fs in os.walk("documentation") for f in fs if f.endswith(".html")]
     nav = set(re.findall(r'\["([^"]+\.html)",',
                          open("documentation/assets/site.js", encoding="utf-8").read()))
@@ -177,7 +179,7 @@ def structure():
             if href.startswith(("http", "data:", "mailto:")):
                 continue
             target, _, fragment = href.partition("#")
-            full = (os.path.normpath(os.path.join(os.path.dirname(page), target))
+            full = (os.path.normpath(os.path.join(os.path.dirname(page), target)).replace(os.sep, "/")
                     if target else page)
             if target and not os.path.exists(os.path.join("documentation", full)):
                 print(f"  broken link: {page} -> {href}")
@@ -264,14 +266,17 @@ def step_tables():
 def main(fix):
     pages = []
     for root, _, files in os.walk("documentation"):
-        pages += [os.path.join(root, f) for f in files
+        # Posix separators, because these paths are also MOD's keys.
+        pages += [os.path.join(root, f).replace(os.sep, "/") for f in files
                   if f.endswith(".html") and "_template" not in f]
 
     total = wrong = repaired = 0
     for page in sorted(pages):
         chain = CHAIN.get(os.path.basename(page)[:-5])
         names = branch_names(chain) if chain else set()
-        text = open(page, encoding="utf-8").read()
+        # newline="" both here and on the write below, so --fix leaves the
+        # file's existing line endings alone instead of rewriting every line.
+        text = open(page, encoding="utf-8", newline="").read()
         out, last, cursor, touched = [], None, 0, False
 
         for ref in REF.finditer(text):
@@ -339,7 +344,7 @@ def main(fix):
         # Only pages that actually changed, so a repair run does not restamp
         # every file on the site.
         if touched:
-            open(page, "w", encoding="utf-8").write("".join(out))
+            open(page, "w", encoding="utf-8", newline="").write("".join(out))
 
     print(f"{total} references, {wrong} wrong" + (f", {repaired} repaired" if fix else ""))
     bad_tables = step_tables()

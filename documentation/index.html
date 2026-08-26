@@ -13,11 +13,11 @@
 <p class="page-kicker">Graph Evolution Tool</p>
 <h1>Evolve Networks Against an Objective</h1>
 <p class="lede">
-  GET searches for graphs that score well on a measure you choose — how far a simulated epidemic
-  spreads, how closely a network's structure matches a reference set, or any objective you write
-  yourself in Python or Rust. You describe the experiment in a config file or in Python; GET runs
-  an evolutionary algorithm in Rust and hands back the best network it found, plus the convergence
-  log that produced it.
+  Graph Evolution Tool (GET) searches for graphs that score well on a measure you choose — how far
+  a simulated epidemic spreads, how closely a network's structure matches a reference set, or any
+  objective you write yourself in Python or Rust. You describe the experiment in a config file or
+  in Python; GET runs an evolutionary algorithm in Rust and hands back the best network it found,
+  plus the convergence log that produced it.
 </p>
 
 <div class="cards">
@@ -255,7 +255,7 @@ told it to build that shape. Seed <code>20260821</code>; regenerate with
 
   <rect x="20"  y="58" width="190" height="76" rx="9" class="d-fill-acc"/>
   <rect x="20"  y="58" width="190" height="76" rx="9" class="d-stroke"/>
-  <text x="115" y="90"  class="d-text" text-anchor="middle" font-weight="600">Genome</text>
+  <text x="115" y="90"  class="d-text" text-anchor="middle" font-weight="600">Genome *</text>
   <text x="115" y="112" class="d-text-sm" text-anchor="middle">edits, or an automaton</text>
 
   <rect x="285" y="58" width="190" height="76" rx="9" class="d-fill-box"/>
@@ -265,7 +265,7 @@ told it to build that shape. Seed <code>20260821</code>; regenerate with
 
   <rect x="550" y="58" width="190" height="76" rx="9" class="d-fill-good"/>
   <rect x="550" y="58" width="190" height="76" rx="9" class="d-stroke"/>
-  <text x="645" y="90"  class="d-text" text-anchor="middle" font-weight="600">Fitness</text>
+  <text x="645" y="90"  class="d-text" text-anchor="middle" font-weight="600">Fitness *</text>
   <text x="645" y="112" class="d-text-sm" text-anchor="middle">one f64 per individual</text>
 
   <path d="M214 96 L281 96" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#ar)" style="color:var(--accent)"/>
@@ -276,14 +276,15 @@ told it to build that shape. Seed <code>20260821</code>; regenerate with
 
   <path d="M645 138 L645 196 L115 196 L115 138" class="d-stroke-acc" stroke-width="1.6"
         marker-end="url(#ar)" style="color:var(--accent)"/>
-  <rect x="255" y="178" width="250" height="36" rx="7" class="d-fill-bg"/>
-  <rect x="255" y="178" width="250" height="36" rx="7" class="d-stroke"/>
-  <text x="380" y="201" class="d-text" text-anchor="middle">Evolver: select · breed · mutate</text>
+  <rect x="230" y="178" width="300" height="36" rx="7" class="d-fill-bg"/>
+  <rect x="230" y="178" width="300" height="36" rx="7" class="d-stroke"/>
+  <text x="380" y="201" class="d-text" text-anchor="middle">Evolver *: select * · breed * · mutate *</text>
 
   </g>
 </svg>
 <figcaption>Each stage is an independent trait, so representations and objectives swap without
-touching the engine.</figcaption>
+touching the engine. <b>*</b> marks a box you choose rather than one that is fixed — every one is a
+named option in the table below, set from a config file and extensible in the source.</figcaption>
 </figure>
 
 <h2>What You Get to Choose</h2>
