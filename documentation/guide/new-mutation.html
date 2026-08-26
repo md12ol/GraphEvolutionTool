@@ -92,7 +92,7 @@ mutation    = { type = "my_mutation", some_param = 0.5 }</code></pre>
         <td>A variant on <code>enum EdgeEditMutation</code>, plus any parameters it reads.</td></tr>
     <tr><td>2</td><td><code>get/src/genomes/edge_edit.rs:233</code></td>
         <td>The arm in <code>EdgeEditGenome::mutate</code> that performs it.</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:301</code> and
+    <tr><td>3</td><td><code>get/src/config.rs:188</code> and
         <code>get/src/dispatch.rs:913</code></td>
         <td>The mirrored variant on <code>enum EdgeEditMutationConfig</code>, and the arm mapping it
             onto the engine enum.</td></tr>
@@ -110,7 +110,7 @@ EdgeEditMutation::MyMutation { some_param } =&gt; {
     // exactly one change to `self.genes`
 }
 
-// step 3a — config.rs:301
+// step 3a — config.rs:188
 MyMutation { some_param: f64 },
 
 // step 3b — dispatch.rs:913
@@ -134,7 +134,7 @@ EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
         <td>A variant on <code>enum SdaMutation</code>, plus any parameters it reads.</td></tr>
     <tr><td>2</td><td><code>get/src/genomes/sda.rs:405</code></td>
         <td>The arm in <code>SdaGenome::mutate</code> that performs it.</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:361</code> and
+    <tr><td>3</td><td><code>get/src/config.rs:230</code> and
         <code>get/src/dispatch.rs:923</code></td>
         <td>The mirrored variant on <code>enum SdaMutationConfig</code>, and the arm mapping it onto
             the engine enum.</td></tr>
@@ -150,7 +150,7 @@ MyMutation { some_param: f64 },
 // step 2 — genomes/sda.rs:405
 SdaMutation::MyMutation { some_param } =&gt; self.my_mutation(context, rng),
 
-// step 3a — config.rs:361
+// step 3a — config.rs:230
 MyMutation { some_param: f64 },
 
 // step 3b — dispatch.rs:923

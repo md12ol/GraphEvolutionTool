@@ -111,7 +111,7 @@ pressure = 1.8</code></pre>
             of the config.</td></tr>
     <tr><td>2</td><td><code>get/src/evolver/common.rs:159</code></td>
         <td>The arm in <code>Selection::pick</code> that actually chooses parents.</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:187</code></td>
+    <tr><td>3</td><td><code>get/src/config.rs:112</code></td>
         <td>The mirrored variant on <code>enum SelectionConfig</code> — this is the one whose name
             becomes <code>type = "roulette"</code>.</td></tr>
     <tr><td>4</td><td><code>get/src/dispatch.rs:980</code></td>
@@ -163,7 +163,7 @@ Selection::Roulette { pressure } =&gt; {
 
 <p>One change, two files. The config variant, and the arm that maps it onto the engine variant:</p>
 
-<pre><code class="language-rust">// step 3 — config.rs:187
+<pre><code class="language-rust">// step 3 — config.rs:112
 Roulette { pressure: f64 },
 
 // step 4 — dispatch.rs:980

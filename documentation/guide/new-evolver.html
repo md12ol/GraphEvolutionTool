@@ -99,10 +99,10 @@ num_my_events = 500</code></pre>
     <tr><td>1</td><td><code>get/src/evolver/mod.rs:17</code></td>
         <td>A new module beside the two that exist, its <code>pub mod</code> and re-export lines,
             and the <code>Evolver</code> implementation inside it.</td></tr>
-    <tr><td>2</td><td><code>get/src/config.rs:104</code></td>
+    <tr><td>2</td><td><code>get/src/config.rs:58</code></td>
         <td>An <code>EvolutionConfig</code> variant carrying your stopping condition, plus any axis
             that is <i>yours</i> rather than every strategy's.</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:842</code></td>
+    <tr><td>3</td><td><code>get/src/config.rs:625</code></td>
         <td><b>Optional.</b> A constraint arm in <code>validate_evolution_and_selection</code>. A
             strategy with nothing to constrain adds no arm.</td></tr>
     <tr><td>4</td><td><code>get/src/dispatch.rs:823</code></td>
@@ -130,12 +130,12 @@ pub use my_strategy::MyStrategyEvolver;</code></pre>
 
 <h2>Steps 2 and 3 — The Config Side</h2>
 
-<pre><code class="language-rust">// step 2 — config.rs:104
+<pre><code class="language-rust">// step 2 — config.rs:58
 MyStrategy {
     num_my_events: usize,
 },
 
-// step 3 — config.rs:842, optional
+// step 3 — config.rs:625, optional
 EvolutionConfig::MyStrategy { num_my_events, .. } =&gt; {
     if *num_my_events == 0 {
         return Err(invalid("num_my_events", "must be at least 1"));

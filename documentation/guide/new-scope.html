@@ -88,7 +88,7 @@ radius = 3</code></pre>
         <td>the variant, and whatever it needs to locate a slice</td></tr>
     <tr><td>2</td><td><code>get/src/evolver/scope.rs:52</code></td>
         <td>the arm filling the buffer with your indices</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:138</code></td>
+    <tr><td>3</td><td><code>get/src/config.rs:77</code></td>
         <td>the variant a user names under <code>[scope]</code>, plus any constraint on it</td></tr>
     <tr><td>4</td><td><code>get/src/dispatch.rs:939</code></td>
         <td>the arm mapping that config variant onto the engine one</td></tr>
@@ -155,7 +155,7 @@ Scope::Neighbourhood { radius } =&gt; {
 
 <p>One change, two files. The config variant, and the arm mapping it onto the engine variant:</p>
 
-<pre><code class="language-rust">// step 3 — config.rs:138
+<pre><code class="language-rust">// step 3 — config.rs:77
 Neighbourhood { radius: usize },
 
 // step 4 — dispatch.rs:939

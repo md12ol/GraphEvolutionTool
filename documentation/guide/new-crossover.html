@@ -80,10 +80,10 @@ some_param = 0.5</code></pre>
             config.</td></tr>
     <tr><td>2</td><td><code>get/src/evolver/common.rs:52</code></td>
         <td>The arm in <code>Crossover::recombine</code> that performs it.</td></tr>
-    <tr><td>3a</td><td><code>get/src/config.rs:214</code></td>
+    <tr><td>3a</td><td><code>get/src/config.rs:131</code></td>
         <td>The mirrored variant on <code>enum CrossoverConfig</code> — the one whose name becomes
             <code>type = "my_crossover"</code>.</td></tr>
-    <tr><td>3b</td><td><code>get/src/config.rs:909</code></td>
+    <tr><td>3b</td><td><code>get/src/config.rs:673</code></td>
         <td><b>The one that gets forgotten.</b> One <code>(operator, genome)</code> pair per
             representation your operator can honour.</td></tr>
     <tr><td>4</td><td><code>get/src/dispatch.rs:900</code></td>
@@ -125,10 +125,10 @@ Crossover::MyCrossover { some_param } =&gt; { /* recombine `first` and `second` 
   chosen independently — so nothing but this match can catch an illegal combination:
 </p>
 
-<pre><code class="language-rust">// step 3a — config.rs:214
+<pre><code class="language-rust">// step 3a — config.rs:131
 MyCrossover { some_param: f64 },
 
-// step 3b — config.rs:909
+// step 3b — config.rs:673
 (CrossoverConfig::MyCrossover { .. }, GenomeConfig::Sda(_)) =&gt; Ok(()),
 (CrossoverConfig::MyCrossover { .. }, GenomeConfig::EdgeEdit(_)) =&gt;
     Err(invalid("crossover", "edge-edit cannot honour my_crossover")),</code></pre>
