@@ -106,17 +106,33 @@ impl Graph {
 
     /// Return the number of distinct nodes connected to `node`.
     pub fn neighbor_count(&self, node: usize) -> usize {
-        self.neighbors(node).len()
+        if node >= self.num_nodes {
+            return 0;
+        }
+        self.adjacency[node]
+            .iter()
+            .filter(|&&weight| weight > 0)
+            .count()
     }
 
     /// Return the distinct neighbour at `index`, wrapping modulo the number of
     /// distinct neighbours.
     pub(crate) fn get_neighbor_at_index(&self, node: usize, index: usize) -> Option<usize> {
-        let neighbors = self.neighbors(node);
-        if neighbors.is_empty() {
+        let count = self.neighbor_count(node);
+        if count == 0 {
             return None;
         }
-        Some(neighbors[index % neighbors.len()])
+        let target = index % count;
+        let mut seen = 0;
+        for neighbor in 0..self.num_nodes {
+            if self.adjacency[node][neighbor] > 0 {
+                if seen == target {
+                    return Some(neighbor);
+                }
+                seen += 1;
+            }
+        }
+        None
     }
 }
 
