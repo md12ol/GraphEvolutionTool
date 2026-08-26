@@ -1,0 +1,55 @@
+# Publishes documentation/ to GitHub Pages.
+#
+# Deploy-from-a-branch mode is not usable here: it serves only the repository
+# root or /docs, so it would force documentation/ to be renamed. Uploading an
+# artifact keeps the directory where it is.
+#
+# The site needs no build. It is hand-written static HTML with relative links
+# and no external assets, so what Pages serves is the directory as committed.
+
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'documentation/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# Read the tree, mint the deploy token, and nothing else.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A deploy that is already running is not cancelled — a half-finished one
+# leaves the site serving a mix of two commits.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: build and deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check the site's references before publishing it
+        # The same checker CI runs on every pull request. Repeated here because
+        # this job also runs on workflow_dispatch, which can deploy a commit no
+        # pull request ever gated.
+        run: python3 documentation/check_refs.py
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: documentation
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
