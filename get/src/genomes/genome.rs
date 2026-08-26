@@ -5,7 +5,8 @@ use rand::Rng;
 
 use crate::graph::Graph;
 
-// ADD A GENOME STEP 1 — implement this trait for your own type.
+// ADD A GENOME STEP 1 — implement this trait for your own type, in your own
+// module: `genomes/my_genome.rs`.
 //
 //     impl Genome for MyGenome {
 //         type Context = MyContext;

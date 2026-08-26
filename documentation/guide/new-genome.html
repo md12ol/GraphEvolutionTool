@@ -108,12 +108,13 @@ some_dimension = 256</code></pre>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
     <tr><td>1</td><td><code>get/src/genomes/genome.rs:8</code></td>
-        <td>Implement <code>Genome</code> for your type — <code>express</code>,
+        <td>Implement <code>Genome</code> for your type, in your own module
+            (<code>genomes/my_genome.rs</code>) — <code>express</code>,
             <code>crossover</code>, <code>mutate</code>, <code>print</code>, and the
             <code>Context</code> associated type. All of them are required, and <code>mutate</code>
             is where each of your mutation kind's variants is performed.</td></tr>
-    <tr><td>2</td><td><code>get/src/genomes/genome.rs:53</code> and
-        <code>:89</code></td>
+    <tr><td>2</td><td><code>get/src/genomes/genome.rs:54</code> and
+        <code>:90</code></td>
         <td>Declare the <code>Context</code> type your genome named, struct and fields <code>pub</code>,
             and the mutation kind it carries. The enum is what makes the operator selectable from a
             config; a genome that always varies itself the same way needs none.</td></tr>
@@ -151,7 +152,7 @@ impl Genome for MyGenome {
     fn print(&amp;self) -&gt; String { ... }
 }
 
-// step 2a — genomes/genome.rs:53
+// step 2a — genomes/genome.rs:54
 #[derive(Clone, Debug)]
 pub struct MyContext {
     pub num_nodes: usize,
@@ -159,7 +160,7 @@ pub struct MyContext {
     pub mutation: MyMutation,
 }
 
-// step 2b — genomes/genome.rs:89
+// step 2b — genomes/genome.rs:90
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MyMutation {
     #[default]
