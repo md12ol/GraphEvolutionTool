@@ -1,5 +1,5 @@
 //! Steady-state evolution: each mating event breeds two children inside one
-//! drawn scope and replaces two members of that same scope, so most of the
+//! drawn scope and overwrites two members of that same scope, so most of the
 //! population persists between events.
 
 use rand::{Rng, SeedableRng};
@@ -15,72 +15,41 @@ use crate::genomes::Genome;
 
 /// How many parents one mating event breeds from.
 ///
-/// Two, because `Genome::crossover` recombines a pair. Not configurable: a
-/// third parent has nowhere to enter the trait.
+/// `mating_event` reads exactly two, so raising this widens the selection call
+/// and silently discards the extra parents.
 pub const PARENTS_PER_EVENT: usize = 2;
 
 /// How many individuals one mating event overwrites.
 ///
-/// Two, because recombination yields two children and steady-state keeps both —
-/// discarding one would waste half of every crossover.
+/// Raising this panics mid-event: a crossover yields two children and there is
+/// no third to fill the extra slot.
 pub const REPLACED_PER_EVENT: usize = 2;
 
-/// Smallest scope keeping the parents and the replaced disjoint.
-///
-/// Derived from the two counts above rather than written down: at three the
-/// scope's best still survives but the second parent is also replaced, and at
-/// two both parents are overwritten by their own children, so the scope's best
-/// is not carried forward and the strategy stops being self-elitist.
-///
-/// `Config::validate_evolution_and_selection` reads this so the config error and
-/// the construction backstop cannot drift apart.
+/// Smallest scope steady-state accepts. Below it a scope cannot hold the
+/// parents and the replaced side by side, so some parent is necessarily among
+/// the individuals its own children overwrite.
 pub const MIN_SCOPE_SIZE: usize = PARENTS_PER_EVENT + REPLACED_PER_EVENT;
 
-/// Evolves a population one mate-and-replace event at a time for a fixed number
-/// of mating events.
+/// Evolves a population one mate-and-replace event at a time, for a fixed
+/// number of mating events.
 pub struct SteadyStateEvolver<G: Genome> {
     shared: SharedEvolutionContext<G>,
     context: SteadyStateContext,
     population: Vec<G>,
     history: Vec<GenerationStats>,
-    /// Reused across events so a 100,000-event run allocates one scope, not one
-    /// per event.
     scope_buffer: Vec<usize>,
 }
 
 impl<G: Genome> SteadyStateEvolver<G> {
-    /// Perform one mating event.
+    /// Run one mating event.
     ///
-    /// Draws one scope of distinct individuals, breeds two parents from it into
-    /// two children, and overwrites two of its members. The scope's best is
-    /// never among the replaced, so the population's best is never discarded and
-    /// no explicit elitism is needed.
+    /// A child takes its slot even if it scores worse than what it displaces,
+    /// and steady-state adds no elitism of its own: whether the best survives is
+    /// [`Replacement`](super::replacement::Replacement)'s to decide.
     ///
-    /// Breeding goes through [`breed_pair`](super::common::breed_pair), which
-    /// owns the crossover roll and both mutation rolls, so the two strategies
-    /// cannot disagree about what they mean or draw them in a different order.
-    ///
-    /// Replacement is unconditional: a child takes its slot even if it scores
-    /// worse than what it displaces.
-    ///
-    /// # Only the two children are scored, and an unreplaced score is frozen
-    ///
-    /// Nothing else in the population is re-evaluated, so an individual keeps
-    /// the number it was born with until something overwrites it — which over
-    /// 100,000 events on a population of 100 can be thousands of events. Under
-    /// a stochastic objective that number is one sample, and the error is
-    /// self-reinforcing: a lucky score makes an individual likelier to be
-    /// selected *and* less likely to be replaced.
-    ///
-    /// **This is intended for now, and it is a cost decision.** Rescoring the
-    /// whole population per event is the `O(population)` work that drawing a
-    /// scope exists to avoid, and against a Python-backed objective it is one
-    /// FFI hop per individual per event. The wanted change is the narrow one —
-    /// rescore the two parents this event selected — and it is deliberately not
-    /// in this release, because it alters the trajectory of every seeded run
-    /// that already exists. Generational takes the opposite trade and rescores
-    /// its elites every generation; the difference is real and neither side of
-    /// it is an oversight.
+    /// Only the children are scored, so every other individual keeps the score
+    /// it was born with — a lucky one is both likelier to breed and harder to
+    /// replace.
     fn mating_event<F, R>(&mut self, fitness: &F, fitnesses: &mut [f64], rng: &mut R)
     where
         F: Fitness,
@@ -100,13 +69,9 @@ impl<G: Genome> SteadyStateEvolver<G> {
 
         breed_pair(&mut first, &mut second, &self.shared, rng);
 
-        // Scoring both children in one batch rather than individually halves the
-        // FFI hops a Python-backed objective pays per event.
         let children = [first, second];
         let (_, scores) = express_and_score(&children, &self.shared.genome_context, fitness);
 
-        // Same scope as the parents: that is what keeps the scope's best out of
-        // the replaced set whatever scheme picked them.
         let worst =
             self.context
                 .replacement
@@ -120,24 +85,18 @@ impl<G: Genome> SteadyStateEvolver<G> {
         }
     }
 
-    /// Run every mating event, logging one row per "generation equivalent" —
-    /// every `population_size` events. Row 0 is already in place, seeded by
-    /// [`Evolver::run`] from the starting population.
+    /// Run every mating event, logging one row every `population_size` events.
     ///
-    /// The interval keeps a steady-state log comparable to a generational one
-    /// and stops a 100,000-event run from producing a 100,000-row history. The
-    /// row at iteration 0 is what makes a log self-contained: without it there
-    /// is no way to see where a run started, and a run shorter than one interval
-    /// would produce nothing at all.
-    ///
-    /// So `history.len()` is `num_mating_events / population_size + 1`.
+    /// Row 0 is already in place, seeded by [`Evolver::run`] from the starting
+    /// population, so `history.len()` ends at
+    /// `num_mating_events / population_size + 1`.
     fn evolve<F, R>(&mut self, fitness: &F, fitnesses: &mut [f64], rng: &mut R)
     where
         F: Fitness,
         R: Rng + ?Sized,
     {
-        // Non-zero: `new` asserts the population is at least MIN_SCOPE_SIZE,
-        // and steady-state only ever replaces individuals, never removes them.
+        // Non-zero by the time the `%` below runs: `mating_event` draws a scope
+        // first, and an empty population is rejected there.
         let log_interval = self.population.len();
 
         for event in 1..=self.context.num_mating_events {
@@ -151,18 +110,9 @@ impl<G: Genome> SteadyStateEvolver<G> {
 
     /// Package the best individual and the accumulated history into an outcome.
     ///
-    /// Expresses the winner once here rather than tracking graphs through every
-    /// event, which would mean keeping a `Graph` per individual alive for the
-    /// whole run to save a single expression at the end. Generational does the
-    /// opposite — it `swap_remove`s the winner from the graphs its final scoring
-    /// pass already built — because it scores everyone every generation and so
-    /// has them to hand.
-    ///
-    /// `direction` is stored, not applied: the outcome leaves here in engine
-    /// orientation and the boundary converts it once. Spec §5.1.
+    /// `direction` is stored, not applied: the fitnesses leave here in engine
+    /// orientation — lower is better — and the boundary converts them once.
     fn outcome(&mut self, fitnesses: &[f64], direction: Direction) -> EvolutionOutcome<G> {
-        // Non-empty: the population is built at construction and every mating
-        // event replaces two members rather than removing any.
         let best = best_index(fitnesses);
         let best_genome = self.population[best].clone();
 
@@ -171,8 +121,6 @@ impl<G: Genome> SteadyStateEvolver<G> {
             best_fitness_engine: fitnesses[best],
             direction,
             best_genome,
-            // mem::take moves history out and leaves an empty Vec in its
-            // place, so `self` stays valid without cloning the whole log.
             history: std::mem::take(&mut self.history),
         }
     }
@@ -186,11 +134,10 @@ impl<G: Genome> Evolver<G> for SteadyStateEvolver<G> {
         type_context: Self::TypeContext,
         population: Vec<G>,
     ) -> Self {
-        // Backstop. The config layer rejects these first, but the evolver is
-        // constructible directly (tests, embedding), and checking here rather
-        // than at the first mating event avoids a mid-run failure. A global
-        // scope needs neither check: it is every individual, so it is large
-        // enough whenever the population is.
+        // The config layer rejects this first; this catches direct construction.
+        // `Scope::Global` is unchecked here, so a population below
+        // `MIN_SCOPE_SIZE` reaches the run and every parent is overwritten by
+        // its own children.
         if let Scope::RandomSubset { size } = shared.scope {
             assert!(
                 size >= MIN_SCOPE_SIZE,
@@ -220,14 +167,9 @@ impl<G: Genome> Evolver<G> for SteadyStateEvolver<G> {
     fn run<F: Fitness>(&mut self, fitness: &F, seed: u64) -> EvolutionOutcome<G> {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
 
-        // The graphs are dropped rather than kept: steady-state re-expresses the
-        // winner in `outcome`, so holding a `Graph` per individual for the whole
-        // run would buy one expression at the end.
         let (_, mut fitnesses) =
             express_and_score(&self.population, &self.shared.genome_context, fitness);
 
-        // Row 0 is seeded here, beside the scoring it summarizes, for the same
-        // reason and in the same place as generational's.
         self.history.clear();
         self.history.push(generation_stats(0, &fitnesses));
 
