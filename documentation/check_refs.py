@@ -26,7 +26,7 @@ import re
 import sys
 
 MOD = {
-    "documentation/guide/new-genome.html": "get/src/genomes/mod.rs",
+    "documentation/guide/new-genome.html": "get/src/genomes.rs",
     "documentation/guide/new-evolver.html": "get/src/evolver.rs",
 }
 CHAIN = {
