@@ -84,17 +84,17 @@ radius = 3</code></pre>
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/evolver/scope.rs:49</code></td>
+    <tr><td>1</td><td><code>get/src/evolver/scope.rs:12</code></td>
         <td>the variant, and whatever it needs to locate a slice</td></tr>
-    <tr><td>2</td><td><code>get/src/evolver/scope.rs:103</code></td>
+    <tr><td>2</td><td><code>get/src/evolver/scope.rs:52</code></td>
         <td>the arm filling the buffer with your indices</td></tr>
     <tr><td>3</td><td><code>get/src/config.rs:138</code></td>
         <td>the variant a user names under <code>[scope]</code>, plus any constraint on it</td></tr>
     <tr><td>4</td><td><code>get/src/dispatch.rs:939</code></td>
         <td>the arm mapping that config variant onto the engine one</td></tr>
-    <tr><td>5</td><td><code>get/src/py_config.rs:264</code> and <code>:876</code></td>
+    <tr><td>5</td><td><code>get/src/py_config.rs:188</code> and <code>:667</code></td>
         <td>the Python mirror — optional</td></tr>
-    <tr><td>6</td><td><code>config.example.toml:157</code></td>
+    <tr><td>6</td><td><code>config.example.toml:158</code></td>
         <td>a commented-out block naming your variant — optional, and the step people skip</td></tr>
   </tbody>
 </table>
@@ -106,10 +106,10 @@ radius = 3</code></pre>
   Both are in <code>get/src/evolver/scope.rs</code>. Add the variant, then the arm that draws it:
 </p>
 
-<pre><code class="language-rust">// step 1 — evolver/scope.rs:49
+<pre><code class="language-rust">// step 1 — evolver/scope.rs:12
 Neighbourhood { radius: usize },
 
-// step 2 — evolver/scope.rs:103
+// step 2 — evolver/scope.rs:52
 Scope::Neighbourhood { radius } =&gt; {
     let centre = rng.random_range(0..population_len);
     for offset in 0..=(radius * 2) {
@@ -189,15 +189,15 @@ ScopeConfig::Neighbourhood { radius } =&gt; {
 <p>
   Skipping these makes the scope TOML-only: it still runs from a config file and from the Rust
   library, and a Python caller simply cannot name it. Step 5 is the mirrored variant on
-  <code>PyScopeConfig</code> (<code>get/src/py_config.rs:264</code>) and its arm in the conversion
-  that writes the <code>[scope]</code> table (<code>:876</code>):
+  <code>PyScopeConfig</code> (<code>get/src/py_config.rs:188</code>) and its arm in the conversion
+  that writes the <code>[scope]</code> table (<code>:667</code>):
 </p>
 
-<pre><code class="language-rust">// step 5 — py_config.rs:264
+<pre><code class="language-rust">// step 5 — py_config.rs:188
 #[pyo3(constructor = (radius))]
 Neighbourhood { radius: usize },
 
-// step 5 — py_config.rs:876
+// step 5 — py_config.rs:667
 PyScopeConfig::Neighbourhood { radius } =&gt; {
     table.insert("type".to_string(), Value::String("neighbourhood".to_string()));
     table.insert("radius".to_string(), integer("radius", *radius)?);
@@ -206,7 +206,7 @@ PyScopeConfig::Neighbourhood { radius } =&gt; {
 <p>
   Write <b>your own parameters and no other block's</b> — the arm is building the
   <code>[scope]</code> table alone. Step 6 is a commented-out block in
-  <code>config.example.toml:157</code>.
+  <code>config.example.toml:158</code>.
 </p>
 
 <div class="callout">

@@ -80,12 +80,12 @@ replacement       = { type = "random" }   # or "worst", the default</code></pre>
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/evolver/replacement.rs:20</code></td>
+    <tr><td>1</td><td><code>get/src/evolver/replacement.rs:15</code></td>
         <td>the variant, and any parameters it needs</td></tr>
-    <tr><td>2</td><td><code>get/src/evolver/replacement.rs:70</code></td>
+    <tr><td>2</td><td><code>get/src/evolver/replacement.rs:61</code></td>
         <td>the arm naming who the children overwrite; the match is exhaustive</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:166</code>, <code>get/src/dispatch.rs:961</code>,
-        <code>get/src/py_config.rs:245</code> and <code>:862</code></td>
+    <tr><td>3</td><td><code>get/src/config.rs:165</code>, <code>get/src/dispatch.rs:961</code>,
+        <code>get/src/py_config.rs:172</code> and <code>:643</code></td>
         <td>what a user names under <code>replacement</code>, the arm building it, and the Python
         mirror</td></tr>
   </tbody>
@@ -105,10 +105,10 @@ replacement       = { type = "random" }   # or "worst", the default</code></pre>
   the victims:
 </p>
 
-<pre><code class="language-rust">// step 1 — evolver/replacement.rs:20
+<pre><code class="language-rust">// step 1 — evolver/replacement.rs:15
 Tournament { size: usize },
 
-// step 2 — evolver/replacement.rs:70
+// step 2 — evolver/replacement.rs:61
 Replacement::Tournament { size } =&gt; {
     // draw `size` members, overwrite the least fit of them
 }</code></pre>
@@ -143,17 +143,17 @@ where
 
 <h2>Step 3 — The Three Places a Name Arrives From</h2>
 
-<pre><code class="language-rust">// step 3 — config.rs:166
+<pre><code class="language-rust">// step 3 — config.rs:165
 Tournament { size: usize },
 
 // step 3 — dispatch.rs:961
 ReplacementConfig::Tournament { size } =&gt; Replacement::Tournament { size: *size },
 
-// step 3 — py_config.rs:245   (optional)
+// step 3 — py_config.rs:172   (optional)
 #[pyo3(constructor = (size))]
 Tournament { size: usize },
 
-// step 3 — py_config.rs:862   (optional, the matching arm)
+// step 3 — py_config.rs:643   (optional, the matching arm)
 PyReplacementConfig::Tournament { size } =&gt; {
     table.insert("type".to_string(), Value::String("tournament".to_string()));
     table.insert("size".to_string(), integer("size", *size)?);

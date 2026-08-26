@@ -102,7 +102,7 @@ num_my_events = 500</code></pre>
     <tr><td>2</td><td><code>get/src/config.rs:104</code></td>
         <td>An <code>EvolutionConfig</code> variant carrying your stopping condition, plus any axis
             that is <i>yours</i> rather than every strategy's.</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:841</code></td>
+    <tr><td>3</td><td><code>get/src/config.rs:842</code></td>
         <td><b>Optional.</b> A constraint arm in <code>validate_evolution_and_selection</code>. A
             strategy with nothing to constrain adds no arm.</td></tr>
     <tr><td>4</td><td><code>get/src/dispatch.rs:823</code></td>
@@ -111,9 +111,9 @@ num_my_events = 500</code></pre>
     <tr><td>5</td><td><code>get/src/dispatch.rs:864</code></td>
         <td><b>Usually nothing, and that is the point.</b> <code>erase</code> is generic over the
             genome with no match on strategy inside it.</td></tr>
-    <tr><td>6</td><td><code>get/src/py_config.rs:221</code> and <code>:833</code></td>
+    <tr><td>6</td><td><code>get/src/py_config.rs:155</code> and <code>:623</code></td>
         <td><b>Optional.</b> The Python-side variant, and its <code>to_toml_value</code> arm.</td></tr>
-    <tr><td>7</td><td><code>config.example.toml:154</code></td>
+    <tr><td>7</td><td><code>config.example.toml:155</code></td>
         <td><b>Optional, and the step people skip.</b> A commented-out <code>[evolution]</code>
             block for your strategy. The shipped example is what a user copies from, so a strategy
             missing from it is one most people never find.</td></tr>
@@ -135,7 +135,7 @@ MyStrategy {
     num_my_events: usize,
 },
 
-// step 3 — config.rs:841, optional
+// step 3 — config.rs:842, optional
 EvolutionConfig::MyStrategy { num_my_events, .. } =&gt; {
     if *num_my_events == 0 {
         return Err(invalid("num_my_events", "must be at least 1"));
@@ -180,13 +180,13 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 
 <p>
   Leaving step 6 out costs nothing elsewhere; the strategy is then configurable from a TOML file but
-  absent from the Python API. The variant goes at <code>get/src/py_config.rs:221</code> and its
-  <code>to_toml_value</code> arm at <code>:833</code>.
+  absent from the Python API. The variant goes at <code>get/src/py_config.rs:155</code> and its
+  <code>to_toml_value</code> arm at <code>:623</code>.
 </p>
 
 <p>
   Step 7 is a commented-out <code>[evolution]</code> block in
-  <code>config.example.toml:154</code>, beside generational's and steady-state's. <b>It is the step
+  <code>config.example.toml:155</code>, beside generational's and steady-state's. <b>It is the step
   people skip</b>, and it costs nothing mechanically — the example file is simply what a user copies
   from, so a strategy missing from it is one most people never find. The test suite parses and
   validates that file, so a block that does not parse fails the build rather than a user's

@@ -106,20 +106,20 @@ pressure = 1.8</code></pre>
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/evolver/common.rs:73</code></td>
+    <tr><td>1</td><td><code>get/src/evolver/common.rs:75</code></td>
         <td>A variant on <code>enum Selection</code>, carrying any parameters the scheme reads out
             of the config.</td></tr>
-    <tr><td>2</td><td><code>get/src/evolver/common.rs:157</code></td>
+    <tr><td>2</td><td><code>get/src/evolver/common.rs:159</code></td>
         <td>The arm in <code>Selection::pick</code> that actually chooses parents.</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:186</code></td>
+    <tr><td>3</td><td><code>get/src/config.rs:187</code></td>
         <td>The mirrored variant on <code>enum SelectionConfig</code> — this is the one whose name
             becomes <code>type = "roulette"</code>.</td></tr>
-    <tr><td>4</td><td><code>get/src/dispatch.rs:979</code></td>
+    <tr><td>4</td><td><code>get/src/dispatch.rs:980</code></td>
         <td>The arm mapping your config variant onto the engine variant. Steps 3 and 4 are one
             change split across two files.</td></tr>
-    <tr><td>5</td><td><code>get/src/py_config.rs:292</code> and <code>:896</code></td>
+    <tr><td>5</td><td><code>get/src/py_config.rs:205</code> and <code>:691</code></td>
         <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
-    <tr><td>6</td><td><code>config.example.toml:163</code></td>
+    <tr><td>6</td><td><code>config.example.toml:164</code></td>
         <td><b>Optional.</b> A commented-out <code>[selection]</code> block naming your scheme —
             only the scheme's own parameters, since the scope sizes itself.</td></tr>
   </tbody>
@@ -133,10 +133,10 @@ pressure = 1.8</code></pre>
   it:
 </p>
 
-<pre><code class="language-rust">// step 1 — evolver/common.rs:73
+<pre><code class="language-rust">// step 1 — evolver/common.rs:75
 Roulette { pressure: f64 },
 
-// step 2 — evolver/common.rs:157
+// step 2 — evolver/common.rs:159
 Selection::Roulette { pressure } =&gt; {
     let mut parents = Vec::with_capacity(count);
     for _ in 0..count {
@@ -163,10 +163,10 @@ Selection::Roulette { pressure } =&gt; {
 
 <p>One change, two files. The config variant, and the arm that maps it onto the engine variant:</p>
 
-<pre><code class="language-rust">// step 3 — config.rs:186
+<pre><code class="language-rust">// step 3 — config.rs:187
 Roulette { pressure: f64 },
 
-// step 4 — dispatch.rs:979
+// step 4 — dispatch.rs:980
 SelectionConfig::Roulette { pressure } =&gt; {
     Selection::Roulette { pressure: *pressure }
 }</code></pre>
@@ -183,10 +183,10 @@ SelectionConfig::Roulette { pressure } =&gt; {
 <p>
   Leaving these out costs nothing elsewhere; the scheme is then configurable from a TOML file but
   absent from the Python API. Step 5 is the mirrored variant on <code>PySelectionConfig</code>
-  (<code>get/src/py_config.rs:292</code>) and its matching arm (<code>:896</code>). Write
+  (<code>get/src/py_config.rs:205</code>) and its matching arm (<code>:691</code>). Write
   <b>your own parameters and no other block's</b> — the arm is building the
   <code>[selection]</code> table alone. Step 6 is a commented-out block in
-  <code>config.example.toml:163</code>.
+  <code>config.example.toml:164</code>.
 </p>
 
 <div class="callout">

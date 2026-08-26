@@ -250,18 +250,18 @@ impl Fitness for EdgeBudget {
   <tbody>
     <tr><td>1</td><td><code>get/src/fitness.rs:394</code></td>
         <td>implement the trait, and validate the objective's inputs in its constructor</td></tr>
-    <tr><td>2</td><td><code>get/src/config.rs:465</code>, <code>:491</code> and <code>:1083</code></td>
+    <tr><td>2</td><td><code>get/src/config.rs:466</code>, <code>:492</code> and <code>:1084</code></td>
         <td>the config variant, its type name, and its validation arm</td></tr>
     <tr><td>3</td><td><code>get/src/dispatch.rs:219</code></td>
         <td>the arm turning the variant into a boxed objective</td></tr>
-    <tr><td>4</td><td><code>get/src/py_config.rs:482</code> and <code>:706</code></td>
+    <tr><td>4</td><td><code>get/src/py_config.rs:501</code> and <code>:501</code></td>
         <td>the Python variant and its attribute paths — optional</td></tr>
     <tr><td>5</td><td><code>config.example.toml:87</code></td>
         <td>an example block, if the objective ships</td></tr>
-    <tr><td>6</td><td><code>get/src/dispatch.rs:1152</code></td>
+    <tr><td>6</td><td><code>get/src/dispatch.rs:1153</code></td>
         <td>a helper returning the objective's <code>[fitness]</code> block — skippable, see
             below</td></tr>
-    <tr><td>7</td><td><code>get/src/dispatch.rs:1186</code></td>
+    <tr><td>7</td><td><code>get/src/dispatch.rs:1187</code></td>
         <td>the test case asserting the boxed objective reports its own direction</td></tr>
   </tbody>
 </table>
@@ -324,13 +324,13 @@ impl Fitness for MyObjective {
 
 <p>All in <code>get/src/config.rs</code>. The variant, its name, and its constraints:</p>
 
-<pre><code class="language-rust">// step 2a — config.rs:465   the variant a user selects
+<pre><code class="language-rust">// step 2a — config.rs:466   the variant a user selects
 MyObjective { threshold: f64 },
 
-// step 2b — config.rs:491   the string `[fitness] type` is written as
+// step 2b — config.rs:492   the string `[fitness] type` is written as
 FitnessConfig::MyObjective { .. } =&gt; "my_objective",
 
-// step 2c — config.rs:1083  the validation arm, if anything can be wrong
+// step 2c — config.rs:1084  the validation arm, if anything can be wrong
 FitnessConfig::MyObjective { threshold } =&gt; {
     if !threshold.is_finite() {
         return Err(invalid("threshold", "must be finite"));
@@ -386,11 +386,11 @@ FitnessConfig::MyObjective { threshold } =&gt; {
 
 <h2>Steps 4 and 5 — Python and the Example, Both Optional</h2>
 
-<pre><code class="language-rust">// step 4 — py_config.rs:482   the Python-side variant
+<pre><code class="language-rust">// step 4 — py_config.rs:501   the Python-side variant
 #[pyo3(constructor = (threshold))]
 MyObjective { threshold: f64 },
 
-// step 4 — py_config.rs:706   an attribute path per validated field
+// step 4 — py_config.rs:501   an attribute path per validated field
 "threshold" =&gt; Some("config.fitness.threshold"),</code></pre>
 
 <p>
@@ -435,7 +435,7 @@ MyObjective { threshold: f64 },
 </table>
 </div>
 
-<pre><code class="language-rust">// step 6 — dispatch.rs:1152   beside `sir_block` and `struct_match_block`
+<pre><code class="language-rust">// step 6 — dispatch.rs:1153   beside `sir_block` and `struct_match_block`
 fn my_objective_block(threshold: f64) -> String {
     format!("[fitness]\ntype = \"my_objective\"\nthreshold = {threshold}\n")
 }</code></pre>
@@ -447,7 +447,7 @@ fn my_objective_block(threshold: f64) -> String {
 
 <h2>Step 7 — The Test That Catches a Silent Failure</h2>
 
-<pre><code class="language-rust">// step 7 — dispatch.rs:1186   one entry in the existing `cases` array
+<pre><code class="language-rust">// step 7 — dispatch.rs:1187   one entry in the existing `cases` array
 let cases = [
     (sir_block("epi_spread", ""), Direction::Maximize),
     (sir_block("epi_length", ""), Direction::Maximize),
