@@ -110,9 +110,10 @@ some_dimension = 256</code></pre>
     <tr><td>1</td><td><code>get/src/genomes/genome.rs:8</code></td>
         <td>Implement <code>Genome</code> for your type — <code>express</code>,
             <code>crossover</code>, <code>mutate</code>, <code>print</code>, and the
-            <code>Context</code> associated type. All five are required.</td></tr>
-    <tr><td>2</td><td><code>get/src/genomes/genome.rs:49</code> and
-        <code>:85</code></td>
+            <code>Context</code> associated type. All of them are required, and <code>mutate</code>
+            is where each of your mutation kind's variants is performed.</td></tr>
+    <tr><td>2</td><td><code>get/src/genomes/genome.rs:53</code> and
+        <code>:89</code></td>
         <td>Declare the <code>Context</code> type your genome named, struct and fields <code>pub</code>,
             and the mutation kind it carries. The enum is what makes the operator selectable from a
             config; a genome that always varies itself the same way needs none.</td></tr>
@@ -142,11 +143,15 @@ impl Genome for MyGenome {
 
     fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph { ... }
     fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R) { ... }
-    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, context: &amp;Self::Context, rng: &amp;mut R) { ... }
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, context: &amp;Self::Context, rng: &amp;mut R) {
+        match context.mutation {
+            MyMutation::SomeVariant =&gt; { /* exactly one change to self */ }
+        }
+    }
     fn print(&amp;self) -&gt; String { ... }
 }
 
-// step 2a — genomes/genome.rs:49
+// step 2a — genomes/genome.rs:53
 #[derive(Clone, Debug)]
 pub struct MyContext {
     pub num_nodes: usize,
@@ -154,7 +159,7 @@ pub struct MyContext {
     pub mutation: MyMutation,
 }
 
-// step 2b — genomes/genome.rs:85
+// step 2b — genomes/genome.rs:89
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MyMutation {
     #[default]

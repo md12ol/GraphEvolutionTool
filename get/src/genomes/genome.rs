@@ -12,7 +12,11 @@ use crate::graph::Graph;
 //
 //         fn express(&self, context: &Self::Context) -> Graph { ... }
 //         fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) { ... }
-//         fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R) { ... }
+//         fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R) {
+//             match context.mutation {
+//                 MyMutation::SomeVariant => { /* exactly one change to self */ }
+//             }
+//         }
 //         fn print(&self) -> String { ... }
 //     }
 
