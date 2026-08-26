@@ -49,20 +49,13 @@ pub trait Genome: Clone + Send + Sync {
 // ADD A GENOME STEP 2 — declare the context your genome named, beside the other
 // two: the run-level configuration `express` reads, one value shared by every
 // individual for the whole run. Struct and fields `pub`, and if variation can
-// change it, it belongs on the genome instead. Declare the mutation kind it
-// names here too, unless `mutate` picks its own way of varying the genome.
+// change it, it belongs on the genome instead.
 //
 //     #[derive(Clone, Debug)]
 //     pub struct MyContext {
 //         pub num_nodes: usize,
 //         pub some_setting: f64,
 //         pub mutation: MyMutation,
-//     }
-//
-//     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-//     pub enum MyMutation {
-//         #[default]
-//         SomeVariant,
 //     }
 
 /// Configuration used when an edge-edit genome modifies an initial graph.
@@ -88,6 +81,18 @@ pub struct SdaContext {
     pub transition_vs_response_rate: f64,
     pub mutation: SdaMutation,
 }
+
+// ADD A GENOME STEP 2 — declare the mutation kind your context carries, beside
+// the other two. This is what makes the operator selectable from a config:
+// `mutate` matches on `context.mutation`, one arm per variant, and steps 4 to 6
+// mirror the enum into `config.rs` and map it back in `dispatch.rs`. A genome
+// that always varies itself the same way needs no enum at all.
+//
+//     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+//     pub enum MyMutation {
+//         #[default]
+//         SomeVariant,
+//     }
 
 /// Which mutation an edge-edit genome performs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

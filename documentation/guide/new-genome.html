@@ -111,10 +111,11 @@ some_dimension = 256</code></pre>
         <td>Implement <code>Genome</code> for your type — <code>express</code>,
             <code>crossover</code>, <code>mutate</code>, <code>print</code>, and the
             <code>Context</code> associated type. All five are required.</td></tr>
-    <tr><td>2</td><td><code>get/src/genomes/genome.rs:49</code></td>
+    <tr><td>2</td><td><code>get/src/genomes/genome.rs:49</code> and
+        <code>:85</code></td>
         <td>Declare the <code>Context</code> type your genome named, struct and fields <code>pub</code>,
-            and the mutation kind it carries — unless <code>mutate</code> picks its own way of
-            varying the genome.</td></tr>
+            and the mutation kind it carries. The enum is what makes the operator selectable from a
+            config; a genome that always varies itself the same way needs none.</td></tr>
     <tr><td>3</td><td><code>get/src/genomes.rs:8</code></td>
         <td><code>pub mod</code> your module, then extend both re-export lists.</td></tr>
     <tr><td>4</td><td><code>get/src/config.rs:245</code> and <code>:951</code></td>
@@ -145,7 +146,7 @@ impl Genome for MyGenome {
     fn print(&amp;self) -&gt; String { ... }
 }
 
-// step 2 — genomes/genome.rs:49
+// step 2a — genomes/genome.rs:49
 #[derive(Clone, Debug)]
 pub struct MyContext {
     pub num_nodes: usize,
@@ -153,6 +154,7 @@ pub struct MyContext {
     pub mutation: MyMutation,
 }
 
+// step 2b — genomes/genome.rs:85
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MyMutation {
     #[default]
