@@ -22,22 +22,8 @@ pub struct GenerationalEvolver<G: Genome> {
 }
 
 impl<G: Genome> GenerationalEvolver<G> {
-    /// Produce the next generation: copy `context.elite_count` elites forward,
-    /// then fill the rest by selecting parents and breeding them through
-    /// [`breed_pair`](super::common::breed_pair).
-    ///
-    /// That helper owns every random draw involved in making a child — the
-    /// crossover roll and both mutation rolls — so this strategy and
-    /// steady-state cannot disagree about what they mean or draw from the RNG in
-    /// a different order. None of those rolls is made here.
-    ///
-    /// Takes `fitnesses` for the population it is replacing and does no scoring:
-    /// the whole next generation is scored in one batch by [`Evolver::run`].
-    ///
-    /// **Odd slot count.** Crossover yields two children, but
-    /// `population_size - elite_count` may be odd. The last pair contributes one
-    /// child and the other is discarded; only the final pair is ever affected.
-    /// Spec §6.2.
+    /// Produce the next generation: `context.elite_count` elites copied
+    /// forward, the rest bred from selected parents.
     fn advance_generation<R>(&mut self, fitnesses: &[f64], rng: &mut R)
     where
         R: Rng + ?Sized,
@@ -45,9 +31,6 @@ impl<G: Genome> GenerationalEvolver<G> {
         let population_size = self.population.len();
         let mut next = Vec::with_capacity(population_size);
 
-        // Elites first, copied forward unchanged. Ranking uses the same
-        // comparator selection does, so "best" means one thing engine-wide.
-        // They are not exempt from being rescored next generation — see `run`.
         if self.context.elite_count > 0 {
             let mut by_rank: Vec<usize> = (0..population_size).collect();
             by_rank.sort_by(|&a, &b| rank(fitnesses, a, b));
@@ -56,9 +39,6 @@ impl<G: Genome> GenerationalEvolver<G> {
             }
         }
 
-        // Then breed the rest. Selection samples with replacement, so a pair can
-        // be one individual and its own clone — crossover then does nothing and
-        // only mutation moves the child.
         let mut scope = Vec::with_capacity(population_size);
         while next.len() < population_size {
             self.shared
@@ -71,9 +51,8 @@ impl<G: Genome> GenerationalEvolver<G> {
 
             breed_pair(&mut first, &mut second, &self.shared, rng);
 
-            // Both children are always bred, so a pass costs the same RNG
-            // whether or not its second child is kept. On an odd fill count the
-            // final pass discards `second`.
+            // Both children are bred whether or not the second is kept, so an
+            // odd fill count consumes the same randomness as an even one.
             next.push(first);
             if next.len() < population_size {
                 next.push(second);
@@ -83,38 +62,26 @@ impl<G: Genome> GenerationalEvolver<G> {
         self.population = next;
     }
 
-    /// Package the best individual and the accumulated history into an outcome.
+    /// Package the best of the final population, and the accumulated history,
+    /// into an outcome. Drains `self.history`.
     ///
-    /// Moves the winner's graph out of the ones the final scoring pass built
-    /// rather than re-expressing it — generational scores every individual every
-    /// generation, so the graph already exists. Steady-state re-expresses instead,
-    /// because it never has a full set of graphs to take one from. Spec §6.2.
-    ///
-    /// The winner is the best of the **final** population, which is the same
-    /// individual the last history row reports, and the same rule steady-state's
-    /// `outcome` uses.
-    ///
-    /// `direction` is stored, not applied: the outcome leaves here in engine
-    /// orientation and the boundary converts it once. Spec §5.1.
+    /// `graphs` and `fitnesses` must be one scoring pass of the same
+    /// population: the winner's graph is taken from `graphs` by index, so a
+    /// stale pair reports someone else's graph. `direction` is stored, not
+    /// applied — the outcome leaves lower-is-better.
     fn outcome(
         &mut self,
         mut graphs: Vec<Graph>,
         fitnesses: &[f64],
         direction: Direction,
     ) -> EvolutionOutcome<G> {
-        // Non-empty: `new` asserts elite_count is smaller than the population,
-        // and generational replaces individuals without ever removing one.
         let best = best_index(fitnesses);
 
         EvolutionOutcome {
             best_genome: self.population[best].clone(),
-            // swap_remove moves the winner out without cloning; the rest of the
-            // graphs are dropped here anyway.
             best_graph: graphs.swap_remove(best),
             best_fitness_engine: fitnesses[best],
             direction,
-            // mem::take moves history out and leaves an empty Vec in its place,
-            // so `self` stays valid without cloning the whole log.
             history: std::mem::take(&mut self.history),
         }
     }
@@ -123,20 +90,13 @@ impl<G: Genome> GenerationalEvolver<G> {
 impl<G: Genome> Evolver<G> for GenerationalEvolver<G> {
     type TypeContext = GenerationalContext;
 
+    /// Panics unless `elite_count` is smaller than the population: otherwise
+    /// every slot is an elite and nothing breeds.
     fn new(
         shared: SharedEvolutionContext<G>,
         type_context: Self::TypeContext,
         population: Vec<G>,
     ) -> Self {
-        // Backstop. The config layer should reject this before we get here, but
-        // the evolver is constructible directly (tests, embedding), so it checks
-        // rather than trusting its caller. The failure it catches is the silent
-        // kind: elites fill every slot, nothing breeds, and the run is a fixed
-        // point that reads as a broken fitness function.
-        //
-        // There is deliberately no matching scope-size assert as steady-state
-        // has: generational's scope is the whole population and its tournaments
-        // sample with replacement, so no size can fail to draw.
         assert!(
             type_context.elite_count < population.len(),
             "elite_count {} must be smaller than the population of {}: every \
@@ -155,17 +115,12 @@ impl<G: Genome> Evolver<G> for GenerationalEvolver<G> {
 
     /// Score, log, advance — `num_generations` times, then report the best.
     ///
-    /// The initial population is scored and logged as **generation 0**, matching
-    /// steady-state's iteration-0 row, so the two strategies' histories share an
-    /// axis and a zero-generation run still says where it began. So
-    /// `history.len() == num_generations + 1`. Spec §6.2, §6.4.
+    /// The starting population is scored and logged as generation 0, so
+    /// `history.len() == num_generations + 1`.
     ///
-    /// **Every individual is rescored every generation, elites included.** They
-    /// are copied forward unchanged, not exempted from scoring: under a
-    /// stochastic objective an elite's number moves while its genome does not,
-    /// and that is correct — the new number is a fresh sample of the same
-    /// individual, where keeping the old one would let a lucky draw persist.
-    /// Spec §6.2, §5.2.
+    /// Every individual is rescored every generation, elites included: under a
+    /// stochastic objective an elite's recorded fitness moves while its genome
+    /// does not.
     fn run<F: Fitness>(&mut self, fitness: &F, seed: u64) -> EvolutionOutcome<G> {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
 

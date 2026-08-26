@@ -1,6 +1,8 @@
+//! What each edge-edit opcode does to the graph.
+
 use crate::graph::Graph;
 
-/// The nine operations encoded by an edge-edit gene.
+/// The operations encoded by an edge-edit gene.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum GraphOperation {
     Toggle,
@@ -15,6 +17,8 @@ pub(super) enum GraphOperation {
 }
 
 impl GraphOperation {
+    /// These numbers are gene data, not an ordering: renumbering one silently
+    /// redecodes every existing genome, saved result and `IDENTITY_GENE`.
     pub(super) fn from_opcode(opcode: u8) -> Option<Self> {
         match opcode {
             0 => Some(Self::Toggle),
@@ -80,7 +84,7 @@ impl GraphOperation {
         second_neighbor_index: usize,
     ) -> Option<(usize, usize)> {
         let first_neighbor = graph.get_neighbor_at_index(start, first_neighbor_index)?;
-        if graph.degree(first_neighbor) < 2 {
+        if graph.neighbor_count(first_neighbor) < 2 {
             return None;
         }
         let endpoint = graph.get_neighbor_at_index(first_neighbor, second_neighbor_index)?;
@@ -145,6 +149,8 @@ impl GraphOperation {
             return;
         };
 
+        // `add_edge` fails at the multiplicity cap; removing the old edge
+        // anyway would lose an edge copy.
         if !graph.add_edge(start, endpoint) {
             return;
         }
@@ -158,16 +164,12 @@ impl GraphOperation {
         first_neighbor_index: usize,
         second_neighbor_index: usize,
     ) {
-        // Reject anything that can't yield two disjoint edges to swap: too few
-        // nodes, an out-of-range or repeated vertex, degree <= 2 (leaves no
-        // spare edge once one is removed), or the two vertices already
-        // adjacent to each other.
         if graph.num_nodes < 4
             || first_vertex >= graph.num_nodes
             || second_vertex >= graph.num_nodes
             || first_vertex == second_vertex
-            || graph.degree(first_vertex) <= 2
-            || graph.degree(second_vertex) <= 2
+            || graph.neighbor_count(first_vertex) <= 2
+            || graph.neighbor_count(second_vertex) <= 2
             || graph.has_edge(first_vertex, second_vertex)
         {
             return;
@@ -183,8 +185,8 @@ impl GraphOperation {
             return;
         };
 
-        // Reject if the swap would collide two of the four vertices, or would
-        // create an edge that already exists.
+        // `has_edge(first_neighbor, second_neighbor)` below is an anti-clustering
+        // guard, not a would-be edge: the swap never creates that pair.
         let mut quartet = [first_vertex, first_neighbor, second_vertex, second_neighbor];
         quartet.sort_unstable();
         if quartet.windows(2).any(|pair| pair[0] == pair[1])

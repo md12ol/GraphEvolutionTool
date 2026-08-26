@@ -1,29 +1,39 @@
-// Doc links are load-bearing: a public doc that links a private item renders a
-// dead link, and nothing failed when that count grew from 2 to 10 unnoticed.
-// Denying it here rather than in CI means it fails on the machine that wrote it.
+//! Evolve graphs with a genetic algorithm, from Rust or from Python.
+//!
+//! A run is described entirely by a `config.toml` — population and network
+//! size, the evolution strategy, the genome representation, and the objective
+//! to optimize — and three entry points read that same document, so a run
+//! means the same thing whichever one drives it:
+//!
+//! - [`run_from_toml`] and [`run_many_from_toml`], for a Rust caller, with no
+//!   Python interpreter involved.
+//! - The `get-run` binary, which is those two behind a command line.
+//! - [`GraphEvolver`], which is also the `get` Python extension module: built
+//!   from a config file, or from config objects assembled in Python.
+//!
+//! A fourth route bypasses config entirely: the engine types in [`evolver`],
+//! [`genomes`], [`fitness`] and [`graph`], for a caller driving their own loop
+//! with a native objective and no `Config`, no TOML, and no Python involved —
+//! see `examples/library_route.rs`.
+//!
+//! Fitness reaches a caller **as-measured** — the units and sign the objective
+//! returned. The lower-is-better form the engine compares on is internal and
+//! never leaves it.
+
+// Denied here rather than in CI, so a doc link into a private item fails on the
+// machine that wrote it.
 #![deny(rustdoc::private_intra_doc_links, rustdoc::redundant_explicit_links)]
 
-// Crate-internal: nothing outside can use a parsed `Config`, because the only
-// thing that consumes one is `dispatch`, which is private. A caller who wants
-// to run from a TOML file goes through `GraphEvolver` or `run_from_toml`.
 mod config;
-// Crate-internal: the config → concrete-type layer `run` dispatches through.
-// Not `pub`, because it is machinery rather than API — the Rust route uses the
-// engine types directly (spec §5.3).
 mod dispatch;
 pub mod evolver;
 pub mod fitness;
 pub mod genomes;
 pub mod graph;
 pub mod graph_io;
-// Crate-internal: the Python config builder. pyo3 needs these types nameable
-// from the crate root to register them, not publicly reachable from Rust.
 mod py_config;
 pub mod py_result;
 pub mod sir;
-// Structural graph statistics. Public for the same reason as `sir`: it is a
-// domain computation objectives are built on, and a caller who writes their own
-// fitness function needs the same measurements the built-in ones use.
 pub mod stats;
 
 use crate::config::{Config, ConfigError, FitnessConfig, GenomeConfig};
@@ -45,29 +55,19 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// One graph as a folder load hands it back: the file it was read from, and its
-/// edges as `(u, v, multiplicity)`.
+/// One graph as a folder load hands it back: the file it was read from, its
+/// node count, and its edges as `(u, v, multiplicity)`.
 type NamedGraph = (String, usize, Vec<(usize, usize, u32)>);
 
 /// Raise every warning a load produced through Python's `warnings` machinery.
 ///
-/// `source` names what produced them — a file path, or `base graph` for a
-/// setter call — since a folder of reference graphs can warn about several files
-/// in one call and the user needs to know which.
-///
-/// Warnings go here rather than to stdout so a caller can silence, capture or
-/// promote them to errors with `warnings.simplefilter`, which is where a Python
-/// user already looks. `stacklevel` is 2, so the message points at the line that
-/// called the setter rather than at this function.
+/// `stacklevel` is 2, so a message points at the line that called the setter
+/// rather than at this function.
 fn emit_load_warnings(py: Python<'_>, source: &str, warnings: &[LoadWarning]) -> PyResult<()> {
     let category = py.get_type::<PyUserWarning>();
 
     for warning in warnings {
         let text = format!("{source}: {warning}");
-        // Python's C API takes a NUL-terminated string, and text we formatted
-        // ourselves cannot contain an interior NUL — but the conversion is
-        // fallible, and dropping a warning silently is the failure this whole
-        // path exists to avoid, so it is reported rather than skipped.
         let message = CString::new(text).map_err(|_| {
             PyValueError::new_err("a load warning could not be converted for Python")
         })?;
@@ -78,16 +78,10 @@ fn emit_load_warnings(py: Python<'_>, source: &str, warnings: &[LoadWarning]) ->
     Ok(())
 }
 
-/// Raise every warning a load produced, on whichever route has no GIL to
-/// raise a `UserWarning` on.
+/// Raise every warning a load produced, on either route.
 ///
-/// `struct_match`'s reference-set loader (`dispatch::struct_match_reference`)
-/// is reachable from `GraphEvolver::run_from_toml` (spec §5.3 route 4), which
-/// never acquires the GIL, as well as from the ordinary Python-driven `run`.
-/// `emit_load_warnings` needs a `Python<'_>` token either way, so this is the
-/// one seam both routes call through: `Some(py)` uses it, `None` prints the
-/// same `{source}: {warning}` text to stderr — the only sink route 4 has,
-/// since there is no `warnings.simplefilter` to route it through there.
+/// `Some(py)` raises a `UserWarning`; `None` — the Rust route, which never
+/// acquires the GIL — prints the same text to stderr, the only sink it has.
 pub(crate) fn emit_load_warnings_maybe(
     py: Option<Python<'_>>,
     source: &str,
@@ -106,62 +100,33 @@ pub(crate) fn emit_load_warnings_maybe(
 
 /// Python-facing entry point to the graph-evolution engine.
 ///
-/// Constructed from a `config.toml` path; [`GraphEvolver::run`] dispatches on
-/// the configured evolution strategy, genome representation, and fitness
-/// objective, then returns everything that run produced.
+/// Constructed from a `config.toml` path; `run` dispatches on the configured
+/// evolution strategy, genome representation and fitness objective.
 ///
-/// **It holds no results.** A run's state lives in the
-/// [`PyRunResult`] `run` returns, never on the
-/// evolver — so one evolver is reusable across repeated runs with nothing stale
-/// from the previous one hanging off it.
+/// **It holds no results.** A run's state lives in the `RunResult` that `run`
+/// returns, so one evolver drives repeated runs with nothing stale from the
+/// previous one hanging off it.
 #[pyclass]
 pub struct GraphEvolver {
     config: Config,
-    /// The objective registered by [`GraphEvolver::set_fitness_function`], set
-    /// only when `[fitness] type = "python"`.
-    ///
-    /// Runtime configuration that cannot live in a config file arrives through
-    /// a setter instead (§8): the config *selects* Python, this *is* the
-    /// callable.
+    /// The objective registered by `set_fitness_function`, set only when
+    /// `[fitness] type = "python"`.
     fitness_function: Option<PyFitness>,
-    /// The graph an edge-edit script is applied to, set by
-    /// [`GraphEvolver::set_base_graph`].
-    ///
-    /// A setter rather than a config field for the same reason as the objective
-    /// above: this is either data the caller brought or the output of a previous
-    /// run, and neither belongs in a `config.toml`. `None` means every run starts
-    /// from an empty graph, which is the default.
-    ///
-    /// Unused by SDA, which generates its graph from scratch rather than editing
-    /// one — the setter rejects a call on an SDA-configured evolver instead of
-    /// storing something nothing will read.
+    /// The graph an edge-edit script is applied to. `None` means every run
+    /// starts from an empty graph, which is the default.
     base_graph: Option<Graph>,
-    /// The index the caller's own data starts at, set by whichever file loader
-    /// was called first and `None` until one is.
-    ///
-    /// One value per run, shared by every loader: node 4 means the same node
-    /// whichever file it was read from, and two files disagreeing about where
-    /// counting starts would silently mix two graphs. Everything is shifted to
-    /// 0 on the way in, so nothing inside the engine ever sees another
-    /// indexing; only the evolved graph `run` hands back is shifted here.
+    /// Where the caller's own node numbering starts, declared by whichever
+    /// loader ran first. One per run, shared by every loader: two files
+    /// disagreeing about where counting starts would silently mix two graphs.
     min_node_index: Option<i64>,
     /// The TOML document `config` was parsed from — the run's provenance
     /// record, written alongside its results.
     config_toml: String,
     /// `struct_match`'s reduced reference set, built at most once per evolver.
     ///
-    /// # Why this is cached when the objective itself is not
-    ///
-    /// `objective()` is called once per replicate, and §8.1 requires each
-    /// replicate its *own* objective because an `EpidemicScorer` holds a
-    /// per-run counter that must not be shared. `StructMatch` has no such
-    /// state — it is a pure function of one graph — so what must be fresh is
-    /// the objective, not the reference statistics behind it. Those are
-    /// immutable, and rebuilding them per replicate would re-read the folder
-    /// and re-run an eigendecomposition of every reference graph, `n_runs`
-    /// times, in a phase that logs nothing.
-    ///
-    /// Empty for every other objective, and until the first run.
+    /// Shared across replicates where the objective itself is not: these are
+    /// immutable, and rebuilding them per replicate would re-read the folder and
+    /// re-run an eigendecomposition of every reference graph.
     struct_match_reference: OnceLock<Arc<ReferenceStatistics>>,
 }
 
@@ -170,16 +135,12 @@ impl GraphEvolver {
     /// Load configuration from a `config.toml` file.
     #[new]
     pub fn new(config_path: String) -> PyResult<Self> {
-        // Read separately from `Config::from_toml_str`, rather than through
-        // `Config::from_path`, because the raw text is the provenance record
-        // and `from_path` does not hand it back.
+        // Read here rather than through `Config::from_path`, which does not hand
+        // back the raw text the provenance record needs.
         let text = std::fs::read_to_string(&config_path).map_err(|err| {
             PyValueError::new_err(format!("failed to load config: {}", ConfigError::Io(err)))
         })?;
         let config = Config::from_toml_str(&text)
-            // `{err}`, not `{err:?}`: `ConfigError`'s `Display` names the
-            // offending field and its constraint, which is what spec §7 says a
-            // bad config must reach the user as.
             .map_err(|err| PyValueError::new_err(format!("failed to load config: {err}")))?;
         config
             .validate()
@@ -196,44 +157,17 @@ impl GraphEvolver {
 
     /// Build from configuration assembled in Python, rather than from a file.
     ///
-    /// The config object is rendered to TOML and parsed by exactly the same
-    /// [`Config::from_toml_str`] and [`Config::validate`] the file path above
-    /// goes through — Python is a *builder* for the config format, not a second
-    /// parser of it (spec §8). So this cannot accept a configuration a
-    /// `config.toml` would reject, and both front ends report the same
-    /// constraint in the same words.
+    /// Accepts exactly what a `config.toml` would, and reports a rejection in
+    /// the same words. Every block is its own object — `EvolutionConfig`,
+    /// `ScopeConfig`, `SelectionConfig`, `GenomeConfig`, `FitnessConfig` — and
+    /// all of them are required.
     ///
-    /// ```python
-    /// config = get.Config(
-    ///     population_size=200,
-    ///     network_size=100,
-    ///     crossover_rate=0.9,
-    ///     mutation_rate=0.2,
-    ///     evolution=get.EvolutionConfig.Generational(num_generations=500),
-    ///     selection=get.SelectionConfig.Tournament(tournament_size=5),
-    ///     genome=get.GenomeConfig.EdgeEdit(gene_length=256),
-    ///     fitness=get.FitnessConfig.EpiSpread(
-    ///         sir=get.SirParams(infection_rate=0.5, num_epidemics=30)
-    ///     ),
-    /// )
-    /// evolver = get.GraphEvolver.from_config(config)
-    /// ```
-    ///
-    /// `config.to_toml()` returns the document this parsed, which is the run's
-    /// provenance record: written beside the results, it re-runs verbatim.
-    ///
-    /// # Errors
-    ///
-    /// `ValueError` if the configuration breaks one of spec §7's constraints,
-    /// or if a field is too large for a TOML integer.
+    /// A field too large for a TOML integer is rejected here, which a
+    /// `config.toml` writer never meets.
     #[staticmethod]
     fn from_config(config: &PyConfig) -> PyResult<Self> {
         let text = config.to_toml()?;
 
-        // Parsing its own rendering should not fail, so this reports the text
-        // as well: a failure here is a defect in `py_config`'s emission rather
-        // than anything the user did, and the document is what a bug report
-        // needs.
         let parsed = Config::from_toml_str(&text).map_err(|err| {
             PyValueError::new_err(format!(
                 "the generated config did not parse: {err}. This is a bug in GET, not in \
@@ -241,11 +175,8 @@ impl GraphEvolver {
             ))
         })?;
 
-        // Reported through `config_error_to_py`, which rewrites the field name
-        // `validate` uses — spelled as it appears in the TOML — into the Python
-        // attribute path that produced it. The bare name is right for the file
-        // front end and unhelpful here, where the user never saw a document
-        // (spec §8).
+        // Rewritten into the Python attribute path that produced the field, for
+        // a caller who never saw a TOML document.
         parsed.validate().map_err(|err| config_error_to_py(&err))?;
 
         Ok(Self {
@@ -262,36 +193,22 @@ impl GraphEvolver {
     /// meant to be optimized in.
     ///
     /// `config.toml` only *selects* Python — `[fitness] type = "python"`. The
-    /// callable itself arrives here, and so does its direction, because nothing
-    /// can infer whether a user's function wants its value large or small
-    /// (§5, §8).
+    /// callable itself arrives here, and so does its direction: nothing can
+    /// infer whether a user's function wants its value large or small.
     ///
     /// The callable takes the **whole batch** and returns one float per graph,
-    /// in the same order — see [`crate::fitness::PyFitness`] for the contract
-    /// and why a per-graph callback is not an option:
+    /// in the same order:
     ///
-    /// ```python
-    /// evolver.set_fitness_function(
-    ///     lambda batch: [score(n, edges) for (n, edges) in batch],
-    ///     "maximize",
-    /// )
-    /// ```
+    /// A batch element is `(num_nodes, edges)`, and `direction` is
+    /// `"minimize"` or `"maximize"`.
     ///
-    /// # Errors
-    ///
-    /// `ValueError` if `callable` is not callable, if `direction` is not
-    /// `"minimize"` or `"maximize"`, or if the config did not select Python.
-    /// That last one is the interesting case: accepting a callable the run
-    /// would never consult is indistinguishable, from Python, from having
-    /// registered it successfully.
+    /// Registering a callable when the config did not select Python is a
+    /// `ValueError`, not a silent no-op.
     fn set_fitness_function(
         &mut self,
         callable: &Bound<'_, PyAny>,
         direction: &str,
     ) -> PyResult<()> {
-        // Refused rather than ignored: silently accepting this leaves the user
-        // watching an SIR objective's numbers and wondering why their own
-        // function never runs.
         if !matches!(self.config.fitness, FitnessConfig::Python) {
             return Err(PyValueError::new_err(format!(
                 "[fitness] type is \"{}\", so a registered callable would never be used; \
@@ -307,8 +224,6 @@ impl GraphEvolver {
             )));
         }
 
-        // Spelled out rather than taking a `Direction` enum across the boundary,
-        // so the Python side needs no import to say which way is better.
         let direction = if direction.eq_ignore_ascii_case("minimize") {
             Direction::Minimize
         } else if direction.eq_ignore_ascii_case("maximize") {
@@ -326,81 +241,21 @@ impl GraphEvolver {
     /// Seed an edge-edit run from a graph the caller already has.
     ///
     /// `edges` is `(u, v, multiplicity)` — the same shape `run` hands back as
-    /// `best_edges`, so one run's output feeds the next without reshaping:
+    /// `best_edges`, so one run's output feeds the next without reshaping.
     ///
-    /// ```python
-    /// first = sda_evolver.run(seed=1)
-    /// edge_evolver.set_base_graph(64, first.best_edges)
-    /// second = edge_evolver.run(seed=2)
-    /// ```
+    /// **One run has one numbering.** `min_node_index` is where the caller's
+    /// own numbering starts — pass `1` for 1-indexed edges. Every loader on this
+    /// evolver must declare the same one, and it is what results are shifted
+    /// back into, so they return in the numbering the data arrived in.
     ///
-    /// **`min_node_index` is where the caller's own node numbering starts, and it
-    /// is the same numbering the two file loaders take** — pass `1` for
-    /// 1-indexed edges, and they shift to 0 here exactly as a file's would, so
-    /// nobody has to renumber data by hand to use this setter. It defaults to
-    /// `0`, which is what `best_edges` above is, so the round-trip in that
-    /// example needs no argument.
+    /// **Left unset, every run starts from an empty graph.** Several edit
+    /// opcodes need existing structure to walk, so early generations do little
+    /// until `Add` and `Toggle` have built some. That is self-correcting.
     ///
-    /// **One run has one numbering, and every entry point shares it.** This
-    /// setter, [`set_base_graph_from_file`](GraphEvolver::set_base_graph_from_file)
-    /// and [`load_reference_graphs`](GraphEvolver::load_reference_graphs) all
-    /// declare the same `min_node_index`, and a second call that disagrees with
-    /// the first is rejected rather than mixed in. That numbering is also what
-    /// the evolved graph is shifted back into on the way out, so results return
-    /// in the numbering the data arrived in. Supplying a 0-indexed graph here
-    /// and then a 1-indexed reference set therefore raises, instead of quietly
-    /// handing back indices that match neither.
-    ///
-    /// **Left unset, every run starts from an empty graph** — that is the
-    /// default, and it is worth stating rather than leaving to be discovered:
-    /// five of the nine edit opcodes are inert on an empty graph. `Swap`, `Hop`
-    /// and the three `Local*` all need existing structure to walk, so early
-    /// generations do nothing until `Add`/`Toggle` have built something. That
-    /// is self-correcting and not a defect.
-    ///
-    /// # Errors
-    ///
-    /// `ValueError` if `num_nodes` disagrees with the config's `network_size`,
-    /// if the config selected the SDA genome, if any edge names a node outside
-    /// `min_node_index ..= min_node_index + num_nodes - 1`, is a self-loop, or
-    /// carries a multiplicity above the config's `max_edge_multiplicity` — or if
-    /// a loader on this evolver already declared a different `min_node_index`.
-    /// An out-of-range message names the index as the caller wrote it, not as it
-    /// would be after shifting.
-    ///
-    /// The SDA case is a rejection rather than a no-op because an SDA run
-    /// generates its graph from scratch instead of editing one: storing a base
-    /// graph nothing would ever read is indistinguishable, from Python, from
-    /// having seeded the run successfully.
-    ///
-    /// **The three per-edge checks all reject what [`Graph::set_edge`] would
-    /// absorb**, and that asymmetry is deliberate. `set_edge` returns early on
-    /// a bad endpoint or a self-loop and clamps an over-cap weight, which is
-    /// right for the engine — the edit opcodes decode vertex indices out of a
-    /// random payload and are all no-ops when their preconditions fail, so a
-    /// fallible `set_edge` would turn that into an error path in every one of
-    /// them. Permissiveness that suits engine-generated indices is wrong for
-    /// data a caller handed over.
-    ///
-    /// Each failure is one a caller cannot otherwise see. A node count equal to
-    /// `network_size` does not make the *edges* in range: a caller who takes
-    /// `num_nodes` from their config rather than their data passes the first
-    /// check while every edge above the network size vanishes. A self-loop
-    /// almost always means the indices are wrong — 1-indexed data is the common
-    /// case, and it also lands every surviving edge on the wrong vertex. And a
-    /// graph built under a wider cap would be narrowed silently, evolving
-    /// against a different graph from the one passed in. Nothing downstream
-    /// reads a warning, so all three raise.
-    ///
-    /// # Warnings
-    ///
-    /// A pair given more than once raises a `UserWarning` and the **last**
-    /// occurrence wins. Comparison is canonical — `(2, 5)` and `(5, 2)` are the
-    /// same undirected edge — so writing one both ways round is a repeat, not
-    /// two edges. This is a warning rather than an error because the list still
-    /// describes a graph and the caller may well have meant to overwrite; what
-    /// it must not do is happen in silence, which is what applying the list in
-    /// order used to do.
+    /// A rejected edge raises `ValueError` naming the index as the caller wrote
+    /// it, not as it would be after shifting. A pair given more than once is a
+    /// `UserWarning` and the **last** occurrence wins, compared canonically, so
+    /// `(2, 5)` and `(5, 2)` are one undirected edge.
     #[pyo3(signature = (num_nodes, edges, min_node_index = 0))]
     fn set_base_graph(
         &mut self,
@@ -426,14 +281,10 @@ impl GraphEvolver {
             ));
         }
 
-        // Every check runs before anything is built, because `Graph::set_edge`
-        // absorbs all three failures rather than reporting them: it returns
-        // early on a bad endpoint or a self-loop and clamps an over-cap weight.
-        // A graph constructed first and validated after would already have lost
-        // the offending edge, leaving nothing to report.
-        // The caller's own numbering, so a message quotes the indices they wrote
-        // rather than shifted ones they would not recognise. Matches how the
-        // file loader validates the same thing.
+        // Checked before anything is built: `Graph::set_edge` absorbs all three
+        // failures rather than reporting them, so a graph built first would
+        // already have lost the offending edge. Bounds are in the caller's own
+        // numbering, so a message quotes the indices they wrote.
         let lowest = min_node_index;
         let highest = min_node_index + num_nodes as i64 - 1;
 
@@ -465,19 +316,16 @@ impl GraphEvolver {
             }
         }
 
-        // Collapse repeats before building. `Graph::set_edge` writes each edge
-        // in turn, so a list holding a pair twice silently kept whichever came
-        // last — a real disagreement in the caller's data, reported by nothing.
+        // Repeats are collapsed before building: `set_edge` writes each edge in
+        // turn, so a list holding a pair twice silently kept whichever came last.
         let mut sourced = Vec::with_capacity(edges.len());
         for &(u, v, multiplicity) in &edges {
             sourced.push(SourcedEdge {
-                // Shifted to 0 here, once, the same as the file loader does on
-                // the way in. The range check above is what makes this safe:
-                // every index is at least `lowest`, so neither can go negative.
+                // The range check above is what keeps these casts non-negative:
+                // every index is at least `lowest`.
                 u: (u as i64 - min_node_index) as usize,
                 v: (v as i64 - min_node_index) as usize,
                 weight: multiplicity,
-                // No file behind these, so no line to point at.
                 line: None,
             });
         }
@@ -497,45 +345,15 @@ impl GraphEvolver {
     ///
     /// One edge per line, `start,end,weight`, comma-delimited, any line ending.
     /// `min_node_index` is where the caller's own node numbering starts — pass
-    /// `1` for 1-indexed data, which is the common case in graph files. Every
-    /// index is shifted to 0 here, and the evolved graph [`GraphEvolver::run`]
-    /// hands back is shifted the same distance the other way, so a caller reads
-    /// their results in the numbering they wrote.
+    /// `1` for 1-indexed data, which is the common case in graph files.
+    /// 1-indexed in is 1-indexed out.
     ///
-    /// ```python
-    /// evolver.set_base_graph_from_file("network.csv", min_node_index=1)
-    /// best = evolver.run(seed=1)[0].best_edges   # also 1-indexed
-    /// ```
+    /// A `# nodes = N` header is mandatory and must agree with `network_size`;
+    /// a file with no header is rejected rather than assumed to match it.
     ///
-    /// **There is no node-count argument, unlike
-    /// [`set_base_graph`](GraphEvolver::set_base_graph)** — the file is checked
-    /// against `network_size` directly, so the mistake that check existed to
-    /// catch (a caller deriving the count from their config rather than their
-    /// data) cannot be made here. A file that states its own size in a
-    /// `# nodes = N` header is checked against `network_size` too, and a
-    /// disagreement is an error: the base graph and the graphs a run evolves
-    /// are the same size by definition. A file with no header is taken to be
-    /// `network_size` nodes, which is what it has always been taken to be.
-    ///
-    /// # Errors
-    ///
-    /// `ValueError` if the config selected the SDA genome, if the file cannot be
-    /// read, or if any row fails validation — a self-loop, a malformed or
-    /// non-numeric row, a negative weight, a node outside
-    /// `min_node_index ..= min_node_index + network_size - 1`, or a multiplicity
-    /// above `max_edge_multiplicity`. Every message names the line it came from,
-    /// and nothing is stored unless the whole file survives.
-    ///
-    /// Also `ValueError` if a previous loader on this evolver was given a
-    /// different `min_node_index`. One run has one numbering: two files
-    /// disagreeing about where counting starts would mix two graphs together
-    /// with nothing to show for it.
-    ///
-    /// # Warnings
-    ///
-    /// A `UserWarning` for each repeated edge (canonical, so `2,5` and `5,2` are
-    /// one edge, and the last occurrence wins), each zero-weight edge (kept as
-    /// given, which is no edge at all), and for a file holding no edges.
+    /// **Nothing is stored unless the whole file survives**, and a rejection
+    /// names the line it came from. A repeated edge, a zero-weight edge and an
+    /// empty file are each a `UserWarning` rather than an error.
     #[pyo3(signature = (path, min_node_index = 0))]
     fn set_base_graph_from_file(
         &mut self,
@@ -562,14 +380,6 @@ impl GraphEvolver {
 
         emit_load_warnings(py, &loaded.source, &loaded.warnings)?;
 
-        // The file states its own size, and disagreeing with the run is the one
-        // mistake this path could not previously catch. The loader rejects a
-        // header above `network_size` as it rejects an index above it; below it
-        // is what lands here, and it is the interesting half — a file the caller
-        // believes is 200 nodes but which says 180 would otherwise load as 200,
-        // padded with isolated nodes nobody asked for. `set_base_graph` has
-        // rejected exactly this disagreement since it took `num_nodes`; a file
-        // could not say enough to be checked until the header existed.
         if loaded.num_nodes != self.config.network_size {
             return Err(PyValueError::new_err(format!(
                 "`{}` states `# nodes = {}` but [evolution] network_size is {}; \
@@ -587,64 +397,27 @@ impl GraphEvolver {
 
     /// Read a folder of graphs, one file per graph, and hand them back.
     ///
-    /// The bulk counterpart to
-    /// [`set_base_graph_from_file`](GraphEvolver::set_base_graph_from_file), for
-    /// reference data an objective matches against. Each file is one edge per
-    /// line, `start,end,weight`, and every file in the folder shares this run's
-    /// node numbering — `min_node_index` here means what it means there.
-    ///
-    /// **It returns the graphs rather than storing them**, and that is the whole
-    /// point of the shape: nothing in the engine reads a reference set yet, and
-    /// a setter that stored one would be keeping data no objective would ever
-    /// look at. The reader is the caller until an objective needs one.
+    /// The bulk counterpart to `set_base_graph_from_file`, for reference data an
+    /// objective matches against. Each file is one edge per line,
+    /// `start,end,weight`, and every file in the folder shares this run's node
+    /// numbering.
     ///
     /// **A reference graph may be larger than the network being evolved**, and
-    /// usually is — these are real data, matched on normalized distributions, so
-    /// their size does not have to relate to `network_size` at all. The only
-    /// ceiling is a sanity bound against a file indexed the wrong way, and it is
-    /// the one the objective itself applies, so anything a run can score against
-    /// can be read back here.
+    /// usually is — the only ceiling is a sanity bound against a file indexed
+    /// the wrong way.
     ///
-    /// ```python
-    /// graphs = evolver.load_reference_graphs("references/", min_node_index=1)
-    /// name, num_nodes, edges = graphs[0]
-    /// ```
+    /// Each graph comes back as `(name, num_nodes, edges)`, **sorted by file
+    /// name**, because a reference set is consumed positionally and filesystem
+    /// order would let a run's numbers depend on how its data was written to
+    /// disk. The node count is stated rather than derived: an isolated node
+    /// appears in no edge, so each file declares its own in a `# nodes = N`
+    /// header. Sub-directories are skipped; every other file is read.
     ///
-    /// **The node count is handed back beside the edges because it cannot be
-    /// recovered from them** — an isolated node appears in no edge, and a
-    /// reference graph with one is ordinary rather than exotic. Each file
-    /// states its own count in a `# nodes = N` header, which is where this
-    /// comes from.
+    /// **This call declares the run's numbering** as the base-graph setters do.
+    /// The reference graphs themselves come back exactly as supplied.
     ///
-    /// **Each graph comes back paired with the file it was read from, in sorted
-    /// file-name order.** Directory order is not reproducible across machines
-    /// and a reference set is consumed positionally, so leaving the order to the
-    /// filesystem would let a run's numbers depend on how its data happened to
-    /// be written to disk. Sub-directories are skipped; every other file is
-    /// read, since an extension convention would silently drop data the caller
-    /// meant to include.
-    ///
-    /// **The reference graphs themselves are never shifted back** — nothing hands
-    /// one to the caller in their own numbering, because these are the numbers
-    /// they supplied in the first place.
-    ///
-    /// **This call does, however, declare the run's numbering**, in common with
-    /// the two base-graph entry points, and that numbering is what the evolved
-    /// graph is shifted back into. So loading a 1-indexed reference set means
-    /// `run` returns `best_edges` 1-indexed too. That is deliberate — one run has
-    /// one numbering — and it is why a base graph supplied under a different
-    /// numbering is rejected rather than mixed in.
-    ///
-    /// # Errors
-    ///
-    /// `ValueError` if the folder cannot be read, if any file in it fails
-    /// validation — the message names the file and the line — or if a previous
-    /// loader on this evolver was given a different `min_node_index`.
-    ///
-    /// # Warnings
-    ///
-    /// The same `UserWarning`s as the base-graph loader, each naming the file it
-    /// came from: a repeated edge, a zero-weight edge, and a file with no edges.
+    /// A rejection names the file and the line; the warnings are the base-graph
+    /// loader's, each naming the file it came from.
     #[pyo3(signature = (folder, min_node_index = 0))]
     fn load_reference_graphs(
         &mut self,
@@ -654,10 +427,8 @@ impl GraphEvolver {
     ) -> PyResult<Vec<NamedGraph>> {
         self.check_min_node_index(min_node_index)?;
 
-        // The loader wants one node count for the whole folder, and reference
-        // graphs differ in size. This is an upper bound that still catches a
-        // wild index; the same bound the objective uses, so a folder a run
-        // scores against is a folder this can read back.
+        // An upper bound rather than the network size, since reference graphs
+        // may be larger; the objective applies the same one.
         let index_cap = self.config.network_size.max(dispatch::MAX_REFERENCE_NODES);
 
         let loaded = graph_io::load_edge_folder(
@@ -680,78 +451,28 @@ impl GraphEvolver {
 
     /// Evolve a population `n_runs` times and return what every run produced.
     ///
-    /// **Always a list, one [`PyRunResult`] per replicate, in run order** — even
-    /// at the default `n_runs = 1`, so the return type does not change shape
-    /// with an argument. Each result carries the best fitness in the objective's
-    /// own units, the best individual's edge list as `(u, v, multiplicity)`, its
-    /// genome's printed form, the convergence log, and the `(seed, run_index)`
-    /// pair that identifies it — `seed` being the master you passed, so the two
-    /// together are what reproduces that replicate:
+    /// **Always a list, one `RunResult` per replicate, in run order** — even at
+    /// the default `n_runs = 1`, so the return type does not change shape with
+    /// an argument.
     ///
-    /// ```python
-    /// results = evolver.run(seed=1, n_runs=30, max_cores=8)
-    /// best = max(results, key=lambda r: r.best_fitness)
-    /// print(best.best_fitness, best.run_index)
-    ///
-    /// single, = evolver.run(seed=1)          # one run still returns a list
-    /// for row in single.history:
-    ///     print(row.iteration, row.best_fitness, row.std_dev)
-    /// ```
-    ///
-    /// **One master seed, not `n` of them.** `seed` seeds a generator whose
-    /// output stream *is* the per-run seed list, so run `i` takes draw `i` and a
-    /// run's seed does not depend on how many runs were requested. Asking for 50
-    /// reproduces the first 30 of a 30-run request exactly, so extending an
-    /// experiment never invalidates the replicates already collected.
+    /// **One master seed, not `n` of them**, so a run's seed does not depend on
+    /// how many were requested: asking for 50 reproduces the first 30 of a
+    /// 30-run request exactly.
     ///
     /// **Whether replicates run concurrently is the engine's call, not yours.**
     /// A native Rust objective runs them in parallel; `fitness = "python"` runs
-    /// them one at a time, because `n` concurrent runs would be `n` threads
-    /// contending for a single GIL — slower than sequential *and* contended.
-    /// `max_cores` caps the concurrency: unset means all available, `1` is fully
-    /// sequential, and there is no point exceeding `n_runs`.
+    /// them one at a time, since concurrent runs would contend for a single GIL.
+    /// `max_cores` caps the concurrency; unset means all available.
     ///
-    /// Nothing is cached on the evolver, so a second `run` cannot be confused
-    /// with the first and the same evolver drives repeated runs safely.
+    /// A replicate that fails abandons the remaining runs rather than returning
+    /// half-complete.
     ///
-    /// # Errors
+    /// # Memory: the sizes multiply, they do not add
     ///
-    /// `ValueError` if `n_runs` is zero, if `max_cores` is given as zero, if the
-    /// config selected Python and no callable was registered, or from the first
-    /// replicate that fails — the remaining runs are abandoned rather than
-    /// returned half-complete.
-    ///
-    /// # Memory: the three sizes multiply, they do not add
-    ///
-    /// Expression materializes the whole population as `Vec<Graph>` before
-    /// scoring, and a `Graph` is a **dense** `network_size × network_size`
-    /// matrix however sparse the graph actually is (spec §2). So peak memory is
-    /// roughly:
-    ///
-    /// ```text
-    /// network_size² × 4 bytes × population_size × min(max_cores, replicates)
-    /// ```
-    ///
-    /// | `network_size` | one graph | population of 200 | × 8 concurrent replicates |
-    /// |---|---|---|---|
-    /// | 100 | 40 KB | 8 MB | 64 MB |
-    /// | 500 | 1 MB | 200 MB | 1.6 GB |
-    /// | 1000 | 4 MB | 800 MB | 6.4 GB |
-    ///
-    /// Treat those as a floor rather than an exact figure: the matrix is a
-    /// `Vec<Vec<u32>>`, so each row carries its own allocation header on top of
-    /// the `4 × network_size` bytes of weights. That overhead is well under 1%
-    /// at these sizes and does not change the shape of the problem.
-    ///
-    /// The failure mode is unintuitive, which is why it is documented on the
-    /// call rather than left to be derived: a configuration that ran fine, given
-    /// a larger `max_cores` to exploit a bigger machine, multiplies peak memory
-    /// by that same factor and can exhaust hardware that handled the smaller
-    /// setting. A user cannot work this out from the Rust internals, and this
-    /// package is the only surface they see.
-    ///
-    /// The last column is reachable from here: `min(max_cores, n_runs)` is the
-    /// multiplier, so raising either raises peak memory by the same factor.
+    /// The whole population is materialized before scoring, and a graph is a
+    /// **dense** matrix however sparse it actually is, so peak memory is roughly
+    /// `network_size² × 4 bytes × population_size × min(max_cores, replicates)`.
+    /// Raising any one of them scales the whole product.
     #[pyo3(signature = (seed, n_runs = 1, max_cores = None))]
     pub fn run(
         &mut self,
@@ -774,35 +495,22 @@ impl GraphEvolver {
             ));
         }
 
-        // One master seed in, one seed per run out, in run order — so a run's
-        // seed does not depend on how many were asked for.
         let seeds = dispatch::replicate_seeds(seed, n_runs);
 
-        // Step 1 of two (§8): erase the objective before any strategy or genome
-        // is chosen. **One instance per run, never one shared** — every SIR
-        // objective owns an epidemic counter, and sharing it across concurrent
-        // replicates would let thread scheduling decide which run saw which
-        // epidemic seed, losing reproducibility exactly where it is hardest to
-        // debug.
-        //
-        // Built here, before the GIL is released, because the python arm reads
-        // the registered callable — that must not happen on a rayon worker.
-        // Deliberately fallible-first too: a config selecting Python with no
-        // callable registered is reported before any population is built.
+        // One objective per run, never one shared: every SIR objective owns an
+        // epidemic counter, and sharing it across concurrent replicates would
+        // let thread scheduling decide which run saw which epidemic seed.
+        // Built before the GIL is released, because the Python arm reads the
+        // registered callable and that must not happen on a rayon worker.
         let mut objectives = Vec::with_capacity(n_runs);
         for &run_seed in &seeds {
             objectives.push(self.objective(run_seed, Some(py))?);
         }
 
-        // The GIL is held on entry to any `#[pymethods]` function, and holding it
-        // across the run buys nothing: everything between scoring calls is pure
-        // Rust, and `PyFitness` re-acquires it per batch on its own. Keeping it
-        // would block every other Python thread for the whole run and serialize
-        // rayon against any Python caller — a run that works and is inexplicably
-        // slow, or a host application that freezes, neither pointing back here.
-        // The failure is a hard deadlock, not just slowness: a rayon worker that
-        // calls back into Python needs the GIL, and it cannot get it while this
-        // thread holds it and waits on that worker to finish.
+        // The GIL is released for the run: everything between scoring calls is
+        // pure Rust, and `PyFitness` re-acquires it per batch. Holding it would
+        // deadlock — a rayon worker calling back into Python needs the GIL, and
+        // cannot get it while this thread holds it and waits on that worker.
         let outcomes = Python::attach(|py| {
             py.detach(|| {
                 dispatch::run_replicates(
@@ -815,22 +523,12 @@ impl GraphEvolver {
             })
         })?;
 
-        // Nothing is stored. `dispatch::erase` has already converted every
-        // number out of engine orientation, so this only re-homes each erased
-        // outcome onto the Python-visible type, keeping run order.
-        //
-        // **`seed` is the master, not the per-run draw.** The pair that
-        // reproduces a replicate is `(master, run_index)` — call `run` with the
-        // same master and take that index. The derived per-run seed cannot do
-        // that: handing it back as `seed` would make the stream draw from *it*,
-        // producing a different run, so recording it would look like provenance
-        // while being unusable as provenance.
+        // `seed` is the master, not the per-run draw: the pair that reproduces a
+        // replicate is `(master, run_index)`. Handing back the derived seed
+        // would make the stream draw from *it*, producing a different run.
         let mut results = Vec::with_capacity(outcomes.len());
         for (run_index, mut outcome) in outcomes.into_iter().enumerate() {
             // The one place a node index goes back to the caller's numbering.
-            // Only the evolved graph is shifted: everything else a loader read
-            // is input, and shifting a reference graph nobody hands back would
-            // be a second conversion with no reader.
             shift_out(&mut outcome.best_edges, self.min_node_index);
 
             results.push(PyRunResult::from_erased(
@@ -848,15 +546,9 @@ impl GraphEvolver {
     /// Reject a numbering that disagrees with one already in force, recording
     /// nothing either way.
     ///
-    /// Checking and recording are two steps rather than one so that a load which
-    /// fails leaves the evolver exactly as it found it. The check runs first, so
-    /// a mismatch is still reported before the named file is opened; the
-    /// recording waits until every fallible step has succeeded. A numbering
-    /// recorded by a call that then failed would shift the node indices of every
-    /// later run's output, with no base graph loaded and nothing to say so.
-    ///
-    /// Not a `#[pymethods]` function: it is internal bookkeeping, and everything
-    /// in that block is exposed to Python.
+    /// Separate from `commit_min_node_index` so a load that fails leaves the
+    /// evolver as it found it: a numbering recorded by a call that then failed
+    /// would shift every later run's output, with no base graph loaded.
     fn check_min_node_index(&self, min_node_index: i64) -> PyResult<()> {
         match self.min_node_index {
             Some(existing) if existing != min_node_index => Err(PyValueError::new_err(format!(
@@ -870,17 +562,13 @@ impl GraphEvolver {
 
     /// Record the numbering this run reads node indices in.
     ///
-    /// Call only once every fallible step of a load has succeeded — see
-    /// [`GraphEvolver::check_min_node_index`] for why the two are separate.
+    /// Call only once every fallible step of a load has succeeded.
     fn commit_min_node_index(&mut self, min_node_index: i64) {
         self.min_node_index = Some(min_node_index);
     }
 }
 
 /// Put an evolved edge list back into the caller's own numbering.
-///
-/// A no-op when no loader set one, which is every run whose data arrived
-/// 0-indexed through a setter.
 fn shift_out(edges: &mut [(usize, usize, u32)], min_node_index: Option<i64>) {
     let shift = match min_node_index {
         Some(0) | None => return,
@@ -888,7 +576,7 @@ fn shift_out(edges: &mut [(usize, usize, u32)], min_node_index: Option<i64>) {
     };
 
     for edge in edges.iter_mut() {
-        // Every index here was produced by the engine, so it is within
+        // Every index here came from the engine, so it is within
         // `0..network_size` and shifting it back lands where it came from.
         edge.0 = (edge.0 as i64 + shift) as usize;
         edge.1 = (edge.1 as i64 + shift) as usize;
@@ -898,8 +586,8 @@ fn shift_out(edges: &mut [(usize, usize, u32)], min_node_index: Option<i64>) {
 /// What a Rust-native run hands back — the [`PyRunResult`] fields, without the
 /// pyo3 wrapper. See [`run_from_toml`].
 pub struct RunSummary {
-    /// Best fitness found, in the objective's own units and sign — see
-    /// [`PyRunResult::best_fitness`].
+    /// Best fitness found, **as-measured**: the units and sign the objective
+    /// returned, not the lower-is-better form the engine compares.
     pub best_fitness: f64,
     /// The best individual's expressed network, as `(u, v, multiplicity)`.
     pub best_edges: Vec<(usize, usize, u32)>,
@@ -910,12 +598,11 @@ pub struct RunSummary {
     pub best_genome_repr: String,
     /// The convergence log, one row per logged iteration.
     pub history: Vec<GenerationStats>,
-    /// The seed the run was made with. Private: `save_logs` stamps it onto
-    /// every row, which is the only way it is meant to be read.
+    /// The master seed the run was made with. Private: `save_logs` stamps it
+    /// onto every row, which is the only way it is meant to be read.
     seed: u64,
     /// Which replicate this is, `0`-based. Private for the same reason as
-    /// `seed`: the pair identifies a replicate, and `save_logs` stamping it
-    /// onto every row is the only way it is meant to be read.
+    /// `seed`.
     run_index: usize,
     /// The TOML document this run's config was parsed from. Private:
     /// `save_results` writes it to `{filename}.toml`.
@@ -925,9 +612,9 @@ pub struct RunSummary {
 impl RunSummary {
     /// Write the convergence log to `filename` as CSV.
     ///
-    /// Same five columns, plus `seed` and `run_index`, as
-    /// [`PyRunResult::save_logs`] — a log from this binary and one from
-    /// Python are byte-for-byte the same shape.
+    /// The same columns as the Python route's `save_logs`, `seed` and
+    /// `run_index` included, so logs from either front end concatenate into one
+    /// file and stay separable.
     pub fn save_logs(&self, filename: &str) -> std::io::Result<()> {
         use std::io::Write;
 
@@ -953,8 +640,7 @@ impl RunSummary {
     }
 
     /// Write the best individual to `filename`, and the run's config TOML
-    /// alongside it at `{filename}.toml` — mirrors
-    /// [`PyRunResult::save_results`].
+    /// alongside it at `{filename}.toml`.
     pub fn save_results(&self, filename: &str) -> std::io::Result<()> {
         use std::io::Write;
 
@@ -981,15 +667,10 @@ impl RunSummary {
 
 /// One seed per replicate, derived from a master seed.
 ///
-/// Re-exported from the private dispatch layer so every route derives them the
-/// same way: a replicate's seed depends on the master and on its own index, and
-/// never on how many replicates were asked for. That is what makes
-/// `(master, run_index)` the pair that reproduces a run — the derived seed
-/// cannot, since passing it back in would make the stream draw from *it*.
-///
-/// A library caller driving its own loop (see `examples/library_route.rs`)
-/// wants this rather than a seed per run of its own invention, or its replicates
-/// will not line up with the same master seed run through `get-run`.
+/// A replicate's seed depends on the master and on its own index, never on how
+/// many replicates were asked for. A library caller driving its own loop wants
+/// these rather than seeds of its own invention, or its replicates will not line
+/// up with the same master seed run through `get-run`.
 pub fn replicate_seeds(master: u64, n_runs: usize) -> Vec<u64> {
     dispatch::replicate_seeds(master, n_runs)
 }
@@ -997,10 +678,7 @@ pub fn replicate_seeds(master: u64, n_runs: usize) -> Vec<u64> {
 /// `YYYYmmdd-HHMMSS` in UTC, for naming a run's output directory.
 ///
 /// UTC rather than local time, so directories from two machines sort into the
-/// order the runs actually happened. Converted here rather than through a date
-/// crate: one directory name does not justify a dependency, and the arithmetic
-/// below is the standard civil-from-days algorithm, exact for every date this
-/// program will ever see.
+/// order the runs actually happened.
 pub fn utc_stamp() -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1037,24 +715,15 @@ pub fn utc_stamp() -> String {
 }
 
 /// Where one replicate's files belong. Returns a path and creates nothing —
-/// every caller runs `create_dir_all` on the result itself. (The Python twin,
-/// `examples/_output_layout.run_output_dir`, does create it; the two are
-/// otherwise parallel.)
+/// every caller runs `create_dir_all` on the result itself.
 ///
-/// `None` for `out_dir` means the working directory under fixed names, which
-/// is what `get-run` did before it took an output folder and what its route
-/// check in CI still expects. It ignores `run_index`, so it is only correct
-/// for a single replicate — `get-run` rejects `--runs N` above 1 without
-/// `--out` for exactly that reason.
+/// `None` for `out_dir` means the working directory under fixed names. It
+/// ignores `run_index`, so it is only correct for a single replicate — `get-run`
+/// rejects `--runs N` above 1 without `--out` for that reason.
 ///
-/// Public so every route lays its output out the same way. A library caller
-/// writing its own files (see `examples/library_route.rs`) gets the same
-/// `<root>/<stamp>-<seed>/run_<i>/` shape as `get-run` without copying the
-/// rule, which is how the four routes stay comparable.
-///
-/// `stamp` is passed in rather than read here: every replicate of one
-/// invocation belongs in the same timestamped directory, and reading the clock
-/// per replicate would scatter them the moment a run crossed a second boundary.
+/// `stamp` is passed in rather than read here: every replicate of one invocation
+/// belongs in the same timestamped directory, and reading the clock per
+/// replicate would scatter them the moment a run crossed a second boundary.
 pub fn run_output_dir(
     out_dir: Option<&str>,
     stamp: &str,
@@ -1073,21 +742,16 @@ pub fn run_output_dir(
     path
 }
 
-/// Rust-native entry point: run a `config.toml` file with no Python
-/// interpreter (spec §5.3's "Rust route", used by the `get-run` binary,
-/// `src/bin/run.rs`).
+/// Rust-native entry point: run a `config.toml` with no Python interpreter.
 ///
-/// Follows exactly the same steps [`GraphEvolver::new`] and
-/// [`GraphEvolver::run`] do for a Python caller — parse, validate, erase the
-/// objective, dispatch — so a run driven from here and one driven from
-/// Python differ only in front end. `[fitness] type = "python"` is rejected,
-/// the same way an un-registered Python run is: there is no callable for it
-/// to call.
+/// Follows the same steps a Python caller's [`GraphEvolver`] does — parse,
+/// validate, erase the objective, dispatch — so the two differ only in front
+/// end.
 ///
 /// # Errors
 ///
-/// The config's own parse/validate error, or `[fitness] type = "python"`
-/// with nothing to call it.
+/// The config's own parse or validate error, or `[fitness] type = "python"`,
+/// which has no callable to call on this route.
 pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String> {
     let mut summaries = run_many_from_toml(config_path, seed, 1)?;
     Ok(summaries.remove(0))
@@ -1095,27 +759,16 @@ pub fn run_from_toml(config_path: &str, seed: u64) -> Result<RunSummary, String>
 
 /// The same run, `n_runs` times from one master seed.
 ///
-/// Mirrors [`GraphEvolver::run`]'s replicate handling exactly, so the Rust and
-/// Python front ends produce the same numbers for the same `(seed, run_index)`
-/// pair: one master seed goes in, one seed per replicate comes out, and a
-/// replicate's seed therefore does not depend on how many were asked for. Each
-/// summary carries the **master** seed and its own index, which is the pair that
-/// reproduces it — the derived seed would draw a different run if it were passed
-/// back in, so recording it would look like provenance while being unusable as
-/// provenance.
+/// Mirrors [`GraphEvolver::run`]'s replicate handling, so the Rust and Python
+/// front ends produce the same numbers for the same `(seed, run_index)` pair —
+/// the master seed and the replicate's index, which is what reproduces it.
 ///
-/// Runs sequentially. The Python path spreads replicates across rayon because a
-/// caller there may be waiting on a notebook cell; a command-line run has
-/// nothing to overlap with, and a sequential loop keeps the objective's
-/// construction, which is fallible, on the calling thread.
+/// Runs sequentially, unlike the Python path.
 ///
 /// # Errors
 ///
-/// The config's own parse/validate error, or `[fitness] type = "python"` with
-/// nothing to call it. `n_runs` of zero is rejected, with the same wording
-/// [`GraphEvolver::run`] uses: asking for no runs returns nothing and is more
-/// likely a mistake than an intent, and the two front ends are meant to differ
-/// only in front end.
+/// The config's own parse or validate error, `n_runs` of zero, or
+/// `[fitness] type = "python"` with nothing to call it.
 pub fn run_many_from_toml(
     config_path: &str,
     seed: u64,
@@ -1179,8 +832,8 @@ pub fn run_many_from_toml(
 #[pymodule]
 fn get(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GraphEvolver>()?;
-    // The config builders (spec §8). Registered under their unprefixed names —
-    // the `Py` prefix is a Rust-side disambiguator, not part of the API.
+    // The `Py` prefix is a Rust-side disambiguator: each class carries a `name`
+    // attribute, and that unprefixed name is what Python sees.
     m.add_class::<PyConfig>()?;
     m.add_class::<PyEvolutionConfig>()?;
     m.add_class::<PyReplacementConfig>()?;
@@ -1193,8 +846,6 @@ fn get(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyFitnessConfig>()?;
     m.add_class::<PySirParams>()?;
     m.add_class::<PyOperationWeights>()?;
-    // What `run` hands back. Registered so the types are importable and
-    // `isinstance`-able, not because a user constructs one.
     m.add_class::<PyRunResult>()?;
     m.add_class::<PyGenerationStats>()?;
     Ok(())

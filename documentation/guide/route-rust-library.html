@@ -72,7 +72,7 @@ impl Fitness for Regularity {
     fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64 {
         let mut at_target = 0;
         for node in 0..graph.num_nodes {
-            if graph.degree(node) == self.target_degree {
+            if graph.neighbor_count(node) == self.target_degree {
                 at_target += 1;
             }
         }
@@ -182,7 +182,7 @@ for row in &amp;outcome.history {
 
 <div class="warn">
   <p>
-    <b>This is the one route that hands you engine-oriented numbers.</b> The outward conversion
+    <b>This is the one route that hands you lower-is-better numbers.</b> The outward conversion
     lives in the dispatch layer, and driving an <code>Evolver</code> yourself goes underneath it —
     so <code>best_fitness_engine</code> and every <code>history</code> row are lower-is-better here,
     even for a <code>Maximize</code> objective. The field is named <code>_engine</code> precisely so

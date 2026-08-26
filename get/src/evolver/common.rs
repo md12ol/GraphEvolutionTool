@@ -1,8 +1,7 @@
 //! GA mechanics shared by every evolution strategy.
 //!
-//! These helpers keep selection, population setup, evaluation, and logging in
-//! one place so [`super::generational`] and [`super::steady_state`] don't each
-//! re-implement them.
+//! These helpers keep selection, population setup, evaluation and logging in
+//! one place, so no strategy re-implements them.
 
 use std::cmp::Ordering;
 
@@ -14,155 +13,62 @@ use crate::fitness::Fitness;
 use crate::genomes::Genome;
 use crate::graph::Graph;
 
-/// Recombination operator, chosen once per run.
+/// Recombination operator, chosen once per run, for every representation.
 ///
-/// An enum rather than a trait, and for the same reason as [`Selection`] below:
-/// a second operator is one extra variant plus one match arm, selectable by
-/// name from `config.toml` with no Rust at the call site.
-///
-/// # Why this is engine-level and shared, while the mutation operator is not
-///
-/// Both shipped representations recombine the *same* way — two-point, over
-/// whatever their linear unit is, drawing cut points from one shared helper —
-/// so `TwoPoint` is a truthful name for both and there is one enum for the
-/// run. Mutation is the opposite: what one mutation *does* differs completely
-/// between representations, so the mutation operator is selected per genome,
-/// under `[genome]`, and its variants live beside the representation they
-/// belong to. See `crate::genomes::EdgeEditMutation` and
-/// `crate::genomes::SdaMutation`.
-///
-/// The practical consequence is that a variant added here is offered for
-/// *every* representation. One that only some genomes can honour has to be
-/// rejected by `Config`'s validation, since nothing in the type system pairs
-/// this enum with the selected genome.
-///
-/// # Adding an operator
-///
-/// 1. **This enum** — the variant, plus any parameters it reads from the file.
-/// 2. **[`Crossover::recombine`]** — the arm that performs it. The compiler
-///    finds this one for you: the match is exhaustive.
-/// 3. **`config::CrossoverConfig`** — the variant a user names under
-///    `[crossover]`, and any constraint it needs in
-///    `Config::validate_crossover`, which is also where an operator no genome
-///    can honour is refused.
-/// 4. **`dispatch::crossover`** — the arm mapping that config variant onto this
-///    one.
-/// 5. **`py_config::PyCrossoverConfig`** — optional, and only buys a Python
-///    caller the ability to name it. Skipped, the operator still runs from TOML
-///    and from Rust.
-/// 6. **`config.example.toml`** — also optional, and also the step people skip
-///    and then wonder why nobody uses the operator: that file is what a new
-///    user copies from.
-///
-/// A `Genome::crossover` that cannot express the operator is the case this
-/// enum does not cover. `Genome::crossover` takes no context, deliberately, so
-/// an operator needing per-representation behaviour adds a trait method rather
-/// than a variant here.
-///
-/// **Every step above is marked at its own site in the code.** Search the
-/// repo for `ADD A CROSSOVER STEP 3`, or any other number:
-///
-/// ```text
-/// git grep -n "ADD A CROSSOVER STEP"    # all six, in one list
-/// ```
+/// A variant here is therefore offered to all of them, and nothing in the type
+/// system pairs this enum with the selected genome — so one only some genomes
+/// can honour must be refused in `Config::validate_crossover`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Crossover {
-    /// Two-point: swap one contiguous band between the parents, leaving
-    /// everything outside it untouched on both sides. What the band is made of
+    /// Swap one contiguous band between the parents. What the band is made of
     /// is the representation's own business — genes for edge-edit, states for
-    /// SDA — and each decides how much shared structure it needs before
-    /// crossing at all.
+    /// SDA.
     TwoPoint,
     // ADD A CROSSOVER STEP 1 — a variant here, plus any parameters it reads
     // from the file:
     //
     //     MyCrossover { some_param: f64 },
     //
-    // Then the arm performing it, in `Crossover::recombine` below — search
-    // `ADD A CROSSOVER STEP 2` for it.
+    // The chain does not currently reach a working operator. `recombine` can
+    // only call trait methods, so a second variant also needs a method on
+    // `Genome` and an implementation in every representation — neither of which
+    // is a step, and neither compiles from the six that are.
 }
 
 impl Crossover {
     /// Recombine one pair in place, both children kept.
-    ///
-    /// The caller has already rolled `crossover_rate` and decided this pair
-    /// breeds; this only chooses *how*.
     pub fn recombine<G, R>(&self, first: &mut G, second: &mut G, rng: &mut R)
     where
         G: Genome,
         R: Rng + ?Sized,
     {
         match self {
-            // Two-point is what `Genome::crossover` already means for every
-            // representation, so this arm is the trait call itself rather than
-            // an implementation. A second variant would not be — it would
-            // dispatch to a second trait method, which is the point at which
-            // `Genome` grows one.
+            // The arm is the trait call itself: two-point is what
+            // `Genome::crossover` already means for every representation. A
+            // second variant cannot reuse it, so it is the point at which
+            // `Genome` grows a second method and every representation
+            // implements it.
             Crossover::TwoPoint => first.crossover(second, rng),
-            // ADD A CROSSOVER STEP 2 — the arm performing your variant. The
-            // step after this one is `config::CrossoverConfig` — search
-            // `ADD A CROSSOVER STEP 3` for it.
+            // ADD A CROSSOVER STEP 2 — the arm performing your variant:
+            //
+            //     Crossover::MyCrossover { some_param } => first.my_crossover(second, *some_param, rng),
         }
     }
 }
 
 /// Parent-selection strategy: who breeds, within the scope an event drew.
 ///
-/// An enum rather than a trait, so a new mechanism is one variant plus one
-/// match arm, selectable by name from `config.toml` with no Rust at the call
-/// site. **This is the one extension point unreachable from outside the crate**
-/// — `Fitness`, `Genome` and `Evolver` are traits a depending program
-/// implements, but a variant cannot be added to another crate's enum.
-///
-/// # The contract every scheme keeps
-///
-/// None is enforced by the signature, and breaking any changes every evolver's
-/// behaviour at once rather than failing anywhere visible.
+/// None of this is enforced, and breaking it fails silently:
 ///
 /// - **Pick only from `scope`** — reaching past it breaks the guarantee that a
 ///   strategy's best individual is never among those replaced.
-/// - **Sample with replacement.** A caller wanting distinct parents enforces
-///   that itself; quietly de-duplicating removes the pressure that comes from a
-///   strong individual being drawn twice.
-/// - **Fitnesses arrive oriented**, lower is better, so compare them directly
-///   through `rank` and never consult a `Direction`. Re-checking it looks
-///   defensive and silently inverts every maximizing objective.
+/// - **Sample with replacement** — rejecting a repeat draw quietly lowers
+///   selection pressure.
+/// - **Compare through `rank`**, never a `Direction` of your own.
 /// - **All randomness comes from `rng`**, never a thread RNG or the clock, or
-///   two runs at one seed stop agreeing with nothing to report it.
-///
-/// How a scheme picks is its own business — pressure, and whether it reads
-/// fitness values or only their order.
-///
-/// # Adding a scheme
-///
-/// 1. **This enum** — the variant and its parameters.
-/// 2. **`Selection::pick`** — the arm; the match is exhaustive.
-/// 3. **`config::SelectionConfig`** — what a user names under `[selection]`,
-///    plus any parameter constraint in `validate_evolution_and_selection`.
-/// 4. **`dispatch::selection`** — config variant onto this one. Nothing here
-///    decides a scope: `[scope]` is its own block, with its own chain.
-/// 5. **`py_config::PySelectionConfig`** — optional; buys a Python caller the
-///    ability to name it.
-/// 6. **`config.example.toml`** — optional, and the step people skip and then
-///    wonder why nobody uses the scheme.
-///
-/// No step here concerns locality or replacement, which is the point: a scheme
-/// works with every strategy because it answers only this one question. The
-/// other two axes are [`super::scope::Scope`] and
-/// [`super::replacement::Replacement`].
-///
-/// **Every step above is marked at its own site in the code.** Search the repo
-/// for `ADD A SELECTION STEP 3`, or any other number:
-///
-/// ```text
-/// git grep -n "ADD A SELECTION STEP"    # all six, in one list
-/// ```
+///   two runs at one seed stop agreeing.
 pub enum Selection {
     /// The fittest members of the scope, best first. Consumes no randomness.
-    ///
-    /// Truncation over a randomly drawn subset is what "tournament selection"
-    /// decomposes into once the draw is its own step, which is how steady-state
-    /// is expressed.
     Best,
     /// Sample `tournament_size` members of the scope per pick, keep the best.
     Tournament { tournament_size: usize },
@@ -170,35 +76,19 @@ pub enum Selection {
     // reads out of the file:
     //
     //     Roulette { pressure: f64 },
-    //
-    // The variant name becomes `type = "roulette"` under `[selection]`, via the
-    // `rename_all` on `config::SelectionConfig`. Then the arm performing it, in
-    // `Selection::pick` below — search `ADD A SELECTION STEP 2` for it.
 }
 
 /// Order two individuals, better first, ties broken by lower index.
 ///
-/// Fitnesses are already oriented so lower is better — every comparison in this
-/// module rests on that, and none of them consults a `Direction`. Orientation
-/// happens once, before a score reaches selection at all; a scheme that checks
-/// the direction again inverts it for maximizing objectives. The index
-/// tie-break makes
-/// a tournament's outcome depend only on which indices were drawn, not the
-/// order the RNG produced them. `total_cmp` is used simply because sorting
-/// needs a total order; `Direction::orient` rejects `NaN` before it gets here.
+/// The index tie-break makes a tournament's outcome depend on which indices
+/// were drawn, not the order the RNG produced them.
 pub(super) fn rank(fitnesses: &[f64], a: usize, b: usize) -> Ordering {
-    // .then() only falls through to the index comparison when the fitness
-    // comparison was Equal — this is the tie-break, not a second sort key.
     fitnesses[a].total_cmp(&fitnesses[b]).then(a.cmp(&b))
 }
 
 /// Index of the best individual in `fitnesses`, ties broken by lower index.
 ///
-/// The same ordering as [`rank`], applied across the whole slice. Both evolvers
-/// need this to package their outcome, so it lives here rather than being
-/// written twice.
-///
-/// Panics if `fitnesses` is empty. Both callers construct a non-empty
+/// Panics if `fitnesses` is empty: both callers construct a non-empty
 /// population and never shrink it, so an empty slice is a bug, not an input.
 pub(super) fn best_index(fitnesses: &[f64]) -> usize {
     assert!(
@@ -219,8 +109,6 @@ impl Selection {
     /// Choose `count` parents from `scope`, returning indices into the
     /// population.
     ///
-    /// Indices rather than clones: the caller knows whether it wants a copy or
-    /// the slot number, and steady-state wants both.
     pub(super) fn pick<R>(
         &self,
         scope: &[usize],
@@ -229,8 +117,6 @@ impl Selection {
         rng: &mut R,
     ) -> Vec<usize>
     where
-        // `?Sized` lets callers pass a trait-object RNG (e.g. `&mut dyn RngCore`),
-        // not just a concrete sized type — same reason on every `R: Rng` bound below.
         R: Rng + ?Sized,
     {
         assert!(!scope.is_empty(), "cannot select from an empty scope");
@@ -279,11 +165,6 @@ impl Selection {
               //         }
               //         parents
               //     }
-              //
-              // Pick only from `scope`, compare through `rank`, and take every
-              // random value from `rng` — the contract above says why each
-              // matters. The step after this is the config variant a user names —
-              // search `ADD A SELECTION STEP 3` for it.
         }
     }
 
@@ -308,36 +189,17 @@ impl Selection {
     }
 }
 
-/// Apply the engine's two mutation dice rolls to one child.
+/// Roll `mutation_rate` for whether this child mutates, then `max_mutations`
+/// for how many times, drawn from `1..=max_mutations`. Both rolls are the
+/// engine's, never the genome's.
 ///
-/// 1. `mutation_rate` — whether this child mutates at all.
-/// 2. `max_mutations` — if it does, how many mutations it takes, drawn uniformly
-///    from `1..=max_mutations`.
+/// The count roll is unconditional once the rate roll passes, and
+/// `random_range(1..=1)` consumes RNG state even though it has one outcome:
+/// skipping it at 1 would make the RNG stream depend on a config value.
 ///
-/// Both rolls live here, in one helper both evolution strategies call, so they
-/// cannot drift apart on mutation semantics the way they did on selection
-/// sampling. Neither roll belongs to the genome: [`Genome::mutate`] applies
-/// exactly one mutation per call, and a representation that rolled its own count
-/// would make `max_mutations` mean nothing for that representation with nothing
-/// to report it.
-///
-/// The rolls happen in a fixed order — rate first, then count — so a seeded run
-/// reproduces exactly.
-///
-/// **A seeded run does not reproduce what the pre-`max_mutations` engine
-/// produced, even at `max_mutations = 1`.** The count roll is unconditional once
-/// the rate roll passes, and `random_range(1..=1)` still consumes RNG state
-/// despite having only one possible outcome (measured 2026-08-03). Skipping the
-/// draw at 1 would restore the old sequence, and is deliberately not done: a
-/// special case that changes the RNG stream based on a config value is a worse
-/// thing to own than a one-time change in seeded output, which was accepted when
-/// this was designed.
-///
-/// # Panics
-///
-/// If `max_mutations` is zero: `1..=0` is an empty range with no meaningful
-/// draw. A backstop only — the config layer rejects it first, but the evolvers
-/// are constructible directly, so this checks rather than trusting its caller.
+/// Panics if `max_mutations` is zero: `1..=0` is an empty range. A backstop —
+/// the config layer rejects it first, but the evolvers are constructible
+/// directly.
 pub fn mutate_child<G, R>(
     child: &mut G,
     context: &G::Context,
@@ -368,17 +230,12 @@ pub fn mutate_child<G, R>(
 /// strategy uses.
 ///
 /// One crossover roll for the pair, then one [`mutate_child`] call per child.
-/// The order is part of the contract, not an implementation detail: a seeded run
-/// only reproduces if every strategy draws from the RNG in the same sequence, so
-/// generational and steady-state both breed through here rather than each
-/// spelling the same four calls out.
+/// The order is the contract: a seeded run reproduces only if every strategy
+/// draws from the RNG in the same sequence, which is why both strategies breed
+/// through here.
 ///
-/// Takes the whole [`SharedEvolutionContext`] rather than its four relevant
-/// fields, so a field added there cannot be forgotten at one of the two call
-/// sites.
-///
-/// `first` and `second` are the parents, mutated in place into the children.
-/// Neither is scored here — the caller decides when and in what batch.
+/// `first` and `second` are the parents, mutated in place into the children,
+/// and neither is scored here.
 pub fn breed_pair<G, R>(
     first: &mut G,
     second: &mut G,
@@ -407,51 +264,21 @@ pub fn breed_pair<G, R>(
     );
 }
 
-/// Express every genome against the shared context and score the whole batch,
-/// returning the expressed graphs alongside their fitnesses. Index `i` of both
-/// vectors refers to `batch[i]`.
+/// Express and score the whole batch through [`Fitness::evaluate_batch`], so a
+/// Python-backed objective crosses the FFI boundary once. Index `i` of both
+/// returned vectors refers to `batch[i]`.
 ///
-/// The returned fitnesses are **oriented**: lower is better, whatever the
-/// objective's own direction. This is the one place that conversion happens, so
-/// everything downstream can compare without knowing the direction.
+/// Fitnesses come back **lower-is-better**, and this is the only place that
+/// conversion happens.
 ///
-/// # This is the engine's sole scoring entry
+/// **Nothing else calls [`Fitness::evaluate`] or [`Fitness::evaluate_batch`].**
+/// A direct call stays as-measured, so under
+/// [`crate::fitness::Direction::Maximize`] every later comparison runs
+/// backwards, and it skips the `NaN` gate, where an unchecked `-NaN` sorts
+/// below `-inf` and wins every tournament it enters. Both leave a run that
+/// looks merely unconverged.
 ///
-/// **The engine never calls [`Fitness::evaluate`] or
-/// [`Fitness::evaluate_batch`] directly.** Every path from a batch of genomes
-/// to a set of fitnesses goes through here — generational scoring, steady-state child
-/// scoring, the final outcome, all of it. Those two trait methods exist to be
-/// *implemented* by an objective and *called by this function*.
-///
-/// The rule is worth stating because breaking it fails **silently**, twice over:
-///
-/// - **Orientation is bypassed.** A direct call returns the objective's own
-///   units, so under [`crate::fitness::Direction::Maximize`] every comparison
-///   runs backwards. A run optimizing away from the goal looks exactly like one
-///   that is merely not converging.
-/// - **The `NaN` gate is bypassed.** [`crate::fitness::Direction::orient`] is
-///   what rejects `NaN`,
-///   and under `Maximize` an unchecked `-NaN` sorts *below* `-inf` — so it wins
-///   every tournament it enters and fills the population with whatever produced
-///   it, leaving a run that looks converged.
-///
-/// Both doors are the same door by design. This is also why the alternative — a
-/// direction-aware comparator — was rejected: it needs the direction at every
-/// comparison site, and a missed one is invisible. Scoring the whole batch
-/// in one place is what lets "exactly once" be *guaranteed* rather than
-/// remembered. Spec §5.1.
-///
-/// Defers to [`Fitness::evaluate_batch`] so native objectives parallelize
-/// over rayon and Python-backed ones batch across the FFI boundary.
-///
-/// The graphs are returned rather than dropped because scoring has to build them
-/// anyway: handing them back costs nothing, and it saves the caller re-expressing
-/// the winner to fill [`super::EvolutionOutcome::best_graph`]. Callers that only
-/// need scores can ignore the first element and let it drop.
-///
-/// # Panics
-///
-/// If the objective returns `NaN` for any individual — see
+/// Panics if the objective returns `NaN` — see
 /// [`crate::fitness::Direction::orient`].
 pub fn express_and_score<G, F>(
     batch: &[G],
@@ -462,7 +289,6 @@ where
     G: Genome,
     F: Fitness,
 {
-    // Expression is parallel; `Genome::Context: Send + Sync` exists for this.
     let graphs: Vec<Graph> = batch.par_iter().map(|g| g.express(context)).collect();
 
     let direction = fitness.direction();
@@ -477,26 +303,13 @@ where
 
 /// Summarize a scored population into one evolution-log row.
 ///
-/// Every field is in **engine orientation** — lower is better — because that is
-/// what the caller passes in and nothing here converts. Only the boundary
-/// converts, once, on the way out of a run; see [`express_and_score`] for the
-/// matching flip inward, and spec §5.1 for why there are exactly two.
+/// Every field is **lower-is-better**: that is what the caller passes in, and
+/// nothing here converts.
 ///
-/// This function used to take a [`crate::fitness::Direction`] and convert
-/// `best` and `mean` back
-/// into the objective's units, which meant `std_dev` had to be deliberately
-/// *skipped* — deviation is unchanged by negation. That exception read as a
-/// missed case and needed a test to defend it. With nothing converting here,
-/// there is nothing to except.
-///
-/// `std_dev` is the population deviation (divides by `n`), not the sample
-/// deviation: these are all the individuals there are, not a sample of a larger
-/// group. A single individual therefore has a deviation of zero.
-///
-/// `ci_95` divides by `n - 1` instead, on purpose: it estimates the
-/// uncertainty in `mean_fitness` as a statistic, which is a sample-deviation
-/// question even though `std_dev` right beside it is a population-deviation
-/// one. `n == 1` gives `0.0`, not a division by zero.
+/// `std_dev` divides by `n` — these are all the individuals there are, not a
+/// sample. `ci_95` divides by `n - 1` on purpose: the uncertainty in
+/// `mean_fitness` as a statistic is a sample question even though the deviation
+/// beside it is not.
 pub(super) fn generation_stats(iteration: usize, fitnesses: &[f64]) -> GenerationStats {
     assert!(
         !fitnesses.is_empty(),

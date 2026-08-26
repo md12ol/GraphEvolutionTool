@@ -107,52 +107,72 @@ some_dimension = 256</code></pre>
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/genomes/genome.rs:148</code></td>
-        <td>Implement <code>Genome</code> for your type — <code>express</code>,
+    <tr><td>1</td><td><code>get/src/genomes/genome.rs:8</code></td>
+        <td>Implement <code>Genome</code> for your type, in your own module
+            (<code>genomes/my_genome.rs</code>) — <code>express</code>,
             <code>crossover</code>, <code>mutate</code>, <code>print</code>, and the
-            <code>Context</code> associated type. All five are required.</td></tr>
-    <tr><td>2</td><td><code>get/src/genomes/genome.rs:260</code></td>
-        <td>Declare the <code>Context</code> type your genome named.</td></tr>
-    <tr><td>3</td><td><code>get/src/genomes/mod.rs:16</code></td>
-        <td><code>pub mod</code> your module and re-export the type and its context.</td></tr>
-    <tr><td>4</td><td><code>get/src/config.rs:245</code> and <code>:951</code></td>
+            <code>Context</code> associated type. All of them are required, and <code>mutate</code>
+            is where each of your mutation kind's variants is performed.</td></tr>
+    <tr><td>2</td><td><code>get/src/genomes/genome.rs:54</code> and
+        <code>:90</code></td>
+        <td>Declare the <code>Context</code> type your genome named, struct and fields <code>pub</code>,
+            and the mutation kind it carries. The enum is what makes the operator selectable from a
+            config; a genome that always varies itself the same way needs none.</td></tr>
+    <tr><td>3</td><td><code>get/src/genomes.rs:8</code></td>
+        <td><code>pub mod</code> your module, then extend both re-export lists.</td></tr>
+    <tr><td>4</td><td><code>get/src/config.rs:149</code> and <code>:713</code></td>
         <td>A <code>GenomeConfig</code> variant plus the struct it carries, <i>and</i> its arm in
             <code>validate_genome</code>.</td></tr>
-    <tr><td>5</td><td><code>get/src/dispatch.rs:403</code></td>
+    <tr><td>5</td><td><code>get/src/dispatch.rs:270</code></td>
         <td>A start builder beside <code>sda_start</code>: validate the dimensions once, mint
             <code>population_size</code> individuals, build the context.</td></tr>
-    <tr><td>6</td><td><code>get/src/dispatch.rs:667</code></td>
+    <tr><td>6</td><td><code>get/src/dispatch.rs:453</code></td>
         <td>One arm in the genome match, calling your step-5 builder. The <b>strategy</b> match is
             not touched — it is generic over the genome.</td></tr>
-    <tr><td>7</td><td><code>get/src/py_config.rs:407</code> and <code>:677</code></td>
+    <tr><td>7</td><td><code>get/src/py_config.rs:268</code>, <code>:476</code> and
+        <code>config.example.toml:181</code></td>
         <td><b>Optional.</b> The Python-side variant and its <code>to_toml_value</code> arm, plus
-            one line in <code>python_attribute_path</code> per field step 4 validates by name.</td></tr>
+            one line in <code>python_attribute_path</code> per field step 4 validates by name, plus
+            a commented-out <code>[genome]</code> block in the example config.</td></tr>
   </tbody>
 </table>
 </div>
 
 <h2>Steps 1 to 3 — The Representation</h2>
 
-<pre><code class="language-rust">// step 1 — genomes/genome.rs:148
+<pre><code class="language-rust">// step 1 — genomes/genome.rs:8
 impl Genome for MyGenome {
     type Context = MyContext;
 
     fn express(&amp;self, context: &amp;Self::Context) -&gt; Graph { ... }
     fn crossover&lt;R: Rng + ?Sized&gt;(&amp;mut self, other: &amp;mut Self, rng: &amp;mut R) { ... }
-    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, context: &amp;Self::Context, rng: &amp;mut R) { ... }
+    fn mutate&lt;R: Rng + ?Sized&gt;(&amp;mut self, context: &amp;Self::Context, rng: &amp;mut R) {
+        match context.mutation {
+            MyMutation::SomeVariant =&gt; { /* exactly one change to self */ }
+        }
+    }
     fn print(&amp;self) -&gt; String { ... }
 }
 
-// step 2 — genomes/genome.rs:260
+// step 2a — genomes/genome.rs:54
 #[derive(Clone, Debug)]
 pub struct MyContext {
     pub num_nodes: usize,
-    pub some_mutation_rate: f64,
+    pub some_setting: f64,
+    pub mutation: MyMutation,
 }
 
-// step 3 — genomes/mod.rs:16
+// step 2b — genomes/genome.rs:90
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MyMutation {
+    #[default]
+    SomeVariant,
+}
+
+// step 3 — genomes.rs:8
 pub mod my_genome;
-pub use my_genome::MyGenome;</code></pre>
+pub use my_genome::{MyGenome, MyOperators};
+pub use genome::{MyContext, MyMutation};</code></pre>
 
 <div class="callout">
   <p>
@@ -168,24 +188,24 @@ pub use my_genome::MyGenome;</code></pre>
 
 <h2>Steps 4 to 6 — Config and Dispatch</h2>
 
-<pre><code class="language-rust">// step 4a — config.rs:245
+<pre><code class="language-rust">// step 4a — config.rs:149
 MyGenome(MyGenomeConfig),
 
-// step 4b — config.rs:951
+// step 4b — config.rs:713
 GenomeConfig::MyGenome(mine) =&gt; {
     if mine.some_dimension == 0 {
         return Err(invalid("some_dimension", "must be at least 1"));
     }
 }
 
-// step 5 — dispatch.rs:403
+// step 5 — dispatch.rs:270
 pub(crate) fn my_genome_start&lt;R: Rng + ?Sized&gt;(
     config: &amp;Config,
     mine: &amp;MyGenomeConfig,
     rng: &amp;mut R,
 ) -&gt; PyResult&lt;(MyContext, Vec&lt;MyGenome&gt;)&gt; { ... }
 
-// step 6 — dispatch.rs:667
+// step 6 — dispatch.rs:453
 GenomeConfig::MyGenome(mine) =&gt; {
     let (genome_context, population) = my_genome_start(config, mine, &amp;mut rng)?;
     ...
@@ -195,8 +215,8 @@ GenomeConfig::MyGenome(mine) =&gt; {
 
 <p>
   Leaving it out costs nothing elsewhere; the genome is then configurable from a TOML file but
-  absent from the Python API. The variant goes at <code>get/src/py_config.rs:407</code>, and the
-  <code>python_attribute_path</code> lines at <code>:677</code>.
+  absent from the Python API. The variant goes at <code>get/src/py_config.rs:476</code>, and the
+  <code>python_attribute_path</code> lines at <code>:476</code>.
 </p>
 
 <div class="callout">

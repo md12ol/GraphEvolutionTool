@@ -1,23 +1,6 @@
-//! `get-run` — drive an evolution run straight from a `config.toml`, no
-//! Python interpreter and no `get.so` build required.
-//!
-//! Mirrors the steps a Python caller takes (`GraphEvolver::new` → `run` →
-//! `save_logs`/`save_results`) through [`get::run_many_from_toml`], so a run's
-//! output files are identical whichever front end produced them.
-//!
-//! # Where the files go
-//!
-//! With no `--out`, into the working directory under the fixed names
-//! `run_log.csv` and `best_individual.txt` (+ `.toml`) — which means a second
-//! invocation overwrites the first, and four runs need four directories. That
-//! is why `--runs N` for `N > 1` requires `--out`: one invocation cannot be
-//! allowed to overwrite itself.
-//!
-//! With `--out <dir>`, into `<dir>/<timestamp>-<seed>/`, one directory per
-//! invocation, so nothing is ever overwritten and the directory name says which
-//! run it was. Several replicates get a `run_<index>/` sub-directory each; a
-//! single run's files sit directly in the timestamped directory, there being
-//! nothing to tell apart.
+//! `get-run` — drive an evolution run from a `config.toml`, with no Python
+//! interpreter and no built extension module. `USAGE` below is the whole
+//! interface.
 
 use std::env;
 use std::process::ExitCode;
@@ -32,6 +15,10 @@ struct Args {
 
 const USAGE: &str = "usage: get-run <config.toml> [seed] [--runs N] [--out DIR]
 
+Writes run_log.csv and best_individual.txt (+ .toml) into the working directory,
+or into DIR/<timestamp>-<seed>/ with --out, where each replicate of a multi-run
+invocation gets its own run_<index>/ sub-directory.
+
   seed        master seed; random if omitted. Replicate `i` is reproduced by
               re-running with the same master seed and reading run_<i>.
   --runs N    number of replicates from that master seed (default 1). More
@@ -40,10 +27,6 @@ const USAGE: &str = "usage: get-run <config.toml> [seed] [--runs N] [--out DIR]
               directory, so nothing is overwritten between invocations.";
 
 /// Parse the command line, or say what was wrong with it.
-///
-/// Hand-rolled rather than pulled from a crate: two flags and two positionals
-/// do not earn a dependency, and this binary is the one place in the tree that
-/// reads `argv` at all.
 fn parse_args(argv: &[String]) -> Result<Args, String> {
     let mut positional: Vec<&String> = Vec::new();
     let mut n_runs = 1usize;
@@ -81,9 +64,6 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
         return Err("expected a config file and an optional seed".to_string());
     }
 
-    // Without --out every replicate writes the same three fixed names in the
-    // working directory, so all but the last are lost with nothing said. Refuse
-    // rather than invent directories nobody asked for — that is what --out is.
     if n_runs > 1 && out_dir.is_none() {
         return Err(format!(
             "--runs {n_runs} needs --out DIR; without it every replicate would \
@@ -110,9 +90,7 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
 fn main() -> ExitCode {
     let argv: Vec<String> = env::args().collect();
 
-    // Before parsing, so `--help` works without a config file. It is the first
-    // thing a new user runs, and printing usage to stderr with a failing exit
-    // code is the wrong answer to a question that was asked correctly.
+    // Before parsing, so `--help` works without a config file.
     if argv[1..].iter().any(|arg| arg == "--help" || arg == "-h") {
         println!("{USAGE}");
         return ExitCode::SUCCESS;
@@ -126,6 +104,7 @@ fn main() -> ExitCode {
         }
     };
 
+    // The only record of a seed that was omitted and drawn at random.
     println!(
         "config = {}, seed = {}, runs = {}",
         args.config_path, args.seed, args.n_runs
@@ -143,9 +122,8 @@ fn main() -> ExitCode {
 
     for (run_index, summary) in summaries.iter().enumerate() {
         if args.n_runs > 1 {
-            // Zero-based, because `run_index` is half of the pair that
-            // reproduces a replicate — printing it 1-based would invite someone
-            // to ask for the wrong one.
+            // Zero-based: `run_index` is half of the pair that reproduces a
+            // replicate, with the master seed.
             println!("\n=== run_index {run_index}, of {} ===", args.n_runs);
         }
 
@@ -193,6 +171,8 @@ fn main() -> ExitCode {
         }
     }
 
+    // Success even if a write above failed: the run itself finished, and its
+    // results are on stdout whether or not they reached a file.
     ExitCode::SUCCESS
 }
 

@@ -1,23 +1,24 @@
+//! The undirected multigraph every genome expresses into and every objective
+//! scores.
+
+/// An undirected multigraph on a fixed node count. An edge carries a
+/// multiplicity capped at `max_edge_multiplicity`; pass `1` for a simple graph.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Graph {
     pub num_nodes: usize,
     pub max_edge_multiplicity: u32,
-    /// Symmetric adjacency matrix whose entries are edge weights.
-    ///
-    /// A zero entry means that no edge exists. A value greater than one
-    /// represents parallel edges between the same pair of vertices.
+    /// Edge weights, zero meaning no edge. Kept symmetric: a write that sets
+    /// `[u][v]` without `[v][u]` makes the graph directed, which nothing checks.
     adjacency: Vec<Vec<u32>>,
 }
 
 impl Graph {
     /// Create an empty graph with `num_nodes` nodes, no edges, and edge
-    /// weights capped at `max_edge_multiplicity`. Pass `1` for a simple
-    /// (unweighted) graph.
+    /// weights capped at `max_edge_multiplicity`.
     pub fn new(num_nodes: usize, max_edge_multiplicity: u32) -> Self {
         Self {
             num_nodes,
             max_edge_multiplicity,
-            // num_nodes x num_nodes matrix, all zeros (no edges yet).
             adjacency: vec![vec![0; num_nodes]; num_nodes],
         }
     }
@@ -37,9 +38,8 @@ impl Graph {
 
     /// Set the multiplicity of an undirected edge directly.
     ///
-    /// A zero weight clears the edge. Values above
-    /// this graph's configured cap are clamped to that cap. Self-loops and
-    /// invalid vertices are ignored.
+    /// A zero weight clears the edge. Values above this graph's configured cap
+    /// are clamped to it. Self-loops and invalid vertices are ignored.
     pub fn set_edge(&mut self, u: usize, v: usize, weight: u32) {
         if u >= self.num_nodes || v >= self.num_nodes || u == v {
             return;
@@ -50,9 +50,8 @@ impl Graph {
         self.adjacency[v][u] = weight;
     }
 
-    /// Add one parallel edge, saturating at this graph's configured cap.
-    /// Returns `true` if the multiplicity actually increased, or `false` if
-    /// the pair was invalid, a self-loop, or already at the cap.
+    /// Add one parallel edge, saturating at the cap. Returns whether the
+    /// multiplicity increased.
     pub fn add_edge(&mut self, u: usize, v: usize) -> bool {
         let current = self.weight(u, v);
         let next = current.saturating_add(1).min(self.max_edge_multiplicity);
@@ -70,16 +69,13 @@ impl Graph {
 
     /// Set every weighted edge in `edges`.
     pub fn set_edges(&mut self, edges: &[(usize, usize, u32)]) {
-        // &(u, v, weight): destructures a reference to the tuple, pulling out
-        // owned copies of its fields directly rather than binding one
-        // reference to the whole tuple. The same &x / |&y| pattern recurs
-        // below in degree().
         for &(u, v, weight) in edges {
             self.set_edge(u, v, weight);
         }
     }
 
-    /// Return each undirected edge once as `(u, v, weight)`.
+    /// Return each undirected edge once as `(u, v, weight)`, with `u < v`,
+    /// sorted by `u` then `v`.
     pub fn get_edge_list(&self) -> Vec<(usize, usize, u32)> {
         let mut edges = Vec::new();
         for u in 0..self.num_nodes {
@@ -93,19 +89,40 @@ impl Graph {
         edges
     }
 
-    /// Return the distinct neighbor at `index`, wrapping modulo the number of
-    /// distinct neighbors.
-    pub(crate) fn get_neighbor_at_index(&self, node: usize, index: usize) -> Option<usize> {
+    /// Return the distinct nodes connected to `node`, ascending. Empty for an
+    /// invalid node.
+    pub fn neighbors(&self, node: usize) -> Vec<usize> {
         if node >= self.num_nodes {
+            return Vec::new();
+        }
+        let mut found = Vec::new();
+        for neighbor in 0..self.num_nodes {
+            if self.adjacency[node][neighbor] > 0 {
+                found.push(neighbor);
+            }
+        }
+        found
+    }
+
+    /// Return the number of distinct nodes connected to `node`.
+    pub fn neighbor_count(&self, node: usize) -> usize {
+        if node >= self.num_nodes {
+            return 0;
+        }
+        self.adjacency[node]
+            .iter()
+            .filter(|&&weight| weight > 0)
+            .count()
+    }
+
+    /// Return the distinct neighbour at `index`, wrapping modulo the number of
+    /// distinct neighbours.
+    pub(crate) fn get_neighbor_at_index(&self, node: usize, index: usize) -> Option<usize> {
+        let count = self.neighbor_count(node);
+        if count == 0 {
             return None;
         }
-
-        let degree = self.degree(node);
-        if degree == 0 {
-            return None;
-        }
-
-        let target = index % degree;
+        let target = index % count;
         let mut seen = 0;
         for neighbor in 0..self.num_nodes {
             if self.adjacency[node][neighbor] > 0 {
@@ -116,17 +133,6 @@ impl Graph {
             }
         }
         None
-    }
-
-    /// Return the number of distinct nodes connected to `node`.
-    pub fn degree(&self, node: usize) -> usize {
-        if node >= self.num_nodes {
-            return 0;
-        }
-        self.adjacency[node]
-            .iter()
-            .filter(|&&weight| weight > 0) // && here is double deref, not logical-AND
-            .count()
     }
 }
 
@@ -220,7 +226,7 @@ mod tests {
 
         assert_eq!(graph.get_edge_list(), vec![]);
         assert_eq!(graph.weight(1, 1), 0);
-        assert_eq!(graph.degree(1), 0);
+        assert_eq!(graph.neighbor_count(1), 0);
         // weight() answers for an out-of-range pair too, rather than indexing.
         assert_eq!(graph.weight(0, 3), 0);
         assert_eq!(graph.weight(9, 0), 0);
@@ -246,14 +252,14 @@ mod tests {
     }
 
     #[test]
-    fn degree_and_neighbor_selection_use_distinct_neighbors() {
+    fn neighbor_count_and_selection_use_distinct_neighbors() {
         let mut graph = Graph::new(4, 5);
         graph.set_edge(0, 1, 2);
         graph.set_edge(0, 3, 1);
 
-        assert_eq!(graph.degree(0), 2);
+        assert_eq!(graph.neighbor_count(0), 2);
         // Two neighbours, but three edge copies between them — the distinction
-        // degree() exists to make.
+        // neighbor_count() exists to make.
         assert_eq!(graph.weight(0, 1) + graph.weight(0, 3), 3);
         assert_eq!(graph.get_neighbor_at_index(0, 0), Some(1));
         assert_eq!(graph.get_neighbor_at_index(0, 1), Some(3));

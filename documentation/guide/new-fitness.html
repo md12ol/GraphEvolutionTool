@@ -75,7 +75,7 @@ some_parameter = 0.5</code></pre>
   </p>
 </div>
 
-<h2>Route 1 — Python: A Registered Callable</h2>
+<h2 id="python-route">Route 1 — Python: A Registered Callable</h2>
 
 <p>
   Set <code>[fitness] type = "python"</code> in the config and register your function. No Rust, no
@@ -176,6 +176,12 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
       returning scores in the wrong <i>order</i> is neither, and will quietly evolve nonsense.</li>
 </ul>
 
+<div class="warn not-in-release">
+  <b>Not part of the v0.9 release.</b> Both Rust routes below need GET as a crate, and GET does not
+  yet publish to crates.io — <a href="#python-route">Route 1</a>, a registered Python callable, is
+  the supported way to add an objective for now. This note is removed once the crate is obtainable.
+</div>
+
 <h2 id="rust-route">Route 2 — Rust: As a Library</h2>
 
 <p>
@@ -210,7 +216,7 @@ impl Fitness for EdgeBudget {
 </p>
 
 <div class="note">
-  <b>Numbers you read from the outcome are in engine orientation</b> — lower is better, whatever
+  <b>Numbers you read from the outcome are as lower-is-better</b> — lower is better, whatever
   your direction said. That is the stated cost of converting only at the two edges of the system,
   and the direction carried on the outcome is what you convert with. See
   <a href="fitness.html">Fitness &amp; Output</a>.
@@ -221,7 +227,14 @@ impl Fitness for EdgeBudget {
   edge of this route rather than a hint that you are doing it wrong.
 </p>
 
-<h2>Route 3 — Rust: Inside GET Itself</h2>
+<h2 id="in-crate-route">Route 3 — Rust: Inside GET Itself</h2>
+
+<div class="warn not-in-release">
+  <b>Not part of the v0.9 release.</b> This route means editing GET's own source, so it needs the
+  crate, and GET does not yet publish to crates.io — <a href="#python-route">Route 1</a>, a
+  registered Python callable, is the supported way to add an objective for now. This note is removed
+  once the crate is obtainable.
+</div>
 
 <p>
   This is the route that gives an objective a <b>name</b> — after it,
@@ -242,20 +255,20 @@ impl Fitness for EdgeBudget {
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/fitness.rs:242</code></td>
+    <tr><td>1</td><td><code>get/src/fitness.rs:393</code></td>
         <td>implement the trait, and validate the objective's inputs in its constructor</td></tr>
-    <tr><td>2</td><td><code>get/src/config.rs:465</code>, <code>:491</code> and <code>:1083</code></td>
+    <tr><td>2</td><td><code>get/src/config.rs:310</code>, <code>:328</code> and <code>:842</code></td>
         <td>the config variant, its type name, and its validation arm</td></tr>
-    <tr><td>3</td><td><code>get/src/dispatch.rs:219</code></td>
+    <tr><td>3</td><td><code>get/src/dispatch.rs:133</code></td>
         <td>the arm turning the variant into a boxed objective</td></tr>
-    <tr><td>4</td><td><code>get/src/py_config.rs:482</code> and <code>:706</code></td>
+    <tr><td>4</td><td><code>get/src/py_config.rs:326</code> and <code>:499</code></td>
         <td>the Python variant and its attribute paths — optional</td></tr>
     <tr><td>5</td><td><code>config.example.toml:87</code></td>
         <td>an example block, if the objective ships</td></tr>
-    <tr><td>6</td><td><code>get/src/dispatch.rs:1152</code></td>
+    <tr><td>6</td><td><code>get/src/dispatch.rs:869</code></td>
         <td>a helper returning the objective's <code>[fitness]</code> block — skippable, see
             below</td></tr>
-    <tr><td>7</td><td><code>get/src/dispatch.rs:1186</code></td>
+    <tr><td>7</td><td><code>get/src/dispatch.rs:902</code></td>
         <td>the test case asserting the boxed objective reports its own direction</td></tr>
   </tbody>
 </table>
@@ -274,7 +287,7 @@ impl Fitness for EdgeBudget {
   with the type and its implementation, in <code>get/src/fitness.rs</code>:
 </p>
 
-<pre><code class="language-rust" data-example>// step 1 — fitness.rs:242
+<pre><code class="language-rust" data-example>// step 1 — fitness.rs:393
 pub struct MyObjective {
     threshold: f64,
 }
@@ -294,7 +307,7 @@ impl Fitness for MyObjective {
     fn evaluate(&amp;self, graph: &amp;Graph) -&gt; f64 {
         let mut over = 0;
         for node in 0..graph.num_nodes {
-            if graph.degree(node) as f64 &gt; self.threshold {
+            if graph.neighbor_count(node) as f64 &gt; self.threshold {
                 over += 1;
             }
         }
@@ -318,13 +331,13 @@ impl Fitness for MyObjective {
 
 <p>All in <code>get/src/config.rs</code>. The variant, its name, and its constraints:</p>
 
-<pre><code class="language-rust">// step 2a — config.rs:465   the variant a user selects
+<pre><code class="language-rust">// step 2a — config.rs:328   the variant a user selects
 MyObjective { threshold: f64 },
 
-// step 2b — config.rs:491   the string `[fitness] type` is written as
+// step 2b — config.rs:328   the string `[fitness] type` is written as
 FitnessConfig::MyObjective { .. } =&gt; "my_objective",
 
-// step 2c — config.rs:1083  the validation arm, if anything can be wrong
+// step 2c — config.rs:842  the validation arm, if anything can be wrong
 FitnessConfig::MyObjective { threshold } =&gt; {
     if !threshold.is_finite() {
         return Err(invalid("threshold", "must be finite"));
@@ -354,7 +367,7 @@ FitnessConfig::MyObjective { threshold } =&gt; {
 
 <h2>Step 3 — Dispatch</h2>
 
-<pre><code class="language-rust">// step 3 — dispatch.rs:219
+<pre><code class="language-rust">// step 3 — dispatch.rs:133
 FitnessConfig::MyObjective { threshold } =&gt; {
     let objective = MyObjective::new(*threshold).map_err(PyValueError::new_err)?;
     Ok(Box::new(objective))
@@ -380,11 +393,11 @@ FitnessConfig::MyObjective { threshold } =&gt; {
 
 <h2>Steps 4 and 5 — Python and the Example, Both Optional</h2>
 
-<pre><code class="language-rust">// step 4 — py_config.rs:482   the Python-side variant
+<pre><code class="language-rust">// step 4 — py_config.rs:499   the Python-side variant
 #[pyo3(constructor = (threshold))]
 MyObjective { threshold: f64 },
 
-// step 4 — py_config.rs:706   an attribute path per validated field
+// step 4 — py_config.rs:499   an attribute path per validated field
 "threshold" =&gt; Some("config.fitness.threshold"),</code></pre>
 
 <p>
@@ -429,7 +442,7 @@ MyObjective { threshold: f64 },
 </table>
 </div>
 
-<pre><code class="language-rust">// step 6 — dispatch.rs:1152   beside `sir_block` and `struct_match_block`
+<pre><code class="language-rust">// step 6 — dispatch.rs:869   beside `sir_block` and `struct_match_block`
 fn my_objective_block(threshold: f64) -> String {
     format!("[fitness]\ntype = \"my_objective\"\nthreshold = {threshold}\n")
 }</code></pre>
@@ -441,7 +454,7 @@ fn my_objective_block(threshold: f64) -> String {
 
 <h2>Step 7 — The Test That Catches a Silent Failure</h2>
 
-<pre><code class="language-rust">// step 7 — dispatch.rs:1186   one entry in the existing `cases` array
+<pre><code class="language-rust">// step 7 — dispatch.rs:902   one entry in the existing `cases` array
 let cases = [
     (sir_block("epi_spread", ""), Direction::Maximize),
     (sir_block("epi_length", ""), Direction::Maximize),

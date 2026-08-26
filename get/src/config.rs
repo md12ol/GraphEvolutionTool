@@ -1,19 +1,9 @@
 //! Deserializable mirror of `config.toml`.
 //!
-//! These are mostly flat, owned structs rather than the engine's own context
-//! types: [`crate::evolver::SharedEvolutionContext`] is generic over the genome
-//! and carries a non-deserializable `Genome::Context`, so configuration is
-//! parsed into this plain shape and then mapped onto concrete engine types by
-//! the dispatch layer in `dispatch.rs`.
-//!
-//! Plain data types that carry no such baggage are deserialized directly rather
-//! than mirrored — [`EdgeEditOperationWeights`] is nine `f64`s with a `Default`,
-//! and duplicating it here would buy nothing but a conversion to maintain.
-//!
-//! [`crate::py_config`] mirrors these types field-for-field for the Python
-//! front end, and cannot be collapsed into them — pyo3 and serde disagree
-//! about one variant of [`FitnessConfig`]. See that module's header for the
-//! mechanism.
+//! The engine's own context types cannot be deserialized into directly — they
+//! are generic over the genome and carry a non-deserializable
+//! `Genome::Context` — so parsing lands in these plain structs and `dispatch`
+//! maps them onto the engine's types.
 
 use serde::Deserialize;
 
@@ -21,19 +11,11 @@ use crate::evolver::steady_state::{MIN_SCOPE_SIZE, PARENTS_PER_EVENT, REPLACED_P
 use crate::genomes::EdgeEditOperationWeights;
 
 /// Everything the genetic algorithm needs for a run.
-///
-/// `Deserialize` only, deliberately: this type never serializes back to
-/// TOML. [`crate::py_config::PyConfig`] is the one direction that does —
-/// `to_toml`/`to_toml_table` — since only the Python front end ever builds a
-/// config in memory and needs to render it out again; the TOML front end
-/// reads a file and stops.
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    /// Which evolution strategy to run, and its strategy-specific settings.
     pub evolution: EvolutionConfig,
-    /// Number of individuals in the population.
     pub population_size: usize,
-    /// Number of nodes in every expressed graph.
+    /// Nodes in every expressed graph, whatever the representation.
     pub network_size: usize,
     /// Edge-weight cap; defaults to 1 (unweighted).
     #[serde(default = "default_max_edge_multiplicity")]
@@ -44,40 +26,20 @@ pub struct Config {
     pub mutation_rate: f64,
     /// How many mutations a mutating child takes, drawn uniformly from
     /// `1..=max_mutations`. Defaults to 1.
-    ///
-    /// Adjacent to `mutation_rate` because the two are one conceptual knob:
-    /// whether a child mutates, then how many mutations it takes.
     #[serde(default = "default_max_mutations")]
     pub max_mutations: usize,
     /// Which slice of the population one breeding event draws from.
-    ///
-    /// Required, and deliberately not defaulted per strategy: an implied scope
-    /// is what let a selection parameter size it, which is the coupling
-    /// `[selection]` was split to remove.
     pub scope: ScopeConfig,
     /// Parent-selection strategy, applied within that scope.
     pub selection: SelectionConfig,
-    /// Recombination operator. Omitted, two-point — which is what every
-    /// representation did before the operator became selectable, so an
-    /// existing config keeps its behaviour by leaving `[crossover]` out.
+    /// Recombination operator; omitted, two-point.
     #[serde(default)]
     pub crossover: CrossoverConfig,
-    /// Genome representation and its dimensions.
     pub genome: GenomeConfig,
-    /// Fitness objective.
     pub fitness: FitnessConfig,
 }
 
 /// Evolution strategy and its strategy-specific settings.
-///
-/// # Part of the chain that adds a strategy
-///
-/// This is where a new strategy becomes selectable by name from a config
-/// file — step 2 of the seven `crate::evolver::Evolver`'s doc walks, which is
-/// where step 1 lands the strategy itself. The step after this one is
-/// `validate_evolution_and_selection`, for any constraint the variant needs;
-/// the one after that is the arm in `dispatch::run_strategy` that constructs
-/// it. A variant added here and nowhere else is dead — nothing constructs it.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvolutionConfig {
@@ -90,44 +52,21 @@ pub enum EvolutionConfig {
     SteadyState {
         num_mating_events: usize,
         /// Which members of the scope a mating event's children overwrite.
-        ///
-        /// Steady-state's own, for the same reason `elite_count` is
-        /// generational's: it is how this strategy makes room for a child.
-        /// Generational builds a whole new population and displaces nobody, so
-        /// the field would mean nothing there.
-        ///
-        /// Defaulted, because `Worst` is what makes steady-state self-elitist
-        /// and a run that never says otherwise should keep that guarantee.
         #[serde(default)]
         replacement: ReplacementConfig,
     },
-    // ADD A STRATEGY STEP 2 — a variant here, carrying whatever stopping
-    // condition your strategy uses, plus any axis that is *its* rather than
-    // every strategy's. `elite_count` and `replacement` are both that: one is
-    // how generational carries individuals forward, the other is how
-    // steady-state makes room for a child, and neither means anything to the
-    // other strategy. A strategy that displaces individuals wants a
-    // `replacement: ReplacementConfig` of its own here. What every strategy
-    // shares — `[scope]` and `[selection]` — is already on `Config` and needs
-    // nothing from you.
+    // ADD A STRATEGY STEP 2 — a variant here, carrying your stopping condition
+    // and any axis that is yours rather than every strategy's. What every
+    // strategy shares is already on `Config`. The variant name becomes
+    // `type = "my_strategy"` under `[evolution]`, via the `rename_all` above.
     //
     //     MyStrategy {
     //         num_my_events: usize,
     //     },
-    //
-    // The variant name becomes `type = "my_strategy"` under `[evolution]`, via
-    // the `rename_all` above. Constrain it in
-    // `validate_evolution_and_selection` — search `ADD A STRATEGY STEP 3` for
-    // that arm.
 }
 
 /// The slice of the population one breeding event draws from. Maps onto
-/// [`crate::evolver::scope::Scope`], whose docs walk the three steps a new
-/// variant touches — this is step 3, and `dispatch::scope` constructs it.
-///
-/// `size` belongs to this block and to nothing else. Steady-state used to take
-/// it from `[selection]`'s `tournament_size`, which meant a scheme without a
-/// tournament had no way to say how large a scope it wanted.
+/// [`crate::evolver::scope::Scope`].
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ScopeConfig {
@@ -136,114 +75,80 @@ pub enum ScopeConfig {
     /// `size` distinct individuals, drawn fresh for each breeding event.
     RandomSubset { size: usize },
     // ADD A SCOPE STEP 3 — the variant a user names under `[scope]`, mirroring
-    // the one added to `Scope`:
+    // the one added to `Scope`. Give it parameters of its own rather than
+    // reading another block's.
     //
     //     Neighbourhood { radius: usize },
-    //
-    // Give it parameters of its own rather than reading another block's. Then
-    // constrain them in `Config::validate_scope`, and add the arm building it —
-    // search `ADD A SCOPE STEP 4`. A field validated here also needs a line in
-    // `py_config::python_attribute_path`, or a Python caller sees an error
-    // naming a TOML field they never wrote.
 }
 
 /// Which members of a scope a mating event's children overwrite. Maps onto
-/// [`crate::evolver::replacement::Replacement`], whose docs walk the three
-/// steps a new policy touches.
-///
-/// Lives under `[evolution]` rather than in a block of its own because it is
-/// steady-state's, the way `elite_count` is generational's.
+/// [`crate::evolver::replacement::Replacement`].
 #[derive(Debug, Default, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ReplacementConfig {
-    /// The least fit of the scope. The default, and what makes steady-state
-    /// self-elitist: the scope's best is never among those overwritten.
+    /// The least fit of the scope. What makes steady-state self-elitist: the
+    /// scope's best is never among those overwritten.
     #[default]
     Worst,
-    // ADD A REPLACEMENT STEP 3 (for SteadyState) — the variant a user names under
-    // `[evolution] replacement`, mirroring the one added to `Replacement`:
+    /// Distinct members of the scope, drawn uniformly. Not self-elitist.
+    Random,
+    // ADD A REPLACEMENT STEP 3 (for SteadyState) — the variant a user names
+    // under `[evolution] replacement`, mirroring the one added to
+    // `Replacement`. Say at the variant what the policy gives up.
     //
-    //     Random,
-    //
-    // Then the arm building it in `dispatch::replacement`. Say at the variant
-    // what the policy gives up: anything that can overwrite the scope's best
-    // removes the self-elitism the default guarantees.
+    //     Tournament { size: usize },
 }
 
-/// Parent-selection strategy. Maps onto [`crate::evolver::common::Selection`],
-/// whose docs list every site a second scheme touches — this variant is step 3
-/// of six, and `dispatch::selection` is the arm that constructs it.
+/// Parent-selection strategy. Maps onto [`crate::evolver::common::Selection`].
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionConfig {
-    /// The fittest of the scope. What steady-state uses: its selection pressure
-    /// comes from the scope being small, not from a draw within it.
+    /// The fittest of the scope.
     Best,
     /// A tournament of `tournament_size`, sampled with replacement from the
     /// scope. `tournament_size` sizes the tournament and nothing else — the
     /// scope has its own `size` under `[scope]`.
     Tournament { tournament_size: usize },
     // ADD A SELECTION STEP 3 — the variant a user names under `[selection]`,
-    // mirroring the one added to `Selection`:
+    // mirroring the one added to `Selection`. Constrain its own parameters in
+    // `validate_evolution_and_selection`; there is no scheme-by-strategy check
+    // to extend, since every scheme works with every strategy.
     //
     //     Roulette { pressure: f64 },
-    //
-    // Constrain its own parameters in `validate_evolution_and_selection` if it
-    // has any — there is deliberately no scheme-by-strategy check to extend,
-    // since every scheme works with every strategy. The arm mapping this onto
-    // the engine type is next: search `ADD A SELECTION STEP 4` for it.
 }
 
-/// Recombination operator. Maps onto [`crate::evolver::common::Crossover`],
-/// whose docs list every site a second operator touches — this is step 3 of
-/// six, and `dispatch::crossover` is the arm that constructs it.
+/// Recombination operator. Maps onto [`crate::evolver::common::Crossover`].
 ///
-/// **Applies to whichever representation is selected**, so an operator only
-/// some genomes can honour is rejected by [`Config::validate_crossover`]
-/// rather than by the type system. The mutation operator is the other way
-/// round: it is chosen per genome, under `[genome]`, so a mismatch there
-/// cannot be written down at all.
+/// `[crossover]` is a shared section, chosen independently of `[genome]`, so an
+/// operator only some representations can honour is rejected by
+/// [`Config::validate_crossover`] rather than by the type system.
 #[derive(Debug, Default, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CrossoverConfig {
-    /// Swap one contiguous band between the parents. The default, and what
-    /// every representation did before this was selectable.
+    /// Swap one contiguous band between the parents.
     #[default]
     TwoPoint,
     // ADD A CROSSOVER STEP 3 — a variant here, matching the one added to
-    // `Crossover`:
+    // `Crossover`. Pair it with each representation in
+    // `Config::validate_crossover`.
     //
     //     MyCrossover { some_param: f64 },
-    //
-    // Constrain it in `Config::validate_crossover` if only some genomes can
-    // honour it — search `ADD A CROSSOVER STEP 3` again for that arm. Then
-    // the arm in `dispatch::crossover` that maps it onto the operator —
-    // search `ADD A CROSSOVER STEP 4`.
 }
 
 /// Genome representation and the dimensions used to build random individuals.
 ///
-/// Each variant carries only what a *random* individual is built from, plus
+/// A variant carries only what a *random* individual is built from, plus
 /// whatever the representation's own mutation needs — not run-level settings
 /// like `network_size` or `max_edge_multiplicity`, which are top-level and
 /// reach the genome through its context.
-///
-/// # Part of the chain that adds a representation
-///
-/// This is step 4 of seven: the variant here is what a user selects under
-/// `[genome]`, and [`Config::validate_genome`] is where its dimensions are
-/// checked. Validate anything that would panic during expression — an
-/// out-of-range `init_state` is the live example — because the alternative is
-/// a panic mid-run inside a generic. `dispatch`'s start builder (step 5) then
-/// turns the variant into a population and a context;
-/// [`crate::genomes::genome`]'s module doc has all seven steps.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GenomeConfig {
     EdgeEdit(EdgeEditGenomeConfig),
     Sda(SdaGenomeConfig),
-    // ADD A GENOME STEP 4 — a variant here, plus the struct it carries and its
-    // arm in `validate_genome`.
+    // ADD A GENOME STEP 4 — a variant here, plus the struct it carries. The
+    // variant name becomes `type = "my_genome"` under `[genome]`, via the
+    // `rename_all` above.
     //
     //     MyGenome(MyGenomeConfig),
     //
@@ -252,23 +157,13 @@ pub enum GenomeConfig {
     //     pub struct MyGenomeConfig {
     //         pub some_dimension: usize,
     //     }
-    //
-    // The variant name becomes `type = "my_genome"` under `[genome]`, via the
-    // `rename_all` above. Validate in `Config::validate_genome` — search for
-    // `ADD A GENOME STEP 4` again to find that arm.
 }
 
 /// Everything the edge-edit genome takes from `[genome]`.
 ///
-/// Named for the same reason as [`SdaGenomeConfig`]: a struct variant is not a
-/// type, so anything wanting to pass "the edge-edit settings" around had to
-/// re-list every field positionally. Only `py_config`'s mirror re-lists them
-/// now, and the round-trip tests fail to compile if it falls behind.
-///
-/// `deny_unknown_fields` because every key here is either required or has a
-/// default, so an unrecognized one under `[genome]` is a typo or a setting the
-/// writer expected to have an effect — silently ignoring it is how a run comes
-/// back with the wrong parameters and no complaint.
+/// `deny_unknown_fields`: every key here is required or defaulted, so an
+/// unrecognized one is a typo, and ignoring it silently runs with parameters
+/// its author never chose.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EdgeEditGenomeConfig {
@@ -277,14 +172,7 @@ pub struct EdgeEditGenomeConfig {
     /// omitted field by field, every operation defaults to a weight of 1.0.
     #[serde(default)]
     pub operation_weights: EdgeEditOperationWeights,
-    /// Which mutation this representation applies. Omitted, the one it
-    /// applied before the operator was selectable.
-    ///
-    /// Nested under `[genome]` rather than given a section of its own,
-    /// because the variants are edge-edit's alone — naming SDA's mutation
-    /// here is refused by `deny_unknown_fields` above rather than by any
-    /// check of ours. [`crate::genomes::EdgeEditMutation`] has the reasoning
-    /// and the steps for adding one.
+    /// Which mutation this representation applies.
     #[serde(default)]
     pub mutation: EdgeEditMutationConfig,
 }
@@ -294,56 +182,38 @@ pub struct EdgeEditGenomeConfig {
 #[derive(Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EdgeEditMutationConfig {
-    /// Reroll one gene from the operation mix. The default.
+    /// Reroll one gene from the operation mix.
     #[default]
     RerollGene,
-    // ADD A MUTATION STEP 3 (for EdgeEdit) — a variant here, matching the one added to
-    // `EdgeEditMutation`:
+    // ADD A MUTATION STEP 3 (for EdgeEdit) — a variant here, matching the one
+    // added to `EdgeEditMutation`.
     //
     //     MyMutation { some_param: f64 },
-    //
-    // Then the arm in `dispatch::edge_edit_mutation` that maps it onto the
-    // operator — search `ADD A MUTATION STEP 3 (for EdgeEdit)` again for that arm.
 }
 
 /// Everything the sda genome takes from `[genome]`.
 ///
-/// A named struct rather than fields inlined on the enum variant, because a
-/// struct variant is not a type: anything wanting to pass "the sda settings"
-/// around had to re-list every field positionally, so adding one meant editing
-/// the list in several places that gained nothing from knowing it. Only
-/// `py_config`'s mirror re-lists them now, and the round-trip tests fail to
-/// compile if it falls behind.
+/// No `num_chars`: the alphabet is derived as `max_edge_multiplicity + 1`, so
+/// every character is a legal edge weight.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SdaGenomeConfig {
     pub num_states: usize,
-    /// No `num_chars` here: the alphabet is derived as
-    /// `max_edge_multiplicity + 1` so every character is a legal edge weight.
-    /// Whatever maps this onto `SdaContext` derives it.
     pub max_resp_len: usize,
-    /// State the automaton starts in, before consuming `init_char`'s first
-    /// transition; defaults to 0.
-    ///
-    /// Must be `< num_states`. This is a precondition, not just a default:
-    /// `SdaGenome::run` indexes its response table with this value, so an
-    /// out-of-range `init_state` panics during expression. Whatever maps
-    /// this onto `SdaContext` is responsible for rejecting it at startup.
+    /// State the automaton starts in; defaults to 0. Must be `< num_states`,
+    /// or expression panics indexing the response table with it.
     #[serde(default)]
     pub init_state: usize,
     /// Chance a mutation redraws the initial character rather than touching
-    /// the transition table. Omitted, it keeps the value sda used when this
-    /// was a private constant.
+    /// the transition table.
     #[serde(default = "default_init_char_mutation_rate")]
     pub init_char_mutation_rate: f64,
-    /// Given the initial character was not chosen, the chance of redrawing a
-    /// transition's target state rather than its response. Omitted, the two
-    /// are equally likely, as they were before this was configurable.
+    /// Applies only when the initial character was not redrawn: the chance of
+    /// redrawing a transition's target state rather than its response.
     #[serde(default = "default_transition_vs_response_rate")]
     pub transition_vs_response_rate: f64,
-    /// Which mutation this representation applies. Omitted, the one it
-    /// applied before the operator was selectable. The two rates above shape
-    /// it; this selects it.
+    /// Which mutation this representation applies. The rates above shape it;
+    /// this selects it.
     #[serde(default)]
     pub mutation: SdaMutationConfig,
 }
@@ -354,31 +224,19 @@ pub struct SdaGenomeConfig {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SdaMutationConfig {
     /// Redraw the initial character, a transition target or a response,
-    /// chosen by the two rates above. The default.
+    /// chosen by the rates above.
     #[default]
     RedrawOne,
-    // ADD A MUTATION STEP 3 (for SDA) — a variant here, matching the one added to
-    // `SdaMutation`:
+    // ADD A MUTATION STEP 3 (for SDA) — a variant here, matching the one added
+    // to `SdaMutation`.
     //
     //     MyMutation { some_param: f64 },
-    //
-    // Then the arm in `dispatch::sda_mutation` that maps it onto the
-    // operator — search `ADD A MUTATION STEP 3 (for SDA)` again for that arm.
 }
 
 /// Fitness objective and its parameters.
 ///
-/// The three epidemic objectives read the same simulation differently (spec
-/// §5.2), so they share one parameter block rather than triplicating it — see
-/// [`SirParams`]. `epi_prof_match` is the only one that adds anything.
-///
-/// # Part of the chain that adds an objective
-///
-/// This is where a new objective becomes selectable by name from a config
-/// file. The step before it is implementing `Fitness` in `crate::fitness`,
-/// whose module doc walks the whole chain; the step after is the arm in
-/// `dispatch`'s `objective()` that turns this variant into a boxed objective.
-/// A variant added here and nowhere else is dead — nothing constructs it.
+/// The epidemic objectives read the same simulation differently, so they share
+/// one parameter block rather than triplicating it — see [`SirParams`].
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FitnessConfig {
@@ -396,12 +254,9 @@ pub enum FitnessConfig {
     EpiProfMatch {
         #[serde(flatten)]
         sir: SirParams,
-        /// The target profile itself, inline in the config (spec §8).
-        ///
-        /// Compared verbatim. Neither C++ loading convention is reproduced —
-        /// no patient-zero element is prepended and nothing is rescaled by
-        /// `verts / 128` — so this is the profile the run is scored against,
-        /// at the size of the network being built.
+        /// The target profile, inline in the config and compared verbatim:
+        /// no element is prepended and nothing is rescaled, so it must already
+        /// be at the size of the network being built.
         target_profile: Vec<f64>,
     },
     /// How closely a graph's structure matches a set of reference graphs.
@@ -409,21 +264,14 @@ pub enum FitnessConfig {
     /// Minimized: zero is a perfect match. Unweighted by construction, so it
     /// requires `max_edge_multiplicity = 1`.
     ///
-    /// # The degree axis is not configurable, deliberately
-    ///
-    /// The other two statistic families have natural bounds — clustering is a
-    /// ratio in `[0, 1]`, the normalized Laplacian's spectrum is in `[0, 2]` —
-    /// but degree has none, so its axis needs a top. That top is taken from
-    /// the reference set rather than the config file. A user who sets it too
-    /// low squashes every reference graph into the last bin, which makes all
-    /// their histograms identical and the whole degree family contribute
-    /// nothing to any candidate's score, with nothing reporting it.
+    /// The degree axis has no top in the config, deliberately: it is taken from
+    /// the reference set. A top set too low squashes every reference graph into
+    /// the last bin, so their histograms come out identical and the degree
+    /// family contributes nothing to any score, with nothing reporting it.
     StructMatch {
-        /// Folder of reference graphs, one edge-list file per graph.
-        ///
-        /// Not checked here: `validate` does no I/O, so an unreadable or empty
-        /// folder is reported when the objective is built, not when the config
-        /// is parsed.
+        /// Folder of reference graphs, one edge-list file per graph. Not
+        /// opened until the objective is built, so an unreadable or empty
+        /// folder is reported then rather than at parse.
         reference_folder: String,
         /// Bins per statistic family. More bins resolve finer differences and
         /// need more reference graphs to fill them.
@@ -433,11 +281,10 @@ pub enum FitnessConfig {
         clustering_bins: usize,
         #[serde(default = "default_struct_bins")]
         spectral_bins: usize,
-        /// RBF bandwidths, one per family.
-        ///
-        /// **Too large is the dangerous direction**: `exp(-gamma * d^2)`
-        /// collapses to zero for every candidate, the whole population scores
-        /// ~1.0, and evolution stalls while appearing to run normally.
+        /// RBF bandwidths, one per family. **Too large is the dangerous
+        /// direction**: `exp(-gamma * d^2)` collapses to zero for every
+        /// candidate, so the population scores alike and evolution stalls while
+        /// appearing to run normally.
         #[serde(default = "default_struct_gamma")]
         degree_gamma: f64,
         #[serde(default = "default_struct_gamma")]
@@ -446,11 +293,9 @@ pub enum FitnessConfig {
         spectral_gamma: f64,
         /// How much each family counts. Zero switches a family off; they
         /// cannot all be zero, which would score every candidate identically.
-        ///
-        /// A weight is only as live as the reference set makes it. Rings and
-        /// paths have clustering coefficient 0 at every node, so a reference
-        /// set drawn only from those leaves `clustering_weight` set and the
-        /// family it weights inert.
+        /// A weight is also only as live as the reference set makes it — a set
+        /// whose graphs all have clustering coefficient 0 leaves
+        /// `clustering_weight` set and the family it weights inert.
         #[serde(default = "default_struct_weight")]
         degree_weight: f64,
         #[serde(default = "default_struct_weight")]
@@ -463,25 +308,17 @@ pub enum FitnessConfig {
         density_weight: f64,
     },
     // ADD AN OBJECTIVE STEP 2 — a variant here, carrying whatever the
-    // objective reads out of the file:
+    // objective reads out of the file.
     //
     //     MyObjective { threshold: f64 },
-    //
-    // Then its `type_name` arm and, if any parameter is worth constraining,
-    // its validation arm — both further down this file, search
-    // `ADD AN OBJECTIVE STEP 2` again for each. `type_name` cannot be
-    // forgotten: the match is exhaustive, so omitting it fails to compile.
     /// A Python callable registered before the run. Its direction is declared
-    /// at registration, not here (spec §7).
+    /// at registration, not here.
     Python,
 }
 
 impl FitnessConfig {
-    /// The `type` string this variant is written as in `config.toml`.
-    ///
-    /// For error messages that have to name the configured objective back to
-    /// the user in the words they typed. `Debug` would print the variant's
-    /// fields too, which is not what a message about the *choice* wants.
+    /// The `type` string this variant is written as in `config.toml`, for
+    /// error messages that name the objective back in the words the user typed.
     pub fn type_name(&self) -> &'static str {
         match self {
             FitnessConfig::EpiSpread { .. } => "epi_spread",
@@ -489,24 +326,22 @@ impl FitnessConfig {
             FitnessConfig::EpiProfMatch { .. } => "epi_prof_match",
             FitnessConfig::StructMatch { .. } => "struct_match",
             // ADD AN OBJECTIVE STEP 2 — the name a user writes under
-            // `[fitness] type`. Derived from nothing: this string is the
-            // whole mapping, and it is what error messages print.
+            // `[fitness] type`. Derived from nothing: this string is the whole
+            // mapping, and it is what error messages print.
+            //
+            //     FitnessConfig::MyObjective { .. } => "my_objective",
             FitnessConfig::Python => "python",
         }
     }
 }
 
-/// Epidemic sampling parameters, shared by the three SIR objectives.
+/// Epidemic sampling parameters, shared by the SIR objectives.
 ///
-/// **Not the same type as [`crate::sir::SirParams`], despite the name.** That
-/// one is the simulator's own two-field struct (`infection_rate`,
-/// `patient_zero`) and is deliberately independent of the config schema; this
-/// one is the deserializable `[fitness]` block and also carries the batch
-/// settings. This type maps onto [`crate::sir::SirSampleParams`], not onto its
-/// namesake.
+/// **Not the same type as [`crate::sir::SirParams`], despite the name**, and it
+/// maps onto [`crate::sir::SirSampleParams`] rather than onto its namesake.
 ///
-/// **No seed appears here.** One master seed is supplied to the Python `run`
-/// call and everything derives from it (spec §7).
+/// No seed appears here: one master seed is supplied to the `run` call and
+/// everything derives from it.
 #[derive(Debug, Deserialize)]
 pub struct SirParams {
     /// Per-edge transmission probability per timestep.
@@ -517,10 +352,9 @@ pub struct SirParams {
     /// Outbreaks averaged per evaluation.
     pub num_epidemics: usize,
     /// Outbreaks shorter than this are re-rolled; 1 disables the re-roll.
-    /// Defaults to the C++ `mepl`.
     #[serde(default = "default_min_epidemic_length")]
     pub min_epidemic_length: usize,
-    /// Attempts before keeping whatever came out. Defaults to the C++ `rse`.
+    /// Attempts before keeping whatever came out.
     #[serde(default = "default_max_epidemic_retries")]
     pub max_epidemic_retries: usize,
 }
@@ -528,10 +362,6 @@ pub struct SirParams {
 fn default_max_edge_multiplicity() -> u32 {
     1
 }
-
-// `struct_match`'s axis and kernel defaults. 50 bins over a bounded axis is
-// fine resolution without needing an enormous reference set to fill it, and a
-// gamma of 1.0 is the neutral starting point users tune from.
 
 fn default_struct_bins() -> usize {
     50
@@ -544,9 +374,6 @@ fn default_struct_gamma() -> f64 {
 fn default_struct_weight() -> f64 {
     1.0
 }
-
-// sda owns both values; these read them back rather than restating the
-// numbers, so the default is written in exactly one place.
 
 fn default_init_char_mutation_rate() -> f64 {
     crate::genomes::sda::DEFAULT_INIT_CHAR_MUTATION_RATE
@@ -564,10 +391,8 @@ fn default_max_mutations() -> usize {
     1
 }
 
-// The two below are the legacy C++ constants `mepl` and `rse`, so an omitted
-// pair reproduces historical behaviour (spec §5.2). Both need an explicit
-// function rather than `#[serde(default)]`, which yields 0 on a `usize` — zero
-// retries would mean no epidemic runs at all.
+// Both need an explicit function: `#[serde(default)]` yields 0 on a `usize`,
+// and zero retries means no epidemic is ever run.
 
 fn default_min_epidemic_length() -> usize {
     3
@@ -579,23 +404,19 @@ fn default_max_epidemic_retries() -> usize {
 
 /// Failure while loading a [`Config`].
 ///
-/// The one type in the config/py_config pair with no mirrored counterpart —
-/// there is no `PyConfigError`. [`crate::py_config`]'s `config_error_to_py`
+/// Not mirrored for Python: [`crate::py_config`]'s `config_error_to_py`
 /// translates a value of this type into a `PyErr` instead, remapping
-/// `Validation`'s `field` through a lookup table (`python_attribute_path`)
-/// rather than exposing this enum to Python directly.
+/// `Validation`'s `field` through `python_attribute_path`.
 #[derive(Debug)]
 pub enum ConfigError {
     /// The config file could not be read.
     Io(std::io::Error),
     /// The config text was not valid TOML for a [`Config`].
     Toml(toml::de::Error),
-    /// The config parsed, but broke one of the constraints in spec §7.
+    /// The config parsed, but broke one of [`Config::validate`]'s constraints.
     ///
-    /// The field and the constraint are kept apart rather than pre-formatted
-    /// into one string: the Python front end has to build its own exception
-    /// message, and tests assert on `field` instead of matching prose that
-    /// would break every time the wording changes.
+    /// The field and the constraint are kept apart rather than pre-formatted:
+    /// the Python front end builds its own message from them.
     Validation {
         /// The offending field, spelled as it appears in the TOML.
         field: &'static str,
@@ -621,17 +442,12 @@ impl std::error::Error for ConfigError {
         match self {
             ConfigError::Io(error) => Some(error),
             ConfigError::Toml(error) => Some(error),
-            // Nothing underlies a validation failure — it is our own check, not
-            // a wrapped error from another library.
             ConfigError::Validation { .. } => None,
         }
     }
 }
 
 /// Build a [`ConfigError::Validation`] for `field`.
-///
-/// A free function rather than an inline struct literal so the twelve checks in
-/// [`Config::validate`] each read as one line.
 fn invalid(field: &'static str, constraint: impl Into<String>) -> ConfigError {
     ConfigError::Validation {
         field,
@@ -642,32 +458,24 @@ fn invalid(field: &'static str, constraint: impl Into<String>) -> ConfigError {
 /// Reject the two `[fitness]` keys serde discards in silence, reading the raw
 /// text: a leftover `seed`, and a `target_profile` under the wrong objective.
 ///
-/// Serde cannot do either. [`SirParams`] is `#[serde(flatten)]`ed into
+/// **Serde cannot do either, so do not replace this with
+/// `deny_unknown_fields`.** [`SirParams`] is `#[serde(flatten)]`ed into
 /// [`FitnessConfig`], and a flattened field deserializes through a buffered
-/// content map, so `deny_unknown_fields` never fires — an unrecognized key is
-/// discarded without a word. Both keys here are dangerous for the same reason:
+/// content map, so that attribute never fires and an unrecognized key is
+/// dropped without a word. Both keys are silent wrong answers rather than
+/// errors: a stale `seed` runs under a seeding model its author does not
+/// expect, and a `target_profile` left behind after switching objective looks
+/// like curve-matching while the run maximizes spread.
 ///
-/// - `seed` — a config written before the seed moved out of `[fitness]` still
-///   parses, and runs under a different seeding model than its author believes,
-///   since the master seed now comes from the `run` call (spec §7).
-/// - `target_profile` — spec §8 requires it be "rejected as a contradiction if
-///   supplied for any other objective". Left alone, someone who switches
-///   objective and forgets the profile behind believes they are matching a
-///   curve while the run maximizes spread.
-///
-/// **Deliberately two keys by name, not a general unknown-key sweep.** That
-/// would hand-roll what serde does everywhere else and start rejecting keys as
-/// the schema grows — the narrowness is a recorded choice (`collab.md` #25),
+/// **Two keys by name, deliberately, not a general unknown-key sweep** —
 /// pinned by `an_unknown_fitness_key_outside_the_two_named_ones_is_still_ignored`.
 ///
-/// This is the TOML path only — the Python front end has no text to inspect,
-/// and `target_profile` exists there only on the `EpiProfMatch` variant, so the
-/// contradiction cannot be expressed. It has to happen here rather than in
-/// [`Config::validate`], which sees an already-parsed config with the key gone.
+/// TOML only: the Python front end has no text to inspect, and it cannot
+/// express the contradiction in the first place.
 fn reject_stray_fitness_keys(text: &str) -> Result<(), ConfigError> {
     // Parsed loosely, as plain TOML values, so this sees keys the `Config`
     // schema throws away. Text that isn't valid TOML at all is left for the
-    // real parse below to report properly.
+    // real parse to report properly.
     let document: toml::Value = match toml::from_str(text) {
         Ok(value) => value,
         Err(_) => return Ok(()),
@@ -681,15 +489,13 @@ fn reject_stray_fitness_keys(text: &str) -> Result<(), ConfigError> {
         return Err(invalid(
             "seed",
             "is not a config field. One master seed is supplied to the `run` call and \
-             everything derives from it (spec §7), so remove `seed` from `[fitness]`",
+             everything derives from it, so remove `seed` from `[fitness]`",
         ));
     }
 
-    // Three conditions, all of which must hold: a profile was supplied, the
-    // objective is present and reads as a string, and it is not the one
-    // objective that owns a profile. A missing, misspelled or non-string
-    // `type` falls through to the real parse, which names that problem far
-    // better than a message about the profile would.
+    // A missing, misspelled or non-string `type` falls through to the real
+    // parse, which names that problem far better than a message about the
+    // profile would.
     let profile_supplied = fitness.get("target_profile").is_some();
 
     if profile_supplied
@@ -699,7 +505,7 @@ fn reject_stray_fitness_keys(text: &str) -> Result<(), ConfigError> {
         return Err(invalid(
             "target_profile",
             format!(
-                "belongs to `epi_prof_match` alone (spec §8), but the objective here is \
+                "belongs to `epi_prof_match` alone, but the objective here is \
                  `{objective}`, which never reads a profile. Either set \
                  `type = \"epi_prof_match\"` or remove `target_profile`"
             ),
@@ -709,33 +515,22 @@ fn reject_stray_fitness_keys(text: &str) -> Result<(), ConfigError> {
 }
 
 impl Config {
-    /// Parse a [`Config`] from TOML text, **without** checking spec §7's
-    /// constraints.
+    /// Parse a [`Config`] from TOML text, **without** running
+    /// [`Config::validate`], which is kept separate so a test can build a
+    /// config that deliberately breaks one constraint.
     ///
-    /// Rejects a stray `[fitness] seed`, and a `target_profile` supplied under
-    /// an objective that is not `epi_prof_match`. Both are parse-time concerns
-    /// because neither key survives deserialization — see
-    /// `reject_stray_fitness_keys`. Everything else is [`Config::validate`],
-    /// kept separate so a test can build a config that deliberately breaks one
-    /// constraint.
+    /// Rejects a stray `[fitness] seed` and a misplaced `target_profile` here
+    /// rather than there, because neither key survives deserialization.
     pub fn from_toml_str(text: &str) -> Result<Self, ConfigError> {
         reject_stray_fitness_keys(text)?;
         toml::from_str(text).map_err(ConfigError::Toml)
     }
 
-    /// Check every constraint in spec §7.
+    /// Check every constraint on a parsed config.
     ///
-    /// **Returns an error; never panics.** A bad config is a user mistake, not
-    /// a bug, and a panic crossing the FFI reaches the user as an opaque
-    /// `PanicException` they cannot act on. The `assert!`s inside the evolvers
-    /// stay as backstops for direct Rust use, but a config-driven run must
-    /// never reach one.
-    ///
-    /// Runs before anything is built — no population, no graph — so everything
-    /// downstream may assume a valid config.
-    ///
-    /// One thing it deliberately does not do: it does not check the base
-    /// graph, which belongs to `set_base_graph`.
+    /// Runs before anything is built, so everything downstream may assume a
+    /// valid config. It does not check the base graph, which belongs to
+    /// `set_base_graph`.
     pub fn validate(&self) -> Result<(), ConfigError> {
         self.validate_top_level()?;
         self.validate_scope()?;
@@ -748,9 +543,8 @@ impl Config {
 
     /// Constraints on the fields that apply to every run.
     fn validate_top_level(&self) -> Result<(), ConfigError> {
-        // Not an SDA-only concern despite motivating the alphabet in §3.2: a
-        // cap of 0 clamps every edge to zero weight under *any* genome, and the
-        // run then looks like a broken fitness function rather than a bad
+        // A cap of 0 clamps every edge to zero weight under any genome, and
+        // the run then looks like a broken fitness function rather than a bad
         // config.
         if self.max_edge_multiplicity == 0 || self.max_edge_multiplicity > 255 {
             return Err(invalid(
@@ -777,25 +571,16 @@ impl Config {
     }
 
     /// Constraints that read the evolution strategy and the selection scheme
-    /// together. Both live here because two of the three are strategy-specific.
-    ///
-    /// Step 3 of the chain that adds a strategy (`crate::evolver::Evolver`'s
-    /// doc has all seven): a new `EvolutionConfig` variant lands its own
-    /// constraints here, matched alongside `Generational` and `SteadyState`
-    /// below. Optional — a strategy with nothing to constrain adds no arm.
+    /// together.
     fn validate_evolution_and_selection(&self) -> Result<(), ConfigError> {
-        // A scheme's own parameters, and nothing else. There is no
-        // scheme-by-strategy rejection to make — every scheme answers one
-        // question over whatever slice it is handed — and nothing here reads a
-        // scope's size, which lives under `[scope]` and is checked in
-        // `validate_scope`.
+        // No scheme-by-strategy rejection to make: every scheme answers one
+        // question over whatever slice it is handed.
         match self.selection {
             SelectionConfig::Best => {}
             SelectionConfig::Tournament { tournament_size } => {
                 // No upper bound: a tournament samples the scope *with*
-                // replacement, so one larger than the scope simply draws some
-                // individuals twice. What must fit is the scope, and that is
-                // the scope's own constraint.
+                // replacement, so one larger than the scope just draws some
+                // individuals twice.
                 if tournament_size == 0 {
                     return Err(invalid(
                         "tournament_size",
@@ -819,11 +604,10 @@ impl Config {
                 }
             }
             EvolutionConfig::SteadyState { .. } => {
-                // Steady-state overwrites members of the scope it bred from, so
-                // the scope has to hold the parents and the replaced without
-                // overlap. Generational has no such floor — it builds a whole
-                // new population rather than displacing anyone — so this cannot
-                // be a blanket check.
+                // Steady-state overwrites members of the scope it bred from,
+                // so the scope must hold the parents and the replaced without
+                // overlap. Generational displaces nobody, so this cannot be a
+                // blanket check.
                 let floor = MIN_SCOPE_SIZE;
                 if let ScopeConfig::RandomSubset { size } = self.scope
                     && size < floor
@@ -838,19 +622,14 @@ impl Config {
                         ),
                     ));
                 }
-            } // ADD A STRATEGY STEP 3 — the constraint arm for your variant,
-              // if it has one:
+            } // ADD A STRATEGY STEP 3 — the constraint arm for your variant.
+              // Optional: a strategy with nothing to constrain adds no arm.
               //
               //     EvolutionConfig::MyStrategy { num_my_events, .. } => {
               //         if *num_my_events == 0 {
               //             return Err(invalid("num_my_events", "must be at least 1"));
               //         }
               //     }
-              //
-              // Optional — a strategy with nothing to constrain adds no arm.
-              // The step after this one is the arm in
-              // `dispatch::run_strategy` that constructs the evolver —
-              // search `ADD A STRATEGY STEP 4` for it.
         }
         Ok(())
     }
@@ -858,8 +637,6 @@ impl Config {
     /// Constraints on the scope, which are its own and not any scheme's.
     fn validate_scope(&self) -> Result<(), ConfigError> {
         match self.scope {
-            // Every individual, so it is exactly as large as the population and
-            // there is nothing to check.
             ScopeConfig::Global => {}
             ScopeConfig::RandomSubset { size } => {
                 if size == 0 {
@@ -885,28 +662,16 @@ impl Config {
 
     /// Pair the recombination operator with the selected representation.
     ///
-    /// **Nothing to reject today, and the code says so by construction rather
-    /// than by being absent.** One operator ships, every representation can
-    /// perform it, so every pairing is legal. The `match` is written out in
-    /// full anyway: a second operator stops it compiling, which forces whoever
-    /// adds one to state which genomes can honour it instead of discovering
-    /// the answer during a run.
-    ///
-    /// This check exists because `[crossover]` is a *shared* section — it names
-    /// an operator for whichever genome is selected, and the two are chosen
-    /// independently, so nothing but this function can catch a combination that
-    /// makes no sense. The mutation operator needs no equivalent: it is chosen
-    /// inside `[genome]`, so a config naming SDA's mutation alongside
-    /// edge-edit's representation does not parse in the first place.
+    /// **Nothing to reject today.** The `match` is written out in full anyway:
+    /// a second operator stops it compiling, which forces whoever adds one to
+    /// state which representations can honour it rather than finding out
+    /// during a run.
     fn validate_crossover(&self) -> Result<(), ConfigError> {
         match (&self.crossover, &self.genome) {
-            // Two-point is defined for every representation GET ships: both
-            // are linear sequences with a shared prefix to cut, and each
-            // decides for itself how much of one it needs before crossing.
             (CrossoverConfig::TwoPoint, GenomeConfig::EdgeEdit(_)) => Ok(()),
             (CrossoverConfig::TwoPoint, GenomeConfig::Sda(_)) => Ok(()),
-            // ADD A CROSSOVER STEP 3 — a pair per representation your
-            // operator can honour, `Err(invalid(..))` for any it cannot:
+            // ADD A CROSSOVER STEP 3 — a pair per representation your operator
+            // can honour, `Err(invalid(..))` for any it cannot.
             //
             //     (CrossoverConfig::MyCrossover { .. }, GenomeConfig::Sda(_)) => Ok(()),
         }
@@ -916,8 +681,6 @@ impl Config {
     fn validate_genome(&self) -> Result<(), ConfigError> {
         match &self.genome {
             GenomeConfig::EdgeEdit(edge_edit) => {
-                // The weights already own their rules; map the message rather
-                // than restating it here and letting the two drift.
                 if let Err(constraint) = edge_edit.operation_weights.validate() {
                     return Err(invalid("operation_weights", constraint));
                 }
@@ -934,9 +697,8 @@ impl Config {
                     ));
                 }
 
-                // Both are probabilities handed straight to `random_bool`,
-                // which panics outside 0..=1 — so they are checked here, at
-                // load, rather than mid-run.
+                // Handed straight to `random_bool`, which panics outside
+                // 0..=1.
                 for (field, rate) in [
                     ("init_char_mutation_rate", sda.init_char_mutation_rate),
                     (
@@ -948,29 +710,27 @@ impl Config {
                         return Err(invalid(field, "must be between 0.0 and 1.0"));
                     }
                 }
-            } // ADD A GENOME STEP 4 — the validation arm for your variant:
+            } // ADD A GENOME STEP 4 — the validation arm for your variant.
+              // Check anything that would otherwise panic during expression,
+              // and report it with `invalid` rather than asserting: a panic
+              // here crosses the FFI as an opaque `PanicException`. A field
+              // named in an `invalid` call also needs an attribute path in
+              // `py_config`'s `python_attribute_path`.
               //
               //     GenomeConfig::MyGenome(mine) => {
               //         if mine.some_dimension == 0 {
               //             return Err(invalid("some_dimension", "must be at least 1"));
               //         }
               //     }
-              //
-              // Anything that would panic during expression is checked here, at
-              // load, rather than mid-run. A field named in an `invalid` call
-              // also needs an attribute path in `py_config`'s
-              // `python_attribute_path` — step 7.
         }
         Ok(())
     }
 
     /// The `struct_match` half of [`Config::validate_fitness`].
     ///
-    /// **Everything checkable without touching the filesystem, and no more.**
-    /// `validate` does no I/O — the reason is spelled out on `target_profile`
-    /// below — so `reference_folder` is not opened here. An unreadable folder,
-    /// an empty one, or files that do not parse are reported when the
-    /// objective is built, in `dispatch`.
+    /// Touches no filesystem, so `reference_folder` is not opened here — an
+    /// unreadable folder, an empty one, or files that do not parse are all
+    /// reported when the objective is built.
     fn validate_struct_match(&self) -> Result<(), ConfigError> {
         let FitnessConfig::StructMatch {
             reference_folder,
@@ -989,10 +749,10 @@ impl Config {
             return Ok(());
         };
 
-        // A top-level field, not one of this objective's own: the three
-        // statistics count neighbours rather than summing weights, so a
-        // multigraph would be scored as though every parallel edge were one.
-        // Rejected rather than silently flattened.
+        // A top-level field, not one of this objective's own: the statistics
+        // count neighbours rather than summing weights, so a multigraph would
+        // be scored as though every parallel edge were one. Rejected rather
+        // than silently flattened.
         if self.max_edge_multiplicity != 1 {
             return Err(invalid(
                 "max_edge_multiplicity",
@@ -1011,8 +771,7 @@ impl Config {
             ));
         }
 
-        // A zero-bin family has no histogram to compare, so it would divide by
-        // a zero bin width.
+        // A zero-bin family divides by a zero bin width.
         for (field, bins) in [
             ("degree_bins", *degree_bins),
             ("clustering_bins", *clustering_bins),
@@ -1024,7 +783,7 @@ impl Config {
         }
 
         // Every gamma and weight reaches `evaluate` as a multiplier, so a
-        // non-finite one makes every score non-finite -- and a NaN fitness
+        // non-finite one makes every score non-finite — and a NaN fitness
         // aborts the run rather than scoring a bad candidate.
         for (field, gamma) in [
             ("degree_gamma", *degree_gamma),
@@ -1051,7 +810,7 @@ impl Config {
             weight_total += weight;
         }
 
-        // All three zero scores every candidate identically: selection stops
+        // All zero scores every candidate identically: selection stops
         // discriminating and the run searches nothing while looking healthy.
         if weight_total == 0.0 {
             return Err(invalid(
@@ -1073,22 +832,27 @@ impl Config {
 
     /// Constraints on the epidemic sampling parameters.
     fn validate_fitness(&self) -> Result<(), ConfigError> {
-        // `python` carries no SIR block at all — its parameters belong to the
-        // callable, which is registered from Python (spec §7).
+        // `python` carries no SIR block: its parameters belong to the
+        // callable, and are supplied when it is registered.
         let sir = match &self.fitness {
             FitnessConfig::EpiSpread { sir } => sir,
             FitnessConfig::EpiLength { sir } => sir,
             FitnessConfig::EpiProfMatch { sir, .. } => sir,
             FitnessConfig::StructMatch { .. } => return self.validate_struct_match(),
             // ADD AN OBJECTIVE STEP 2 — the validation arm, if any parameter
-            // is worth constraining. Two things are not obvious. It may not
-            // touch the filesystem — `validate` does no I/O, which is why
-            // `epi_prof_match` takes its target inline rather than as a path,
-            // and everything about a named file becomes step 3's problem. And
-            // it may constrain fields outside `[fitness]`: `struct_match`
-            // requires a top-level `max_edge_multiplicity` of 1. Return
-            // `Ok(())` if there is nothing to check. The step after this is
-            // the dispatch arm — search `ADD AN OBJECTIVE STEP 3` for it.
+            // is worth constraining; return `Ok(())` if none is. Report a
+            // failure with `invalid` rather than asserting: a panic here
+            // crosses the FFI as an opaque `PanicException`. It may not touch
+            // the filesystem, and it may constrain fields outside `[fitness]`,
+            // the way `struct_match` requires a top-level
+            // `max_edge_multiplicity` of 1.
+            //
+            //     FitnessConfig::MyObjective { threshold } => {
+            //         if !threshold.is_finite() {
+            //             return Err(invalid("threshold", "must be finite"));
+            //         }
+            //         return Ok(());
+            //     }
             FitnessConfig::Python => return Ok(()),
         };
 
@@ -1103,9 +867,8 @@ impl Config {
             ));
         }
 
-        // 1 is legal and means "never re-roll": every epidemic has length >= 1
-        // under the §5.2 convention, so 1 is how a user opts out of the
-        // re-roll's deliberate bias. Only 0 is an error.
+        // 1 is legal and means "never re-roll": every epidemic has length >= 1,
+        // so 1 is how a user opts out of the re-roll's deliberate bias.
         if sir.min_epidemic_length == 0 {
             return Err(invalid(
                 "min_epidemic_length",
@@ -1120,8 +883,6 @@ impl Config {
             ));
         }
 
-        // Only checked when pinned; an omitted `patient_zero` draws a fresh
-        // node per epidemic and cannot be out of range.
         if let Some(patient_zero) = sir.patient_zero
             && patient_zero >= self.network_size
         {
@@ -1134,10 +895,8 @@ impl Config {
             ));
         }
 
-        // `epi_prof_match` only — the other two epidemic objectives have no
-        // target, and `python` returned above. These two checks are the reason
-        // the profile is an inline config value rather than a path: a file
-        // could not be checked here without `validate` opening it (spec §8).
+        // These checks are why the profile is an inline config value rather
+        // than a path: a file could not be checked without opening it.
         if let FitnessConfig::EpiProfMatch { target_profile, .. } = &self.fitness {
             if target_profile.is_empty() {
                 return Err(invalid(
@@ -1146,10 +905,10 @@ impl Config {
                 ));
             }
 
-            // NaN and both infinities. RMSE against any of them is NaN or
-            // infinite for *every* individual, so the whole population scores
-            // identically and selection stops discriminating — a run that
-            // looks like it is working and is searching nothing.
+            // RMSE against a NaN or an infinity is NaN or infinite for *every*
+            // individual, so the whole population scores identically and
+            // selection stops discriminating — a run that looks like it is
+            // working and is searching nothing.
             for (index, value) in target_profile.iter().enumerate() {
                 if !value.is_finite() {
                     return Err(invalid(
@@ -1779,6 +1538,7 @@ num_epidemics  = 30
         match config.evolution {
             EvolutionConfig::SteadyState { replacement, .. } => match replacement {
                 ReplacementConfig::Worst => {}
+                other => panic!("expected the worst default, got {other:?}"),
             },
             other => panic!("expected steady_state, got {other:?}"),
         }

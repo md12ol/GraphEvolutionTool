@@ -371,7 +371,7 @@ evolver = get.GraphEvolver.from_config(config)
 results = evolver.run(seed=20260812)   # one master seed drives everything
 result  = results[0]                   # run() always returns a list, one entry per replicate
 
-print(result.best_fitness)             # nodes infected, in your units
+print(result.best_fitness)             # nodes infected, as-measured
 print(len(result.best_edges))          # the winning network, as (u, v, weight) triples
 print(len(result.history))             # the convergence log, one row per generation
 

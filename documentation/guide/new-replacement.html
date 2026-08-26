@@ -27,7 +27,7 @@
   <b>This axis is steady-state's alone.</b> Generational rebuilds its whole population every
   iteration and never asks who to overwrite, so a reader extending <i>that</i> strategy has no step
   in this chain to take. Every marker says so on the line —
-  <code>ADD A REPLACEMENT STEP 2 (for SteadyState)</code> — so a grep across all the chains at once
+  <code>(for SteadyState)</code> — so a grep across all the chains at once
   does not hand you a step that is not yours.
 </div>
 
@@ -43,9 +43,10 @@
 
 <div class="callout">
   <p>
-    <b>A policy consumes no randomness.</b> Every one reads the scope's fitnesses and nothing else,
-    so a replacement choice cannot shift a seeded run's stream. Keep it that way: a policy that draws
-    would make every run before it irreproducible against every run after it.
+    <b>A policy may consume randomness.</b> <code>worst</code> reads the scope's fitnesses and
+    nothing else; <code>random</code> draws from the run's seeded stream. Either is reproducible from
+    a seed, but adding or removing a drawing policy changes what every later draw in the run sees, so
+    runs are only comparable against others using the same policy.
   </p>
 </div>
 
@@ -54,8 +55,8 @@
 <p>
   <code>Worst</code> takes the scope's least fit members, never its best. That is what makes
   steady-state self-elitist — and note it is a property of the <i>policy</i>, not of the selection
-  scheme, which is why it holds whichever scheme picked the parents. A policy that can overwrite the
-  best individual in a scope gives that guarantee up, deliberately or not.
+  scheme, which is why it holds whichever scheme picked the parents. <code>Random</code> gives that
+  guarantee up by design: it can draw the scope's best, so a run's best fitness can fall.
 </p>
 
 <h2>What the User Ends Up Writing</h2>
@@ -63,7 +64,7 @@
 <pre><code class="language-toml">[evolution]
 type              = "steady_state"
 num_mating_events = 5000
-replacement       = { type = "random" }</code></pre>
+replacement       = { type = "random" }   # or "worst", the default</code></pre>
 
 <p>
   It is read from the strategy's own table rather than a section of its own, because it belongs to
@@ -79,12 +80,12 @@ replacement       = { type = "random" }</code></pre>
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/evolver/replacement.rs:46</code></td>
+    <tr><td>1</td><td><code>get/src/evolver/replacement.rs:15</code></td>
         <td>the variant, and any parameters it needs</td></tr>
-    <tr><td>2</td><td><code>get/src/evolver/replacement.rs:77</code></td>
+    <tr><td>2</td><td><code>get/src/evolver/replacement.rs:61</code></td>
         <td>the arm naming who the children overwrite; the match is exhaustive</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:163</code>, <code>get/src/dispatch.rs:960</code>,
-        <code>get/src/py_config.rs:243</code> and <code>:857</code></td>
+    <tr><td>3</td><td><code>get/src/config.rs:95</code>, <code>get/src/dispatch.rs:695</code>,
+        <code>get/src/py_config.rs:170</code> and <code>:641</code></td>
         <td>what a user names under <code>replacement</code>, the arm building it, and the Python
         mirror</td></tr>
   </tbody>
@@ -104,20 +105,21 @@ replacement       = { type = "random" }</code></pre>
   the victims:
 </p>
 
-<pre><code class="language-rust">// step 1 — evolver/replacement.rs:46
-Random,
+<pre><code class="language-rust">// step 1 — evolver/replacement.rs:15
+Tournament { size: usize },
 
-// step 2 — evolver/replacement.rs:77
-Replacement::Random =&gt; {
-    // needs an `rng` parameter; `pick` takes none today
-    // precisely because no shipped policy draws.
+// step 2 — evolver/replacement.rs:61
+Replacement::Tournament { size } =&gt; {
+    // draw `size` members, overwrite the least fit of them
 }</code></pre>
 
 <p>
   The signature you are filling in is:
 </p>
 
-<pre><code class="language-rust">fn pick(&amp;self, scope: &amp;[usize], fitnesses: &amp;[f64], count: usize) -&gt; Vec&lt;usize&gt;</code></pre>
+<pre><code class="language-rust">fn pick&lt;R&gt;(&amp;self, scope: &amp;[usize], fitnesses: &amp;[f64], count: usize, rng: &amp;mut R) -&gt; Vec&lt;usize&gt;
+where
+    R: Rng + ?Sized</code></pre>
 
 <div class="warn">
   <b>Two contracts, and the second is the expensive one.</b>
@@ -125,34 +127,36 @@ Replacement::Random =&gt; {
     <li><b>Return indices into the <i>population</i>, not into <code>scope</code></b>, and in the
         order children should take the slots. <code>scope</code> is itself a list of population
         indices, so returning a position within it is a bug that type-checks.</li>
-    <li><b>A policy that draws changes this signature</b> — <code>pick</code> takes no
-        <code>rng</code> today precisely because no shipped policy needs one. Adding the parameter
-        shifts <b>every seeded run's RNG stream</b>, so results before and after stop being
-        comparable. That is a real cost, not a formality; decide it deliberately.</li>
+    <li><b>Draw only from <code>rng</code>, never from a thread RNG or a clock.</b> It is the
+        run's seeded stream, shared with selection, scope and mutation, which is what makes a run
+        reproducible from its seed. A policy that draws is fine — <code>Random</code> does — but
+        two runs are only comparable if they used the same policy, because a draw here changes what
+        every later draw in the run sees.</li>
   </ul>
 </div>
 
 <p>
   Say at the variant what your policy <b>gives up</b>. <code>Worst</code> is what makes a strategy
-  self-elitist, and anything that can overwrite the scope's best removes that guarantee — leaving
-  that to be discovered later is how a run quietly stops improving.
+  self-elitist; <code>Random</code> can overwrite the scope's best and says so in its own doc
+  comment. Leaving that to be discovered later is how a run quietly stops improving.
 </p>
 
 <h2>Step 3 — The Three Places a Name Arrives From</h2>
 
-<pre><code class="language-rust">// step 3 — config.rs:163
-Random,
+<pre><code class="language-rust">// step 3 — config.rs:95
+Tournament { size: usize },
 
-// step 3 — dispatch.rs:960
-ReplacementConfig::Random =&gt; Replacement::Random,
+// step 3 — dispatch.rs:695
+ReplacementConfig::Tournament { size } =&gt; Replacement::Tournament { size: *size },
 
-// step 3 — py_config.rs:243   (optional)
-#[pyo3(constructor = ())]
-Random {},
+// step 3 — py_config.rs:170   (optional)
+#[pyo3(constructor = (size))]
+Tournament { size: usize },
 
-// step 3 — py_config.rs:857   (optional, the matching arm)
-PyReplacementConfig::Random {} =&gt; {
-    table.insert("type".to_string(), Value::String("random".to_string()));
+// step 3 — py_config.rs:641   (optional, the matching arm)
+PyReplacementConfig::Tournament { size } =&gt; {
+    table.insert("type".to_string(), Value::String("tournament".to_string()));
+    table.insert("size".to_string(), integer("size", *size)?);
 }</code></pre>
 
 <p>
@@ -164,16 +168,17 @@ PyReplacementConfig::Random {} =&gt; {
 <h2>Testing It</h2>
 
 <p>
-  <code>pick</code> is a pure function from a scope and a fitness slice to a list of indices — no
-  RNG, no evolver, nothing to set up:
+  <code>pick</code> takes a scope, a fitness slice and an RNG, and returns a list of indices — no
+  evolver, nothing else to set up:
 </p>
 
 <pre><code class="language-rust" data-example>#[test]
-fn random_returns_population_indices_from_the_scope() {
+fn tournament_returns_population_indices_from_the_scope() {
     let scope = [3, 7, 11, 15];
     let fitnesses = [0.0; 16];
+    let mut rng = ChaCha8Rng::seed_from_u64(7);
 
-    let victims = Replacement::Random.pick(&amp;scope, &amp;fitnesses, 2);
+    let victims = Replacement::Tournament { size: 2 }.pick(&amp;scope, &amp;fitnesses, 2, &amp;mut rng);
 
     assert_eq!(victims.len(), 2);
     assert!(victims.iter().all(|v| scope.contains(v)));
@@ -182,8 +187,9 @@ fn random_returns_population_indices_from_the_scope() {
 <p>
   The existing test beside it, <code>the_worst_are_returned_worst_first</code>, is the one to read
   before writing yours — it pins the ordering contract that the children's slot assignment depends
-  on. If your policy claims to preserve self-elitism, assert that too: the scope's best index must
-  never appear in the result.
+  on. If your policy draws, seed a fixed RNG so the test is reproducible, and read
+  <code>random_returns_distinct_members_of_the_scope</code> for the distinctness assertion every
+  drawing policy owes: two victims that coincide mean one child overwrites the other.
 </p>
 
 <h2>The Limit Worth Knowing Before You Start</h2>

@@ -96,24 +96,24 @@ num_my_events = 500</code></pre>
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/evolver/mod.rs:23</code></td>
+    <tr><td>1</td><td><code>get/src/evolver.rs:17</code></td>
         <td>A new module beside the two that exist, its <code>pub mod</code> and re-export lines,
             and the <code>Evolver</code> implementation inside it.</td></tr>
-    <tr><td>2</td><td><code>get/src/config.rs:104</code></td>
+    <tr><td>2</td><td><code>get/src/config.rs:58</code></td>
         <td>An <code>EvolutionConfig</code> variant carrying your stopping condition, plus any axis
             that is <i>yours</i> rather than every strategy's.</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:841</code></td>
+    <tr><td>3</td><td><code>get/src/config.rs:625</code></td>
         <td><b>Optional.</b> A constraint arm in <code>validate_evolution_and_selection</code>. A
             strategy with nothing to constrain adds no arm.</td></tr>
-    <tr><td>4</td><td><code>get/src/dispatch.rs:823</code></td>
+    <tr><td>4</td><td><code>get/src/dispatch.rs:583</code></td>
         <td>One arm building your <code>TypeContext</code> and calling your evolver's
             <code>new</code> and <code>run</code>. The genome match is not touched.</td></tr>
-    <tr><td>5</td><td><code>get/src/dispatch.rs:864</code></td>
+    <tr><td>5</td><td><code>get/src/dispatch.rs:607</code></td>
         <td><b>Usually nothing, and that is the point.</b> <code>erase</code> is generic over the
             genome with no match on strategy inside it.</td></tr>
-    <tr><td>6</td><td><code>get/src/py_config.rs:221</code> and <code>:833</code></td>
+    <tr><td>6</td><td><code>get/src/py_config.rs:153</code> and <code>:621</code></td>
         <td><b>Optional.</b> The Python-side variant, and its <code>to_toml_value</code> arm.</td></tr>
-    <tr><td>7</td><td><code>config.example.toml:154</code></td>
+    <tr><td>7</td><td><code>config.example.toml:156</code></td>
         <td><b>Optional, and the step people skip.</b> A commented-out <code>[evolution]</code>
             block for your strategy. The shipped example is what a user copies from, so a strategy
             missing from it is one most people never find.</td></tr>
@@ -123,19 +123,19 @@ num_my_events = 500</code></pre>
 
 <h2>Step 1 — The Module</h2>
 
-<pre><code class="language-rust">// step 1 — evolver/mod.rs:23
+<pre><code class="language-rust">// step 1 — evolver.rs:17
 pub mod my_strategy;
 
 pub use my_strategy::MyStrategyEvolver;</code></pre>
 
 <h2>Steps 2 and 3 — The Config Side</h2>
 
-<pre><code class="language-rust">// step 2 — config.rs:104
+<pre><code class="language-rust">// step 2 — config.rs:58
 MyStrategy {
     num_my_events: usize,
 },
 
-// step 3 — config.rs:841, optional
+// step 3 — config.rs:625, optional
 EvolutionConfig::MyStrategy { num_my_events, .. } =&gt; {
     if *num_my_events == 0 {
         return Err(invalid("num_my_events", "must be at least 1"));
@@ -154,7 +154,7 @@ EvolutionConfig::MyStrategy { num_my_events, .. } =&gt; {
 
 <h2>Steps 4 and 5 — Dispatch</h2>
 
-<pre><code class="language-rust">// step 4 — dispatch.rs:823
+<pre><code class="language-rust">// step 4 — dispatch.rs:583
 EvolutionConfig::MyStrategy { num_my_events } =&gt; {
     let type_context = MyStrategyContext {
         num_my_events: *num_my_events,
@@ -180,13 +180,13 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 
 <p>
   Leaving step 6 out costs nothing elsewhere; the strategy is then configurable from a TOML file but
-  absent from the Python API. The variant goes at <code>get/src/py_config.rs:221</code> and its
-  <code>to_toml_value</code> arm at <code>:833</code>.
+  absent from the Python API. The variant goes at <code>get/src/py_config.rs:153</code> and its
+  <code>to_toml_value</code> arm at <code>:621</code>.
 </p>
 
 <p>
   Step 7 is a commented-out <code>[evolution]</code> block in
-  <code>config.example.toml:154</code>, beside generational's and steady-state's. <b>It is the step
+  <code>config.example.toml:156</code>, beside generational's and steady-state's. <b>It is the step
   people skip</b>, and it costs nothing mechanically — the example file is simply what a user copies
   from, so a strategy missing from it is one most people never find. The test suite parses and
   validates that file, so a block that does not parse fails the build rather than a user's
@@ -205,9 +205,9 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 </div>
 
 <div class="warn">
-  <b>2. Everything inside your evolver is in engine orientation — lower is better.</b> Do not
+  <b>2. Everything inside your evolver is as lower-is-better — lower is better.</b> Do not
   convert on the way in or on the way out. The fitness arrays, the stats rows and the outcome are
-  all engine-oriented; conversion happens once at each edge of the system, and a strategy that
+  all lower-is-better; conversion happens once at each edge of the system, and a strategy that
   helpfully converts something in the middle reintroduces the double-flip the design removed.
 </div>
 

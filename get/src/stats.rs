@@ -1,29 +1,17 @@
 //! Size-invariant structural statistics for a graph.
 //!
-//! Every statistic here reduces a graph to a **normalized histogram on a fixed
-//! axis**: the bin edges are the same for every graph, whatever its node count.
-//! That is what lets one candidate be compared against reference graphs of
-//! many different sizes — the size stops entering the comparison at all,
-//! because each graph contributes a probability distribution over the same
-//! bins.
+//! Every statistic reduces a graph to a normalized histogram on a **fixed**
+//! axis: the same bin edges whatever the node count, which is what lets graphs
+//! of different sizes be compared. Bin per graph instead and bin *k* means a
+//! different thing on each side, with every number still plausible.
 //!
-//! Binning each graph over its own observed range would break exactly that.
-//! Two histograms built on different axes can still be compared arithmetically,
-//! and nothing about the result looks wrong: the numbers stay finite and the
-//! score still moves. Bin *k* simply means a different thing on each side.
-//!
-//! All statistics here are **unweighted**. An edge is present or absent; a
-//! multiplicity above one counts once. `Graph::degree` already counts distinct
-//! neighbours, so this needs no special handling for degree.
+//! All statistics here are **unweighted**: an edge is present or absent, and a
+//! multiplicity above one counts once.
 
 use crate::graph::Graph;
 
 /// Bin a value into `num_bins` bins spanning `[0.0, max]`, clamping anything at
 /// or above `max` into the last bin.
-///
-/// Shared by every statistic so that no two of them can disagree about how a
-/// value on a bin boundary is placed, or about what happens at the top of the
-/// range.
 fn bin_index(value: f64, max: f64, num_bins: usize) -> usize {
     if num_bins == 0 {
         return 0;
@@ -44,10 +32,7 @@ fn bin_index(value: f64, max: f64, num_bins: usize) -> usize {
 
 /// Turn per-node counts into a probability distribution summing to 1.0.
 ///
-/// A histogram with no observations is left as all zeros rather than being
-/// given a uniform distribution: no observations is not the same claim as
-/// "every bin equally likely", and the callers that can produce one are
-/// documented where they occur.
+/// A histogram with no observations is left as all zeros, not made uniform.
 fn normalize(hist: &mut [f64]) {
     let mut total = 0.0;
     for count in hist.iter() {
@@ -62,14 +47,8 @@ fn normalize(hist: &mut [f64]) {
 
 /// Degree histogram over the fixed absolute axis `[0, max_degree]`.
 ///
-/// `max_degree` is supplied by the caller rather than taken from the graph, so
-/// that a candidate and every reference graph land on one shared axis.
-///
-/// The axis is **absolute degree, not degree / (n - 1)**. Reference graphs here
-/// have their degree bounded by a chemical valence, so an absolute degree is
-/// already comparable across sizes and is the quantity that carries the
-/// structure. Dividing by `n - 1` would instead call a degree-5 node in a
-/// 12-node graph the same as a degree-20 node in a 45-node graph.
+/// `max_degree` comes from the caller, not from the graph: a candidate and every
+/// reference graph it is compared against must be given the same one.
 ///
 /// A degree above `max_degree` lands in the top bin rather than being dropped,
 /// so the distribution always sums to 1.0 for a graph with at least one node.
@@ -80,9 +59,7 @@ pub fn degree_histogram(graph: &Graph, max_degree: usize, num_bins: usize) -> Ve
     }
 
     for node in 0..graph.num_nodes {
-        let degree = graph.degree(node) as f64;
-        // Degree 0 is a real observation — an isolated node — so it belongs in
-        // bin 0 rather than being skipped.
+        let degree = graph.neighbor_count(node) as f64;
         let index = bin_index(degree, max_degree as f64, num_bins);
         hist[index] += 1.0;
     }
@@ -91,33 +68,12 @@ pub fn degree_histogram(graph: &Graph, max_degree: usize, num_bins: usize) -> Ve
     hist
 }
 
-/// The distinct neighbours of `node`, in increasing order.
-///
-/// `Graph` stores a dense weight matrix and does not expose it, so this walks
-/// the row. That is the same cost the matrix representation already imposes on
-/// every other traversal in the crate.
-fn neighbours(graph: &Graph, node: usize) -> Vec<usize> {
-    let mut result = Vec::new();
-    for other in 0..graph.num_nodes {
-        if other != node && graph.has_edge(node, other) {
-            result.push(other);
-        }
-    }
-    result
-}
-
 /// Local clustering coefficient of every node, histogrammed over the fixed
 /// axis `[0, 1]`.
 ///
-/// This family needs no size-invariance work: a clustering coefficient is
-/// already a ratio in `[0, 1]`, whatever the node count. It is on a fixed axis
-/// for the same reason as the others, not to repair anything.
-///
-/// A node with fewer than two neighbours has no pair of neighbours that could
-/// be connected, so its coefficient is 0 — matching NetworkX. That is a real
-/// observation and lands in bin 0 rather than being skipped, which is why a
-/// graph too small to hold a triangle still produces a distribution summing to
-/// 1.0 rather than a vector of zeros.
+/// A node with fewer than two neighbours scores 0 and is counted rather than
+/// skipped, so a graph too small to hold a triangle still produces a
+/// distribution summing to 1.0 rather than a vector of zeros.
 pub fn clustering_histogram(graph: &Graph, num_bins: usize) -> Vec<f64> {
     let mut hist = vec![0.0; num_bins];
     if num_bins == 0 || graph.num_nodes == 0 {
@@ -125,15 +81,14 @@ pub fn clustering_histogram(graph: &Graph, num_bins: usize) -> Vec<f64> {
     }
 
     for node in 0..graph.num_nodes {
-        let neighbours = neighbours(graph, node);
+        let neighbours = graph.neighbors(node);
         let degree = neighbours.len();
 
         let coefficient = if degree < 2 {
             0.0
         } else {
-            // Count the neighbour pairs that are themselves connected. Each
-            // unordered pair is visited once, so no halving is needed beyond
-            // the usual 2 * links / (k * (k - 1)).
+            // Each unordered neighbour pair is counted once, which is what the
+            // factor of 2 below corrects for.
             let mut links = 0;
             for i in 0..degree {
                 for j in (i + 1)..degree {
@@ -156,36 +111,25 @@ pub fn clustering_histogram(graph: &Graph, num_bins: usize) -> Vec<f64> {
 
 /// Build the symmetric normalized Laplacian, `L = I - D^(-1/2) A D^(-1/2)`.
 ///
-/// Unweighted: a present edge contributes 1 whatever its multiplicity.
-///
-/// **Isolated nodes are the hazard this function exists to contain.** The
-/// candidate can strip a node's last edge mid-run, and `D^(-1/2)` is undefined
-/// at degree zero, so the natural expression yields `inf * 0 = NaN`. A `NaN`
-/// reaching the fitness value crashes the run rather than scoring it badly.
-///
-/// Taking `1/sqrt(0) = 0` — as NetworkX does — leaves an isolated node's row
-/// and column entirely zero, so it contributes one zero eigenvalue. That is
-/// consistent rather than a patch: an isolated node *is* a connected
-/// component, and the multiplicity of eigenvalue 0 is exactly the number of
-/// connected components.
+/// Degree zero takes `1/sqrt(0) = 0`: mutation can strip a node's last edge
+/// mid-run, and the natural expression then yields `inf * 0 = NaN`, which
+/// crashes the run rather than scoring it badly.
 fn normalized_laplacian(graph: &Graph) -> Vec<Vec<f64>> {
     let n = graph.num_nodes;
     let mut inverse_sqrt_degree = Vec::with_capacity(n);
     for node in 0..n {
-        let degree = graph.degree(node);
+        let degree = graph.neighbor_count(node);
         if degree > 0 {
             inverse_sqrt_degree.push(1.0 / (degree as f64).sqrt());
         } else {
-            // Degree zero deliberately contributes 0.0 here, not infinity.
             inverse_sqrt_degree.push(0.0);
         }
     }
 
     let mut laplacian = vec![vec![0.0; n]; n];
     for u in 0..n {
-        // An isolated node keeps an all-zero row, including the diagonal: it
-        // has no self-similarity to subtract from.
-        if graph.degree(u) > 0 {
+        // An isolated node keeps an all-zero row, the diagonal included.
+        if graph.neighbor_count(u) > 0 {
             laplacian[u][u] = 1.0;
         }
         for v in 0..n {
@@ -198,17 +142,9 @@ fn normalized_laplacian(graph: &Graph) -> Vec<Vec<f64>> {
 }
 
 /// All eigenvalues of a real symmetric matrix, ascending, by cyclic Jacobi
-/// rotation.
-///
-/// Jacobi is chosen over a general eigensolver because the input is always
-/// small (one row per node) and always symmetric, which is the case Jacobi is
-/// exact and unconditionally convergent for. Each rotation zeroes one
-/// off-diagonal pair and preserves symmetry, so the matrix converges to a
-/// diagonal one whose entries are the eigenvalues.
-// The rotation below touches two specific rows and two specific columns of a
-// square matrix, so indices are what the algorithm is written in terms of.
-// Rewriting it as iterator chains would obscure it, and this crate prefers the
-// explicit loop where the two disagree.
+/// rotation. A matrix that is not symmetric gives meaningless results.
+// The rotation below works on two specific rows and two specific columns, so
+// indices are what the algorithm is written in terms of.
 #[allow(clippy::needless_range_loop)]
 fn symmetric_eigenvalues(mut matrix: Vec<Vec<f64>>) -> Vec<f64> {
     let n = matrix.len();
@@ -219,14 +155,12 @@ fn symmetric_eigenvalues(mut matrix: Vec<Vec<f64>>) -> Vec<f64> {
         return vec![matrix[0][0]];
     }
 
-    // Generous ceilings: a sweep costs O(n^2) rotations and convergence is
-    // quadratic once the off-diagonal mass is small, so this is a guard
-    // against a pathological input rather than the expected exit.
+    // Exhausting the sweeps returns the unconverged diagonal; the ceiling is a
+    // guard against a pathological input, not the expected exit.
     const MAX_SWEEPS: usize = 100;
     const TOLERANCE: f64 = 1e-12;
 
     for _ in 0..MAX_SWEEPS {
-        // Total off-diagonal magnitude: the quantity each rotation reduces.
         let mut off_diagonal = 0.0;
         for p in 0..n {
             for q in (p + 1)..n {
@@ -243,15 +177,14 @@ fn symmetric_eigenvalues(mut matrix: Vec<Vec<f64>>) -> Vec<f64> {
                     continue;
                 }
 
-                // The rotation angle that sends matrix[p][q] to exactly zero.
+                // `t` is the tangent of the rotation that sends `matrix[p][q]`
+                // to exactly zero.
                 let theta = (matrix[q][q] - matrix[p][p]) / (2.0 * matrix[p][q]);
                 let sign = if theta >= 0.0 { 1.0 } else { -1.0 };
                 let t = sign / (theta.abs() + (theta * theta + 1.0).sqrt());
                 let cos = 1.0 / (t * t + 1.0).sqrt();
                 let sin = t * cos;
 
-                // Apply the rotation to rows p and q, then to columns p and q,
-                // keeping the matrix symmetric throughout.
                 for k in 0..n {
                     let a_kp = matrix[k][p];
                     let a_kq = matrix[k][q];
@@ -277,26 +210,12 @@ fn symmetric_eigenvalues(mut matrix: Vec<Vec<f64>>) -> Vec<f64> {
 }
 
 /// Spectrum of the normalized Laplacian, histogrammed over the fixed axis
-/// `[0, 2]`.
+/// `[0, 2]`, which is where its eigenvalues lie for any graph of any size.
 ///
-/// The axis is fixed at `[0, 2]` because that is where the normalized
-/// Laplacian's eigenvalues lie for **any** graph of any size — the
-/// size-invariance the other two families have natively.
-///
-/// This deliberately replaces the more usual "first *k* eigenvalues of the
-/// combinatorial Laplacian". An *n*-node graph has *n* eigenvalues, so a
-/// fixed-length prefix compares different fractions of two spectra, and the
-/// prefix is dominated by the zeros — one per connected component — rather
-/// than by anything structural. A histogram uses the whole spectrum and stays
-/// the same length whatever *n* is.
-///
-/// Bin 0 carries every eigenvalue below `2 / num_bins`, so it *contains* the
-/// exact zeros — one per connected component — without being only them. A
-/// connected graph whose spectrum crowds near zero puts several eigenvalues
-/// there as well: a 12-node path on 8 bins contributes three, not one. So a
-/// heavy bin 0 tracks fragmentation rather than counting it, and the component
-/// count is the zero multiplicity alone, which this histogram does not isolate.
-/// Read it as a signal, never as `components / n`.
+/// Bin 0 holds every eigenvalue below `2 / num_bins`, so it contains the exact
+/// zeros — one per connected component — without being only them: a connected
+/// 12-node path on 8 bins contributes three. A heavy bin 0 is a signal of
+/// fragmentation, never a component count.
 pub fn spectral_histogram(graph: &Graph, num_bins: usize) -> Vec<f64> {
     let mut hist = vec![0.0; num_bins];
     if num_bins == 0 || graph.num_nodes == 0 {
@@ -305,9 +224,7 @@ pub fn spectral_histogram(graph: &Graph, num_bins: usize) -> Vec<f64> {
 
     let eigenvalues = symmetric_eigenvalues(normalized_laplacian(graph));
     for value in &eigenvalues {
-        // Rounding can push an eigenvalue a hair outside [0, 2]; clamping
-        // keeps every one of them an observation instead of silently dropping
-        // the ones at the ends, which are the structurally meaningful ones.
+        // Rounding can leave an eigenvalue a hair outside [0, 2].
         let clamped = value.clamp(0.0, 2.0);
         let index = bin_index(clamped, 2.0, num_bins);
         hist[index] += 1.0;
@@ -317,16 +234,8 @@ pub fn spectral_histogram(graph: &Graph, num_bins: usize) -> Vec<f64> {
     hist
 }
 
-/// Fraction of the possible edges that are present, `2m / (n(n-1))`.
-///
-/// A density rather than an edge count, because an edge count is not
-/// comparable across graphs of different sizes: the source penalises distance
-/// from an average edge count taken over reference graphs of many sizes, which
-/// makes the target wrong for any candidate whose node count differs from the
-/// reference mean. A density is unchanged when a graph and its target scale
-/// together.
-///
-/// Unweighted, like everything else here: multiplicity does not add edges.
+/// Fraction of the possible edges that are present, `2m / (n(n-1))`. Zero for a
+/// graph with fewer than two nodes.
 pub fn density(graph: &Graph) -> f64 {
     let n = graph.num_nodes;
     if n < 2 {
@@ -351,10 +260,9 @@ pub fn density(graph: &Graph) -> f64 {
 pub enum StatsError {
     /// No reference graphs were supplied.
     ///
-    /// This is an error and not a score. The source returns a *perfect* score
-    /// for an empty reference set, so a mistyped or empty reference folder
-    /// makes every candidate ideal, the population converges immediately, and
-    /// the run looks healthy while measuring nothing.
+    /// An error rather than a score, because scoring against nothing makes
+    /// every candidate ideal: the population converges at once and the run
+    /// looks healthy while measuring nothing.
     EmptyReferenceSet,
     /// A family was configured with zero bins, which leaves nothing to compare.
     ZeroBins { family: &'static str },
@@ -376,8 +284,8 @@ impl std::fmt::Display for StatsError {
 
 impl std::error::Error for StatsError {}
 
-/// The shared axes every graph is binned onto — the candidate and every
-/// reference graph alike, so the two can never bin differently.
+/// The bin edges every graph is binned onto, a candidate and every reference
+/// graph alike.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HistogramAxes {
     /// Top of the degree axis. Degrees above it land in the last bin.
@@ -387,7 +295,7 @@ pub struct HistogramAxes {
     pub spectral_bins: usize,
 }
 
-/// A per-family value: the three statistics each take their own.
+/// One value per statistic family.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PerFamily {
     pub degree: f64,
@@ -408,22 +316,14 @@ struct FamilyReference {
 
 /// Added to every per-bin standard deviation before dividing by it.
 ///
-/// A bin that is identical across every reference graph has deviation exactly
-/// zero, and dividing by it would put a `NaN` into the fitness value — which
-/// crashes a run rather than scoring it badly. The guard also carries a
-/// meaning worth keeping: a candidate that differs on a bin the reference set
-/// is unanimous about is divided by a very small number, so it is pushed far
-/// away, which is the right verdict.
+/// A bin identical across every reference graph has deviation exactly zero, and
+/// dividing by it would put a `NaN` into the fitness value, crashing the run.
 const DEVIATION_FLOOR: f64 = 1e-6;
 
 impl FamilyReference {
     /// Standardize each bin against the reference set's own mean and deviation
-    /// for that bin.
-    ///
-    /// This is what makes the score weight *what the reference set agrees
-    /// about*: a bin the reference graphs vary widely on contributes less to
-    /// the distance than one they all agree on. An unstandardized kernel would
-    /// treat every bin alike.
+    /// for that bin, so a bin the reference graphs agree on weighs more than
+    /// one they vary widely on.
     fn build(histograms: Vec<Vec<f64>>) -> Self {
         let count = histograms.len() as f64;
         let bins = histograms[0].len();
@@ -464,12 +364,9 @@ impl FamilyReference {
     /// `1 - mean RBF similarity` between a candidate histogram and every
     /// reference histogram.
     ///
-    /// Deliberately **not** MMD, and not named as such. MMD is a two-sample
-    /// statistic; this compares one candidate against a fixed reference
-    /// distribution, so the within-reference term is a constant and the
-    /// candidate's self-similarity is 1. Both quantities are strictly
-    /// decreasing in the mean similarity, so candidates rank identically —
-    /// the simplification is sound, but the name would claim something else.
+    /// Not MMD: against a fixed reference set the within-reference term is a
+    /// constant and the candidate's self-similarity is 1, so dropping both
+    /// leaves the ranking unchanged.
     fn error(&self, histogram: &[f64], gamma: f64) -> f64 {
         let candidate = standardize(histogram, &self.mean, &self.deviation);
 
@@ -497,11 +394,6 @@ fn standardize(histogram: &[f64], mean: &[f64], deviation: &[f64]) -> Vec<f64> {
 }
 
 /// Check the RBF bandwidths before they reach `exp`.
-///
-/// Finite and greater than zero is what makes `exp(-gamma * d^2)` a similarity
-/// in `(0, 1]`. At exactly zero every candidate scores identically and the
-/// search has nothing to climb; below zero the exponent grows with the distance
-/// instead of shrinking, and the score runs away to infinity.
 fn assert_gammas(gammas: PerFamily) {
     let named = [
         ("degree", gammas.degree),
@@ -518,11 +410,8 @@ fn assert_gammas(gammas: PerFamily) {
     }
 }
 
-/// Check the per-family weights before they multiply a family's error.
-///
-/// Zero is allowed and means "ignore this family", which is a real
-/// configuration. Negative is not: it rewards a candidate for being *unlike*
-/// the reference set, inverting the objective without anything reporting it.
+/// Check the per-family weights before they multiply a family's error. Zero is
+/// allowed and means "ignore this family".
 fn assert_weights(weights: PerFamily) {
     let named = [
         ("degree", weights.degree),
@@ -541,8 +430,7 @@ fn assert_weights(weights: PerFamily) {
 
 /// A reference set reduced to the statistics a candidate is scored against.
 ///
-/// Built once per run: the reference graphs never change, so their histograms
-/// and per-bin moments are computed here rather than on every evaluation.
+/// Built once per run and reused for every evaluation.
 #[derive(Debug, Clone)]
 pub struct ReferenceStatistics {
     degree: FamilyReference,
@@ -591,9 +479,8 @@ impl ReferenceStatistics {
         })
     }
 
-    /// The axes this reference set was built on. A candidate must be binned on
-    /// the same ones, which is why they are carried here rather than passed
-    /// again at scoring time.
+    /// The axes this reference set was built on; a candidate must be binned on
+    /// the same ones.
     pub fn axes(&self) -> &HistogramAxes {
         &self.axes
     }
@@ -604,31 +491,17 @@ impl ReferenceStatistics {
     }
 
     /// How far a candidate is from this reference set: a weighted sum of the
-    /// three family errors and the density penalty. Zero is a perfect match.
+    /// family errors, zero for a perfect match. [`Self::density_penalty`] is
+    /// not part of it.
     ///
-    /// `gammas` are the RBF bandwidths, one per family. They are per-family and
-    /// small on purpose: a gamma that is too large collapses
-    /// `exp(-gamma * d^2)` to zero for every candidate, so the whole population
-    /// scores ~1.0, there is no gradient to climb, and evolution stalls while
-    /// appearing to run normally.
+    /// `gammas` are the RBF bandwidths, one per family, and must be kept small:
+    /// too large a gamma collapses `exp(-gamma * d^2)` to zero for every
+    /// candidate, so the whole population scores ~1.0, there is no gradient to
+    /// climb, and evolution stalls while appearing to run normally.
     ///
-    /// The result is always finite **given the preconditions below**. Every
-    /// route to a `NaN` from the graphs themselves is closed — the deviation
-    /// floor, the isolated-node rule in the Laplacian, and the empty reference
-    /// set being rejected at construction — because a `NaN` fitness aborts a
-    /// run instead of scoring a bad candidate.
-    ///
-    /// # Panics
-    ///
-    /// If any gamma is not finite and positive, or any weight is not finite and
-    /// non-negative. Neither is expressible in `PerFamily`, which is a plain
-    /// triple of `f64`, and this module is public exactly so a caller can drive
-    /// it without a `Config` — so the checks a config-file run gets are not on
-    /// this path and have to be made here. Left unchecked these return a score
-    /// rather than an error: a negative gamma flips the sign inside
-    /// `exp(-gamma * d^2)` and overflows to infinity, and a non-finite gamma or
-    /// weight carries straight through. An aborted run with a message beats a
-    /// finished one whose numbers mean nothing.
+    /// Panics unless every gamma is finite and positive and every weight finite
+    /// and non-negative: nothing else checks them on this path, and unchecked
+    /// they return a plausible score rather than an error.
     pub fn error(&self, candidate: &Graph, gammas: PerFamily, weights: PerFamily) -> f64 {
         assert_gammas(gammas);
         assert_weights(weights);
@@ -653,8 +526,7 @@ impl ReferenceStatistics {
 
     /// Absolute distance between a candidate's density and the reference mean.
     ///
-    /// Kept separate from `error` so its weight can be set independently, and
-    /// so a caller can report the two halves apart when diagnosing a run.
+    /// Not included in `error`: a caller weights and reports the two separately.
     pub fn density_penalty(&self, candidate: &Graph) -> f64 {
         (density(candidate) - self.mean_density).abs()
     }

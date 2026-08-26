@@ -103,7 +103,7 @@
 </ol>
 
 <p>
-  The stated cost: a Rust embedder reading the outcome directly gets engine-oriented numbers, which
+  The stated cost: a Rust embedder reading the outcome directly gets lower-is-better numbers, which
   is what the direction carried on the outcome is for.
 </p>
 
@@ -202,7 +202,7 @@
 
 <ul>
   <li>Lower is better inside the engine, always.</li>
-  <li>Fitness crosses back into the objective's own units only at the reporting boundary.</li>
+  <li>Fitness crosses back to as-measured only at the reporting boundary.</li>
   <li>All randomness derives from one user seed.</li>
   <li>Every value has exactly one source of truth.</li>
   <li>A bad configuration is an error naming its field, never a panic.</li>

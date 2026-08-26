@@ -88,32 +88,34 @@ mutation    = { type = "my_mutation", some_param = 0.5 }</code></pre>
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/genomes/genome.rs:316</code></td>
+    <tr><td>1</td><td><code>get/src/genomes/genome.rs:108</code></td>
         <td>A variant on <code>enum EdgeEditMutation</code>, plus any parameters it reads.</td></tr>
-    <tr><td>2</td><td><code>get/src/genomes/edge_edit.rs:287</code></td>
+    <tr><td>2</td><td><code>get/src/genomes/edge_edit.rs:235</code></td>
         <td>The arm in <code>EdgeEditGenome::mutate</code> that performs it.</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:300</code> and
-        <code>get/src/dispatch.rs:913</code></td>
+    <tr><td>3</td><td><code>get/src/config.rs:188</code> and
+        <code>get/src/dispatch.rs:653</code></td>
         <td>The mirrored variant on <code>enum EdgeEditMutationConfig</code>, and the arm mapping it
             onto the engine enum.</td></tr>
-    <tr><td>4</td><td><code>get/src/py_config.rs:926</code> and <code>:952</code></td>
-        <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
+    <tr><td>4</td><td><code>get/src/py_config.rs:723</code>, <code>:744</code> and
+        <code>config.example.toml:187</code></td>
+        <td><b>Optional.</b> The Python-side variant, its matching arm, and a
+            <code>mutation</code> line in the example config.</td></tr>
   </tbody>
 </table>
 </div>
 
-<pre><code class="language-rust">// step 1 — genomes/genome.rs:316
+<pre><code class="language-rust">// step 1 — genomes/genome.rs:108
 MyMutation { some_param: f64 },
 
-// step 2 — genomes/edge_edit.rs:287
+// step 2 — genomes/edge_edit.rs:235
 EdgeEditMutation::MyMutation { some_param } =&gt; {
     // exactly one change to `self.genes`
 }
 
-// step 3a — config.rs:300
+// step 3a — config.rs:188
 MyMutation { some_param: f64 },
 
-// step 3b — dispatch.rs:913
+// step 3b — dispatch.rs:653
 EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
     EdgeEditMutation::MyMutation { some_param: *some_param }
 }</code></pre>
@@ -130,30 +132,32 @@ EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/genomes/genome.rs:347</code></td>
+    <tr><td>1</td><td><code>get/src/genomes/genome.rs:121</code></td>
         <td>A variant on <code>enum SdaMutation</code>, plus any parameters it reads.</td></tr>
-    <tr><td>2</td><td><code>get/src/genomes/sda.rs:492</code></td>
+    <tr><td>2</td><td><code>get/src/genomes/sda.rs:405</code></td>
         <td>The arm in <code>SdaGenome::mutate</code> that performs it.</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:360</code> and
-        <code>get/src/dispatch.rs:923</code></td>
+    <tr><td>3</td><td><code>get/src/config.rs:230</code> and
+        <code>get/src/dispatch.rs:667</code></td>
         <td>The mirrored variant on <code>enum SdaMutationConfig</code>, and the arm mapping it onto
             the engine enum.</td></tr>
-    <tr><td>4</td><td><code>get/src/py_config.rs:966</code> and <code>:991</code></td>
-        <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
+    <tr><td>4</td><td><code>get/src/py_config.rs:760</code>, <code>:781</code> and
+        <code>config.example.toml:194</code></td>
+        <td><b>Optional.</b> The Python-side variant, its matching arm, and a
+            <code>mutation</code> line in the example config.</td></tr>
   </tbody>
 </table>
 </div>
 
-<pre><code class="language-rust">// step 1 — genomes/genome.rs:347
+<pre><code class="language-rust">// step 1 — genomes/genome.rs:121
 MyMutation { some_param: f64 },
 
-// step 2 — genomes/sda.rs:492
+// step 2 — genomes/sda.rs:405
 SdaMutation::MyMutation { some_param } =&gt; self.my_mutation(context, rng),
 
-// step 3a — config.rs:360
+// step 3a — config.rs:230
 MyMutation { some_param: f64 },
 
-// step 3b — dispatch.rs:923
+// step 3b — dispatch.rs:667
 SdaMutationConfig::MyMutation { some_param } =&gt; {
     SdaMutation::MyMutation { some_param: *some_param }
 }</code></pre>

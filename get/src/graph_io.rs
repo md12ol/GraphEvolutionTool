@@ -1,39 +1,22 @@
 //! Reading graphs from edge-list files.
 //!
-//! One edge per line, `start,end,weight`, comma-delimited, any line ending. A
-//! caller whose data is not 0-indexed passes `min_node_index`, and every index
-//! is shifted to 0 here — once, on the way in.
+//! One edge per line, `start,end,weight`, any line ending. A caller whose data
+//! is not 0-indexed passes `min_node_index`, and every index is shifted to 0
+//! here, once, on the way in.
 //!
-//! **A line starting with `#` is a comment, and every file must carry the one
-//! comment that is read: `# nodes = N`.** It states the graph's node count,
-//! which the edges cannot — a node with no edges is invisible to
+//! **A `#` line is a comment, and every file must carry `# nodes = N`.** The
+//! edges cannot supply that count: a node with no edges is invisible to
 //! `highest index + 1`, so a count taken from the data is short by exactly the
-//! nodes hardest to notice, and short silently. It is required rather than
-//! optional on purpose: two ways to arrive at a node count means one that is
-//! right and one that is quietly wrong, chosen by whether whoever wrote the
-//! file remembered. The header is checked against the file's own indices and
-//! against the count the caller allows.
+//! nodes hardest to notice, and short silently.
 //!
-//! Everything GET writes carries it — `RunResult::save_results` emits a
-//! loadable edge list — so a run's output is a file the loader will take back
-//! without editing.
-//!
-//! **Everything is validated before anything is built.** The whole text is
-//! checked first and the edge list is returned only if every row survives, so a
-//! rejected file leaves no half-built graph behind. That matters because
+//! **Everything is validated before anything is built**, because
 //! [`Graph::set_edge`](crate::graph::Graph::set_edge) absorbs the failures this
-//! module reports: it returns early on a bad endpoint or a self-loop, and clamps
-//! an over-cap weight. A graph built first and checked after would already have
-//! lost the offending edge, leaving nothing to name.
+//! module reports — returning early on a bad endpoint or a self-loop, clamping
+//! an over-cap weight — so a graph built first would already have lost the edge
+//! there was to name.
 //!
-//! Two failures are warnings rather than errors, because the file still
-//! describes a graph: a repeated edge (the last occurrence wins) and a
-//! zero-weight edge (kept as given, which is no edge at all). Warnings are
-//! returned to the caller rather than printed here, which keeps this module
-//! testable without a Python interpreter: the Python boundary raises them as
-//! a `UserWarning`, through `warnings`, and the Rust-native route (`get-run`,
-//! which has no interpreter to raise one on) prints them to stderr instead —
-//! see `crate::emit_load_warnings_maybe`.
+//! A repeated edge (last occurrence wins) and a zero-weight edge (kept as
+//! given) are warnings rather than errors: the file still describes a graph.
 
 use std::path::Path;
 
@@ -47,40 +30,20 @@ pub struct EdgeFile {
     pub edges: Vec<(usize, usize, u32)>,
     /// Non-fatal findings, in the order they were met.
     pub warnings: Vec<LoadWarning>,
-    /// What to call this in a message — a path, or a test's own label.
+    /// What to call this in a message — a path, or a caller's own label.
     pub source: String,
-    /// The node count the file stated in its `# nodes = N` header.
-    ///
-    /// Required, and there is deliberately no second way to arrive at it: a
-    /// trailing node with no edges is invisible to `highest index + 1`, so a
-    /// format accepting both spellings would have one that is right and one
-    /// that is quietly wrong by exactly the nodes hardest to notice.
+    /// The node count from the file's `# nodes = N` header.
     pub num_nodes: usize,
 }
 
 impl EdgeFile {
-    /// Build the graph these edges describe, sizing it from the data itself.
+    /// Build the graph these edges describe, sized from this file's own
+    /// `# nodes = N` header.
     ///
-    /// # Why the count is the file's own, not the loader's
-    ///
-    /// [`load_edge_folder`] takes **one** `num_nodes` for the whole folder,
-    /// which suits a set of same-sized graphs and does not suit a reference
-    /// set: those come from real data and differ in size, and the loader's
-    /// `num_nodes` is an upper bound used to reject out-of-range indices, not
-    /// a description of any one file. So a caller passes a generous cap to the
-    /// loader — which still catches a wild index — and each file states its
-    /// own size, which is what this builds from.
-    ///
-    /// **The size comes from the file's `# nodes = N` header, always.** Edges
-    /// cannot supply it: nothing in them distinguishes "node 9 exists but has
-    /// no edges" from "there is no node 9", so a count inferred as
-    /// `highest index + 1` is short by exactly the trailing isolated nodes, and
-    /// short silently. That is not cosmetic for a reference set — the degree,
-    /// clustering and spectral histograms each count an isolated node as a real
-    /// observation and normalize over the node count, so a lost node shifts
-    /// every distribution consistently in one direction. `parse_edge_list` has
-    /// already checked the header against the indices the file uses and against
-    /// the count the caller allows, so this is a construction, not a decision.
+    /// The `num_nodes` handed to the loader is an upper bound used to reject
+    /// wild indices, not the size of any one file — a folder of differently
+    /// sized graphs loads under one generous cap and each file still builds at
+    /// its own size.
     pub fn to_graph(&self, max_edge_multiplicity: u32) -> Graph {
         let mut graph = Graph::new(self.num_nodes, max_edge_multiplicity);
         graph.set_edges(&self.edges);
@@ -88,12 +51,7 @@ impl EdgeFile {
     }
 }
 
-/// Why one row was rejected.
-///
-/// Kept apart from its prose for the same reason `ConfigError::Validation` is: a
-/// test asserts on the variant instead of matching wording that changes every
-/// time someone improves the message. Not linked, because `config` is
-/// crate-internal and this type is public — a link would render as a dead one.
+/// Why one row was rejected, apart from the wording used to report it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RowProblem {
     /// Not three comma-separated fields. Carries how many there were.
@@ -101,8 +59,7 @@ pub enum RowProblem {
     /// A field that is not an integer. Carries which one — `start`, `end` or
     /// `weight`.
     NonNumeric(&'static str),
-    /// `start == end`. This graph has no representation for a self-loop, and in
-    /// caller data it usually means the indices are wrong.
+    /// `start == end`, which this graph cannot represent. Carries the node.
     SelfLoop(i64),
     /// A node index outside `min_node_index ..= min_node_index + num_nodes - 1`.
     /// Carries the index and the range it missed.
@@ -114,15 +71,12 @@ pub enum RowProblem {
     WeightAboveCap { weight: i64, cap: u32 },
     /// A `# nodes` header whose value is not a whole number of nodes.
     NonNumericNodeCount,
-    /// A second `# nodes` header. One file states one node count; a second is a
-    /// contradiction rather than an override, and honouring either would be a
-    /// guess. Carries the line the first one was on.
+    /// A second `# nodes` header. Carries the line the first one was on.
     RepeatedNodeCount { first: usize },
     /// A `# nodes` header naming fewer nodes than the file's own edges use.
     /// Carries the count and the smallest one that would fit the data.
     NodeCountBelowIndices { declared: usize, needed: usize },
-    /// A `# nodes` header above the count this run allows — the header's
-    /// counterpart to [`RowProblem::NodeOutOfRange`]. Carries both.
+    /// A `# nodes` header above the count this run allows. Carries both.
     NodeCountAboveCap { declared: usize, cap: usize },
 }
 
@@ -191,24 +145,18 @@ pub enum GraphLoadError {
     Io {
         /// What was being read.
         path: String,
-        /// What the operating system said.
         source: std::io::Error,
     },
     /// One row did not survive validation.
     Row {
-        /// The file the row is in.
         path: String,
-        /// Its 1-based line number, so the user can go straight to it.
+        /// 1-based, so the user can go straight to it.
         line: usize,
-        /// What was wrong with it.
         problem: RowProblem,
     },
-    /// No `# nodes = N` header. A file-level failure rather than a row one:
-    /// there is no line to point at, which is the whole problem.
-    MissingNodeCount {
-        /// The file that did not state its size.
-        path: String,
-    },
+    /// No `# nodes = N` header — a file-level failure, with no one line to
+    /// point at.
+    MissingNodeCount { path: String },
 }
 
 impl std::fmt::Display for GraphLoadError {
@@ -238,11 +186,10 @@ impl std::error::Error for GraphLoadError {}
 /// Something worth telling the caller that does not stop the load.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LoadWarning {
-    /// The same pair appeared more than once. Comparison is canonical —
-    /// `(min(u, v), max(u, v))` — so `2,5` and `5,2` collide, and the last
-    /// occurrence is the one kept.
+    /// The same pair appeared more than once. Pairs are compared canonically,
+    /// so `2,5` and `5,2` collide, and the last occurrence is the one kept.
     DuplicateEdge {
-        /// The canonical pair, in the caller's own indexing.
+        /// The pair, in the caller's own indexing.
         edge: (usize, usize),
         /// The multiplicity that survived.
         kept: u32,
@@ -288,9 +235,8 @@ impl std::fmt::Display for LoadWarning {
 
 /// One validated edge together with where it came from.
 ///
-/// The line is `None` for edges handed over by a setter call, which have no
-/// file behind them. It exists so duplicate detection can be written once and
-/// used by both routes.
+/// `line` is `None` for edges handed over by a setter call, which have no file
+/// behind them.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SourcedEdge {
     pub(crate) u: usize,
@@ -301,14 +247,11 @@ pub(crate) struct SourcedEdge {
 
 /// Collapse repeated pairs, last occurrence winning, and report each collapse.
 ///
-/// Pairs are compared canonically, so `(2, 5)` and `(5, 2)` are the same edge —
-/// an undirected edge written either way round must not slip through as two.
-/// Surviving edges keep first-appearance order, which makes the result a
-/// function of the input alone rather than of a hash order.
+/// Comparison is canonical, so an undirected edge written either way round
+/// does not slip through as two. Survivors keep first-appearance order.
 ///
-/// `shift` is subtracted from nothing here; it is only what the reported pairs
-/// are shifted *back* by, so a warning names the indices the caller wrote
-/// rather than the internal 0-based ones.
+/// `shift` is applied to nothing that is kept — it only shifts the pairs named
+/// in warnings *back* into the caller's own indexing.
 pub(crate) fn canonicalize(
     edges: &[SourcedEdge],
     shift: i64,
@@ -319,9 +262,6 @@ pub(crate) fn canonicalize(
     for edge in edges {
         let pair = (edge.u.min(edge.v), edge.u.max(edge.v));
 
-        // Linear scan rather than a map: it keeps first-appearance order without
-        // a second structure, and an edge list is small enough that the cost
-        // never shows.
         let mut existing = None;
         for (index, &(u, v, _)) in kept.iter().enumerate() {
             if (u, v) == pair {
@@ -350,8 +290,8 @@ pub(crate) fn canonicalize(
 fn unshift(pair: (usize, usize), shift: i64) -> (usize, usize) {
     let restore = |node: usize| -> usize {
         let raw = node as i64 + shift;
-        // A negative result cannot happen for an index that passed the range
-        // check, and saturating beats panicking inside a warning either way.
+        // An index that passed the range check cannot go negative; saturate
+        // anyway, rather than panicking inside a warning.
         raw.max(0) as usize
     };
     (restore(pair.0), restore(pair.1))
@@ -363,7 +303,7 @@ fn unshift(pair: (usize, usize), shift: i64) -> (usize, usize) {
 /// caller's own data starts at; every index is shifted by it, so the returned
 /// edges are 0-based whatever went in.
 ///
-/// Blank lines are skipped rather than rejected — every text file ends in one.
+/// Blank lines are skipped.
 pub fn parse_edge_list(
     text: &str,
     source: &str,
@@ -371,8 +311,8 @@ pub fn parse_edge_list(
     max_edge_multiplicity: u32,
     min_node_index: i64,
 ) -> Result<EdgeFile, GraphLoadError> {
-    // An empty graph has no valid index at all, and this keeps the arithmetic
-    // below from underflowing into a range that accepts one.
+    // Signed on purpose: with `num_nodes == 0` this must fall below
+    // `min_node_index`, leaving a range that accepts no index at all.
     let highest = min_node_index + num_nodes as i64 - 1;
 
     let mut parsed: Vec<SourcedEdge> = Vec::new();
@@ -386,10 +326,6 @@ pub fn parse_edge_list(
             continue;
         }
 
-        // A `#` line is a comment, and one spelling of comment is load-bearing:
-        // `# nodes = 200` is how a file states a size its edges cannot imply.
-        // Anything else after the `#` is ignored, so a file may carry its own
-        // provenance without the parser growing an opinion about it.
         if let Some(comment) = trimmed.strip_prefix('#') {
             let Some(value) = node_count_header(comment) else {
                 continue;
@@ -438,9 +374,8 @@ pub fn parse_edge_list(
             });
         }
 
-        // Parsed as signed, deliberately: a negative index or weight is a
-        // distinct, reportable mistake, and reading into `usize` would collapse
-        // it into "not a number".
+        // Signed, so a negative index or weight is reported as negative rather
+        // than collapsing into "not a number".
         let start = parse_field(fields[0], "start", source, line)?;
         let end = parse_field(fields[1], "end", source, line)?;
         let weight = parse_field(fields[2], "weight", source, line)?;
@@ -505,8 +440,7 @@ pub fn parse_edge_list(
         warnings.push(LoadWarning::EmptyFile);
     }
 
-    // Checked after the rows, not while reading them: the header may come last,
-    // and a file is not required to put it first for the check to mean anything.
+    // Checked after the rows, because the header may come last.
     let Some((count, header_line)) = declared_nodes else {
         return Err(GraphLoadError::MissingNodeCount {
             path: source.to_string(),
@@ -548,10 +482,8 @@ pub fn parse_edge_list(
 /// The value of a `# nodes = N` header, or `None` for any other comment.
 ///
 /// `comment` is what followed the `#`. The key is matched case-insensitively
-/// and the `=` is required, so `# nodes: 5` and `# 200 nodes` are prose and are
-/// skipped rather than half-read. A file that means to state a size and
-/// misspells it gets no count, which the caller sees as inference — the reason
-/// a malformed *value* is an error rather than a shrug.
+/// and the `=` is required, so `# nodes: 5` and `# 200 nodes` are prose: they
+/// are skipped, and the file then fails as though it stated no count.
 fn node_count_header(comment: &str) -> Option<&str> {
     let (key, value) = comment.split_once('=')?;
     if key.trim().eq_ignore_ascii_case("nodes") {
@@ -602,14 +534,13 @@ pub fn load_edge_file(
 
 /// Read every edge-list file in a folder, one file per graph.
 ///
-/// **The order is sorted by file name, and each file's name is on the result it
-/// produced.** Filesystem order is not reproducible across machines, and a
-/// reference set is consumed positionally, so leaving the order to the
-/// directory would make a run's numbers depend on how its data happened to be
-/// written to disk.
+/// **Results are sorted by file name, and each carries the name it came from.**
+/// A reference set is consumed positionally and filesystem order is not
+/// reproducible across machines, so leaving the order to the directory would
+/// make a run's numbers depend on how its data reached disk.
 ///
-/// Sub-directories are skipped; every regular file is read, since an extension
-/// convention would silently drop data the caller meant to include.
+/// Sub-directories are skipped; every regular file is read, whatever its
+/// extension.
 pub fn load_edge_folder(
     folder: &Path,
     num_nodes: usize,
@@ -716,7 +647,7 @@ mod tests {
         // Nodes 3, 4 and 5 are real and isolated: present in the graph, absent
         // from every edge, and counted by anything that reads degrees.
         let graph = loaded.to_graph(3);
-        assert_eq!(graph.degree(5), 0);
+        assert_eq!(graph.neighbor_count(5), 0);
     }
 
     /// Missing is an error, not a fallback. The alternative — infer when the
@@ -1188,7 +1119,7 @@ mod tests {
         assert_eq!(graph.num_nodes, 3);
         for node in 0..3 {
             assert_eq!(
-                graph.degree(node),
+                graph.neighbor_count(node),
                 2,
                 "every node of a triangle has degree 2"
             );
@@ -1204,7 +1135,7 @@ mod tests {
 
         let graph = file.to_graph(1);
         assert_eq!(graph.num_nodes, 5);
-        assert_eq!(graph.degree(4), 0);
+        assert_eq!(graph.neighbor_count(4), 0);
         assert_eq!(file.warnings, vec![LoadWarning::EmptyFile]);
 
         // Zero is expressible too, and means what it says.

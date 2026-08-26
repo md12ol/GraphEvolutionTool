@@ -53,7 +53,8 @@
     <tr><td><b><a href="new-replacement.html">Replacement Policy</a></b></td>
         <td>Three steps — the shortest chain here.</td>
         <td>Who gets overwritten, and steady-state's alone: generational rebuilds its population and
-            never asks. Consumes no randomness, so a policy cannot shift a seeded run's stream.</td></tr>
+            never asks. A policy may draw — <code>random</code> does — so it shares the run's seeded
+            stream.</td></tr>
   </tbody>
 </table>
 </div>
@@ -192,6 +193,21 @@ anything else.</figcaption>
   <code>NaN</code> through that will take over the population. Neither failure announces itself.
   Any new evolution strategy scores its population through this function or it is wrong. Detail on
   <a href="fitness.html#gate">Fitness &amp; Output</a>.
+</div>
+
+<h2>The Steps Are a Checklist, Not a Complete List</h2>
+
+<div class="warn">
+  <b>A marker chain names the sites every variant touches, not every site yours will.</b> The
+  compiler catches the exhaustive matches and nothing else, so a variant that adds something the
+  shipped ones do not have can compile clean and still be incomplete.
+  <p>
+    The common case is a <b>parameter</b>. <code>Scope::RandomSubset { size }</code> needs
+    <code>size</code> checked at load, so <code>Config::validate_scope</code> has an arm for it — a
+    scope with no parameters would never have sent you there. If your variant carries a number, look
+    for the <code>Config::validate_*</code> function covering its section and add the constraint,
+    whether or not a marker mentions one.
+  </p>
 </div>
 
 <h2>Practical Notes for Any of Them</h2>

@@ -1,75 +1,25 @@
-//! Python-facing builders for the `config.toml` schema (spec §8).
+//! Python-facing builders for the `config.toml` schema.
 //!
-//! These mirror [`crate::config`]'s types one field for one field. The user
-//! fills them in Python, they serialize to TOML, and that TOML is what
-//! [`crate::config::Config::from_toml_str`] parses — so there is exactly one
+//! Each type here mirrors one in [`crate::config`], field for field. The user
+//! fills them in from Python, they serialize to TOML, and
+//! [`crate::config::Config::from_toml_str`] parses that TOML — so there is one
 //! parser and one validator, and the Python path cannot accept a config the
 //! hand-written TOML path rejects.
 //!
-//! # Why these are a separate mirror rather than `#[pyclass]` on `config`'s own types
-//!
-//! Not a stylistic choice — the two attribute sets are mutually exclusive on
-//! the fitness enum, measured on pyo3 0.27.2 and serde 1.0.228:
-//!
-//! - pyo3 rejects a **unit variant** in a complex enum ("not yet supported in a
-//!   complex enum; change to an empty tuple variant instead"), so
-//!   [`crate::config::FitnessConfig::Python`] would have to become `Python()`.
-//! - serde then rejects *that*: `#[serde(tag = "type")] cannot be used with
-//!   tuple variants`. And the tag is what deserializes `type = "python"` for
-//!   the hand-written TOML path.
-//!
-//! So annotating `config`'s enum directly would break the TOML front end to
-//! serve the Python one. The mirror also confines every pyo3 attribute to this
-//! one file, which matters with two owners editing the crate at once.
-//!
-//! The cost is drift: a field added to [`crate::config`] and not here is
-//! invisible from Python. That is what the round-trip tests below guard — they
-//! build a mirror, serialize it, parse it back as a real
-//! [`crate::config::Config`], and compare field for field.
-//!
-//! # What this looks like from Python
-//!
-//! ```python
-//! config = get.Config(
-//!     population_size=200,
-//!     network_size=100,
-//!     crossover_rate=0.9,
-//!     mutation_rate=0.2,
-//!     evolution=get.EvolutionConfig.Generational(num_generations=500),
-//!     scope=get.ScopeConfig.Global(),
-//!     selection=get.SelectionConfig.Tournament(tournament_size=5),
-//!     genome=get.GenomeConfig.EdgeEdit(gene_length=256),
-//!     fitness=get.FitnessConfig.EpiSpread(
-//!         sir=get.SirParams(infection_rate=0.05, num_epidemics=30)
-//!     ),
-//! )
-//! evolver = get.GraphEvolver.from_config(config)
-//! ```
-//!
-//! Worked examples for every objective, both genomes and both evolution
-//! strategies live in `examples/config_builder.py`, which is runnable and is
-//! the place to add a new one — not this comment, which cannot be executed and
-//! so cannot be caught going stale.
+//! The mirror is forced, not chosen: `#[pyclass]` on [`crate::config`]'s own
+//! enums would break the TOML front end, because pyo3 rejects a unit variant in
+//! a complex enum and serde rejects the tuple variant it would become. It is
+//! also why several variants here carry an empty struct body.
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use toml::Value;
 use toml::map::Map;
 
-/// Epidemic sampling parameters, shared by the three SIR objectives.
+/// Epidemic sampling parameters, shared by the epidemic objectives.
 ///
-/// Mirrors [`crate::config::SirParams`], which is `#[serde(flatten)]`ed into
-/// its variant — so this becomes keys of `[fitness]` directly, not a
-/// sub-table.
-///
-/// Unrelated to [`crate::fitness::PyFitness`], despite both starting `Py`: that
-/// one adapts a registered Python *callable* to the `Fitness` trait, this one
-/// is configuration.
-///
-/// None of these five fields is validated here — `PySirParams` carries no
-/// range checks of its own. All of them are checked later by
-/// `Config::validate_fitness`, once this has round-tripped through TOML,
-/// the same deferral `PyGenomeConfig::Sda::init_state` uses.
+/// Nothing is range-checked here; every field is checked when the config is
+/// handed to an evolver.
 #[pyclass(name = "SirParams")]
 #[derive(Debug, Clone)]
 pub struct PySirParams {
@@ -92,9 +42,6 @@ pub struct PySirParams {
 
 #[pymethods]
 impl PySirParams {
-    /// The two defaults are the legacy C++ constants `mepl` and `rse`, so an
-    /// omitted pair reproduces historical behaviour (spec §5.2) — the same
-    /// values `config`'s serde defaults supply.
     #[new]
     #[pyo3(signature = (
         infection_rate,
@@ -122,9 +69,8 @@ impl PySirParams {
 
 /// Relative probability of each edge-edit operation.
 ///
-/// Mirrors [`crate::genomes::EdgeEditOperationWeights`]. Every field defaults
-/// to 1.0, giving all nine operations equal probability; a weight of 0.0
-/// disables its operation outright.
+/// Every weight defaults to 1.0, so the operations are equally likely; 0.0
+/// disables an operation outright.
 #[pyclass(name = "OperationWeights")]
 #[derive(Debug, Clone)]
 pub struct PyOperationWeights {
@@ -153,7 +99,7 @@ impl PyOperationWeights {
         local_delete = 1.0,
         null = 1.0,
     ))]
-    #[allow(clippy::too_many_arguments)] // nine weights is the schema, not a smell
+    #[allow(clippy::too_many_arguments)] // one argument per weight is the schema, not a smell
     pub fn new(
         toggle: f64,
         hop: f64,
@@ -186,24 +132,11 @@ impl Default for PyOperationWeights {
 }
 
 /// Which evolution strategy to run, and its strategy-specific settings.
-///
-/// Mirrors [`crate::config::EvolutionConfig`].
-///
-/// # Part of the chain that adds a strategy
-///
-/// This is the optional step: it is what lets a Python caller name the
-/// strategy. Skipping it costs nothing anywhere else — the strategy still
-/// runs from a TOML config and from Rust — so it is only needed if Python
-/// should be able to select it. The steps before it are the
-/// `EvolutionConfig` variant and its `validate_evolution_and_selection` and
-/// `dispatch::run_strategy` arms; `crate::evolver::Evolver`'s doc has all
-/// seven.
 #[pyclass(name = "EvolutionConfig")]
 #[derive(Debug, Clone)]
 pub enum PyEvolutionConfig {
-    /// `elite_count`'s default of 1 carries the same value as `config`'s
-    /// `default_elite_count`; there's no shared constant, so a change to one
-    /// side needs the other updated by hand.
+    // `elite_count`'s default of 1 has to match `config`'s `default_elite_count`;
+    // nothing checks that the two agree.
     #[pyo3(constructor = (num_generations, elite_count = 1))]
     Generational {
         num_generations: usize,
@@ -213,47 +146,36 @@ pub enum PyEvolutionConfig {
     #[pyo3(constructor = (num_mating_events, replacement = None))]
     SteadyState {
         num_mating_events: usize,
-        /// Which members of the scope a mating event's children overwrite.
-        /// `None` means the least fit, which is what keeps steady-state
-        /// self-elitist — the same reading the TOML side gives an absent field.
+        /// Which members of the scope a mating event's children overwrite;
+        /// `None` means the least fit.
         replacement: Option<PyReplacementConfig>,
     },
-    // ADD A STRATEGY STEP 6 — the Python-side variant, if the strategy should
-    // be reachable from Python. Optional; leaving it out costs nothing
-    // elsewhere.
+    // ADD A STRATEGY STEP 6 — the Python-side variant, if the strategy should be
+    // selectable from Python, plus its arm in `to_toml_value` below writing
+    // `type = "my_strategy"` and the fields under `[evolution]`. Optional: without
+    // it the strategy still runs from a TOML config and from Rust.
     //
     //     #[pyo3(constructor = (num_my_events))]
     //     MyStrategy { num_my_events: usize },
-    //
-    // Then add the matching arm to `PyEvolutionConfig::to_toml_value` below,
-    // which writes `type = "my_strategy"` and the fields under `[evolution]`
-    // — search `ADD A STRATEGY STEP 6` again for it.
 }
 
 /// Which members of a scope a mating event's children overwrite.
-///
-/// Mirrors [`crate::config::ReplacementConfig`]. Carried on the steady-state
-/// strategy rather than at the top level, because that is the only strategy
-/// that displaces anyone.
 #[pyclass(name = "ReplacementConfig")]
 #[derive(Debug, Clone)]
 pub enum PyReplacementConfig {
     #[pyo3(constructor = ())]
     Worst {},
-    // ADD A REPLACEMENT STEP 3 (for SteadyState, Python half) — optional, and nothing checks it:
+    #[pyo3(constructor = ())]
+    Random {},
+    // ADD A REPLACEMENT STEP 3 (for SteadyState, Python half) — the Python-side
+    // variant plus its arm in `to_toml_value` below. Optional: without it the
+    // policy still works from a TOML config and from Rust.
     //
-    //     #[pyo3(constructor = ())]
-    //     Random {},
-    //
-    // Then its arm in the conversion below. Skipped, the policy still works
-    // from TOML and from Rust.
+    //     #[pyo3(constructor = (size))]
+    //     Tournament { size: usize },
 }
 
 /// The slice of the population one breeding event draws from.
-///
-/// Mirrors [`crate::config::ScopeConfig`]. `size` is this block's own parameter
-/// — a scheme with no tournament still needs a way to say how large a scope it
-/// wants, which is why it does not live under `[selection]`.
 #[pyclass(name = "ScopeConfig")]
 #[derive(Debug, Clone)]
 pub enum PyScopeConfig {
@@ -261,27 +183,16 @@ pub enum PyScopeConfig {
     Global {},
     #[pyo3(constructor = (size))]
     RandomSubset { size: usize },
-    // ADD A SCOPE STEP 5 — optional, and nothing checks it:
+    // ADD A SCOPE STEP 5 — the Python-side variant, plus its arm in `to_toml_value`
+    // below writing the `[scope]` table, and a field step 3 validates by name also
+    // needs a path in `python_attribute_path`. Optional: without it the scope still
+    // works from a TOML config and from Rust.
     //
     //     #[pyo3(constructor = (radius))]
     //     Neighbourhood { radius: usize },
-    //
-    // Then its arm in the conversion writing the `[scope]` table below, and — if
-    // step 3 added a validated field — that field's name in
-    // `python_attribute_path`. Skipped, the variant still works from TOML and
-    // from Rust. The example config is last: search `ADD A SCOPE STEP 6`.
 }
 
 /// Parent-selection strategy.
-///
-/// Mirrors [`crate::config::SelectionConfig`]. One variant today, and an enum
-/// rather than a bare integer so adding a second scheme does not change the
-/// shape of the Python API.
-///
-/// This is step 5 of the six a new scheme touches, and the only one nothing
-/// checks: [`crate::evolver::common::Selection`] lists them all. A variant
-/// missing here compiles and tests clean — the Rust side is complete and Python
-/// simply cannot name the scheme.
 #[pyclass(name = "SelectionConfig")]
 #[derive(Debug, Clone)]
 pub enum PySelectionConfig {
@@ -289,50 +200,29 @@ pub enum PySelectionConfig {
     Best {},
     #[pyo3(constructor = (tournament_size))]
     Tournament { tournament_size: usize },
-    // ADD A SELECTION STEP 5 — optional, and the one nothing checks. Mirror the
-    // `config::SelectionConfig` variant so a Python caller can name the scheme:
+    // ADD A SELECTION STEP 5 — the Python-side variant, plus its arm in
+    // `to_toml_value` below writing the `[selection]` table, and a field step 3
+    // validates by name also needs a path in `python_attribute_path`. Optional:
+    // without it the scheme still works from a TOML config and from Rust.
     //
     //     #[pyo3(constructor = (pressure))]
     //     Roulette { pressure: f64 },
-    //
-    // Then its arm in the conversion that writes the `[selection]` table, and —
-    // if step 3 added a validated field — that field's name in
-    // `python_attribute_path`, or the error a Python caller sees names a TOML
-    // field they never wrote. Skipping this file entirely still leaves the
-    // scheme usable from TOML and from Rust. The last step is the example
-    // config: search `ADD A SELECTION STEP 6` for it.
 }
 
 /// Recombination operator.
-///
-/// Mirrors [`crate::config::CrossoverConfig`], and is step 5 of the six on
-/// [`crate::evolver::common::Crossover`] — optional, like every mirror here.
-/// An operator missing from this enum compiles and tests clean; it simply
-/// cannot be named from Python, and still runs from TOML and from Rust.
-///
-/// A unit variant would be the natural spelling for an operator that takes no
-/// parameters, but pyo3 rejects one in a complex enum, so `TwoPoint` carries an
-/// empty struct body — the same constraint this module's header records for
-/// [`crate::config::FitnessConfig::Python`], hit here for a second time.
 #[pyclass(name = "CrossoverConfig")]
 #[derive(Debug, Clone)]
 pub enum PyCrossoverConfig {
     #[pyo3(constructor = ())]
     TwoPoint {},
-    // ADD A CROSSOVER STEP 5 — the Python-side variant, if the operator
-    // should be reachable from Python. Optional; leaving it out costs
-    // nothing elsewhere.
+    // ADD A CROSSOVER STEP 5 — the Python-side variant, if the operator should be
+    // selectable from Python, plus its arm in `to_toml_value` below. Optional:
+    // without it the operator still runs from a TOML config and from Rust.
     //
     //     #[pyo3(constructor = (some_param))]
     //     MyCrossover { some_param: f64 },
-    //
-    // Then the matching arm in `to_toml_value` below — search
-    // `ADD A CROSSOVER STEP 5` again for it.
 }
 
-/// Hand-written rather than derived: `#[derive(Default)]` needs a *unit*
-/// variant to mark, and pyo3 does not allow one in a complex enum, so the
-/// empty struct body above rules the derive out.
 impl Default for PyCrossoverConfig {
     fn default() -> Self {
         PyCrossoverConfig::TwoPoint {}
@@ -340,38 +230,19 @@ impl Default for PyCrossoverConfig {
 }
 
 /// Genome representation and the dimensions used to build random individuals.
-///
-/// Mirrors [`crate::config::GenomeConfig`].
-///
-/// # Part of the chain that adds a representation
-///
-/// This is step 7, and it is optional: it is what lets a Python caller name
-/// the representation. Leaving it out costs nothing elsewhere — the
-/// representation still runs from a TOML config and from Rust. One thing does
-/// have to follow step 4 even so: a field its validation raises by name needs
-/// an attribute path in `python_attribute_path` below, or a Python caller gets
-/// an error naming a TOML field they never wrote.
-/// [`crate::genomes::genome`]'s module doc has all seven steps.
 #[pyclass(name = "GenomeConfig")]
 #[derive(Debug, Clone)]
 pub enum PyGenomeConfig {
-    /// `operation_weights` is `Option`-wrapped because it's a whole nested
-    /// type with its own defaults, not a scalar a `#[pyo3(constructor)]`
-    /// default can hand back directly — contrast `Sda::init_state` below,
-    /// where the default *is* a plain `usize` and needs no `Option`.
     #[pyo3(constructor = (gene_length, operation_weights = None, mutation = None))]
     EdgeEdit {
         gene_length: usize,
-        /// Omitted entirely, every operation defaults to a weight of 1.0.
+        /// Omitted, every operation gets a weight of 1.0.
         operation_weights: Option<PyOperationWeights>,
-        /// Which mutation the run applies. `Option`-wrapped so an unset value
-        /// is left out of the TOML entirely and `config`'s own default
-        /// supplies it — writing the variant here would put the default in
-        /// two places. The variants are edge-edit's own; SDA has its own set.
+        /// Which mutation the run applies; omitted, the default one.
         mutation: Option<PyEdgeEditMutationConfig>,
     },
-    /// No `num_chars`: the alphabet is derived as `max_edge_multiplicity + 1`,
-    /// so every character is a legal edge weight (spec §3.2, GitHub #6).
+    /// No `num_chars`: the alphabet is `max_edge_multiplicity + 1`, so every
+    /// character is a legal edge weight.
     #[pyo3(constructor = (
         num_states,
         max_resp_len,
@@ -383,53 +254,30 @@ pub enum PyGenomeConfig {
     Sda {
         num_states: usize,
         max_resp_len: usize,
-        /// Defaults to 0, matching `config`'s `#[serde(default)]` (a bare
-        /// `usize` defaults to 0, so there's no named default fn to track
-        /// here the way `elite_count` has one). Must be `< num_states`;
-        /// checked by `Config::validate`, since an out-of-range value panics
-        /// during expression.
+        /// Must be less than `num_states`, or expression panics.
         init_state: usize,
-        /// Chance a mutation redraws the initial character instead of
-        /// touching the transition table. `Option`-wrapped so an unset value
-        /// is left out of the TOML entirely and `config`'s own default
-        /// supplies it — writing a number here would mean the default lived
-        /// in two places.
+        /// Chance a mutation redraws the initial character instead of touching
+        /// the transition table; omitted, the default rate.
         init_char_mutation_rate: Option<f64>,
-        /// Chance of redrawing a transition's target rather than its
-        /// response, once the initial character was not chosen.
-        /// `Option`-wrapped for the same reason.
+        /// Chance of redrawing a transition's target rather than its response,
+        /// once the initial character was not chosen.
         transition_vs_response_rate: Option<f64>,
-        /// Which mutation the run applies. `Option`-wrapped for the same
-        /// reason as the two rates above. SDA's own variants; edge-edit has
-        /// its own set.
+        /// Which mutation the run applies; omitted, the default one.
         mutation: Option<PySdaMutationConfig>,
     },
-    // ADD A GENOME STEP 7 — the Python-side variant, if the representation
-    // should be reachable from Python. Optional; leaving it out costs nothing
-    // elsewhere.
+    // ADD A GENOME STEP 7 — the Python-side variant, if the representation should
+    // be selectable from Python, plus its arm in `to_toml_value` below writing
+    // `type = "my_genome"` and the fields under `[genome]`. Optional: without it
+    // the representation still runs from a TOML config and from Rust.
     //
     //     #[pyo3(constructor = (some_dimension))]
     //     MyGenome { some_dimension: usize },
-    //
-    // Then add the matching arm to `PyGenomeConfig::to_toml_value` below, which
-    // writes `type = "my_genome"` and the fields under `[genome]`. And if step
-    // 4's validation raises a field by name, give it a path in
-    // `python_attribute_path` — search `ADD A GENOME STEP 7` again for it.
 }
 
 /// Fitness objective and its parameters.
 ///
-/// Mirrors [`crate::config::FitnessConfig`]. The three epidemic objectives
-/// read the same simulation differently (spec §5.2), so they share one
-/// [`PySirParams`] block rather than triplicating it.
-///
-/// # Part of the chain that adds an objective
-///
-/// This is the optional step: it is what lets a Python caller name the
-/// objective. Skipping it costs nothing anywhere else — the objective still
-/// runs from a TOML config and from Rust — so it is only needed if Python
-/// should be able to select it. The steps before it are the `FitnessConfig`
-/// variant and its `dispatch` arm; `crate::fitness`'s module doc has all seven.
+/// The epidemic objectives read one simulation differently, so they share a
+/// single [`PySirParams`] block.
 #[pyclass(name = "FitnessConfig")]
 #[derive(Debug, Clone)]
 pub enum PyFitnessConfig {
@@ -443,16 +291,12 @@ pub enum PyFitnessConfig {
     #[pyo3(constructor = (sir, target_profile))]
     EpiProfMatch {
         sir: PySirParams,
-        /// The target profile itself, as a Python list of numbers (spec §8).
-        /// Compared verbatim — see [`crate::config::FitnessConfig`].
+        /// The profile the run is scored against, compared verbatim — nothing
+        /// is prepended to it and nothing is rescaled.
         target_profile: Vec<f64>,
     },
     /// How closely a graph's structure matches a set of reference graphs.
     /// Minimized; requires `max_edge_multiplicity = 1`.
-    ///
-    /// Every parameter but the folder has a default, matching the TOML side —
-    /// see [`crate::config::FitnessConfig`] for what each one does and for the
-    /// two ways a reference set can retire a family without saying so.
     #[pyo3(constructor = (
         reference_folder,
         degree_bins = 50,
@@ -479,32 +323,21 @@ pub enum PyFitnessConfig {
         spectral_weight: f64,
         density_weight: f64,
     },
-    // ADD AN OBJECTIVE STEP 4 — the Python-side variant, if the objective
-    // should be reachable from Python:
+    // ADD AN OBJECTIVE STEP 4 — the Python-side variant, if the objective should
+    // be selectable from Python, plus a path in `python_attribute_path` below for
+    // every field step 2 validates by name. Optional: without it the objective
+    // still runs from a TOML config and from Rust.
     //
     //     #[pyo3(constructor = (threshold))]
     //     MyObjective { threshold: f64 },
-    //
-    // Optional; leaving it out costs nothing elsewhere and a Python caller
-    // simply cannot name the objective. If step 2's validation raises a new
-    // field name, that name also needs an attribute path — search
-    // `ADD AN OBJECTIVE STEP 4` again for it, or the error a Python caller
-    // sees names a TOML field they never wrote.
     /// A Python callable registered before the run, via
-    /// `GraphEvolver.set_fitness_function`. Its direction is declared at
-    /// registration, not here (spec §7).
-    ///
-    /// An empty tuple variant rather than a unit one because pyo3 rejects unit
-    /// variants in a complex enum — see this module's header.
+    /// `GraphEvolver.set_fitness_function`. Whether it is maximized or minimized
+    /// is declared at registration, not here.
     #[pyo3(constructor = ())]
     Python(),
 }
 
 /// Everything the genetic algorithm needs for a run.
-///
-/// Mirrors [`crate::config::Config`]. Serializing this is what produces the
-/// TOML the Rust side parses; it is deliberately not a second parser of that
-/// format (spec §8).
 #[pyclass(name = "Config")]
 #[derive(Debug, Clone)]
 pub struct PyConfig {
@@ -536,9 +369,7 @@ pub struct PyConfig {
     /// Parent-selection strategy, applied within that scope.
     #[pyo3(get, set)]
     pub selection: PySelectionConfig,
-    /// Recombination operator. Defaulted, so an existing caller that never
-    /// passes one keeps the behaviour it had before the operator was
-    /// selectable.
+    /// Recombination operator; two-point when unset.
     #[pyo3(get, set)]
     pub crossover: PyCrossoverConfig,
     /// Genome representation and its dimensions.
@@ -551,11 +382,8 @@ pub struct PyConfig {
 
 #[pymethods]
 impl PyConfig {
-    /// The two defaulted arguments carry the same defaults as `config`'s serde
-    /// attributes: an unweighted graph, and one mutation per mutating child.
-    ///
-    /// No `seed`: one master seed is supplied to the `run` call and everything
-    /// derives from it (spec §7, §8.1).
+    /// No `seed` here: one master seed is supplied to the run, and every draw
+    /// derives from it.
     #[new]
     #[pyo3(signature = (
         evolution,
@@ -571,7 +399,7 @@ impl PyConfig {
         max_mutations = 1,
         crossover = None,
     ))]
-    #[allow(clippy::too_many_arguments)] // twelve fields is the schema, not a smell
+    #[allow(clippy::too_many_arguments)] // one argument per field is the schema, not a smell
     pub fn new(
         evolution: PyEvolutionConfig,
         population_size: usize,
@@ -584,11 +412,6 @@ impl PyConfig {
         fitness: PyFitnessConfig,
         max_edge_multiplicity: u32,
         max_mutations: usize,
-        // `Option`-wrapped rather than defaulted in the signature, because the
-        // default is a whole pyclass instance and a `#[pyo3(signature)]`
-        // default has to be a constant expression. `None` means two-point,
-        // which is what every representation did before this was selectable —
-        // the same reading `[crossover]`'s absence has on the TOML side.
         crossover: Option<PyCrossoverConfig>,
     ) -> Self {
         Self {
@@ -607,19 +430,10 @@ impl PyConfig {
         }
     }
 
-    /// Render this config as the TOML document the Rust side parses.
+    /// Render this config as the TOML document GET parses — the record of what
+    /// was run, byte for byte.
     ///
-    /// Spec §8 calls this out as provenance: the generated text *is* the record
-    /// of what was run, so writing it beside the results re-runs verbatim.
-    ///
-    /// Also the seam whatever builds a [`crate::config::Config`] from this
-    /// calls, so the document a user inspects for provenance is byte-for-byte
-    /// the one that was parsed.
-    ///
-    /// # Errors
-    ///
-    /// `ValueError` if a field is too large for a TOML integer, whose maximum
-    /// is `i64::MAX`.
+    /// `ValueError` if a field is too large for a TOML integer, `2**63 - 1`.
     pub fn to_toml(&self) -> PyResult<String> {
         let document = Value::Table(self.to_toml_table()?);
         toml::to_string(&document).map_err(|err| {
@@ -638,61 +452,39 @@ impl PyConfig {
 /// The Python attribute path a validation field name corresponds to.
 ///
 /// [`crate::config::Config::validate`] names the offending field as it appears
-/// in the TOML document, which is the right answer for the file front end and a
-/// poor one here: a user who wrote `SirParams(num_epidemics=0)` is told
-/// `num_epidemics` and left to work out which of the objects they assembled
-/// owns it. Spec §8 calls this out — errors referencing a document the user
-/// never wrote need mapping back to the attribute that produced them.
+/// in the TOML document, which a Python caller never wrote; this maps it back to
+/// the attribute they set. `None` means there is no Python equivalent and the
+/// caller falls back to the unmapped name.
 ///
-/// Returns `None` for a field with no Python equivalent, and the caller then
-/// falls back to the unmapped name rather than inventing a path. Today the only
-/// such field is `seed`, which `reject_stray_fitness_keys` raises against raw TOML
-/// text and which this front end cannot produce — [`PyConfig`] has no seed to
-/// write (spec §7: one master seed, supplied to `run`).
-///
-/// Every name here is checked against `config.rs`'s actual `invalid(...)` calls
-/// by `every_validation_field_maps_to_a_python_attribute` below, so a check
-/// added there without a mapping here fails the suite rather than silently
-/// degrading to a bare field name.
+/// `every_validation_field_maps_to_a_python_attribute` checks every name here
+/// against `config.rs`'s own `invalid(...)` calls, so a validation added there
+/// without a mapping fails the suite rather than degrading to a bare field name.
 fn python_attribute_path(field: &str) -> Option<&'static str> {
     match field {
-        // Directly on the config object.
         "population_size" => Some("config.population_size"),
         "max_edge_multiplicity" => Some("config.max_edge_multiplicity"),
         "crossover_rate" => Some("config.crossover_rate"),
         "mutation_rate" => Some("config.mutation_rate"),
         "max_mutations" => Some("config.max_mutations"),
-        // On the strategy and selection objects.
         "elite_count" => Some("config.evolution.elite_count"),
         "tournament_size" => Some("config.selection.tournament_size"),
-        // On the scope object, which owns its own size.
         "size" => Some("config.scope.size"),
-        // On the genome object; each belongs to one variant.
         "operation_weights" => Some("config.genome.operation_weights"),
         "init_state" => Some("config.genome.init_state"),
-        // Raised from a loop in `validate_genome` rather than as a literal at
-        // the call site — the second of the two shapes the scraper below reads.
         "init_char_mutation_rate" => Some("config.genome.init_char_mutation_rate"),
         "transition_vs_response_rate" => Some("config.genome.transition_vs_response_rate"),
-        // ADD A GENOME STEP 7 — one line per field step 4's validation names:
+        // ADD A GENOME STEP 7 — one line per field step 4's validation names, or a
+        // Python caller gets an error naming a TOML field they never wrote.
         //
         //     "some_dimension" => Some("config.genome.some_dimension"),
-        //
-        // Without it a Python caller gets an error naming a TOML field they
-        // never wrote. `every_validation_field_maps_to_a_python_attribute` is
-        // the test that catches a missing one.
-        // On the SIR block, which every epidemic objective reaches the same
-        // way even though it flattens into `[fitness]` in the document.
+        // The SIR keys flatten into `[fitness]` in the document, but every
+        // epidemic objective reaches them through the same `sir` attribute.
         "infection_rate" => Some("config.fitness.sir.infection_rate"),
         "num_epidemics" => Some("config.fitness.sir.num_epidemics"),
         "min_epidemic_length" => Some("config.fitness.sir.min_epidemic_length"),
         "max_epidemic_retries" => Some("config.fitness.sir.max_epidemic_retries"),
         "patient_zero" => Some("config.fitness.sir.patient_zero"),
-        // On the objective itself rather than the shared SIR block — only
-        // `epi_prof_match` has one.
         "target_profile" => Some("config.fitness.target_profile"),
-        // `struct_match`'s own block. All are raised from loops in
-        // `validate_struct_match` rather than as literals at the call site.
         "reference_folder" => Some("config.fitness.reference_folder"),
         "degree_bins" => Some("config.fitness.degree_bins"),
         "clustering_bins" => Some("config.fitness.clustering_bins"),
@@ -703,12 +495,11 @@ fn python_attribute_path(field: &str) -> Option<&'static str> {
         "degree_weight" => Some("config.fitness.degree_weight"),
         "clustering_weight" => Some("config.fitness.clustering_weight"),
         "spectral_weight" => Some("config.fitness.spectral_weight"),
-        // ADD AN OBJECTIVE STEP 4 — one line per field step 2's validation
-        // names, mapping the TOML name to the Python attribute path. The test
-        // `every_validation_field_maps_to_a_python_attribute` is what catches
-        // a missing one. The step after this is the shipped example — search
-        // `ADD AN OBJECTIVE STEP 5` for it.
         "density_weight" => Some("config.fitness.density_weight"),
+        // ADD AN OBJECTIVE STEP 4 — one line per field step 2's validation names,
+        // mapping the TOML name to the Python attribute path.
+        //
+        //     "threshold" => Some("config.fitness.threshold"),
         _ => None,
     }
 }
@@ -722,16 +513,15 @@ pub fn config_error_to_py(error: &crate::config::ConfigError) -> PyErr {
         return PyValueError::new_err(format!("invalid config: `{path}` {constraint}"));
     }
 
-    // Anything else already reads correctly without a document to point at.
     PyValueError::new_err(error.to_string())
 }
 
 /// A `usize` as a TOML integer.
 ///
-/// TOML integers are `i64`, so this is not infallible on a 64-bit `usize`, and
-/// the gap is reachable from Python: `population_size=2**63` converts into
-/// `usize` happily and only fails here. Reported against the field rather than
-/// wrapping to a negative number, which would be a silently wrong config.
+/// TOML integers are `i64`, and the gap is reachable from Python:
+/// `population_size=2**63` converts into `usize` happily and fails only here.
+/// Rejected rather than wrapped to a negative number, which would be a silently
+/// wrong config.
 fn integer(field: &str, value: usize) -> PyResult<Value> {
     match i64::try_from(value) {
         Ok(number) => Ok(Value::Integer(number)),
@@ -746,7 +536,7 @@ impl PySirParams {
     /// Write this block's keys *into* `table`.
     ///
     /// Not a table of its own: [`crate::config::SirParams`] is
-    /// `#[serde(flatten)]`ed into its variant, so these are keys of
+    /// `#[serde(flatten)]`ed into its variant, so these become keys of
     /// `[fitness]` directly.
     fn flatten_into(&self, table: &mut Map<String, Value>) -> PyResult<()> {
         table.insert(
@@ -765,8 +555,7 @@ impl PySirParams {
             "max_epidemic_retries".to_string(),
             integer("max_epidemic_retries", self.max_epidemic_retries)?,
         );
-        // Omitted when unset, matching `#[serde(default)]` on the Rust side —
-        // emitting a null would not parse, and emitting a sentinel would pin
+        // Omitted when unset: a null would not parse, and a sentinel would pin
         // patient zero to a node the user never chose.
         if let Some(node) = self.patient_zero {
             table.insert("patient_zero".to_string(), integer("patient_zero", node)?);
@@ -824,24 +613,16 @@ impl PyEvolutionConfig {
                     "num_mating_events".to_string(),
                     integer("num_mating_events", *num_mating_events)?,
                 );
-                // Omitted when absent, so the TOML the caller gets back is the
-                // one they would have written by hand — an explicit `worst`
-                // they never asked for reads as a choice they made.
+                // Omitted when unset, so the parser's own default applies rather
+                // than this recording a choice the caller never made.
                 if let Some(replacement) = replacement {
                     table.insert("replacement".to_string(), replacement.to_toml_value()?);
                 }
-            } // ADD A STRATEGY STEP 6 — the matching arm for your Python-side
-              // variant:
+            } // ADD A STRATEGY STEP 6 — the matching arm for your variant:
               //
               //     PyEvolutionConfig::MyStrategy { num_my_events } => {
-              //         table.insert(
-              //             "type".to_string(),
-              //             Value::String("my_strategy".to_string()),
-              //         );
-              //         table.insert(
-              //             "num_my_events".to_string(),
-              //             integer("num_my_events", *num_my_events)?,
-              //         );
+              //         table.insert("type".to_string(), Value::String("my_strategy".to_string()));
+              //         table.insert("num_my_events".to_string(), integer("num_my_events", *num_my_events)?);
               //     }
         }
         Ok(Value::Table(table))
@@ -854,7 +635,15 @@ impl PyReplacementConfig {
         match self {
             PyReplacementConfig::Worst {} => {
                 table.insert("type".to_string(), Value::String("worst".to_string()));
-            } // ADD A REPLACEMENT STEP 3 (for SteadyState) — the matching arm for your variant.
+            }
+            PyReplacementConfig::Random {} => {
+                table.insert("type".to_string(), Value::String("random".to_string()));
+            } // ADD A REPLACEMENT STEP 3 (for SteadyState) — the matching arm:
+              //
+              //     PyReplacementConfig::Tournament { size } => {
+              //         table.insert("type".to_string(), Value::String("tournament".to_string()));
+              //         table.insert("size".to_string(), integer("size", *size)?);
+              //     }
         }
         Ok(Value::Table(table))
     }
@@ -873,8 +662,12 @@ impl PyScopeConfig {
                     Value::String("random_subset".to_string()),
                 );
                 table.insert("size".to_string(), integer("size", *size)?);
-            } // ADD A SCOPE STEP 5 — the matching arm for your variant, writing
-              // its own parameters and no other block's.
+            } // ADD A SCOPE STEP 5 — the matching arm for your variant:
+              //
+              //     PyScopeConfig::Neighbourhood { radius } => {
+              //         table.insert("type".to_string(), Value::String("neighbourhood".to_string()));
+              //         table.insert("radius".to_string(), integer("radius", *radius)?);
+              //     }
         }
         Ok(Value::Table(table))
     }
@@ -893,7 +686,12 @@ impl PySelectionConfig {
                     "tournament_size".to_string(),
                     integer("tournament_size", *tournament_size)?,
                 );
-            } // ADD A SELECTION STEP 5 — the matching arm for your variant.
+            } // ADD A SELECTION STEP 5 — the matching arm for your variant:
+              //
+              //     PySelectionConfig::Roulette { pressure } => {
+              //         table.insert("type".to_string(), Value::String("roulette".to_string()));
+              //         table.insert("pressure".to_string(), integer("pressure", *pressure)?);
+              //     }
         }
         Ok(Value::Table(table))
     }
@@ -905,38 +703,32 @@ impl PyCrossoverConfig {
         match self {
             PyCrossoverConfig::TwoPoint {} => {
                 table.insert("type".to_string(), Value::String("two_point".to_string()));
-            } // ADD A CROSSOVER STEP 5 — the matching arm for your variant.
+            } // ADD A CROSSOVER STEP 5 — the matching arm for your variant:
+              //
+              //     PyCrossoverConfig::Uniform { swap_rate } => {
+              //         table.insert("type".to_string(), Value::String("uniform".to_string()));
+              //         table.insert("swap_rate".to_string(), integer("swap_rate", *swap_rate)?);
+              //     }
         }
         Ok(Value::Table(table))
     }
 }
 
 /// Which mutation an edge-edit genome applies.
-///
-/// Mirrors [`crate::config::EdgeEditMutationConfig`], and lives here rather
-/// than beside [`PyCrossoverConfig`] because it is nested under
-/// `PyGenomeConfig::EdgeEdit` rather than given a section of its own — the
-/// same reason `EdgeEditMutationConfig` sits inside `EdgeEditGenomeConfig` in
-/// `config.rs`. Optional, like every mirror here.
 #[pyclass(name = "EdgeEditMutationConfig")]
 #[derive(Debug, Clone)]
 pub enum PyEdgeEditMutationConfig {
     #[pyo3(constructor = ())]
     RerollGene {},
-    // ADD A MUTATION STEP 4 (for EdgeEdit) — the Python-side variant, if the operator
-    // should be reachable from Python. Optional; leaving it out costs
-    // nothing elsewhere.
+    // ADD A MUTATION STEP 4 (for EdgeEdit) — the Python-side variant, if the
+    // operator should be selectable from Python, plus its arm in `to_toml_value`
+    // below and an example line under `[genome]` in `config.example.toml`.
+    // Optional: without it the operator still runs from a TOML config and from Rust.
     //
     //     #[pyo3(constructor = (some_param))]
     //     MyMutation { some_param: f64 },
-    //
-    // Then the matching arm in `to_toml_value` below, and an example line in
-    // `config.example.toml` under `[genome]` — search `ADD A MUTATION STEP 4 (for EdgeEdit)`
-    // again for both.
 }
 
-/// Hand-written: `#[derive(Default)]` needs a unit variant, and pyo3 does not
-/// allow one in a complex enum. Same constraint as [`PyCrossoverConfig`].
 impl Default for PyEdgeEditMutationConfig {
     fn default() -> Self {
         PyEdgeEditMutationConfig::RerollGene {}
@@ -949,33 +741,31 @@ impl PyEdgeEditMutationConfig {
         match self {
             PyEdgeEditMutationConfig::RerollGene {} => {
                 table.insert("type".to_string(), Value::String("reroll_gene".to_string()));
-            } // ADD A MUTATION STEP 4 (for EdgeEdit) — the matching arm for your variant.
+            } // ADD A MUTATION STEP 4 (for EdgeEdit) — the matching arm:
+              //
+              //     PyEdgeEditMutationConfig::MyMutation {} => {
+              //         table.insert("type".to_string(), Value::String("my_mutation".to_string()));
+              //     }
         }
         Value::Table(table)
     }
 }
 
-/// Which mutation an SDA genome applies. Mirrors
-/// [`crate::config::SdaMutationConfig`]; see [`PyEdgeEditMutationConfig`] for
-/// why it is nested rather than top-level.
+/// Which mutation an SDA genome applies.
 #[pyclass(name = "SdaMutationConfig")]
 #[derive(Debug, Clone)]
 pub enum PySdaMutationConfig {
     #[pyo3(constructor = ())]
     RedrawOne {},
     // ADD A MUTATION STEP 4 (for SDA) — the Python-side variant, if the operator
-    // should be reachable from Python. Optional; leaving it out costs
-    // nothing elsewhere.
+    // should be selectable from Python, plus its arm in `to_toml_value` below and
+    // an example line under `[genome]` in `config.example.toml`. Optional: without
+    // it the operator still runs from a TOML config and from Rust.
     //
     //     #[pyo3(constructor = (some_param))]
     //     MyMutation { some_param: f64 },
-    //
-    // Then the matching arm in `to_toml_value` below, and an example line in
-    // `config.example.toml` under `[genome]` — search `ADD A MUTATION STEP 4 (for SDA)`
-    // again for both.
 }
 
-/// Hand-written for the same reason as [`PyEdgeEditMutationConfig::default`].
 impl Default for PySdaMutationConfig {
     fn default() -> Self {
         PySdaMutationConfig::RedrawOne {}
@@ -988,7 +778,11 @@ impl PySdaMutationConfig {
         match self {
             PySdaMutationConfig::RedrawOne {} => {
                 table.insert("type".to_string(), Value::String("redraw_one".to_string()));
-            } // ADD A MUTATION STEP 4 (for SDA) — the matching arm for your variant.
+            } // ADD A MUTATION STEP 4 (for SDA) — the matching arm:
+              //
+              //     PySdaMutationConfig::MyMutation {} => {
+              //         table.insert("type".to_string(), Value::String("my_mutation".to_string()));
+              //     }
         }
         Value::Table(table)
     }
@@ -1008,16 +802,14 @@ impl PyGenomeConfig {
                     "gene_length".to_string(),
                     integer("gene_length", *gene_length)?,
                 );
-                // Left out entirely when unset, so serde's `Default` supplies
-                // all nine weights rather than this writing them out.
+                // Left out when unset, so the parser's own defaults supply the
+                // weights rather than this writing a second copy of them.
                 if let Some(weights) = operation_weights {
                     table.insert(
                         "operation_weights".to_string(),
                         Value::Table(weights.to_toml_table()),
                     );
                 }
-                // Left out when unset, so `config`'s own default supplies it
-                // rather than this naming it a second time.
                 if let Some(mutation) = mutation {
                     table.insert("mutation".to_string(), mutation.to_toml_value());
                 }
@@ -1043,8 +835,8 @@ impl PyGenomeConfig {
                     "init_state".to_string(),
                     integer("init_state", *init_state)?,
                 );
-                // Left out when unset, so `config`'s serde default supplies
-                // the rate rather than this writing a second copy of it.
+                // Left out when unset, so the parser's own defaults supply these
+                // rather than this writing a second copy of them.
                 if let Some(rate) = init_char_mutation_rate {
                     table.insert("init_char_mutation_rate".to_string(), Value::Float(*rate));
                 }
@@ -1138,8 +930,7 @@ impl PyFitnessConfig {
     }
 }
 
-/// Rust-only, so outside the `#[pymethods]` block: builds a `toml` type that
-/// has no Python representation.
+/// A second impl block: the TOML value it builds has no Python equivalent.
 impl PyConfig {
     fn to_toml_table(&self) -> PyResult<Map<String, Value>> {
         let mut table = Map::new();
@@ -1372,6 +1163,7 @@ mod tests {
                 // renders it rather than that the default filled it in.
                 match replacement {
                     ReplacementConfig::Worst => {}
+                    other => panic!("expected worst, got {other:?}"),
                 }
             }
             other => panic!("expected steady_state, got {other:?}"),
@@ -1762,9 +1554,9 @@ mod tests {
         // The third blind spot, after the two guards above: everything here
         // reads `config.rs` as text, so without `config_rs_without_comments` a
         // worked example in a comment is indistinguishable from a live call.
-        // `config.rs` carries exactly such an example — the `ADD A GENOME STEP 4`
-        // marker — and the symptom is the sweep below demanding a Python
-        // attribute for a field name nobody wrote.
+        // `config.rs` carries exactly such an example — a genome step-4 marker
+        // — and the symptom is the sweep below demanding a Python attribute for
+        // a field name nobody wrote.
         //
         // Asserted against a fixture rather than `config.rs` itself, so the test
         // still means something after someone edits that marker away.

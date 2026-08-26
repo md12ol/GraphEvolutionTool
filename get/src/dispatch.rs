@@ -1,25 +1,9 @@
-//! Config → concrete types: the layer spec §1 and §8 call "dispatch".
+//! Config → concrete types: the layer that resolves every runtime choice.
 //!
-//! Runtime choice is resolved here and nowhere else. The objective is erased to
-//! `Box<dyn Fitness>` first, then strategy × genome is matched — which is what
-//! keeps dispatch at 4 arms instead of 16 (§8). The starting population is built
-//! here too, because `Genome` has no uniform random constructor and a generic
-//! evolver therefore cannot mint one (§6).
-//!
-//! # Why this is its own module, and specifically not `evolver/common.rs`
-//!
-//! This layer is the **only** place that knows both sides. It reads
-//! [`crate::config`] and returns `PyResult`, so it depends on the config schema
-//! *and* on pyo3; the engine below it — `evolver/`, `genomes/`, `sir`, `graph` —
-//! deliberately depends on neither, and `sir.rs` says so about its own params
-//! type. Putting these functions in `evolver/common.rs` would drag both
-//! dependencies into the engine core, and `common.rs` is genome-*agnostic*
-//! generics over `G: Genome` where these name `EdgeEditGenome` and `SdaGenome`
-//! concretely. Keeping it separate is what lets the engine be tested without a
-//! config or a Python interpreter. See `decisions.md` 2026-08-11.
-//!
-//! `lib.rs` keeps the `#[pyclass]` surface — the constructors,
-//! `set_fitness_function`, and `run`, which calls into here.
+//! This is the only layer that depends on both the config schema and pyo3.
+//! Everything below it depends on neither, which is what lets the engine be
+//! tested without a config or a Python interpreter — so these functions must
+//! not move down into `evolver/`.
 
 use std::sync::Arc;
 
@@ -57,105 +41,44 @@ use crate::stats::{HistogramAxes, PerFamily, ReferenceStatistics};
 /// One run's result, with the genome type erased.
 ///
 /// `#[pyclass]` cannot carry a type parameter but [`EvolutionOutcome<G>`] does,
-/// so every dispatch arm erases `G` before returning (§8). What survives is what
-/// a caller can use without knowing the representation.
+/// so every dispatch arm erases `G` before returning.
 ///
-/// **Everything in here has already been converted out of engine orientation.**
-/// That is the difference between this type and [`EvolutionOutcome`], which is
-/// engine-oriented throughout and says so in its field names. This is the far
-/// side of the boundary [`erase`] draws, and no field here needs converting
-/// again.
+/// **Every fitness in here is as-measured**, converted by [`erase`]. Nothing on
+/// this side of that boundary needs converting again.
 pub(crate) struct ErasedOutcome {
-    /// Best fitness in the objective's **own units and sign**, not engine
-    /// orientation.
-    ///
-    /// The engine compares in oriented values throughout, so a maximizing
-    /// objective's numbers are negative in there (§5.1). Converting once here is
-    /// what keeps that an engine-internal detail: `Direction::orient` is its own
-    /// inverse, so the same call that oriented the value on the way in undoes it
-    /// on the way out.
     pub best_fitness: f64,
     /// The best individual's expressed network as `(u, v, multiplicity)`.
     pub best_edges: Vec<(usize, usize, u32)>,
     /// How many nodes that network has.
     ///
-    /// Carried rather than left to be counted from `best_edges`, because it
-    /// cannot be: a node with no edges appears nowhere in an edge list, and an
-    /// evolved graph acquires isolated nodes routinely. Every writer states it,
-    /// so a run's output loads back through `graph_io` unedited.
+    /// Not derivable from `best_edges`: a node with no edges appears nowhere in
+    /// an edge list, and an evolved graph acquires isolated ones routinely.
     pub num_nodes: usize,
     /// The winning genome's `Genome::print()` string.
-    ///
-    /// The entry point is not generic over the genome, so this is the only way
-    /// it can record *which* individual won.
     pub best_genome_repr: String,
     /// The convergence log, one row per logged iteration.
-    ///
-    /// Reuses the engine's [`GenerationStats`] row, but the two fitness columns
-    /// have been oriented by [`erase`] — see this struct's own note above.
     pub history: Vec<GenerationStats>,
 }
 
 /// The node index a reference file may not exceed, when the run's own
 /// `network_size` is smaller.
 ///
-/// `load_edge_folder` takes one node count for a whole folder and uses it to
-/// reject out-of-range indices. Reference graphs come from real data and differ
-/// in size, so there is no single right value; this is a sanity bound that
-/// still catches a file indexed the wrong way (a global TUDataset index, say)
-/// while admitting any plausible reference graph.
+/// Reference graphs come from real data and differ in size, so there is no
+/// single right value. This one is loose enough for any plausible reference
+/// graph and still tight enough to catch a file indexed against something else
+/// entirely.
 pub(crate) const MAX_REFERENCE_NODES: usize = 100_000;
 
-/// The parts of dispatch that need the evolver itself, not just its config.
-///
-/// `objective` reads the registered callable as well as `[fitness]`, and
-/// `python_fitness` is entirely about that registration — so both take `&self`.
-/// The three pure config→engine mappings below are free functions instead, which
-/// makes them testable from a bare [`Config`] with no evolver to construct.
 impl GraphEvolver {
     /// Build the objective for one run, erased to `Box<dyn Fitness>`.
     ///
-    /// **Step 1 of the two-step dispatch** (§1, §8, GitHub #26). The objective
-    /// is erased *before* any strategy or genome is chosen, which is what keeps
-    /// dispatch at 2 strategies × 2 genomes = 4 arms instead of 16: nothing
-    /// downstream knows which objective it holds. Adding a fifth objective is
-    /// one arm here and touches nothing else.
-    ///
-    /// The asymmetry is not an oversight. `Fitness` erases cleanly — no generic
-    /// methods, no `Self` in argument position, and `Send + Sync` through its
-    /// supertrait, so rayon is unaffected. `Genome` cannot, for four
-    /// independent reasons — `mutate`/`crossover` are generic over the RNG,
-    /// `crossover` takes `&mut Self`, `Clone` requires `Sized`, and `Context` is
-    /// an associated type differing per representation — so that axis stays a
-    /// match.
-    ///
     /// **Call this once per run, never once per evolver.** Every SIR objective
-    /// owns an `EpidemicScorer` holding a per-run counter, and two replicates
-    /// sharing one would let thread scheduling decide which run saw which seed
-    /// — reproducibility goes with it (§8.1). Taking `run_seed` by argument
-    /// rather than reading a field is what makes that misuse awkward.
+    /// owns a per-run epidemic counter, and two replicates sharing one would let
+    /// thread scheduling decide which run saw which seed, taking reproducibility
+    /// with it.
     ///
-    /// # Errors
-    ///
-    /// `ValueError` if the config selected Python and no callable was
-    /// registered, or if `epi_prof_match`'s target profile is unusable.
-    /// `Config::validate` already rejects an empty or non-finite profile, so
-    /// that second case is a backstop for a `Config` built in Rust without
-    /// going through validation — not a path a Python caller can reach.
-    /// # Part of the chain that adds an objective
-    ///
-    /// This match is the step after adding the `FitnessConfig` variant in
-    /// `crate::config`, and it is the one that erases the choice: everything
-    /// downstream of here sees one `Box<dyn Fitness>` and not a variant, which
-    /// is what keeps a new objective to a single arm rather than one arm per
-    /// strategy and genome combination. `crate::fitness`'s module doc has the
-    /// whole chain.
-    ///
-    /// `py` is the GIL token to report a `struct_match` reference folder's
-    /// `LoadWarning`s through, when one is held — `None` on the Rust-native
-    /// route (`GraphEvolver::run_from_toml`, spec §5.3 route 4), which has no
-    /// Python interpreter to raise a `UserWarning` on, so those warnings go to
-    /// stderr instead. See `struct_match_reference`.
+    /// `py` is the GIL token load warnings are raised on; `None` sends them to
+    /// stderr instead.
     pub(crate) fn objective(
         &self,
         run_seed: u64,
@@ -172,9 +95,6 @@ impl GraphEvolver {
                 sir,
                 target_profile,
             } => {
-                // Cloned because the objective owns its target and the config
-                // outlives it — a run must not be able to mutate the profile it
-                // is being scored against.
                 let objective =
                     EpiProfMatch::new(sir_sample_params(sir), run_seed, target_profile.clone())
                         .map_err(PyValueError::new_err)?;
@@ -190,9 +110,6 @@ impl GraphEvolver {
                 density_weight,
                 ..
             } => {
-                // Shared, not rebuilt: this arm runs once per replicate, and
-                // the reduced reference set is immutable. See
-                // `GraphEvolver::struct_match_reference`.
                 let reference = self.struct_match_reference(py)?;
 
                 let objective = StructMatch::new(
@@ -213,57 +130,27 @@ impl GraphEvolver {
 
                 Ok(Box::new(objective))
             }
-            // The one arm that is not built from config alone: the callable
-            // arrived through a setter, so `python_fitness` owns the "nothing
-            // registered" error and this stays one call.
             // ADD AN OBJECTIVE STEP 3 — the arm turning your config variant
-            // into a `Box<dyn Fitness>`:
+            // into a `Box<dyn Fitness>`. It runs once per replicate, so this is
+            // where anything needing the filesystem happens, and anything
+            // expensive and immutable belongs behind an `Arc`:
             //
             //     FitnessConfig::MyObjective { threshold } => {
             //         Ok(Box::new(MyObjective::new(*threshold)))
             //     }
-            //
-            // Steps 2 and 3 are one change split across two files: a variant
-            // nothing constructs is dead code, and an arm for a variant that
-            // does not exist will not compile. This arm runs **once per
-            // replicate**, so it is where anything needing the filesystem
-            // finally happens — step 2 could not — and anything expensive and
-            // immutable belongs behind an `Arc` rather than being rebuilt, the
-            // way `struct_match_reference` does it. The step after this is the
-            // Python mirror — search `ADD AN OBJECTIVE STEP 4` for it.
             FitnessConfig::Python => self.python_fitness(),
         }
     }
 
     /// `struct_match`'s reduced reference set, loaded and reduced at most once.
     ///
-    /// # Why the folder is read here rather than in `Config::validate`
+    /// An empty reference set is a hard error rather than an empty score: scoring
+    /// against nothing returns 0.0, and 0.0 is a *perfect* score for this objective,
+    /// so a mistyped folder would make every candidate ideal.
     ///
-    /// `validate` does no I/O deliberately, so every failure that needs the
-    /// filesystem surfaces here instead: a missing or unreadable folder, a
-    /// file that does not parse, and an empty reference set — which task A
-    /// made a hard error because scoring against nothing returns 0.0, and 0.0
-    /// is a *perfect* score in this objective. A mistyped folder would
-    /// otherwise make every candidate ideal and the convergence log read like
-    /// a solved problem.
-    ///
-    /// # The degree axis is taken from the reference set
-    ///
-    /// Clustering and the normalized spectrum have natural bounds; degree does
-    /// not, so its axis needs a top. Deriving it from the reference graphs
-    /// means it cannot be set too low — which would squash every reference
-    /// histogram into the last bin and silently retire the whole family.
-    /// A candidate above the top lands in the last bin, which is the honest
-    /// reading: more connected than anything in the reference set.
-    ///
-    /// # Warnings
-    ///
-    /// Reported the same way `GraphEvolver::load_reference_graphs` reports
-    /// them for a base-graph reference set: a repeated edge, a zero-weight
-    /// edge, and a file with no edges, each naming the file it came from.
-    /// Only the caller whose load wins the `OnceLock` race below reports —
-    /// a losing caller's graphs are discarded in favour of the winner's, so
-    /// its warnings would describe a reference set nobody is using.
+    /// The degree axis top is derived from the reference graphs rather than
+    /// configured: a top set too low squashes every reference histogram into the
+    /// last bin and silently retires that whole family.
     fn struct_match_reference(&self, py: Option<Python<'_>>) -> PyResult<Arc<ReferenceStatistics>> {
         if let Some(cached) = self.struct_match_reference.get() {
             return Ok(Arc::clone(cached));
@@ -282,16 +169,14 @@ impl GraphEvolver {
             ));
         };
 
-        // `min_node_index` is whatever a loader already established for this
-        // run, and 0 when none has: reference files are the caller's data and
-        // share the run's indexing convention.
+        // Reference files are the caller's data, so they share the run's own
+        // indexing convention.
         let min_node_index = self.min_node_index.unwrap_or(0);
 
-        // The loader wants one node count for the whole folder, and reference
-        // graphs differ in size. This is an upper bound that still catches a
-        // wild index; each graph's real size comes from `EdgeFile::to_graph`.
-        // `load_reference_graphs` computes the same bound, so what a run reads
-        // and what a caller can inspect are the same set of files.
+        // An upper bound for rejecting wild indices, not a size: each graph's
+        // real size comes from `EdgeFile::to_graph`. `load_reference_graphs`
+        // computes the same bound, so what a run reads and what a caller can
+        // inspect are the same set of files.
         let index_cap = self.config.network_size.max(MAX_REFERENCE_NODES);
 
         let loaded = graph_io::load_edge_folder(
@@ -314,7 +199,7 @@ impl GraphEvolver {
         let mut max_degree = 0;
         for graph in &graphs {
             for node in 0..graph.num_nodes {
-                let degree = graph.degree(node);
+                let degree = graph.neighbor_count(node);
                 if degree > max_degree {
                     max_degree = degree;
                 }
@@ -337,8 +222,8 @@ impl GraphEvolver {
 
         let shared = Arc::new(statistics);
 
-        // If another caller won the race, take theirs, so every replicate in a
-        // run shares exactly one reduced reference set.
+        // If another caller won the race, take theirs: every replicate in a run
+        // must share exactly one reduced reference set.
         match self.struct_match_reference.set(Arc::clone(&shared)) {
             Ok(()) => {
                 for file in &loaded {
@@ -356,31 +241,13 @@ impl GraphEvolver {
 
     /// The objective for one run, when the config selected Python.
     ///
-    /// This is the seam the dispatch in **#26** calls: it turns the registered
-    /// callable into the erased `Box<dyn Fitness>` that §8 hands the evolver,
-    /// so the `python` arm of that match is one call rather than a second place
-    /// that knows how registration works.
-    ///
-    /// **A fresh instance per call, not a shared one.** Replicate runs each
-    /// need their own objective (§8.1), so the erasing step is re-run per
-    /// replicate rather than cloning one box. The Python callable itself is
-    /// shared by refcount — see [`PyFitness::clone_ref`] — which is right,
-    /// because it is the *scorer* state that must stay per-run and this has
-    /// none.
-    ///
-    /// The other three variants are not built here — they need
-    /// `config::SirParams` mapped onto [`crate::sir::SirSampleParams`] plus the
-    /// run seed. [`GraphEvolver::objective`] is that match, and this is its
-    /// `python` arm.
-    ///
     /// # Errors
     ///
-    /// `ValueError` if no callable has been registered — the case spec §8 and
-    /// issue #19 both call out, since a run that reached scoring with nothing
-    /// registered would otherwise panic deep inside the engine. Also if the
-    /// config did not select Python, which is a caller mistake rather than a
-    /// user one, but is reported rather than asserted so it cannot become a
-    /// panic in a release build.
+    /// `ValueError` if no callable has been registered, so that a run reaching
+    /// scoring with nothing registered fails here rather than panicking deep
+    /// inside the engine. Also if the config did not select Python — a caller
+    /// mistake, reported rather than asserted so it cannot become a panic in a
+    /// release build.
     pub(crate) fn python_fitness(&self) -> PyResult<Box<dyn Fitness>> {
         if !matches!(self.config.fitness, FitnessConfig::Python) {
             return Err(PyValueError::new_err(format!(
@@ -400,68 +267,40 @@ impl GraphEvolver {
     }
 }
 
-// ADD A GENOME STEP 5 — a start builder beside this one and `sda_start`.
+// ADD A GENOME STEP 5 — a start builder in this file, beside `edge_edit_start`
+// and `sda_start`. It owes the engine exactly `population_size` individuals, a
+// context `express` can index without panicking, and rejection rather than
+// clamping for caller data that disagrees with the config:
 //
 //     pub(crate) fn my_genome_start<R: Rng + ?Sized>(
 //         config: &Config,
 //         mine: &MyGenomeConfig,
 //         rng: &mut R,
 //     ) -> PyResult<(MyContext, Vec<MyGenome>)> {
-//         // Validate the dimensions once, here — not per individual.
+//         let dimensions = MyDimensions::new(mine.some_dimension)
+//             .map_err(PyValueError::new_err)?;
 //         let mut population = Vec::with_capacity(config.population_size);
 //         for _ in 0..config.population_size {
-//             population.push(MyGenome::random(mine.some_dimension, rng));
+//             population.push(MyGenome::random(&dimensions, rng));
 //         }
-//         let context = MyContext { num_nodes: config.network_size, .. };
+//         let context = MyContext {
+//             num_nodes: config.network_size,
+//             mutation: my_genome_mutation(&mine.mutation),
+//         };
 //         Ok((context, population))
 //     }
-//
-// Exactly `population_size` individuals, a context `express` can index without
-// panicking, and rejection rather than clamping for caller data that disagrees
-// with the config. The doc below says why each of those matters.
 
 /// The edge-edit starting population and the context it expresses against.
 ///
-/// # Part of the chain that adds a representation
+/// `base_graph` is what the edit script is applied to: `Some` seeds the run from
+/// a caller-supplied graph, `None` starts from an empty one.
 ///
-/// This is step 5 of seven, and the one with real obligations rather than
-/// wiring: a start builder owes the engine a population of exactly
-/// `population_size`, a context `express` can use, and rejection rather than
-/// clamping for caller data that disagrees with the config.
-/// [`crate::genomes::genome`]'s module doc states all three and has the other
-/// six steps; a new representation adds a function beside this one and
-/// [`sda_start`].
+/// From an empty base, every opcode that walks existing structure is inert, so
+/// early generations do nothing until `Add` and `Toggle` have built something.
 ///
-/// **Why the dispatch layer builds the population at all.** `Evolver::new`
-/// takes a ready-made `Vec<G>` because `Genome` has no uniform random
-/// constructor: this one needs a gene length and an operation mix, the SDA
-/// one needs three dimensions and is fallible. A generic evolver cannot call
-/// either, so the knowledge lives here, where genome-specific detail already
-/// is — and a bad dimension surfaces as a config error at startup instead of
-/// an `.expect()` mid-run inside a generic.
-///
-/// The operation mix is built **once** and shared across the population
-/// behind the `Arc`: `EdgeEditOperators::new` compiles the weights into a
-/// `WeightedIndex` sampler, and doing that per individual would rebuild the
-/// same table `population_size` times.
-///
-/// `base_graph` is what the edit script is applied to: `Some` seeds the run
-/// from a caller-supplied graph — raw data, or a previous run's best edges —
-/// and `None` starts from an empty one. It is cloned rather than borrowed
-/// because the context owns its graph for the whole run, while the caller
-/// keeps theirs for any further runs.
-///
-/// An empty base is the case worth knowing about, because **five of the nine
-/// opcodes are inert on an empty graph** — `Swap`, `Hop` and the three
-/// `Local*` all need existing structure to walk, so early generations do
-/// nothing until `Add`/`Toggle` have built something. Self-correcting, and
-/// stated here so it is not read as a defect.
-///
-/// # Errors
-///
-/// `ValueError` if the operation weights are unusable — all zero, negative,
-/// or non-finite. `Config::validate` already rejects those, so this is a
-/// backstop for a `Config` assembled in Rust without validation.
+/// Returns `ValueError` if the operation weights are unusable — all zero,
+/// negative, or non-finite. `Config::validate` already rejects those, so this is
+/// a backstop for a `Config` assembled in Rust without validation.
 pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
     config: &Config,
     edge_edit: &EdgeEditGenomeConfig,
@@ -481,15 +320,10 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
     }
 
     // A seeded run keeps one individual that edits nothing, so generation 0
-    // contains the graph the caller supplied and not only random departures
-    // from it. Every gene is opcode 8, `Null`, which expression skips — so this
-    // genome expresses to exactly the base graph.
-    //
-    // Unconditional, with no config flag: without it a seeded run can return
-    // something worse than its own input, if nothing in a random generation 0
-    // happens to beat it. What that buys is a soft floor rather than a hard one
-    // — elites are rescored every generation, so a stochastic objective can
-    // still evict this individual on a bad draw.
+    // contains the caller's own graph and not only random departures from it.
+    // That is a soft floor, not a hard one: elites are rescored every
+    // generation, so a stochastic objective can still evict this individual on
+    // a bad draw.
     if base_graph.is_some() && !population.is_empty() {
         population[0] = EdgeEditGenome::new_with_operators(
             vec![IDENTITY_GENE; edge_edit.gene_length],
@@ -497,7 +331,6 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
         );
     }
 
-    // Unset means empty, which is the default an unseeded run gets.
     let starting_graph = match base_graph {
         Some(graph) => graph.clone(),
         None => Graph::new(config.network_size, config.max_edge_multiplicity),
@@ -512,29 +345,15 @@ pub(crate) fn edge_edit_start<R: Rng + ?Sized>(
 
 /// The SDA starting population and the context it expresses against.
 ///
-/// The second start builder — step 5 of the chain that adds a representation,
-/// alongside [`edge_edit_start`], where that step's obligations are stated.
+/// **`num_chars` is derived, never configured**: the alphabet is
+/// `max_edge_multiplicity + 1`, so every character the automaton can emit is a
+/// legal edge weight and none is silently clamped away.
 ///
-/// **`num_chars` is derived, never configured** (§3.2): the alphabet is
-/// `max_edge_multiplicity + 1`, so every character the automaton can emit is
-/// a legal edge weight and none is silently clamped away by
-/// `Graph::set_edge`. The same cap goes into the context, so the genome and
-/// the graph it expresses against agree by construction rather than by the
-/// caller remembering to pass the same number twice.
-///
-/// # Errors
-///
-/// `ValueError` if `init_state >= num_states`, or if the dimensions do not
-/// fit `SdaGenome`'s storage types (`num_states` up to 65536, the derived
-/// `num_chars` up to 256, `max_resp_len` at least 1).
-///
-/// Both are backstops rather than the primary guard — `Config::validate`
-/// rejects the `init_state` case (`config.rs`, `validate_genome`) and both
-/// front ends validate before constructing. Kept because the alternative is
-/// worse than redundant: `SdaGenome::run` indexes its response table with
-/// `init_state`, so an out-of-range value **panics during expression**,
-/// which crosses the FFI as an opaque `PanicException` (§7). Reporting beats
-/// asserting for anything that can reach a release build.
+/// The dimensions are checked here — `init_state < num_states`, `num_states` up
+/// to 65536, the derived `num_chars` up to 256, `max_resp_len` at least 1 — as a
+/// backstop for a `Config` assembled without validation. Reported, never
+/// asserted: expression indexes the response table with `init_state`, and a
+/// panic crosses the FFI as an opaque `PanicException`.
 pub(crate) fn sda_start<R: Rng + ?Sized>(
     config: &Config,
     sda: &SdaGenomeConfig,
@@ -549,9 +368,6 @@ pub(crate) fn sda_start<R: Rng + ?Sized>(
     }
 
     let cap = config.max_edge_multiplicity;
-    // Validate once, here, rather than on every individual: the three
-    // dimensions are the same for the whole population, so a failure can only
-    // be a startup failure.
     let dimensions =
         SdaDimensions::from_edge_multiplicity_cap(sda.num_states, cap, sda.max_resp_len)
             .map_err(PyValueError::new_err)?;
@@ -575,18 +391,10 @@ pub(crate) fn sda_start<R: Rng + ?Sized>(
 /// The per-run seed list for a replicate request: one master seed in, `n_runs`
 /// seeds out, in run order.
 ///
-/// The master seeds a generator whose output stream *is* the seed list — run
-/// `i` takes draw `i`. That buys one property deliberately: **a run's seed does
-/// not depend on how many runs were asked for.** Extending an experiment from 30
-/// replicates to 50 reproduces the first 30 exactly, so replicates already
-/// collected are never invalidated by asking for more.
-///
-/// `master + i` or `hash(master, i)` would give the same property. `master ^ i`
-/// would not — nearby masters collide across run indices, so master 4 run 1 and
-/// master 5 run 0 are the same run.
-///
-/// Each seed returned is then a whole run's `seed` argument, drawn from
-/// independent generator state rather than shared with any other replicate.
+/// Run `i` takes draw `i` from a generator seeded by the master, which buys one
+/// property deliberately: **a run's seed does not depend on how many runs were
+/// asked for.** Extending an experiment reproduces its earlier replicates
+/// exactly, so collected results are never invalidated by asking for more.
 pub(crate) fn replicate_seeds(master: u64, n_runs: usize) -> Vec<u64> {
     let mut rng = ChaCha8Rng::seed_from_u64(master);
     let mut seeds = Vec::with_capacity(n_runs);
@@ -598,35 +406,13 @@ pub(crate) fn replicate_seeds(master: u64, n_runs: usize) -> Vec<u64> {
 
 /// Run one evolution and hand back its result with the genome type erased.
 ///
-/// # Part of the chain that adds a representation
-///
-/// The match below is step 6 of seven: one arm, selecting the representation
-/// and calling its step-5 start builder. Steps 4, 5 and 6 are one change split
-/// across two files — a `GenomeConfig` variant nothing constructs is dead code,
-/// and an arm for a variant that does not exist will not compile.
-/// [`crate::genomes::genome`]'s module doc has all seven.
-///
-/// **Step 2 of the dispatch** (§1, §8). The objective has already been erased to
-/// `Box<dyn Fitness>`, so only strategy × genome is left — and this is arranged
-/// as genome outside, strategy inside [`run_strategy`], which is why there are
-/// two arms here and two there rather than four copies of the same body. Adding
-/// a third genome is one arm here; a third strategy is one arm there.
-///
 /// **All randomness derives from `seed`.** The population is drawn first, then
 /// the evolver's own seed is drawn from the same stream — never `seed` itself,
 /// which the evolver would use to re-seed its own ChaCha8 and thereby replay the
 /// exact draws that just built the population.
 ///
-/// `base_graph` reaches only the edge-edit arm. The SDA genome generates its
-/// graph rather than editing one, so there is nothing for a base to seed —
-/// which is why `set_base_graph` refuses an SDA-configured evolver outright
-/// instead of accepting a value that dies here.
-///
-/// # Errors
-///
-/// `ValueError` for any dimension the genome constructors reject. `Config::validate`
-/// has already run at construction, so these are backstops rather than the first
-/// line of defence — see [`sda_start`].
+/// `base_graph` reaches only the edge-edit arm: an SDA genome generates its
+/// graph rather than editing one.
 pub(crate) fn evolve<F: Fitness>(
     config: &Config,
     fitness: &F,
@@ -637,8 +423,8 @@ pub(crate) fn evolve<F: Fitness>(
     let scope = scope(&config.scope);
     let selection = selection(&config.selection);
 
-    // Genome outside, strategy inside: `Genome` cannot be a trait object, so the
-    // concrete type has to be settled before an evolver can be named at all.
+    // `Genome` cannot be a trait object, so the concrete type has to be settled
+    // here before an evolver can be named at all.
     match &config.genome {
         GenomeConfig::EdgeEdit(edge_edit) => {
             let (genome_context, population) =
@@ -664,7 +450,8 @@ pub(crate) fn evolve<F: Fitness>(
                 fitness,
                 rng.random::<u64>(),
             ))
-        } // ADD A GENOME STEP 6 — one arm, calling your step-5 start builder:
+        } // ADD A GENOME STEP 6 — one arm, the arm above verbatim with your own
+          // start builder called in place of `sda_start`:
           //
           //     GenomeConfig::MyGenome(mine) => {
           //         let (genome_context, population) = my_genome_start(config, mine, &mut rng)?;
@@ -678,23 +465,18 @@ pub(crate) fn evolve<F: Fitness>(
           //             rng.random::<u64>(),
           //         ))
           //     }
-          //
-          // Copy the arm above verbatim and change the builder it calls. The
-          // match is exhaustive, so omitting this will not compile — which is
-          // the whole reason steps 4, 5 and 6 cannot be half-done.
     }
 }
 
 /// How many replicates may execute at once.
 ///
-/// Never more than the caller allowed, never more than there are runs — extra
-/// threads past the replicate count have nothing to do — and never zero, which
-/// `ThreadPoolBuilder` reads as "pick a default" rather than "run nothing".
+/// Never more than the caller allowed, never more than there are runs, and never
+/// zero — which `ThreadPoolBuilder` reads as "pick a default" rather than "run
+/// nothing".
 fn effective_concurrency(max_cores: Option<usize>, n_runs: usize) -> usize {
     let available = match max_cores {
         Some(cap) => cap,
-        // `available_parallelism` fails on some constrained targets; one thread
-        // is the honest fallback, since the alternative is guessing high.
+        // `available_parallelism` fails on some constrained targets.
         None => std::thread::available_parallelism().map_or(1, |n| n.get()),
     };
     available.min(n_runs).max(1)
@@ -703,30 +485,19 @@ fn effective_concurrency(max_cores: Option<usize>, n_runs: usize) -> usize {
 /// Run one replicate per entry in `seeds`, and hand back their outcomes **in
 /// run order**.
 ///
-/// `objectives` is parallel to `seeds` — one objective per run, built by the
-/// caller before this is entered. They are not built here because each needs a
-/// fresh per-run instance (an SIR objective owns an epidemic counter, and
-/// sharing one across concurrent runs lets thread scheduling decide which run
-/// sees which epidemic seed), and because building a Python objective touches
-/// the interpreter, which must not happen inside a rayon worker.
+/// `objectives` is parallel to `seeds`, one per run, and is built by the caller
+/// rather than here: building a Python objective touches the interpreter, which
+/// must not happen inside a rayon worker.
 ///
-/// **The engine picks parallel or sequential; the caller does not.** A native
-/// Rust objective scores without the interpreter, so replicates are independent
-/// and concurrency is nearly free. Under `fitness = "python"` every scoring call
-/// re-acquires the GIL, so `n` concurrent runs are `n` threads contending for
-/// one lock — slower than sequential *and* contended. Exposing that as a setting
-/// would only create a way to choose wrong.
+/// Under `fitness = "python"` every scoring call re-acquires the GIL, so these
+/// run sequentially: concurrent runs would contend for one lock.
 ///
 /// **The pool is built here, per call, never configured globally.** Rayon's
-/// global pool can be configured once per process, and this crate is a Python
-/// extension module imported once per session — a global configuration would
-/// make `max_cores` a property of whichever `run` happened first, and the second
-/// call with a different cap would fail outright.
+/// global pool can be configured once per process and this crate is imported
+/// once per session, so a global configuration would make `max_cores` a property
+/// of whichever `run` happened first and fail the next call outright.
 ///
-/// # Errors
-///
-/// `ValueError` if the thread pool cannot be built, or from any replicate that
-/// fails — the first such error is returned and the rest are abandoned.
+/// The first replicate to fail returns its error and the rest are abandoned.
 pub(crate) fn run_replicates(
     config: &Config,
     objectives: &[Box<dyn Fitness>],
@@ -736,8 +507,8 @@ pub(crate) fn run_replicates(
 ) -> PyResult<Vec<ErasedOutcome>> {
     debug_assert_eq!(objectives.len(), seeds.len(), "one objective per run");
 
-    // Nothing to run, and in particular no pool to size: `effective_concurrency`
-    // would clamp to 1 and build a pool for zero work.
+    // No pool to size: `effective_concurrency` would clamp to 1 and build one
+    // for zero work.
     if seeds.is_empty() {
         return Ok(Vec::new());
     }
@@ -756,9 +527,8 @@ pub(crate) fn run_replicates(
         .map_err(|err| PyValueError::new_err(format!("could not build the thread pool: {err}")))?;
 
     // `zip` over two slices is an *indexed* parallel iterator, so `collect`
-    // rebuilds the vector by position rather than by completion. That is what
-    // makes the result order the run order: the same master seed has to give the
-    // same output ordering on every machine, whatever order the runs finish in.
+    // rebuilds the vector by position rather than by completion — which is what
+    // makes the result order the run order, whatever order the runs finish in.
     pool.install(|| {
         seeds
             .par_iter()
@@ -769,16 +539,6 @@ pub(crate) fn run_replicates(
 }
 
 /// Pick the evolution strategy and run it, for a genome type already settled.
-///
-/// Generic over `G`, so both genomes share this body instead of the strategy
-/// match being written once per genome. That is the whole reason dispatch is
-/// 2 + 2 arms rather than 2 × 2.
-///
-/// Step 4 of the chain that adds a strategy (`crate::evolver::Evolver`'s doc
-/// has all seven): this match is where a `config::EvolutionConfig` variant
-/// becomes a running evolver — build the strategy's `TypeContext` from the
-/// variant's fields, construct it, and call `run`. `erase`, right below, is
-/// the step after this one, and for most strategies it is not a step at all.
 fn run_strategy<G: Genome, F: Fitness>(
     config: &Config,
     genome_context: G::Context,
@@ -821,50 +581,35 @@ fn run_strategy<G: Genome, F: Fitness>(
             let mut evolver = SteadyStateEvolver::new(shared, type_context, population);
             erase(evolver.run(fitness, seed))
         } // ADD A STRATEGY STEP 4 — one arm, building your `TypeContext` and
-          // calling your evolver's `new` and `run`:
+          // calling your evolver's `new` and `run`. `shared` already carries the
+          // scope and the selection scheme, so only what is *yours* goes in the
+          // `TypeContext`:
           //
           //     EvolutionConfig::MyStrategy { num_my_events } => {
           //         let type_context = MyStrategyContext {
           //             num_my_events: *num_my_events,
-          //             // If your strategy displaces individuals, map its own
-          //             // policy here as steady-state does:
-          //             //     replacement: replacement(replacement_config),
           //         };
           //         let mut evolver = MyStrategyEvolver::new(shared, type_context, population);
           //         erase(evolver.run(fitness, seed))
           //     }
-          //
-          // `shared` already carries the scope and the selection scheme, built
-          // once above this match, so a strategy reads them without asking for
-          // them. Only what is *yours* goes in the `TypeContext`.
-          //
-          // `erase`, right below, is the step after this one — for most
-          // strategies it is not a step at all; search `ADD A STRATEGY STEP 5`.
     }
 }
 
-/// Drop the genome type, converting every fitness back to the objective's units.
+/// Drop the genome type, converting every fitness back to as-measured.
 ///
-/// One generic function rather than the same lines in each arm. The conversion
-/// is the part that matters: everything inside the engine is lower-is-better,
-/// and this is the boundary where that stops being true.
-/// `Direction::orient` is its own inverse, so it is also what undoes itself.
+/// The engine is lower-is-better throughout, and this is the boundary where that
+/// stops being true.
 ///
-/// **The history needs converting too, row by row** — and only its two fitness
-/// columns. `std_dev` and `ci_95` are left exactly as the engine computed them,
-/// because a spread is identical under negation. Orienting either would be a
-/// silent defect: the number stays positive, so nothing looks wrong.
-///
-/// **The last step of the chain that adds a strategy is usually nothing, and
-/// this function is why.** It is generic over `G` alone — no match on
-/// strategy inside it — so a new strategy that returns a normal
-/// `EvolutionOutcome<G>` needs no edit here at all. It only becomes a step if
-/// a strategy's outcome needs handling this conversion does not already give
-/// it, which none of the shipped strategies do.
-// ADD A STRATEGY STEP 5 — usually nothing, and that is the point: this
-// function is generic over `G` alone, with no match on strategy inside it.
-// Only touch it if your strategy's `EvolutionOutcome` needs converting in a
-// way the loop above does not already cover.
+/// **The history is converted row by row, and only its fitness columns.**
+/// `std_dev` and `ci_95` are left exactly as the engine computed them, because a
+/// spread is identical under negation. Converting either would be a silent
+/// defect: the number stays positive, so nothing looks wrong.
+// ADD A STRATEGY STEP 5 — usually nothing, because this function is generic over
+// `G` alone with no match on strategy in it. It becomes a step only if your
+// strategy reports a fitness-valued number this does not already convert, and
+// then the edit is one call per such number:
+//
+//     best_fitness: direction.orient(outcome.best_fitness_engine),
 fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
     let direction = outcome.direction;
 
@@ -889,30 +634,29 @@ fn erase<G: Genome>(outcome: EvolutionOutcome<G>) -> ErasedOutcome {
 }
 
 /// Turn the `[crossover]` block into the operator the engine runs.
-///
-/// Step 4 of the six on [`Crossover`], and the counterpart to `selection`
-/// below. A variant added to `config::CrossoverConfig` and not here does not
-/// compile, which is the whole reason the mapping is a match rather than a
-/// blanket conversion.
 fn crossover(config: &CrossoverConfig) -> Crossover {
     match config {
         CrossoverConfig::TwoPoint => Crossover::TwoPoint,
         // ADD A CROSSOVER STEP 4 — the arm mapping your `CrossoverConfig`
-        // variant onto the matching `Crossover` one. The step after this one
-        // is optional — search `ADD A CROSSOVER STEP 5`.
+        // variant onto the matching `Crossover` one:
+        //
+        //     CrossoverConfig::MyCrossover { some_param } => {
+        //         Crossover::MyCrossover { some_param: *some_param }
+        //     }
     }
 }
 
 /// Turn `[genome] mutation` into the operator an edge-edit run applies.
-///
-/// One per representation, unlike `crossover` above, because the operators are
-/// per representation — `EdgeEditMutation` says why.
 fn edge_edit_mutation(config: &EdgeEditMutationConfig) -> EdgeEditMutation {
     match config {
         EdgeEditMutationConfig::RerollGene => EdgeEditMutation::RerollGene,
-        // ADD A MUTATION STEP 3 (for EdgeEdit) — the arm mapping your `EdgeEditMutationConfig`
-        // variant onto the matching `EdgeEditMutation` one. The step after
-        // this one is optional — search `ADD A MUTATION STEP 4 (for EdgeEdit)`.
+        // ADD A MUTATION STEP 3 (for EdgeEdit) — the arm mapping your
+        // `EdgeEditMutationConfig` variant onto the matching `EdgeEditMutation`
+        // one:
+        //
+        //     EdgeEditMutationConfig::MyMutation { some_param } => {
+        //         EdgeEditMutation::MyMutation { some_param: *some_param }
+        //     }
     }
 }
 
@@ -920,18 +664,16 @@ fn edge_edit_mutation(config: &EdgeEditMutationConfig) -> EdgeEditMutation {
 fn sda_mutation(config: &SdaMutationConfig) -> SdaMutation {
     match config {
         SdaMutationConfig::RedrawOne => SdaMutation::RedrawOne,
-        // ADD A MUTATION STEP 3 (for SDA) — the arm mapping your `SdaMutationConfig`
-        // variant onto the matching `SdaMutation` one. The step after this
-        // one is optional — search `ADD A MUTATION STEP 4 (for SDA)`.
+        // ADD A MUTATION STEP 3 (for SDA) — the arm mapping your
+        // `SdaMutationConfig` variant onto the matching `SdaMutation` one:
+        //
+        //     SdaMutationConfig::MyMutation { some_param } => {
+        //         SdaMutation::MyMutation { some_param: *some_param }
+        //     }
     }
 }
 
 /// Map the `[scope]` block onto the slice each breeding event draws from.
-///
-/// Independent of `[selection]`: the scope's size is its own parameter, so a
-/// scheme with no tournament can still say how large a scope it wants. This arm
-/// is the last step a new `Scope` variant needs — `crate::evolver::scope::Scope`
-/// walks all three.
 fn scope(config: &ScopeConfig) -> Scope {
     match config {
         ScopeConfig::Global => Scope::Global,
@@ -942,34 +684,24 @@ fn scope(config: &ScopeConfig) -> Scope {
         //     ScopeConfig::Neighbourhood { radius } => {
         //         Scope::Neighbourhood { radius: *radius }
         //     }
-        //
-        // Steps 3 and 4 are one change split across two files: a config variant
-        // nothing constructs is dead, and an arm for a variant that does not
-        // exist will not compile. The Python mirror is next, and optional —
-        // search `ADD A SCOPE STEP 5` for it.
     }
 }
 
 /// Map `[evolution] replacement` onto the engine's own replacement policy.
-///
-/// Steady-state's, like `elite_count` is generational's — which is why it is
-/// read from the strategy's own table rather than a block of its own.
 fn replacement(config: &ReplacementConfig) -> Replacement {
     match config {
         ReplacementConfig::Worst => Replacement::Worst,
-        // ADD A REPLACEMENT STEP 3 (for SteadyState, second half) — the arm turning your config
-        // variant into the engine one:
+        ReplacementConfig::Random => Replacement::Random,
+        // ADD A REPLACEMENT STEP 3 (for SteadyState, second half) — the arm
+        // turning your config variant into the engine one:
         //
-        //     ReplacementConfig::Random => Replacement::Random,
-        //
-        // This and the config variant are one change split across two files.
+        //     ReplacementConfig::MyPolicy { some_param } => {
+        //         Replacement::MyPolicy { some_param: *some_param }
+        //     }
     }
 }
 
 /// Map the `[selection]` block onto the engine's own selection scheme.
-///
-/// Kept a function rather than inlined so a second scheme is one arm here and
-/// touches neither evolver.
 fn selection(config: &SelectionConfig) -> Selection {
     match config {
         SelectionConfig::Best => Selection::Best,
@@ -982,32 +714,17 @@ fn selection(config: &SelectionConfig) -> Selection {
         //     SelectionConfig::Roulette { pressure } => {
         //         Selection::Roulette { pressure: *pressure }
         //     }
-        //
-        // Nothing here decides a scope: that is `[scope]`'s own block, and the
-        // reason this function no longer needs to know which strategy is
-        // running. Steps 3 and 4 are one change split across two files. The
-        // Python mirror is next, and optional — search
-        // `ADD A SELECTION STEP 5` for it.
     }
 }
 
 /// Map the `[fitness]` block onto the simulator's own sampling parameters.
 ///
-/// Two types with overlapping names and neither is redundant:
-/// [`crate::config::SirParams`] is the deserializable config block, and
-/// [`SirSampleParams`] is what the simulator takes — deliberately independent
-/// of the config schema, so `sir.rs` does not depend on `[fitness]`'s spelling.
-/// This function is the seam, and it lives in the dispatch layer because that
-/// is where `config.rs`'s module doc says config becomes engine types.
+/// Two types with overlapping names: [`crate::config::SirParams`] is the config
+/// block, [`SirSampleParams`] is what the simulator takes, and keeping them
+/// apart is what stops `sir.rs` depending on `[fitness]`'s spelling.
 ///
-/// Note the nesting changes shape: the config block is flat, while
-/// [`SirSampleParams`] separates the epidemic's own two parameters into a nested
-/// [`sir::SirParams`] from the batch settings around them.
-///
-/// **No seed is mapped.** One master seed reaches `run` and every objective
-/// derives from it (§7, §8.1), so a seed in the config would be a second,
-/// competing source — `Config::from_toml_str` rejects a stray `seed` key
-/// outright rather than ignoring it.
+/// **No seed is mapped** — one master seed reaches `run` and every objective
+/// derives from it.
 fn sir_sample_params(params: &config::SirParams) -> SirSampleParams {
     SirSampleParams {
         epidemic: sir::SirParams {
@@ -1165,8 +882,7 @@ mod tests {
     // that does not exist fails there rather than here.
     //
     // An objective needing neither skips this step and writes its block inline
-    // in the array below. Either way the last step is that array — search
-    // `ADD AN OBJECTIVE STEP 7` for it.
+    // in the array below. Either way the last step is that array.
 
     #[test]
     fn each_objective_erases_to_a_box_carrying_its_own_direction() {

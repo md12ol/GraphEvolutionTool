@@ -75,22 +75,22 @@ some_param = 0.5</code></pre>
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/evolver/common.rs:76</code></td>
+    <tr><td>1</td><td><code>get/src/evolver/common.rs:27</code></td>
         <td>A variant on <code>enum Crossover</code>, plus any parameters it reads from the
             config.</td></tr>
-    <tr><td>2</td><td><code>get/src/evolver/common.rs:102</code></td>
+    <tr><td>2</td><td><code>get/src/evolver/common.rs:52</code></td>
         <td>The arm in <code>Crossover::recombine</code> that performs it.</td></tr>
-    <tr><td>3a</td><td><code>get/src/config.rs:213</code></td>
+    <tr><td>3a</td><td><code>get/src/config.rs:131</code></td>
         <td>The mirrored variant on <code>enum CrossoverConfig</code> — the one whose name becomes
             <code>type = "my_crossover"</code>.</td></tr>
-    <tr><td>3b</td><td><code>get/src/config.rs:908</code></td>
+    <tr><td>3b</td><td><code>get/src/config.rs:673</code></td>
         <td><b>The one that gets forgotten.</b> One <code>(operator, genome)</code> pair per
             representation your operator can honour.</td></tr>
-    <tr><td>4</td><td><code>get/src/dispatch.rs:900</code></td>
+    <tr><td>4</td><td><code>get/src/dispatch.rs:640</code></td>
         <td>The arm mapping your <code>CrossoverConfig</code> onto the engine variant.</td></tr>
-    <tr><td>5</td><td><code>get/src/py_config.rs:322</code> and <code>:908</code></td>
+    <tr><td>5</td><td><code>get/src/py_config.rs:218</code> and <code>:706</code></td>
         <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
-    <tr><td>6</td><td><code>config.example.toml:166</code></td>
+    <tr><td>6</td><td><code>config.example.toml:174</code></td>
         <td><b>Optional, and the step people skip.</b> A commented-out <code>[crossover]</code>
             block. The shipped example is what a user copies from.</td></tr>
   </tbody>
@@ -99,10 +99,10 @@ some_param = 0.5</code></pre>
 
 <h2>Steps 1 and 2 — The Engine Side</h2>
 
-<pre><code class="language-rust">// step 1 — evolver/common.rs:76
+<pre><code class="language-rust">// step 1 — evolver/common.rs:27
 MyCrossover { some_param: f64 },
 
-// step 2 — evolver/common.rs:102
+// step 2 — evolver/common.rs:52
 Crossover::MyCrossover { some_param } =&gt; { /* recombine `first` and `second` */ }</code></pre>
 
 <div class="callout">
@@ -125,10 +125,10 @@ Crossover::MyCrossover { some_param } =&gt; { /* recombine `first` and `second` 
   chosen independently — so nothing but this match can catch an illegal combination:
 </p>
 
-<pre><code class="language-rust">// step 3a — config.rs:213
+<pre><code class="language-rust">// step 3a — config.rs:131
 MyCrossover { some_param: f64 },
 
-// step 3b — config.rs:908
+// step 3b — config.rs:673
 (CrossoverConfig::MyCrossover { .. }, GenomeConfig::Sda(_)) =&gt; Ok(()),
 (CrossoverConfig::MyCrossover { .. }, GenomeConfig::EdgeEdit(_)) =&gt;
     Err(invalid("crossover", "edge-edit cannot honour my_crossover")),</code></pre>
@@ -144,7 +144,7 @@ MyCrossover { some_param: f64 },
 
 <h2>Step 4 — Dispatch</h2>
 
-<pre><code class="language-rust">// step 4 — dispatch.rs:900
+<pre><code class="language-rust">// step 4 — dispatch.rs:640
 CrossoverConfig::MyCrossover { some_param } =&gt; {
     Crossover::MyCrossover { some_param: *some_param }
 }</code></pre>
@@ -157,13 +157,13 @@ CrossoverConfig::MyCrossover { some_param } =&gt; {
 
 <p>
   Leaving step 5 out costs nothing elsewhere; the operator is then configurable from a TOML file but
-  absent from the Python API. The variant goes at <code>get/src/py_config.rs:322</code> and its
-  matching arm at <code>:908</code>.
+  absent from the Python API. The variant goes at <code>get/src/py_config.rs:218</code> and its
+  matching arm at <code>:706</code>.
 </p>
 
 <p>
   Step 6 is a commented-out <code>[crossover]</code> block in
-  <code>config.example.toml:166</code>. <b>It is the step people skip</b>, and it costs nothing
+  <code>config.example.toml:174</code>. <b>It is the step people skip</b>, and it costs nothing
   mechanically — the example file is simply what a user copies from, so an operator missing from it
   is one most people never find. The test suite parses and validates that file, so a block that does
   not parse fails the build rather than a user's afternoon.
