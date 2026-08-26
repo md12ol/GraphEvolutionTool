@@ -72,11 +72,9 @@ pub(crate) fn epidemic_seeds(
 
 /// Run one graph's epidemics, re-rolling short ones.
 ///
-/// # Panics
-///
-/// If `num_epidemics` or `max_epidemic_retries` is zero. With no epidemics at
-/// all the objective would average nothing, producing the `NaN` the `Fitness`
-/// contract forbids; config validation rejects both at load.
+/// Panics if `num_epidemics` or `max_epidemic_retries` is zero: with no
+/// epidemics the objective averages nothing, producing the `NaN` the `Fitness`
+/// contract forbids. Config validation rejects both at load.
 pub fn simulate_epidemics(
     graph: &Graph,
     params: &SirSampleParams,
