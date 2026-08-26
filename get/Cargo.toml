@@ -1,37 +1,31 @@
 [package]
-# The published name, on crates.io and PyPI alike. `get` is taken on both and
-# cannot be reclaimed (crates.io since 2024-03-14), so the distribution is
-# named for the project and the import path is set separately below — the same
-# arrangement as `pip install scikit-learn` giving you `import sklearn`.
-# Decided 2026-08-16, GitHub #88.
 name = "graph-evolution-tool"
 version = "0.9.0"
 edition = "2024"
 
 [lib]
-# `use get::` and `import get` both come from HERE, not from the package name
-# above. Renaming this would break every example, both front ends and
-# `#[pymodule] fn get` at once; renaming the package breaks nothing.
+# Renaming this breaks every example, both front ends and `#[pymodule] fn get`
+# at once — `use get::` and `import get` come from here, not from the package
+# name above.
 name = "get"
-# cdylib for the importable Python extension module; rlib so `cargo test` can
-# link the crate for the unit tests.
+# Dropping `rlib` stops `cargo test` linking the crate; `cdylib` is the
+# importable Python extension module.
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-# The Rust-native runner (spec §5.3's "Rust route", for run testing): reads a
-# config.toml and drives a run exactly like a Python caller would, with no
-# interpreter and no `get.so` build required. Gated behind `cli` because it
-# needs `pyo3/auto-initialize`, which conflicts with the `extension-module`
-# feature the built Python module uses — see the dev-dependency comment below.
 name = "get-run"
 path = "src/bin/run.rs"
 required-features = ["cli"]
 
 [features]
+# Off by default, and `get-run` gates on it: `auto-initialize` embeds an
+# interpreter, which the built Python extension module must not do.
 cli = ["pyo3/auto-initialize"]
 
 [dependencies]
-# `extension-module` is deliberately NOT enabled here — see [dev-dependencies].
+# Adding `extension-module` here makes the whole test suite fail to LINK, with
+# undefined `Py*` symbols; the built module supplies it through
+# `pyproject.toml`'s `[tool.maturin] features`.
 pyo3 = { version = "0.27.2", features = ["abi3-py38"] }
 
 rayon = "1.8"
@@ -41,22 +35,10 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 
 [dev-dependencies]
-# Why `extension-module` is not a normal dependency feature: it tells pyo3 to
-# leave the Python symbols unresolved, for the interpreter to supply when it
-# loads the module. That is right for the built extension and fatal for
-# `cargo test`, which produces an ordinary binary with no interpreter to
-# resolve them — the whole suite then fails to LINK, with dozens of undefined
-# `Py*` symbols, however few tests touch Python.
-#
-# So the built module turns it on from outside the manifest:
-#   maturin — `[tool.maturin] features = ["pyo3/extension-module"]`
-#   cargo   — `cargo build -p graph-evolution-tool --features pyo3/extension-module`
-#
-# `auto-initialize` starts an embedded interpreter on the first
-# `Python::attach`, so tests can call a Python callable. Test builds only.
+# Without `auto-initialize` no test can start an interpreter to call a Python
+# callable.
 pyo3 = { version = "0.27.2", features = ["auto-initialize"] }
 
 [lints.clippy]
-# We want the explicit `return` where it aids readability; clippy's default
-# prefers the implicit form. Issue #22.
+# Explicit `return` is allowed where it aids readability.
 needless_return = "allow"
