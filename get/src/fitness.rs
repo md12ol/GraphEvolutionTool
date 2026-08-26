@@ -151,7 +151,6 @@ impl EpidemicScorer {
     /// for having been handed a milder outbreak. A new seed for the next batch,
     /// because reusing one forever would breed a population good at that
     /// outbreak rather than good at the disease.
-
     pub(crate) fn next_batch_seed(&self) -> u64 {
         let counter = self.batches_scored.fetch_add(1, Ordering::Relaxed);
         mix_seed(self.run_seed, counter)
