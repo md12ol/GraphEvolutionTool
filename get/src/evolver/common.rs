@@ -301,15 +301,13 @@ where
 
 /// Summarize a scored population into one evolution-log row.
 ///
-/// Every field is **lower-is-better**, because that is what the caller passes
-/// in and nothing here converts. The only conversion is at the boundary, on the
-/// way out of a run.
+/// Every field is **lower-is-better**: that is what the caller passes in, and
+/// nothing here converts.
 ///
-/// `std_dev` divides by `n`: these are all the individuals there are, not a
-/// sample of a larger group, so one individual has a deviation of zero.
-/// `ci_95` divides by `n - 1` instead, on purpose — the uncertainty in
+/// `std_dev` divides by `n` — these are all the individuals there are, not a
+/// sample. `ci_95` divides by `n - 1` on purpose: the uncertainty in
 /// `mean_fitness` as a statistic is a sample question even though the deviation
-/// beside it is not. `n == 1` gives `0.0`.
+/// beside it is not.
 pub(super) fn generation_stats(iteration: usize, fitnesses: &[f64]) -> GenerationStats {
     assert!(
         !fitnesses.is_empty(),
