@@ -156,6 +156,17 @@ impossible rather than merely unlikely.</figcaption>
   coercing one, because the statistics are defined on simple graphs.
 </p>
 
+<div class="tip">
+  <b>Where a reference set comes from.</b> The repository carries two standard-library scripts that
+  are not part of the package and are not in the wheel:
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/tools/tudataset_to_get.py"><code>tools/tudataset_to_get.py</code></a>
+  converts a <a href="https://chrsmrrs.github.io/datasets/">TUDataset</a> collection into the folder
+  of edge files <code>load_reference_graphs</code> reads, and
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/tools/graph_to_png.py"><code>tools/graph_to_png.py</code></a>
+  draws any GET edge file as a PNG. Both are documented in
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/tools/README.md"><code>tools/README.md</code></a>.
+</div>
+
 <div class="note">
   <b><code>epi_prof_match</code>'s length rule is fixed by the target, and it is asymmetric.</b>
   Iterate <code>0 .. target.len()</code>, treat a shorter run's missing values as <code>0</code>,
