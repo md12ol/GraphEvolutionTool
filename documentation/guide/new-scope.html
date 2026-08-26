@@ -90,7 +90,7 @@ radius = 3</code></pre>
         <td>the arm filling the buffer with your indices</td></tr>
     <tr><td>3</td><td><code>get/src/config.rs:77</code></td>
         <td>the variant a user names under <code>[scope]</code>, plus any constraint on it</td></tr>
-    <tr><td>4</td><td><code>get/src/dispatch.rs:939</code></td>
+    <tr><td>4</td><td><code>get/src/dispatch.rs:681</code></td>
         <td>the arm mapping that config variant onto the engine one</td></tr>
     <tr><td>5</td><td><code>get/src/py_config.rs:186</code> and <code>:665</code></td>
         <td>the Python mirror — optional</td></tr>
@@ -158,7 +158,7 @@ Scope::Neighbourhood { radius } =&gt; {
 <pre><code class="language-rust">// step 3 — config.rs:77
 Neighbourhood { radius: usize },
 
-// step 4 — dispatch.rs:939
+// step 4 — dispatch.rs:681
 ScopeConfig::Neighbourhood { radius } =&gt; {
     Scope::Neighbourhood { radius: *radius }
 }</code></pre>

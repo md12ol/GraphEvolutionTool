@@ -114,7 +114,7 @@ pressure = 1.8</code></pre>
     <tr><td>3</td><td><code>get/src/config.rs:112</code></td>
         <td>The mirrored variant on <code>enum SelectionConfig</code> — this is the one whose name
             becomes <code>type = "roulette"</code>.</td></tr>
-    <tr><td>4</td><td><code>get/src/dispatch.rs:980</code></td>
+    <tr><td>4</td><td><code>get/src/dispatch.rs:711</code></td>
         <td>The arm mapping your config variant onto the engine variant. Steps 3 and 4 are one
             change split across two files.</td></tr>
     <tr><td>5</td><td><code>get/src/py_config.rs:203</code> and <code>:689</code></td>
@@ -166,7 +166,7 @@ Selection::Roulette { pressure } =&gt; {
 <pre><code class="language-rust">// step 3 — config.rs:112
 Roulette { pressure: f64 },
 
-// step 4 — dispatch.rs:980
+// step 4 — dispatch.rs:711
 SelectionConfig::Roulette { pressure } =&gt; {
     Selection::Roulette { pressure: *pressure }
 }</code></pre>

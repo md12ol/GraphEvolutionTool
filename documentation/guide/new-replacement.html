@@ -84,7 +84,7 @@ replacement       = { type = "random" }   # or "worst", the default</code></pre>
         <td>the variant, and any parameters it needs</td></tr>
     <tr><td>2</td><td><code>get/src/evolver/replacement.rs:61</code></td>
         <td>the arm naming who the children overwrite; the match is exhaustive</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:95</code>, <code>get/src/dispatch.rs:961</code>,
+    <tr><td>3</td><td><code>get/src/config.rs:95</code>, <code>get/src/dispatch.rs:695</code>,
         <code>get/src/py_config.rs:170</code> and <code>:641</code></td>
         <td>what a user names under <code>replacement</code>, the arm building it, and the Python
         mirror</td></tr>
@@ -146,7 +146,7 @@ where
 <pre><code class="language-rust">// step 3 — config.rs:95
 Tournament { size: usize },
 
-// step 3 — dispatch.rs:961
+// step 3 — dispatch.rs:695
 ReplacementConfig::Tournament { size } =&gt; Replacement::Tournament { size: *size },
 
 // step 3 — py_config.rs:170   (optional)

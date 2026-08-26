@@ -123,10 +123,10 @@ some_dimension = 256</code></pre>
     <tr><td>4</td><td><code>get/src/config.rs:149</code> and <code>:713</code></td>
         <td>A <code>GenomeConfig</code> variant plus the struct it carries, <i>and</i> its arm in
             <code>validate_genome</code>.</td></tr>
-    <tr><td>5</td><td><code>get/src/dispatch.rs:403</code></td>
+    <tr><td>5</td><td><code>get/src/dispatch.rs:270</code></td>
         <td>A start builder beside <code>sda_start</code>: validate the dimensions once, mint
             <code>population_size</code> individuals, build the context.</td></tr>
-    <tr><td>6</td><td><code>get/src/dispatch.rs:667</code></td>
+    <tr><td>6</td><td><code>get/src/dispatch.rs:453</code></td>
         <td>One arm in the genome match, calling your step-5 builder. The <b>strategy</b> match is
             not touched — it is generic over the genome.</td></tr>
     <tr><td>7</td><td><code>get/src/py_config.rs:476</code> and <code>:476</code></td>
@@ -196,14 +196,14 @@ GenomeConfig::MyGenome(mine) =&gt; {
     }
 }
 
-// step 5 — dispatch.rs:403
+// step 5 — dispatch.rs:270
 pub(crate) fn my_genome_start&lt;R: Rng + ?Sized&gt;(
     config: &amp;Config,
     mine: &amp;MyGenomeConfig,
     rng: &amp;mut R,
 ) -&gt; PyResult&lt;(MyContext, Vec&lt;MyGenome&gt;)&gt; { ... }
 
-// step 6 — dispatch.rs:667
+// step 6 — dispatch.rs:453
 GenomeConfig::MyGenome(mine) =&gt; {
     let (genome_context, population) = my_genome_start(config, mine, &amp;mut rng)?;
     ...

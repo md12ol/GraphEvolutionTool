@@ -252,16 +252,16 @@ impl Fitness for EdgeBudget {
         <td>implement the trait, and validate the objective's inputs in its constructor</td></tr>
     <tr><td>2</td><td><code>get/src/config.rs:328</code>, <code>:328</code> and <code>:842</code></td>
         <td>the config variant, its type name, and its validation arm</td></tr>
-    <tr><td>3</td><td><code>get/src/dispatch.rs:219</code></td>
+    <tr><td>3</td><td><code>get/src/dispatch.rs:133</code></td>
         <td>the arm turning the variant into a boxed objective</td></tr>
     <tr><td>4</td><td><code>get/src/py_config.rs:499</code> and <code>:499</code></td>
         <td>the Python variant and its attribute paths — optional</td></tr>
     <tr><td>5</td><td><code>config.example.toml:87</code></td>
         <td>an example block, if the objective ships</td></tr>
-    <tr><td>6</td><td><code>get/src/dispatch.rs:1153</code></td>
+    <tr><td>6</td><td><code>get/src/dispatch.rs:869</code></td>
         <td>a helper returning the objective's <code>[fitness]</code> block — skippable, see
             below</td></tr>
-    <tr><td>7</td><td><code>get/src/dispatch.rs:1187</code></td>
+    <tr><td>7</td><td><code>get/src/dispatch.rs:903</code></td>
         <td>the test case asserting the boxed objective reports its own direction</td></tr>
   </tbody>
 </table>
@@ -360,7 +360,7 @@ FitnessConfig::MyObjective { threshold } =&gt; {
 
 <h2>Step 3 — Dispatch</h2>
 
-<pre><code class="language-rust">// step 3 — dispatch.rs:219
+<pre><code class="language-rust">// step 3 — dispatch.rs:133
 FitnessConfig::MyObjective { threshold } =&gt; {
     let objective = MyObjective::new(*threshold).map_err(PyValueError::new_err)?;
     Ok(Box::new(objective))
@@ -435,7 +435,7 @@ MyObjective { threshold: f64 },
 </table>
 </div>
 
-<pre><code class="language-rust">// step 6 — dispatch.rs:1153   beside `sir_block` and `struct_match_block`
+<pre><code class="language-rust">// step 6 — dispatch.rs:869   beside `sir_block` and `struct_match_block`
 fn my_objective_block(threshold: f64) -> String {
     format!("[fitness]\ntype = \"my_objective\"\nthreshold = {threshold}\n")
 }</code></pre>
@@ -447,7 +447,7 @@ fn my_objective_block(threshold: f64) -> String {
 
 <h2>Step 7 — The Test That Catches a Silent Failure</h2>
 
-<pre><code class="language-rust">// step 7 — dispatch.rs:1187   one entry in the existing `cases` array
+<pre><code class="language-rust">// step 7 — dispatch.rs:903   one entry in the existing `cases` array
 let cases = [
     (sir_block("epi_spread", ""), Direction::Maximize),
     (sir_block("epi_length", ""), Direction::Maximize),
