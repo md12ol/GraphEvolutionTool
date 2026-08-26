@@ -107,12 +107,14 @@ some_dimension = 256</code></pre>
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/genomes/genome.rs:148</code></td>
+    <tr><td>1</td><td><code>get/src/genomes/genome.rs:8</code></td>
         <td>Implement <code>Genome</code> for your type — <code>express</code>,
             <code>crossover</code>, <code>mutate</code>, <code>print</code>, and the
             <code>Context</code> associated type. All five are required.</td></tr>
-    <tr><td>2</td><td><code>get/src/genomes/genome.rs:261</code></td>
-        <td>Declare the <code>Context</code> type your genome named, struct and fields <code>pub</code>.</td></tr>
+    <tr><td>2</td><td><code>get/src/genomes/genome.rs:49</code></td>
+        <td>Declare the <code>Context</code> type your genome named, struct and fields <code>pub</code>,
+            and the mutation kind it carries — unless <code>mutate</code> picks its own way of
+            varying the genome.</td></tr>
     <tr><td>3</td><td><code>get/src/genomes.rs:8</code></td>
         <td><code>pub mod</code> your module, then extend both re-export lists.</td></tr>
     <tr><td>4</td><td><code>get/src/config.rs:245</code> and <code>:951</code></td>
@@ -133,7 +135,7 @@ some_dimension = 256</code></pre>
 
 <h2>Steps 1 to 3 — The Representation</h2>
 
-<pre><code class="language-rust">// step 1 — genomes/genome.rs:148
+<pre><code class="language-rust">// step 1 — genomes/genome.rs:8
 impl Genome for MyGenome {
     type Context = MyContext;
 
@@ -143,11 +145,18 @@ impl Genome for MyGenome {
     fn print(&amp;self) -&gt; String { ... }
 }
 
-// step 2 — genomes/genome.rs:261
+// step 2 — genomes/genome.rs:49
 #[derive(Clone, Debug)]
 pub struct MyContext {
     pub num_nodes: usize,
-    pub some_mutation_rate: f64,
+    pub some_setting: f64,
+    pub mutation: MyMutation,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MyMutation {
+    #[default]
+    SomeVariant,
 }
 
 // step 3 — genomes.rs:8

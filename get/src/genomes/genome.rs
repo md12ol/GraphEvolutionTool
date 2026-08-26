@@ -46,14 +46,23 @@ pub trait Genome: Clone + Send + Sync {
     fn print(&self) -> String;
 }
 
-// ADD A GENOME STEP 2 — declare your context type here, beside the other two.
-// Make the struct and every field `pub`, and keep it to run configuration: if
-// variation can change it, it belongs on the genome instead.
+// ADD A GENOME STEP 2 — declare the context your genome named, beside the other
+// two: the run-level configuration `express` reads, one value shared by every
+// individual for the whole run. Struct and fields `pub`, and if variation can
+// change it, it belongs on the genome instead. Declare the mutation kind it
+// names here too, unless `mutate` picks its own way of varying the genome.
 //
 //     #[derive(Clone, Debug)]
 //     pub struct MyContext {
 //         pub num_nodes: usize,
-//         pub some_mutation_rate: f64,
+//         pub some_setting: f64,
+//         pub mutation: MyMutation,
+//     }
+//
+//     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+//     pub enum MyMutation {
+//         #[default]
+//         SomeVariant,
 //     }
 
 /// Configuration used when an edge-edit genome modifies an initial graph.
@@ -68,20 +77,15 @@ pub struct EdgeEditContext {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SdaContext {
     pub num_nodes: usize,
-    /// The state the automaton starts in before consuming `init_char`'s first
-    /// transition. Must be below the genome's state count — expression indexes
-    /// the transition table with it, and panics if it is out of range.
+    /// Must be below the genome's state count, or expression panics.
     pub init_state: usize,
     /// Pass `1` for unweighted graphs.
     pub max_edge_multiplicity: u32,
-    /// Chance that a mutation redraws the initial character rather than
-    /// touching the transition table at all.
+    /// Chance a mutation redraws the initial character.
     pub init_char_mutation_rate: f64,
-    /// Given that the initial character was *not* chosen, the chance of
-    /// redrawing a transition's target state; the remainder redraws that
-    /// transition's response instead.
+    /// Given the initial character was *not* chosen, the chance of redrawing a
+    /// transition's target state; the remainder redraws its response.
     pub transition_vs_response_rate: f64,
-    /// Which mutation this run applies; the two rates above shape it.
     pub mutation: SdaMutation,
 }
 
