@@ -132,7 +132,7 @@ EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
   <tbody>
     <tr><td>1</td><td><code>get/src/genomes/genome.rs:121</code></td>
         <td>A variant on <code>enum SdaMutation</code>, plus any parameters it reads.</td></tr>
-    <tr><td>2</td><td><code>get/src/genomes/sda.rs:492</code></td>
+    <tr><td>2</td><td><code>get/src/genomes/sda.rs:405</code></td>
         <td>The arm in <code>SdaGenome::mutate</code> that performs it.</td></tr>
     <tr><td>3</td><td><code>get/src/config.rs:360</code> and
         <code>get/src/dispatch.rs:923</code></td>
@@ -147,7 +147,7 @@ EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
 <pre><code class="language-rust">// step 1 — genomes/genome.rs:121
 MyMutation { some_param: f64 },
 
-// step 2 — genomes/sda.rs:492
+// step 2 — genomes/sda.rs:405
 SdaMutation::MyMutation { some_param } =&gt; self.my_mutation(context, rng),
 
 // step 3a — config.rs:360

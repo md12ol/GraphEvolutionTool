@@ -1,10 +1,13 @@
+//! The self-driving-automaton representation: the genome, the checked
+//! dimensions it is built to, and the default mutation rates.
+
 use rand::Rng;
 
 use super::genome::{Genome, SdaContext, SdaMutation};
 use crate::graph::Graph;
 
 /// Self-driving-automaton genome: a finite-state machine whose run emits the
-/// characters that get folded into a graph's adjacency triangle.
+/// characters folded into the upper triangle of a graph's adjacency matrix.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SdaGenome {
     init_char: u8,
@@ -12,11 +15,9 @@ pub struct SdaGenome {
     transitions: Vec<Vec<u16>>,
     /// `[state][char] -> chars appended to the output buffer`
     responses: Vec<Vec<Vec<u8>>>,
-    /// Maximum length of a freshly generated response, used by
-    /// [`SdaGenome::random_with_edge_multiplicity_cap`] and [`Genome::mutate`]
-    /// when a response is generated. Unlike `num_states`/`num_chars`, this
-    /// isn't observable from the current data, so it has to be stored rather
-    /// than derived.
+    /// Maximum length of a response generated later. Unlike
+    /// `num_states`/`num_chars` it is not observable from the current data, so
+    /// it is stored rather than derived.
     max_resp_len: usize,
 }
 
@@ -25,9 +26,8 @@ const MAX_NUM_CHARS: usize = u8::MAX as usize + 1;
 /// Largest state count representable by [`SdaGenome`]'s `u16`-valued transitions.
 const MAX_NUM_STATES: usize = u16::MAX as usize + 1;
 /// Default for [`SdaContext::init_char_mutation_rate`]: the chance per
-/// [`Genome::mutate`] call of mutating the initial character instead of a
-/// transition or response. The value a run uses is configurable; this is what
-/// it falls back to.
+/// mutation of redrawing the initial character instead of a transition or
+/// response.
 pub const DEFAULT_INIT_CHAR_MUTATION_RATE: f64 = 0.04;
 /// Default for [`SdaContext::transition_vs_response_rate`]: an even split between
 /// redrawing a transition's target state and redrawing its response.
@@ -36,16 +36,9 @@ pub const DEFAULT_TRANSITION_VS_RESPONSE_RATE: f64 = 0.5;
 /// Genome dimensions that have already been checked, so a caller building a
 /// whole population validates once rather than once per individual.
 ///
-/// Every constructor is a check, so holding a value of this type *is* the proof
-/// that the three numbers are usable, and
-/// [`SdaGenome::random_with_dimensions`] can be infallible rather than
-/// returning a `Result` no caller past the first iteration can ever see fail.
-///
-/// From outside the crate the only route is
-/// [`SdaDimensions::from_edge_multiplicity_cap`], which derives `num_chars`
-/// from the cap. `new` takes it directly and is crate-internal: a caller
-/// choosing its own alphabet builds a genome that disagrees with the context it
-/// is expressed against, and `express` panics on that.
+/// Every constructor checks, so holding a value of this type is the proof that
+/// the numbers are usable, which is what lets
+/// [`SdaGenome::random_with_dimensions`] be infallible.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SdaDimensions {
     num_states: usize,
@@ -57,6 +50,10 @@ impl SdaDimensions {
     /// Check that `num_states`, `num_chars`, and `max_resp_len` are usable
     /// dimensions for a genome: nonzero, and small enough to fit the storage
     /// types backing `transitions`/`responses`.
+    ///
+    /// Crate-internal because `num_chars` is taken directly: an alphabet that
+    /// is not one more than the cap of the [`SdaContext`] the genome is
+    /// expressed against makes `express` panic.
     pub(crate) fn new(
         num_states: usize,
         num_chars: usize,
@@ -83,13 +80,6 @@ impl SdaDimensions {
     /// so every character value doubles as a legal edge weight and nothing is
     /// clamped by [`Graph::set_edge`] when the same cap builds the
     /// [`SdaContext`] the genome is expressed against.
-    ///
-    /// **`num_chars` is derived, never chosen.** A caller picking its own value
-    /// builds a genome that disagrees with its context, which `express` panics
-    /// on — so this is the constructor a run uses, and the only one outside the
-    /// crate. The direct `new` exists for the checks themselves, which need a
-    /// route that does not go through a cap: `cap + 1` is never zero, so the
-    /// empty-alphabet branch would otherwise be unreachable and untested.
     pub fn from_edge_multiplicity_cap(
         num_states: usize,
         edge_multiplicity_cap: u32,
@@ -102,25 +92,16 @@ impl SdaDimensions {
 
 impl SdaGenome {
     /// Build a genome sized for graphs expressed under `edge_multiplicity_cap`:
-    /// the alphabet is fixed at `edge_multiplicity_cap + 1` characters
-    /// (`0..=cap`), so every character value doubles as a legal edge weight and
-    /// nothing is clamped by [`Graph::set_edge`] when the same cap is used to
-    /// build the [`SdaContext`] this genome is later expressed against.
+    /// the alphabet is `cap + 1` characters, `0..=cap`, so every character is a
+    /// legal edge weight and [`Graph::set_edge`] clamps nothing — provided the
+    /// same cap builds the [`SdaContext`] this is expressed against. Each
+    /// response is a random 1..=`max_resp_len` characters.
     ///
-    /// Each transition's response is a random length between 1 and
-    /// `max_resp_len` characters, inclusive.
+    /// For a whole population, validate once into an [`SdaDimensions`] and loop
+    /// through [`SdaGenome::random_with_dimensions`] instead.
     ///
-    /// **The constructor to reach for, and the alphabet is why.** The cap
-    /// decides `num_chars`, so it is never a free choice here: a caller picking
-    /// its own value builds a genome that disagrees with the context it is
-    /// expressed against, which `express` panics on. Building one individual at
-    /// a time, this is the route; for a whole population, validate once into an
-    /// [`SdaDimensions`] and loop through
-    /// [`SdaGenome::random_with_dimensions`] instead.
-    ///
-    /// Returns an error if the dimensions are zero or too large to fit the
-    /// genome's storage types (`num_states` up to 65536, `num_chars` up to
-    /// 256).
+    /// Returns an error if the dimensions are zero or exceed the storage types
+    /// (`num_states` 65536, `num_chars` 256).
     pub fn random_with_edge_multiplicity_cap<R: Rng + ?Sized>(
         num_states: usize,
         edge_multiplicity_cap: u32,
@@ -138,9 +119,7 @@ impl SdaGenome {
     /// Build a random genome to already-checked dimensions.
     ///
     /// Infallible by construction: every value that could be rejected was
-    /// rejected when the [`SdaDimensions`] was built, so a population loop
-    /// validates once at the top instead of re-checking three constants on
-    /// every individual.
+    /// rejected when the [`SdaDimensions`] was built.
     pub fn random_with_dimensions<R: Rng + ?Sized>(
         dimensions: &SdaDimensions,
         rng: &mut R,
@@ -184,44 +163,24 @@ impl SdaGenome {
         }
     }
 
-    /// Build a genome from a *chosen* automaton rather than a random one.
-    ///
-    /// Almost every individual is minted at random by
-    /// [`SdaGenome::random_with_edge_multiplicity_cap`] instead, so this is the
-    /// path for the callers that need a known automaton: a hand-designed
-    /// fixture, or the automaton read back off a previous run's winner through
-    /// the accessors below. Without it the accessors would be readable with no
-    /// supported way to feed them back, which is the state
-    /// [`crate::genomes::EdgeEditGenome::new_with_operators`] exists to avoid
-    /// on the other representation.
+    /// Build a genome from a *chosen* automaton rather than a random one — a
+    /// hand-designed fixture, or a previous run's winner read back through the
+    /// accessors below.
     ///
     /// `transitions` is `[state][char] -> next state` and `responses` is
-    /// `[state][char] -> characters appended to the output`. Both are indexed
-    /// the same way, so both are `num_states` rows of `num_chars` entries. The
-    /// alphabet size is taken from the transition table's row width;
-    /// `max_resp_len` bounds only the responses a later mutation generates, and
-    /// does not constrain the ones supplied here.
+    /// `[state][char] -> characters appended to the output`; both are
+    /// `num_states` rows of `num_chars`, and the alphabet size comes from that
+    /// row width. `max_resp_len` bounds only the responses a later mutation
+    /// generates, not the ones supplied here.
     ///
-    /// # Errors
-    ///
-    /// Every check here converts a failure that would otherwise happen during
-    /// the run, when it is far harder to attribute:
-    ///
-    /// - Dimensions outside what the storage types hold, ragged rows, or a
-    ///   `responses` table that is not the same shape as `transitions` — each
-    ///   panics on an out-of-bounds index at expression.
-    /// - A transition targeting a state that does not exist, a response
-    ///   character outside the alphabet, or an `init_char` outside it — the
-    ///   same, one step later.
-    /// - **An empty response** — this one does not panic, it hangs. Running the
-    ///   automaton makes progress only by appending a response's characters, so
-    ///   a run that reaches an empty one stops producing output and loops until
-    ///   the process is killed.
-    ///
-    /// It does **not** check the alphabet against a context's
-    /// `max_edge_multiplicity`; nothing here knows which context this genome
-    /// will be expressed against. [`Genome::express`] asserts that pairing, and
-    /// its own docs say what the mismatch would otherwise do.
+    /// Errors rather than letting the failure land mid-run, where it is far
+    /// harder to attribute: bad dimensions, a wrong row width, a transition
+    /// targeting a state that does not exist, or a character outside the
+    /// alphabet each panic at expression, and **an empty response does not
+    /// panic, it hangs** — the automaton makes progress only by appending a
+    /// response's characters. The alphabet is not checked against a context
+    /// here; nothing yet knows which one, and [`Genome::express`] asserts that
+    /// pairing.
     pub fn from_parts(
         init_char: u8,
         transitions: Vec<Vec<u16>>,
@@ -280,11 +239,9 @@ impl SdaGenome {
 
     /// The character the automaton's output always starts with.
     ///
-    /// This and the three accessors below are what make a run's winner
-    /// reusable: together they are exactly [`SdaGenome::from_parts`]'s
-    /// arguments, so an automaton can be read off one genome and handed to
-    /// another. [`Genome::print`] renders the same data for a human and is not
-    /// a substitute — it returns formatted text, not something that parses back.
+    /// This and the accessors below are together exactly
+    /// [`SdaGenome::from_parts`]'s arguments, so an automaton can be read off
+    /// one genome and rebuilt as another.
     pub fn init_char(&self) -> u8 {
         self.init_char
     }
@@ -311,11 +268,10 @@ impl SdaGenome {
     }
 
     /// Run the automaton from `init_state`, producing exactly `output_len`
-    /// characters. `output[0]` is `init_char`; each subsequent transition
-    /// appends its response's characters (truncated if that would overshoot
-    /// `output_len`) and advances `cur_state` before moving to the next
-    /// unconsumed character. Every response is at least one character long,
-    /// so this always terminates without needing a step cap.
+    /// characters. `output[0]` is `init_char`; each transition appends its
+    /// response, truncated if that would overshoot `output_len`. Every
+    /// response is at least one character long, so this always terminates
+    /// without needing a step cap.
     ///
     /// Callers must ensure `init_state` is a valid state index.
     fn run(&self, init_state: usize, output_len: usize) -> Vec<u8> {
@@ -327,9 +283,8 @@ impl SdaGenome {
         output.push(self.init_char);
 
         let mut cur_state = init_state;
-        // Two cursors into the same growing buffer: tail_idx reads a
-        // character already produced; output.len() is where the next one
-        // gets written.
+        // Two cursors into the same growing buffer: tail_idx reads a character
+        // already produced, output.len() is where the next one gets written.
         let mut tail_idx = 0;
         while output.len() < output_len {
             let driver = output[tail_idx] as usize;
@@ -346,8 +301,7 @@ impl SdaGenome {
         output
     }
 
-    /// The body of [`SdaMutation::RedrawOne`], split out so `mutate` above is
-    /// one match over the operator and nothing else.
+    /// The body of [`SdaMutation::RedrawOne`].
     fn redraw_one<R: Rng + ?Sized>(&mut self, context: &SdaContext, rng: &mut R) {
         let num_states = self.transitions.len();
         let num_chars = self.num_chars();
@@ -379,24 +333,14 @@ impl SdaGenome {
 impl Genome for SdaGenome {
     type Context = SdaContext;
 
-    /// Run the automaton for exactly one character per upper-triangle pair
-    /// and fold the output into a graph: output index `i` maps onto the
-    /// `i`-th pair in the same row-major order as [`Graph::get_edge_list`]
-    /// (`(0,1), (0,2), ..., (0,n-1), (1,2), ...`), and each character's raw
-    /// value becomes that edge's weight. [`Graph::set_edge`] clamps the value
-    /// to the cap selected by `SdaContext`, so the same representation can
-    /// express unweighted or bounded-multiplicity graphs.
+    /// Run the automaton for one character per upper-triangle vertex pair: the
+    /// character at output index `i` is the weight of the `i`-th pair in
+    /// row-major order, `(0,1), (0,2), ..., (0,n-1), (1,2), ...`.
     ///
-    /// # Panics
-    ///
-    /// Panics if this genome's alphabet (`num_chars`, the width of a
-    /// transition/response row) disagrees with `context.max_edge_multiplicity`
-    /// plus one — the derived-alphabet invariant of §3.2. A genome built
-    /// through [`SdaGenome::random_with_edge_multiplicity_cap`] against this
-    /// same cap always satisfies it; one assembled field-by-field in-module is
-    /// not checked until expressed, so a mismatch there would otherwise
-    /// silently bias the expressed graph toward the cap (alphabet too large)
-    /// or leave the upper edge weights unreachable (alphabet too small).
+    /// Panics unless this genome's alphabet (`num_chars`, the width of a
+    /// transition/response row) is `context.max_edge_multiplicity` plus one:
+    /// too large biases the expressed graph toward the cap, too small leaves the
+    /// upper edge weights unreachable.
     fn express(&self, context: &Self::Context) -> Graph {
         let num_chars = self.num_chars();
         let expected_num_chars = context.max_edge_multiplicity as usize + 1;
@@ -427,29 +371,15 @@ impl Genome for SdaGenome {
         graph
     }
 
-    /// Two-point crossover over states: draw two distinct cut points in
-    /// `0..=shared_length` and swap the half-open interior segment
-    /// `[start, end)` between the parents, leaving states outside that window
-    /// untouched on both sides. Swapping state 0 also swaps `init_char`,
-    /// since together they determine the automaton's first transition.
+    /// Two-point crossover over states: swap the half-open segment
+    /// `[start, end)` between the parents, leaving states outside it untouched.
+    /// Swapping state 0 also swaps `init_char`, since together they determine
+    /// the automaton's first transition.
     ///
-    /// Crosses even when only one state is shared, where the single possible
-    /// pair of cut points forces the segment to state 0 alone. That is still
-    /// worth doing here because `init_char` moves with it, so two automata
-    /// genuinely exchange their starting behaviour.
-    /// `EdgeEditGenome::crossover` declines at the same length, its genes
-    /// having no equivalent passenger to carry.
-    ///
-    /// The obligations every crossover carries — both children kept, both
-    /// parents left valid for the representation, every draw from `rng` — are
-    /// stated once on [`Genome::crossover`]. Validity is a real constraint
-    /// here rather than a free one: a transition stores a *target state
-    /// index*, so a swapped band carries values that only mean anything
-    /// against a state table of the same size. What makes that safe is that
-    /// `num_states` is a config value fixed for the whole run, so every genome
-    /// in a population is built to it — not the `shared_length` bound below,
-    /// which guards the positions being indexed and could not fix a target
-    /// value pointing past a shorter automaton's end.
+    /// A transition stores a *target state index*, so a swapped band means
+    /// anything only against a state table of the same size. `num_states` is a
+    /// config value fixed for the whole run, which is what makes that safe —
+    /// `shared_length` guards the positions indexed, not the values carried.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) {
         // States past the shorter automaton's length have no counterpart to swap.
         let shared_length = self.transitions.len().min(other.transitions.len());
@@ -469,41 +399,21 @@ impl Genome for SdaGenome {
         }
     }
 
-    /// Apply one mutation: redraw the initial character with probability
-    /// `context.init_char_mutation_rate`, otherwise redraw one transition's
-    /// target state with probability `context.transition_vs_response_rate` and
-    /// its response with the remainder. Callers that want more disruption per
-    /// generation call this multiple times.
-    ///
-    /// Exactly one, per the [`Genome::mutate`] contract, which has the rest of
-    /// what a mutation owes: the engine's two dice rolls, why magnitudes are
-    /// not equalized across representations, and that every draw comes from
-    /// `rng`. The three outcomes above are one mutation between them, not
-    /// three — whichever branch is taken, the method returns having changed a
-    /// single thing.
-    ///
-    /// The second draw was a plain coin flip before the rates were
-    /// configurable. `random_bool(0.5)` and `random::<bool>()` do not consume
-    /// the same RNG state, so a seeded run does not reproduce output from
-    /// before this change even at the default rates.
     fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R) {
         match context.mutation {
             SdaMutation::RedrawOne => self.redraw_one(context, rng),
-            // ADD A MUTATION STEP 2 (for SDA) — the arm performing your variant. Keep
-            // the exactly-one-mutation contract this method's own doc states.
-            // The step after this one is `config::SdaMutationConfig` —
-            // search `ADD A MUTATION STEP 3 (for SDA)` for it.
+            // ADD A MUTATION STEP 2 (for SDA) — the arm performing your variant,
+            // changing exactly one thing about `self`.
+            //
+            //     SdaMutation::MyMutation { some_param } => self.my_mutation(some_param, rng),
         }
     }
 
-    /// Dump `init_char` followed by one line per `state + char -> target
-    /// [ response ]`. `init_state` isn't included since it lives on
-    /// `SdaContext`, not the genome, and `print` has no context parameter to
-    /// read it from.
+    /// `init_state` is not included: it lives on `SdaContext`, which `print`
+    /// has no parameter to read.
     fn print(&self) -> String {
-        // Brings write!/writeln! for String into scope; writes to a String
-        // can't actually fail, so the .unwrap()s below just satisfy the
-        // trait's Result return.
+        // Writes to a String cannot fail, so the unwraps below only discharge
+        // the trait's Result return.
         use std::fmt::Write as _;
 
         let mut out = String::new();
