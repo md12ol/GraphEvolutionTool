@@ -21,8 +21,10 @@ const OPERATION_COUNT: usize = 9;
 const OPCODE_MASK: u64 = 0xF;
 
 /// A gene that edits nothing: opcode 8 is `Null` and its payload is unread.
-/// A starting population is built from these, so a run begins at the base graph
-/// rather than at a random one.
+/// When a run is seeded from a base graph, one individual is built entirely
+/// from these — a soft floor keeping the caller's own graph in generation 0,
+/// not a guarantee: every other individual is still random, and this one can
+/// still be evicted on a bad draw.
 pub const IDENTITY_GENE: u64 = 8;
 
 /// Relative probabilities for generating each edge-edit operation, set under

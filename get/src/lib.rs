@@ -2,16 +2,19 @@
 //!
 //! A run is described entirely by a `config.toml` — population and network
 //! size, the evolution strategy, the genome representation, and the objective
-//! to optimize — and four entry points read that same document, so a run means
-//! the same thing whichever one drives it:
+//! to optimize — and three entry points read that same document, so a run
+//! means the same thing whichever one drives it:
 //!
 //! - [`run_from_toml`] and [`run_many_from_toml`], for a Rust caller, with no
 //!   Python interpreter involved.
 //! - The `get-run` binary, which is those two behind a command line.
 //! - [`GraphEvolver`], which is also the `get` Python extension module: built
 //!   from a config file, or from config objects assembled in Python.
-//! - The engine types in [`evolver`], [`genomes`], [`fitness`] and [`graph`],
-//!   for a caller driving their own loop.
+//!
+//! A fourth route bypasses config entirely: the engine types in [`evolver`],
+//! [`genomes`], [`fitness`] and [`graph`], for a caller driving their own loop
+//! with a native objective and no `Config`, no TOML, and no Python involved —
+//! see `examples/library_route.rs`.
 //!
 //! Fitness reaches a caller **as-measured** — the units and sign the objective
 //! returned. The lower-is-better form the engine compares on is internal and
@@ -345,8 +348,8 @@ impl GraphEvolver {
     /// `1` for 1-indexed data, which is the common case in graph files.
     /// 1-indexed in is 1-indexed out.
     ///
-    /// A file stating its own size in a `# nodes = N` header must agree with
-    /// `network_size`; one with no header is taken to be `network_size` nodes.
+    /// A `# nodes = N` header is mandatory and must agree with `network_size`;
+    /// a file with no header is rejected rather than assumed to match it.
     ///
     /// **Nothing is stored unless the whole file survives**, and a rejection
     /// names the line it came from. A repeated edge, a zero-weight edge and an
