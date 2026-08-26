@@ -35,6 +35,9 @@ CHAIN = {
     "new-crossover": "CROSSOVER", "new-mutation": "MUTATION",
 }
 REF = re.compile(r"([a-z_]+\.rs|config\.example\.toml):(\d+)|<code>:(\d+)</code>")
+# A card is navigation, not a section. site.js keeps their headings out of the
+# contents panel, so they never receive a generated id.
+CARD = re.compile(r'<a[^>]*\bclass="[^"]*\bcard\b[^"]*"[^>]*>.*?</a>', re.S)
 # A *declaration* marker: the name, an optional branch qualifier, then an em
 # dash introducing what to do. A cross-reference — `search `ADD A ... STEP 4``
 # — is wrapped in backticks and carries no dash, and must not count: a
@@ -110,7 +113,8 @@ def resolve(page, name):
         return MOD[page]
     for root, _, files in os.walk("get/src"):
         if name in files:
-            return os.path.join(root, name)
+            # Posix separators, so a reported path is the one the page cites.
+            return os.path.join(root, name).replace(os.sep, "/")
     raise SystemExit(f"{page}: no source file named {name}")
 
 
@@ -143,15 +147,24 @@ def structure():
     nav = set(re.findall(r'\["([^"]+\.html)",',
                          open("documentation/assets/site.js", encoding="utf-8").read()))
 
+    # Must match `slugify` in assets/site.js character for character: these are
+    # the ids a browser will actually create, and an anchor is checked against
+    # them. site.js reads `textContent`, so entities are decoded, not spelled
+    # out — `&amp;` becomes `&` and is then stripped, never the word "and".
     def slug(text):
-        text = re.sub(r"<[^>]+>", "", text).replace("&amp;", "and")
+        text = html.unescape(re.sub(r"<[^>]+>", "", text))
         return re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", text.lower()).strip())
 
     ids = {}
     for page in pages:
         body = open(os.path.join("documentation", page), encoding="utf-8").read()
-        ids[page] = set(re.findall(r'\sid="([^"]+)"', body)) | {
-            slug(t) for _, t in re.findall(r"<(h[23])[^>]*>(.*?)</\1>", body, re.S)}
+        # site.js only assigns ids as a side effect of building the contents
+        # panel, and that is skipped for card headings and for any page with
+        # fewer than three of them. Synthesizing ids the browser never creates
+        # passes a dead anchor: `index.html`'s six card headings are the case.
+        headings = re.findall(r"<(h[23])[^>]*>(.*?)</\1>", CARD.sub("", body), re.S)
+        synthesized = {slug(t) for _, t in headings} if len(headings) >= 3 else set()
+        ids[page] = set(re.findall(r'\sid="([^"]+)"', body)) | synthesized
 
     bad = 0
     for entry in sorted(nav):
@@ -318,7 +331,10 @@ def main(fix):
             # branch. Those narrow first, so a whole-file nearest match cannot
             # pull a reference onto its neighbour's marker — or, on a forked
             # chain, onto the same step of the other representation.
-            wanted = chain
+            # `chain` is None on any page outside CHAIN. Those pages may still
+            # carry a reference, and this is the reporting path for a stale
+            # one, so it has to render rather than raise.
+            wanted = chain if chain is not None else "matching"
             if step is not None:
                 wanted += f" step {step}"
             if branch is not None:
