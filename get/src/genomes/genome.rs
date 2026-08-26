@@ -56,30 +56,6 @@ pub trait Genome: Clone + Send + Sync {
 //         pub some_mutation_rate: f64,
 //     }
 
-/// Which mutation an edge-edit genome performs.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum EdgeEditMutation {
-    /// Reroll one gene, its opcode drawn from the operation mix.
-    #[default]
-    RerollGene,
-    // ADD A MUTATION STEP 1 (for EdgeEdit) — a variant here, plus any parameters it reads:
-    //
-    //     MyMutation { some_param: f64 },
-}
-
-/// Which mutation an SDA genome performs.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum SdaMutation {
-    /// Redraw exactly one of: the initial character, one transition's target
-    /// state, or that transition's response — chosen by the two rates on
-    /// [`SdaContext`].
-    #[default]
-    RedrawOne,
-    // ADD A MUTATION STEP 1 (for SDA) — a variant here, plus any parameters it reads:
-    //
-    //     MyMutation { some_param: f64 },
-}
-
 /// Configuration used when an edge-edit genome modifies an initial graph.
 #[derive(Clone, Debug)]
 pub struct EdgeEditContext {
@@ -107,4 +83,28 @@ pub struct SdaContext {
     pub transition_vs_response_rate: f64,
     /// Which mutation this run applies; the two rates above shape it.
     pub mutation: SdaMutation,
+}
+
+/// Which mutation an edge-edit genome performs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EdgeEditMutation {
+    /// Reroll one gene, its opcode drawn from the operation mix.
+    #[default]
+    RerollGene,
+    // ADD A MUTATION STEP 1 (for EdgeEdit) — a variant here, plus any parameters it reads:
+    //
+    //     MyMutation { some_param: f64 },
+}
+
+/// Which mutation an SDA genome performs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SdaMutation {
+    /// Redraw exactly one of: the initial character, one transition's target
+    /// state, or that transition's response — chosen by the two rates on
+    /// [`SdaContext`].
+    #[default]
+    RedrawOne,
+    // ADD A MUTATION STEP 1 (for SDA) — a variant here, plus any parameters it reads:
+    //
+    //     MyMutation { some_param: f64 },
 }
