@@ -28,7 +28,7 @@
 }</code></pre>
 
 <p>
-  <code>evaluate</code> returns a score <b>in the objective's own units and sign</b> — nothing is
+  <code>evaluate</code> returns a score <b><b>as-measured</b> — the units and sign your objective returned</b> — nothing is
   normalised or flipped for you. <code>direction</code> declares whether bigger or smaller is
   better, and is a property of what the function computes, never of the run — so it is never
   configurable. <code>evaluate_batch</code> scores a whole population at once, which is what lets a
@@ -39,14 +39,14 @@
 <h2 id="gate">Two Number Systems, One Gate</h2>
 
 <p>
-  <b>Your units</b> are whatever your objective returns. <b>Engine orientation</b> has one rule:
-  <b>lower is better</b>. Selection, elitism and replacement all assume it, which is what lets them
+  <b>As-measured</b> is whatever your objective returns. <b>Lower-is-better</b> is what the
+  engine compares. Selection, elitism and replacement all assume it, which is what lets them
   work without ever asking what the objective was. The conversion is a negation, and the whole
   design is about doing it in exactly <b>two</b> places.
 </p>
 
 <figure>
-<svg viewBox="0 0 700 470" role="img" aria-label="Fitness values flow from your units through one inward conversion into engine orientation, and back out through one outward conversion in the dispatch layer.">
+<svg viewBox="0 0 700 470" role="img" aria-label="Fitness values flow from as-measured through one inward conversion into lower-is-better, and back out through one outward conversion in the dispatch layer.">
   <defs>
     <marker id="af" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
@@ -56,7 +56,7 @@
 
   <rect x="60" y="14" width="580" height="56" rx="9" class="d-fill-good"/>
   <rect x="60" y="14" width="580" height="56" rx="9" class="d-stroke"/>
-  <text x="350" y="38" class="d-text" text-anchor="middle" font-weight="600">YOUR UNITS</text>
+  <text x="350" y="38" class="d-text" text-anchor="middle" font-weight="600">AS-MEASURED</text>
   <text x="350" y="57" class="d-text-sm" text-anchor="middle">epi_spread → 1470 nodes infected · direction = Maximize</text>
 
   <path d="M350 74 L350 100" class="d-stroke-acc" stroke-width="1.8" marker-end="url(#af)"/>
@@ -73,7 +73,7 @@
 
   <rect x="60" y="216" width="580" height="118" rx="9" class="d-fill-box"/>
   <rect x="60" y="216" width="580" height="118" rx="9" class="d-stroke"/>
-  <text x="350" y="240" class="d-text" text-anchor="middle" font-weight="600">ENGINE ORIENTATION — lower is better</text>
+  <text x="350" y="240" class="d-text" text-anchor="middle" font-weight="600">LOWER-IS-BETTER — what the engine compares</text>
   <text x="350" y="266" class="d-text-sm" text-anchor="middle">tournament ranking · elitism · replace-worst · argmin</text>
   <text x="350" y="285" class="d-text-sm" text-anchor="middle">GenerationStats · EvolutionOutcome</text>
   <text x="350" y="313" class="d-text-acc" text-anchor="middle">None of these know, ask, or store which way the objective ran.</text>
@@ -88,7 +88,7 @@
 
   <rect x="60" y="440" width="580" height="26" rx="7" class="d-fill-good"/>
   <rect x="60" y="440" width="580" height="26" rx="7" class="d-stroke"/>
-  <text x="350" y="458" class="d-text-sm" text-anchor="middle">YOUR UNITS AGAIN — 1470, exactly what your function returned</text>
+  <text x="350" y="458" class="d-text-sm" text-anchor="middle">AS-MEASURED AGAIN — 1470, exactly what your function returned</text>
 
   </g>
 </svg>
@@ -450,7 +450,7 @@ nodes; the mean tracks it a little below, which is what a healthy run looks like
 
 <p>
   The dispatch layer converts <code>best_fitness</code> and <code>mean_fitness</code> back into
-  your units and sign on the way out. <code>std_dev</code> and <code>ci_95</code> are <b>not</b>
+  as-measured units and sign on the way out. <code>std_dev</code> and <code>ci_95</code> are <b>not</b>
   converted, and correctly so: a spread is identical under negation. So an <code>epi_spread</code>
   log reads in infected nodes and goes <i>up</i>; an <code>epi_prof_match</code> log reads as an
   RMSE and goes <i>down</i>.
@@ -463,7 +463,7 @@ nodes; the mean tracks it a little below, which is what a healthy run looks like
   <code>run_many_from_toml</code> all hand you numbers already in your objective's units. The
   exception is <a href="route-rust-library.html">driving an <code>Evolver</code> directly</a>: that
   returns an <code>EvolutionOutcome</code> carrying <code>best_fitness_engine</code>, which is
-  engine-oriented, plus the <code>direction</code> to undo it —
+  lower-is-better, plus the <code>direction</code> to undo it —
   <code>direction.orient(outcome.best_fitness_engine)</code> is the same negation, and it is its own
   inverse.
 </div>

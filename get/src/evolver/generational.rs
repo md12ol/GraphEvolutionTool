@@ -68,7 +68,7 @@ impl<G: Genome> GenerationalEvolver<G> {
     /// `graphs` and `fitnesses` must be one scoring pass of the same
     /// population: the winner's graph is taken from `graphs` by index, so a
     /// stale pair reports someone else's graph. `direction` is stored, not
-    /// applied — the outcome leaves in engine orientation.
+    /// applied — the outcome leaves lower-is-better.
     fn outcome(
         &mut self,
         mut graphs: Vec<Graph>,

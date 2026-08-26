@@ -110,8 +110,8 @@ impl<G: Genome> SteadyStateEvolver<G> {
 
     /// Package the best individual and the accumulated history into an outcome.
     ///
-    /// `direction` is stored, not applied: the fitnesses leave here in engine
-    /// orientation — lower is better — and the boundary converts them once.
+    /// `direction` is stored, not applied: the fitnesses leave here
+    /// lower-is-better, and the boundary converts them once.
     fn outcome(&mut self, fitnesses: &[f64], direction: Direction) -> EvolutionOutcome<G> {
         let best = best_index(fitnesses);
         let best_genome = self.population[best].clone();

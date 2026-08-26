@@ -72,9 +72,9 @@ impl PyGenerationStats {
 #[pyclass(name = "RunResult", frozen)]
 #[derive(Debug)]
 pub struct PyRunResult {
-    /// Best of the **final** population, in the **objective's own units and
-    /// sign**. Matches `history`'s last row, which a stochastic objective may
-    /// have scored worse than an earlier one.
+    /// Best of the **final** population, **as-measured** — the units and sign
+    /// your objective returned. Matches `history`'s last row, which a
+    /// stochastic objective may have scored worse than an earlier one.
     #[pyo3(get)]
     pub best_fitness: f64,
     /// The best individual's expressed network, as `(u, v, multiplicity)`.
