@@ -882,8 +882,7 @@ mod tests {
     // that does not exist fails there rather than here.
     //
     // An objective needing neither skips this step and writes its block inline
-    // in the array below. Either way the last step is that array — search
-    // `ADD AN OBJECTIVE STEP 7` for it.
+    // in the array below. Either way the last step is that array.
 
     #[test]
     fn each_objective_erases_to_a_box_carrying_its_own_direction() {

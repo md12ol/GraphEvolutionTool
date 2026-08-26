@@ -1554,9 +1554,9 @@ mod tests {
         // The third blind spot, after the two guards above: everything here
         // reads `config.rs` as text, so without `config_rs_without_comments` a
         // worked example in a comment is indistinguishable from a live call.
-        // `config.rs` carries exactly such an example — the `ADD A GENOME STEP 4`
-        // marker — and the symptom is the sweep below demanding a Python
-        // attribute for a field name nobody wrote.
+        // `config.rs` carries exactly such an example — a genome step-4 marker
+        // — and the symptom is the sweep below demanding a Python attribute for
+        // a field name nobody wrote.
         //
         // Asserted against a fixture rather than `config.rs` itself, so the test
         // still means something after someone edits that marker away.
