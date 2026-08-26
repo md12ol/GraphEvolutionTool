@@ -1,154 +1,5 @@
-//! The objectives the GA optimizes, and the sign rule that makes them
+//! The objectives the GA optimizes, and the sign rule that makes their scores
 //! comparable.
-//!
-//! # Adding your own objective
-//!
-//! An objective touches five files, in seven steps — two of the files want
-//! more than one edit, and `dispatch.rs` appears three times: once for the
-//! code, and twice in its tests, for a block helper and for the case using it.
-//!
-//! **Five is the floor, not the ceiling.** It is what an objective assembled
-//! from config values alone needs, which is what all three of the originals
-//! were. One that brings data of its own — anything read from disk — will also
-//! touch the loader it reads through and wherever its shared state lives;
-//! `struct_match` touched seven files for that reason.
-//!
-//! How many of the seven steps are yours depends on which way you are using GET,
-//! so start by working out which reader you are:
-//!
-//! - **You depend on this crate from your own program.** Step 1 is the only
-//!   one available to you, and it is enough on its own: write your type,
-//!   implement [`Fitness`] for it, and pass it to `Evolver::run`. Steps 2–7
-//!   are unreachable rather than skipped: `config`, `dispatch` and `py_config`
-//!   are private modules, so nothing outside this crate can add a config
-//!   variant or a dispatch arm, and the example file and the tests live in the
-//!   GET repository rather than yours. Your objective reaches the evolver by
-//!   being handed over directly, and is never named in a config file.
-//! - **You are editing your own copy of GET.** All seven steps are yours, though
-//!   step 6 is skippable. What that
-//!   buys, and what the first reader structurally cannot have, is an objective
-//!   selectable by name from `config.toml` and runnable by the `get-run`
-//!   binary, with no Rust written at the call site.
-//!
-//! Every step is marked in the source. One command lists the whole chain:
-//!
-//! ```text
-//! git grep -n "ADD AN OBJECTIVE STEP" get/src config.example.toml
-//! ```
-//!
-//! The steps, in the order you would walk them:
-//!
-//! 1. **This file** — implement [`Fitness`] for your type. [`Fitness::evaluate`]
-//!    is the only required method. Add [`Fitness::direction`] if bigger is
-//!    better, and override [`Fitness::evaluate_batch`] if the default is wrong
-//!    for you — see "When overriding `evaluate_batch` is required" below,
-//!    because that case is about correctness rather than speed.
-//!
-//!    **Validate the objective's own inputs in its constructor, and make it
-//!    fallible if it has any worth checking.** Step 2's validation lives in
-//!    `config.rs`, which the library route never runs — so a guard written
-//!    only there does not exist for the first reader above. Anything that
-//!    would put a `NaN` into every score belongs here: `EpiProfMatch::new`
-//!    rejects an empty or non-finite target for exactly this reason, and
-//!    `StructMatch::new` rejects a non-finite weight. The two sites are
-//!    additive, not alternatives.
-//! 2. **`config.rs`** — three edits, not one. Add a variant to
-//!    `FitnessConfig` holding whatever the objective reads out of the file;
-//!    add its arm to `FitnessConfig::type_name`, which is the string error
-//!    messages name the objective by; and add validation for any parameter
-//!    worth constraining. Only the first is what a user selects under
-//!    `[fitness]`. The `type_name` arm cannot be forgotten — the match is
-//!    exhaustive, so omitting it fails to compile.
-//!
-//!    Two things about that validation are not obvious. **It may not touch
-//!    the filesystem** — `Config::validate` does no I/O, which is why
-//!    `epi_prof_match` takes its target inline rather than as a path. An
-//!    objective that must name a file therefore cannot check it here, and
-//!    everything about that file's contents becomes step 3's problem instead.
-//!    And **it may constrain fields outside the `[fitness]` block**:
-//!    `struct_match` requires a top-level `max_edge_multiplicity` of 1,
-//!    because its statistics count neighbours rather than summing weights.
-//! 3. **`dispatch.rs`** — add the matching arm to `objective()`, which turns
-//!    that variant into a `Box<dyn Fitness>`. Steps 2 and 3 are one change
-//!    split across two files: a variant nothing constructs is dead code, and
-//!    an arm for a variant that does not exist will not compile.
-//!
-//!    **This arm runs once per replicate**, not once per run — `run` builds
-//!    one objective per seed before starting. Two consequences. It is where
-//!    anything needing the filesystem finally happens, since step 2 could not;
-//!    an unreadable folder or an empty reference set is reported from here.
-//!    And anything **expensive and immutable** should be built once and shared
-//!    behind an `Arc` rather than rebuilt per replicate — see
-//!    `GraphEvolver::struct_match_reference`. What §8.1 requires per replicate
-//!    is a fresh *objective*, because an [`EpidemicScorer`] holds a per-run
-//!    counter; an objective with no per-run state has nothing to keep apart,
-//!    and rebuilding its data is pure waste in a phase that logs nothing.
-//! 4. **`py_config.rs`** — add the Python-side constructor, if the objective
-//!    should be reachable from Python. Leave it out and everything else still
-//!    works; a Python caller simply has no way to name the objective. If step
-//!    2's validation raises a new field name, that name also needs a Python
-//!    attribute path here, or the error a Python caller sees will name a TOML
-//!    field they never wrote. The test
-//!    `every_validation_field_maps_to_a_python_attribute` is what catches a
-//!    missing one.
-//! 5. **`config.example.toml`** — add an example block if the objective ships.
-//!    The example file is what a user copies from, so an objective missing
-//!    from it is one most people never find.
-//! 6. **The dispatch tests, a block helper** — a function returning your
-//!    objective's `[fitness]` block, alongside `sir_block` and
-//!    `struct_match_block`. **The one skippable step.** It earns its place
-//!    when the block carries keys shared with other objectives, or when the
-//!    objective reads something off disk that has to exist before the test
-//!    runs. An objective needing neither writes its block inline at step 7.
-//! 7. **The dispatch tests, the case** — assert the new variant erases to a
-//!    box that reports its own [`Direction`]. Worth writing because the
-//!    failure it catches is silent: an objective whose direction is lost runs
-//!    the search backwards and looks merely unconverged.
-//!
-//! # What `Direction` costs you if you get it wrong
-//!
-//! [`Fitness::evaluate`] returns your score in your own units, and
-//! [`Fitness::direction`] is what tells the engine whether large or small
-//! wins. The engine compares in one convention throughout and converts back at
-//! the boundary, so you never negate your own output — see [`Direction`],
-//! which explains both forms and why the objective does not do the flipping.
-//!
-//! The default is [`Direction::Minimize`], which means an objective that
-//! should be maximized and does not say so is not rejected anywhere. It runs,
-//! it logs, and it optimizes for the worst graph it can find.
-//!
-//! # When overriding `evaluate_batch` is required
-//!
-//! The default scores each graph independently across rayon threads, which is
-//! correct for an objective that is a pure function of one graph. Two cases
-//! are not merely slower under it — they are wrong:
-//!
-//! - **The objective is stochastic.** The default draws fresh randomness per
-//!   graph, so two graphs in one batch are scored against different samples
-//!   and their scores stop being comparable to each other. Share one sample
-//!   across the batch instead; [`EpidemicScorer::mean_batch`] is how the
-//!   epidemic objectives do it.
-//! - **The objective calls Python.** Taking the GIL inside a rayon closure
-//!   deadlocks rather than running slowly, so a Python objective must batch
-//!   its crossing of the boundary. `PyFitness` exists for this.
-//!
-//! # What an objective must not do
-//!
-//! Nothing that makes two runs at the same seed disagree. Every source of
-//! randomness an objective uses has to derive from the seed it was built with,
-//! never from the system clock, an address, thread scheduling, or iteration
-//! order over a hash map. Reproducing a run from its seed is the only way a
-//! result can be checked afterwards, and a run that quietly stopped being
-//! reproducible looks exactly like one that is fine.
-//!
-//! # If it is epidemic-based
-//!
-//! Build it on [`EpidemicScorer`] rather than calling the simulator yourself.
-//! It owns the seeding, and wrong seeding still gives numbers that look fine.
-//! Copy the shape [`EpiSpread`] uses: both `evaluate` and `evaluate_batch`
-//! hand [`EpidemicScorer::mean_batch`] a closure saying what to read off one
-//! epidemic. Write the same reading in both — the test
-//! `both_entry_points_use_the_same_reading` fails if they disagree.
 
 use std::slice;
 use std::sync::Arc;
@@ -163,23 +14,18 @@ use crate::stats::{PerFamily, ReferenceStatistics};
 
 /// Whether an objective wants its value small or large.
 ///
-/// Every fitness number in the engine is in one of two forms, and mixing them
-/// up is the bug this type exists to prevent:
+/// Every fitness number is in one of two forms, and mixing them up is the bug
+/// this type exists to prevent:
 ///
-/// - **original** — what the fitness function returned, in its own units. 28
-///   nodes infected is `28.0`, and bigger is better.
-/// - **oriented** — the original after [`Direction::orient`], which negates it
-///   when the objective maximizes and leaves it alone when the objective
-///   minimizes, so that smaller is always better. That same 28 becomes
-///   `-28.0`.
+/// - **as-measured** — what the fitness function returned. 28 nodes infected is
+///   `28.0`, and bigger is better.
+/// - **lower-is-better** — the same value through [`Direction::orient`]: that
+///   28 becomes `-28.0`. The engine compares in these throughout, and the
+///   boundary converts back.
 ///
-/// The engine only ever compares, so it works in oriented values throughout;
-/// logs and results are turned back into originals at the boundary (§5.1),
-/// which is what the sheet calls engine orientation.
-///
-/// The objective does not negate its own output, because then the value and
-/// the declared direction could disagree — and a run optimizing backwards
-/// looks exactly like a run that is simply not converging.
+/// The objective never negates its own output: the value and the declared
+/// direction would then disagree, and a run optimizing backwards looks exactly
+/// like one that is simply not converging.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     /// Smaller is better, as for an error or a distance. The default.
@@ -189,21 +35,12 @@ pub enum Direction {
 }
 
 impl Direction {
-    /// Orient an original, so that smaller always wins.
+    /// Convert between the two forms. The same call converts back.
     ///
-    /// Under [`Direction::Minimize`] the two are the same number; under
-    /// [`Direction::Maximize`] the oriented value is the negated original, so
-    /// the largest original becomes the smallest oriented value.
-    ///
-    /// Negation is its own inverse, so this one function converts both ways:
-    /// an original in to compare, an oriented value in to report.
-    ///
-    /// # Panics
-    ///
-    /// On `NaN`. Under [`Direction::Maximize`] it becomes `-NaN`, which sorts
-    /// below `-inf` — so it would win every tournament it entered and leave a
-    /// run that looks converged. Rust's `assert!` survives a release build, so
-    /// this check always runs.
+    /// Panics on `NaN`: under [`Direction::Maximize`] it becomes `-NaN`, which
+    /// sorts below `-inf`, so it would win every tournament it entered and
+    /// leave a run that looks converged. An `assert!`, so it survives a release
+    /// build.
     pub fn orient(self, value: f64) -> f64 {
         assert!(
             !value.is_nan(),
@@ -220,42 +57,30 @@ impl Direction {
 
 /// An objective the GA optimizes over expressed graphs.
 ///
-/// [`Fitness::evaluate`] returns the **original** score, in the objective's
-/// own units; [`Fitness::direction`] says which way is better. The engine
-/// orients it exactly once, so logs and results keep the original units and
-/// sign (§5.1). See [`Direction`] for both terms.
+/// [`Fitness::evaluate`] returns an **as-measured** score and
+/// [`Fitness::direction`] says which way is better; the engine converts to
+/// lower-is-better exactly once, so logs and results stay as-measured.
 ///
-/// `Send + Sync` lets [`Fitness::evaluate_batch`] score across rayon
-/// threads.
-///
-/// # Implement these; never call them
-///
-/// Only `common::express_and_score` calls them. A direct call compiles and
-/// returns plausible numbers, but hands the engine an original where an
-/// oriented value belongs — so under [`Direction::Maximize`] every comparison
-/// runs backwards, and nothing says so. It skips the `NaN` check too.
-///
-/// # Never return `NaN`
-///
-/// [`Direction::orient`] panics on it. Watch for division by a count that can
-/// be zero, `0.0 / 0.0`, and `inf - inf`.
+/// **Implement these, never call them.** Only `common::express_and_score` does,
+/// and it is what converts and what rejects `NaN`; a direct call compiles,
+/// skips both, and returns plausible numbers.
 // ADD AN OBJECTIVE STEP 1 — implement this trait for your own type, in this
-// file or beside your own code:
+// file beside the shipped objectives. Validate the objective's own inputs in
+// its constructor and make it fallible if any are worth checking: the config
+// layer's validation does not run when GET is used as a library.
 //
 //     impl Fitness for MyObjective {
 //         fn evaluate(&self, graph: &Graph) -> f64 { ... }
-//     }
+//         fn direction(&self) -> Direction { Direction::Maximize }
 //
-// Validate the objective's own inputs in its constructor and make it fallible
-// if it has any worth checking — step 2's validation lives in `config.rs`,
-// which the library route never runs, so a guard written only there does not
-// exist for a caller depending on this crate. The two sites are additive.
-// This is the only step available to such a caller, and it is enough on its
-// own. The step after this is the config variant a user names — search
-// `ADD AN OBJECTIVE STEP 2` for it.
+//         // Only if scoring draws randomness — every stochastic objective
+//         // here overrides it, because the default scores each graph on its
+//         // own and the scores stop being comparable.
+//         fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> { ... }
+//     }
 pub trait Fitness: Send + Sync {
-    /// Score one graph: the **original**, in the objective's own units, never
-    /// an oriented value. Must not return `NaN`.
+    /// Score one graph, **as-measured** — never converted. Must not return
+    /// `NaN`.
     fn evaluate(&self, graph: &Graph) -> f64;
 
     /// Which way is better. Defaults to [`Direction::Minimize`], so an error
@@ -264,21 +89,13 @@ pub trait Fitness: Send + Sync {
         Direction::Minimize
     }
 
-    /// Score a **batch of graphs** — whatever set the evolver scores together.
-    /// These come back as originals too; the caller converts them.
+    /// Score a batch of graphs — whatever set the evolver scores together, from
+    /// a whole population down to one steady-state pair.
     ///
-    /// The batch is not always a generation. Generational hands over the whole
-    /// population each cycle; steady-state hands over just the two new
-    /// children per mating event, and its starting population once (§6.3). All
-    /// three are batches.
-    ///
-    /// The default runs [`Fitness::evaluate`] on each graph across rayon,
-    /// which suits a Rust objective. A Python one overrides this to take the
-    /// GIL once per batch instead of once per graph.
-    ///
-    /// **A stochastic objective must override it as well** — the default would
-    /// draw a fresh seed per graph, so scores would no longer be comparable
-    /// inside the batch. See [`EpidemicScorer::mean_batch`].
+    /// The default runs [`Fitness::evaluate`] on each graph across rayon.
+    /// **A stochastic objective must override it**, or each graph draws its own
+    /// randomness and scores stop being comparable within the batch; a Python
+    /// one must too, to take the GIL once per batch rather than once per graph.
     fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> {
         graphs
             .par_iter()
@@ -289,32 +106,15 @@ pub trait Fitness: Send + Sync {
 
 /// A boxed objective is an objective.
 ///
-/// # Why this exists
+/// The config layer erases its fitness variant to one `Box<dyn Fitness>`, and a
+/// `Box` holding a `Fitness` is not itself one until this says so. It has to
+/// live beside the trait — the orphan rule rejects it anywhere else.
 ///
-/// The config layer erases its fitness variant to one `Box<dyn Fitness>` before
-/// instantiating anything, so that adding an objective is one match arm rather
-/// than one arm per strategy × genome combination (§1, §8). But `Evolver::run<F>`
-/// requires `F: Fitness`, and a `Box` holding a `Fitness` is not itself one
-/// until this says so. It has to live here beside the trait — the orphan rule
-/// rejects it anywhere else.
-///
-/// # Every method is forwarded, including the two with defaults
-///
-/// This is the whole point, and both omissions **compile**:
-///
-/// - **`evaluate_batch`** — without it the box inherits the trait's
-///   default, which fans out over rayon and calls `evaluate` per graph. For a
-///   Python objective that means one GIL acquisition per individual from inside
-///   a rayon closure, which is what `PyFitness`'s batching exists to prevent —
-///   and which **deadlocks** rather than merely running slowly (measured
-///   2026-08-07; see `PyFitness`). For an epidemic objective it also re-seeds
-///   per graph, so scores stop being comparable within a batch.
-/// - **`direction`** — without it the box reports [`Direction::Minimize`]
-///   whatever it holds, so every maximizing objective runs the search backwards
-///   while looking merely unconverged.
-///
-/// Neither failure produces a compiler error, a panic, or a wrong-looking
-/// number, which is why `a_boxed_objective_forwards_every_method` exists.
+/// **Every method is forwarded, including the two with defaults**, and both
+/// omissions compile. Without `evaluate_batch` the box inherits the fan-out
+/// default, which deadlocks a Python objective and re-seeds an epidemic one per
+/// graph; without `direction` it reports [`Direction::Minimize`] whatever it
+/// holds, running every maximizing search backwards.
 impl Fitness for Box<dyn Fitness> {
     fn evaluate(&self, graph: &Graph) -> f64 {
         (**self).evaluate(graph)
@@ -329,29 +129,18 @@ impl Fitness for Box<dyn Fitness> {
     }
 }
 
-/// Runs the epidemics that every SIR objective scores (§5.2).
+/// Runs the epidemics that every SIR objective scores.
 ///
 /// The epidemic is the expensive part and all three objectives want the same
 /// one, so this runs the batch and each objective supplies only a reading —
 /// see [`EpiSpread`] for the smallest example.
 ///
-/// The nesting, widest first (§5.2, §8.1): an **experiment** is many **runs**
-/// at one set of parameters; a run scores many **batches of graphs**; each
-/// batch averages many **epidemics** per graph. One scorer covers one run.
-///
-/// A batch is whatever the evolver scores in one call, and its size is not
-/// fixed: the whole population for a generational cycle or for either
-/// evolver's starting population, but only the **two new children** for a
-/// steady-state mating event (§6.3). Nothing here needs to know which — it
-/// seeds whatever arrives.
-///
-/// **One scorer per run.** The counter below is per-run state; two replicates
-/// sharing a scorer would let thread scheduling pick which run saw which seed,
-/// and reproducibility goes with it (§8.1).
+/// **One scorer per run.** The batch counter is per-run state; two replicates
+/// sharing a scorer would let thread scheduling decide which run saw which
+/// seed, and reproducibility goes with it.
 pub struct EpidemicScorer {
     params: SirSampleParams,
     run_seed: u64,
-    /// Batches scored so far — see [`EpidemicScorer::next_batch_seed`].
     batches_scored: AtomicU64,
 }
 
@@ -359,7 +148,7 @@ impl EpidemicScorer {
     /// Build a scorer for one run.
     ///
     /// `run_seed` is this run's share of the master seed handed to
-    /// `GraphEvolver::run`; `[fitness]` has no seed of its own (§5.2).
+    /// `GraphEvolver::run`; `[fitness]` has no seed of its own.
     pub fn new(params: SirSampleParams, run_seed: u64) -> Self {
         Self {
             params,
@@ -368,69 +157,35 @@ impl EpidemicScorer {
         }
     }
 
-    /// The seed for the next batch of graphs. Every call returns a different
-    /// one, because it advances the counter.
-    ///
-    /// A seed fixes every random choice the epidemic simulator makes. Same
-    /// seed, same epidemics. Different seed, different epidemics.
+    /// The seed for the next batch of graphs, advancing the counter so that
+    /// every call returns a different one.
     ///
     /// **Call this once per batch, then give that one seed to every graph in
-    /// the batch.** The batch size depends on the evolver, and nothing here
-    /// changes with it:
+    /// the batch.** One seed across the batch, because those graphs are
+    /// compared with each other: if each drew its own, a graph could rank first
+    /// for having been handed a milder outbreak. A new seed for the next batch,
+    /// because reusing one forever would breed a population good at that
+    /// outbreak rather than good at the disease.
     ///
-    /// ```text
-    /// generational   batch 1   seed A   all 200 of the population
-    ///                batch 2   seed B   all 200 of the next generation
-    ///
-    /// steady-state   batch 1   seed A   the 200 starting graphs
-    ///                batch 2   seed B   the 2 children of one mating event
-    ///                batch 3   seed C   the 2 children of the next event
-    /// ```
-    ///
-    /// *One seed across the batch*, because those graphs are compared with
-    /// each other. If each drew its own, a graph could rank first for having
-    /// been handed a milder outbreak.
-    ///
-    /// *A new seed for the next batch*, because reusing A forever would breed
-    /// a population good at outbreak A rather than good at the disease.
-    ///
-    /// Both properties together are what §5.2 calls common random numbers.
-    ///
-    /// Steady-state pays a known cost here, accepted in §5.2: its two children
-    /// are scored under a newer seed than the population they are compared
-    /// against, and a graph that drew an easy outbreak keeps that score until
-    /// something replaces it.
-    ///
-    /// The counter is an atomic for a duller reason than it looks: `evaluate`
-    /// only gets `&self`, so a plain `+= 1` will not compile, and `Cell` is
-    /// not `Sync`, which [`Fitness`] requires. Nothing here is actually
-    /// contended — [`EpidemicScorer::mean_batch`] calls this once on its own
-    /// thread before rayon fans out, batches are scored one after another, and
-    /// each replicate owns its own scorer (§8.1). `Relaxed` is enough because
-    /// no other data rides along with the count.
+    /// Steady-state pays a known cost here: its two children are scored under a
+    /// newer seed than the population they are compared against, so a graph
+    /// that drew an easy outbreak keeps that score until something replaces it.
     pub(crate) fn next_batch_seed(&self) -> u64 {
         let counter = self.batches_scored.fetch_add(1, Ordering::Relaxed);
         mix_seed(self.run_seed, counter)
     }
 
-    /// Score a whole batch of graphs — **one seed for every graph, one tick**.
+    /// Score a whole batch of graphs — one seed for every graph, one tick of
+    /// the counter. Every epidemic objective routes through here, which is what
+    /// gives a batch common random numbers.
     ///
-    /// This is the only way to score, and the method that delivers common
-    /// random numbers. It is why each objective overrides
-    /// [`Fitness::evaluate_batch`] rather than letting the default score
-    /// the graphs one at a time (§5.2). It does not care whether the batch is
-    /// a generation, a starting population or two steady-state children — a
-    /// single graph is a batch of one.
-    ///
-    /// `read` turns one epidemic into one number, which is what keeps each
-    /// objective to a single line. Averaging matters: a single epidemic is
-    /// noisy enough that selection would chase the dice instead of the graph.
-    /// The division is safe — [`simulate_epidemics`] rejects an empty batch.
-    ///
-    /// `+ Sync` on `read` lets rayon call it from several threads at once.
+    /// `read` turns one epidemic into one number. Averaging matters: a single
+    /// epidemic is noisy enough that selection would chase the dice instead of
+    /// the graph. The division is safe — [`simulate_epidemics`] rejects an
+    /// empty batch.
     pub fn mean_batch(&self, graphs: &[Graph], read: impl Fn(&Epidemic) -> f64 + Sync) -> Vec<f64> {
-        // Taken once, here, and handed to every graph below. Taking it inside
-        // the loop would give each graph its own dice — see next_batch_seed.
+        // Taken once, here, and handed to every graph below: inside the loop
+        // each graph would get its own dice.
         let seed = self.next_batch_seed();
 
         graphs
@@ -450,14 +205,12 @@ impl EpidemicScorer {
 
 /// Turn a run seed and a batch number into that batch's seed.
 ///
-/// SplitMix64: step a large odd constant `counter` times, then scramble. Every
-/// pair gives a different, well-spread `u64`, which is all this needs — the
+/// SplitMix64: step a large odd constant `counter` times, then scramble. The
 /// result seeds a real generator and is never used as randomness itself.
-/// (`wrapping_*` lets the arithmetic overflow and wrap instead of panicking.)
 ///
-/// **Not `run_seed ^ counter`** (§8.1): neighbouring run seeds would collide
-/// across batch numbers, so two replicates would replay each other's epidemics
-/// one batch apart. See `decisions.md` 2026-08-06.
+/// **Not `run_seed ^ counter`**: neighbouring run seeds would collide across
+/// batch numbers, so two replicates would replay each other's epidemics one
+/// batch apart.
 fn mix_seed(run_seed: u64, counter: u64) -> u64 {
     let mut z = run_seed.wrapping_add(counter.wrapping_mul(0x9E37_79B9_7F4A_7C15));
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
@@ -498,7 +251,7 @@ impl Fitness for EpiSpread {
 /// Timesteps to burn out, averaged over the epidemics. **Maximized.**
 ///
 /// `length` counts the final burnout step, so a lone patient zero reads 1, not
-/// 0 (§5.2).
+/// 0.
 pub struct EpiLength {
     scorer: EpidemicScorer,
 }
@@ -530,22 +283,17 @@ impl Fitness for EpiLength {
 
 /// RMSE between the epidemic profile and a target profile. **Minimized.**
 ///
-/// The target is newly-infected counts, one per timestep. An epidemic's
-/// profile starts with patient zero and ends with a terminating zero (§5.2),
-/// so a target captured from older output will not line up element for element.
+/// The target is newly-infected counts, one per timestep. An epidemic's profile
+/// starts with patient zero and ends with a terminating zero, so a target
+/// captured from older output will not line up element for element.
 pub struct EpiProfMatch {
     scorer: EpidemicScorer,
     target: Vec<f64>,
 }
 
 impl EpiProfMatch {
-    /// Build the objective from its sampling parameters and a target profile.
-    ///
-    /// # Errors
-    ///
-    /// If `target` is empty or holds a non-finite value — either would put a
-    /// `NaN` into every score, which [`Fitness`] forbids. (`&'static str` is a
-    /// fixed string literal, used here as a lightweight error type.)
+    /// Errors if `target` is empty or holds a non-finite value: either would put
+    /// a `NaN` into every score, which [`Fitness`] forbids.
     pub fn new(
         params: SirSampleParams,
         run_seed: u64,
@@ -565,21 +313,16 @@ impl EpiProfMatch {
 
     /// RMSE of one epidemic against the target — this objective's reading.
     ///
-    /// A method rather than an inline closure only because it is too long to
-    /// read twice; the other two objectives inline theirs.
-    ///
-    /// **The target sets the comparison, not the epidemic** — matching the
-    /// original C++ — so the scoring is asymmetric: an epidemic
-    /// that ends early is penalised for the whole remaining target, while one
-    /// that outlasts the target is not penalised at all. This rewards matching
-    /// *or exceeding* the tail. See `decisions.md` 2026-08-04 18:13.
+    /// **The target sets the comparison, not the epidemic**, so the scoring is
+    /// asymmetric: an epidemic that ends early is penalised for the whole
+    /// remaining target, while one that outlasts it is not penalised at all.
+    /// This rewards matching *or exceeding* the tail.
     fn rmse(&self, epidemic: &Epidemic) -> f64 {
         let mut total = 0.0;
 
         for (step, wanted) in self.target.iter().enumerate() {
             // Past the end of the epidemic nobody was newly infected, so a
-            // missing step counts as zero. `.get` returns None instead of
-            // panicking there, and `.unwrap_or(0)` supplies that zero.
+            // missing step counts as zero.
             let actual = epidemic.profile.get(step).copied().unwrap_or(0) as f64;
             total += (actual - wanted).powi(2);
         }
@@ -607,21 +350,16 @@ impl Fitness for EpiProfMatch {
 /// reference set, and compared by an RBF kernel. Zero is a perfect match, so
 /// this minimizes and says nothing about direction.
 ///
-/// # Why the score is not called MMD
-///
-/// MMD is a two-sample statistic. This compares **one** candidate against a
-/// fixed reference distribution, which makes the within-candidate term
-/// degenerate and leaves `1 - mean similarity`. That is rank-equivalent to MMD
-/// for a single candidate against a fixed reference, so the arithmetic is
-/// sound — but the name would claim a two-sample test that is not being run.
+/// The score is `1 - mean similarity` against a fixed reference, not MMD: with
+/// one candidate the within-candidate term of a two-sample statistic is
+/// degenerate, so the name would claim a test that is not being run.
 ///
 /// # A reference set can make a whole family inert, silently
 ///
-/// Rings and paths have clustering coefficient 0 at every node. A reference
-/// set drawn only from those leaves `clustering_weight` live while the family
-/// it weights contributes exactly nothing to any candidate's score, and
-/// nothing reports it. Give the weights a reference set that actually varies
-/// in the statistic being weighted.
+/// Rings and paths have clustering coefficient 0 at every node. A reference set
+/// drawn only from those leaves `clustering_weight` live while the family it
+/// weights contributes nothing to any candidate's score, and nothing reports
+/// it. Give the weights a reference set that varies in the statistic weighted.
 pub struct StructMatch {
     reference: Arc<ReferenceStatistics>,
     gammas: PerFamily,
@@ -630,24 +368,10 @@ pub struct StructMatch {
 }
 
 impl StructMatch {
-    /// Build the objective from a reference set's statistics and its weights.
-    ///
-    /// The statistics arrive behind an [`Arc`] because they are immutable and
-    /// expensive: replicates each need their own objective, and can share one
-    /// reduced reference set rather than rebuilding it per run.
-    ///
-    /// # Errors
-    ///
-    /// If any gamma is not finite and strictly positive, if any weight is not
-    /// finite and non-negative, if every weight is zero, or if
-    /// `density_weight` is not finite and non-negative.
-    ///
-    /// The guards live here rather than only in `config.rs` because an
-    /// embedder constructing this type directly never runs the config layer,
-    /// and every one of these inputs reaches `evaluate` as a multiplier: a
-    /// non-finite one yields a non-finite score, which [`Fitness`] forbids.
-    /// All-zero weights are rejected separately — that scores every candidate
-    /// identically, so the search runs with no gradient while looking healthy.
+    /// Errors unless every gamma is finite and positive, every weight finite and
+    /// non-negative, and at least one weight non-zero: each reaches `evaluate`
+    /// as a multiplier, and all-zero weights score every candidate identically,
+    /// so the search runs with no gradient while looking healthy.
     pub fn new(
         reference: Arc<ReferenceStatistics>,
         gammas: PerFamily,
@@ -695,54 +419,34 @@ impl Fitness for StructMatch {
     }
 }
 
-/// A user's Python callable, used as an objective (§5, §8).
+/// A user's Python callable, used as an objective.
 ///
 /// `config.toml` only *selects* Python — `[fitness] type = "python"`. The
 /// callable itself is registered at runtime through
 /// `GraphEvolver::set_fitness_function`, together with its [`Direction`],
-/// because nothing can infer whether a user's function wants its value large
-/// or small.
+/// because nothing can infer whether a user's function wants its value large or
+/// small.
 ///
-/// # The callable takes a whole batch, and that is not negotiable
+/// # The callable takes a whole batch
 ///
 /// One call receives the entire batch and returns one float per graph, in the
-/// same order — the shape of pymoo's `Problem._evaluate`, which this audience
-/// already knows:
+/// same order:
 ///
 /// ```python
 /// def fitness(batch):   # batch: list[(num_nodes, [(u, v, weight), ...])]
 ///     return [score(n, edges) for (n, edges) in batch]
 /// ```
 ///
-/// A per-graph callback would serialize every call behind the GIL, losing all
-/// rayon parallelism and paying lock contention on top of Python being slower
-/// at the same arithmetic — together, potentially hundreds of times slower
-/// wall-clock than native Rust. Batched, only the speed of the user's own code
-/// remains.
+/// **A per-graph arrangement deadlocks** rather than merely running slowly: the
+/// trait's default `evaluate_batch` fans out over rayon and each worker tries to
+/// take the GIL while the calling thread holds it and blocks on rayon to finish.
+/// Nothing fails — the run hangs, carrying no message saying why. So Python is
+/// never called from inside a rayon closure: expression fans out into a
+/// `Vec<Graph>` first, and only then does the single batched call happen here.
 ///
-/// **And "slower" understates it: the per-graph arrangement deadlocks.**
-/// Measured 2026-08-07 by deleting the `evaluate_batch` override below and
-/// running the batching test. The trait's default then fans out over rayon and
-/// each worker tries to take the GIL, while the calling thread is holding it and
-/// blocking on rayon to finish. The suite hung until it was killed — it did not
-/// fail, which is worse, because a hang carries no message saying why.
-///
-/// Two rules keep that from happening, and both are structural rather than
-/// advisory:
-///
-/// - **Python is never called from inside a rayon closure.** Expression fans
-///   out across threads into a `Vec<Graph>` first; only then does the single
-///   batched call happen, here.
-/// - **The Rust-heavy part of a run should release the GIL**, this adapter
-///   re-acquiring it per batch — the caller's job, at the entry point.
-///
-/// # Panics
-///
-/// Like every objective, this one has no `Result` path — [`Fitness`]'s methods
-/// return `f64`. So a callable that raises, returns the wrong type, returns the
-/// wrong number of scores, or returns `NaN` panics, each naming what was
-/// expected and which item was at fault. That is the same posture
-/// [`Direction::orient`] already takes on `NaN`.
+/// [`Fitness`]'s methods return `f64` with no `Result` path, so a callable that
+/// raises, returns the wrong type, returns the wrong number of scores, or
+/// returns `NaN` panics, naming what was expected and which item was at fault.
 pub(crate) struct PyFitness {
     callable: Py<PyAny>,
     direction: Direction,
@@ -759,11 +463,10 @@ impl PyFitness {
 
     /// A second handle on the same callable.
     ///
-    /// Replicate runs need one objective instance each (§8.1), and this is how
-    /// the dispatch layer produces them. The Python object is shared rather
-    /// than copied — `clone_ref` bumps its refcount — which is correct: the
-    /// user's function is stateless as far as the engine is concerned, and it
-    /// is the *scorer* state that must not be shared, of which this has none.
+    /// Replicate runs need one objective each. The Python object is shared
+    /// rather than copied — `clone_ref` bumps its refcount — which is correct
+    /// here: it is per-run *scorer* state that must not be shared, and this has
+    /// none.
     pub(crate) fn clone_ref(&self) -> Self {
         Python::attach(|py| Self {
             callable: self.callable.clone_ref(py),
@@ -774,20 +477,18 @@ impl PyFitness {
     /// The one call into Python, which both trait methods route through.
     ///
     /// Inherent rather than having [`Fitness::evaluate`] call
-    /// [`Fitness::evaluate_batch`] directly: that arrangement is a latent
-    /// stack overflow, because the trait's **default** `evaluate_batch`
-    /// calls `evaluate`, so removing the override below turns the pair into
-    /// infinite recursion instead of a compile error. Routing both through here
-    /// has no cycle to fall into (`collab.md` #33).
+    /// [`Fitness::evaluate_batch`]: that pairing is a latent stack overflow,
+    /// because the trait's default `evaluate_batch` calls `evaluate`, so
+    /// removing the override below turns the two into infinite recursion instead
+    /// of a compile error.
     fn score_batch(&self, graphs: &[Graph]) -> Vec<f64> {
-        // Nothing to score, so nothing to hand Python. Skipping the call also
-        // spares a user's function from having to handle an empty batch.
+        // An empty batch never reaches the user's function.
         if graphs.is_empty() {
             return Vec::new();
         }
 
-        // Built before the GIL is taken: this is plain Rust work, and holding
-        // the GIL across it would block every other Python thread for no reason.
+        // Built before the GIL is taken: holding it across plain Rust work
+        // blocks every other Python thread for no reason.
         let mut batch = Vec::with_capacity(graphs.len());
         for graph in graphs {
             batch.push((graph.num_nodes, graph.get_edge_list()));
@@ -816,8 +517,7 @@ impl PyFitness {
             );
 
             // Caught here rather than at `Direction::orient`, which sees a lone
-            // number and cannot say which graph produced it. A user debugging
-            // their own function needs the index.
+            // number and cannot say which graph produced it.
             for (index, &score) in scores.iter().enumerate() {
                 assert!(
                     !score.is_nan(),

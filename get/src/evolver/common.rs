@@ -270,7 +270,7 @@ pub fn breed_pair<G, R>(
 /// conversion happens.
 ///
 /// **Nothing else calls [`Fitness::evaluate`] or [`Fitness::evaluate_batch`].**
-/// A direct call keeps the objective's own units, so under
+/// A direct call stays as-measured, so under
 /// [`crate::fitness::Direction::Maximize`] every later comparison runs
 /// backwards, and it skips the `NaN` gate, where an unchecked `-NaN` sorts
 /// below `-inf` and wins every tournament it enters. Both leave a run that
