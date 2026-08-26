@@ -836,7 +836,7 @@ pub fn run_many_from_toml(
 /// - **Config objects.** Build `Config` from the typed pieces — `EvolutionConfig`,
 ///   `SelectionConfig`, `GenomeConfig`, `FitnessConfig` and the rest — then
 ///   `GraphEvolver.from_config(config)`.
-/// - **A TOML file.** `GraphEvolver.from_toml_file(path)`. `config.to_toml()`
+/// - **A TOML file.** `GraphEvolver(path)`, the constructor. `config.to_toml()`
 ///   returns the document that was actually parsed, so a run reproduces verbatim.
 ///
 /// `run()` returns a `RunResult`: the best graph found, its fitness **as the
