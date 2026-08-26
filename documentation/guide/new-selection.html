@@ -106,10 +106,10 @@ pressure = 1.8</code></pre>
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/evolver/common.rs:169</code></td>
+    <tr><td>1</td><td><code>get/src/evolver/common.rs:73</code></td>
         <td>A variant on <code>enum Selection</code>, carrying any parameters the scheme reads out
             of the config.</td></tr>
-    <tr><td>2</td><td><code>get/src/evolver/common.rs:273</code></td>
+    <tr><td>2</td><td><code>get/src/evolver/common.rs:157</code></td>
         <td>The arm in <code>Selection::pick</code> that actually chooses parents.</td></tr>
     <tr><td>3</td><td><code>get/src/config.rs:186</code></td>
         <td>The mirrored variant on <code>enum SelectionConfig</code> — this is the one whose name
@@ -133,10 +133,10 @@ pressure = 1.8</code></pre>
   it:
 </p>
 
-<pre><code class="language-rust">// step 1 — evolver/common.rs:169
+<pre><code class="language-rust">// step 1 — evolver/common.rs:73
 Roulette { pressure: f64 },
 
-// step 2 — evolver/common.rs:273
+// step 2 — evolver/common.rs:157
 Selection::Roulette { pressure } =&gt; {
     let mut parents = Vec::with_capacity(count);
     for _ in 0..count {

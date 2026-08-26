@@ -75,10 +75,10 @@ some_param = 0.5</code></pre>
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/evolver/common.rs:76</code></td>
+    <tr><td>1</td><td><code>get/src/evolver/common.rs:27</code></td>
         <td>A variant on <code>enum Crossover</code>, plus any parameters it reads from the
             config.</td></tr>
-    <tr><td>2</td><td><code>get/src/evolver/common.rs:102</code></td>
+    <tr><td>2</td><td><code>get/src/evolver/common.rs:52</code></td>
         <td>The arm in <code>Crossover::recombine</code> that performs it.</td></tr>
     <tr><td>3a</td><td><code>get/src/config.rs:213</code></td>
         <td>The mirrored variant on <code>enum CrossoverConfig</code> — the one whose name becomes
@@ -99,10 +99,10 @@ some_param = 0.5</code></pre>
 
 <h2>Steps 1 and 2 — The Engine Side</h2>
 
-<pre><code class="language-rust">// step 1 — evolver/common.rs:76
+<pre><code class="language-rust">// step 1 — evolver/common.rs:27
 MyCrossover { some_param: f64 },
 
-// step 2 — evolver/common.rs:102
+// step 2 — evolver/common.rs:52
 Crossover::MyCrossover { some_param } =&gt; { /* recombine `first` and `second` */ }</code></pre>
 
 <div class="callout">
