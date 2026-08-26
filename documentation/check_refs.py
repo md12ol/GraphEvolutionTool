@@ -136,7 +136,9 @@ def markers(path, chain, step=None, branch=None):
 
 def structure():
     """data-page, NAV membership, internal links and anchors, across every page."""
-    pages = [os.path.relpath(os.path.join(d, f), "documentation")
+    # Posix separators: these are compared against `data-page` and NAV, which
+    # use forward slashes on every platform.
+    pages = [os.path.relpath(os.path.join(d, f), "documentation").replace(os.sep, "/")
              for d, _, fs in os.walk("documentation") for f in fs if f.endswith(".html")]
     nav = set(re.findall(r'\["([^"]+\.html)",',
                          open("documentation/assets/site.js", encoding="utf-8").read()))
@@ -177,7 +179,7 @@ def structure():
             if href.startswith(("http", "data:", "mailto:")):
                 continue
             target, _, fragment = href.partition("#")
-            full = (os.path.normpath(os.path.join(os.path.dirname(page), target))
+            full = (os.path.normpath(os.path.join(os.path.dirname(page), target)).replace(os.sep, "/")
                     if target else page)
             if target and not os.path.exists(os.path.join("documentation", full)):
                 print(f"  broken link: {page} -> {href}")
