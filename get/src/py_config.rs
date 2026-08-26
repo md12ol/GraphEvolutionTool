@@ -620,8 +620,12 @@ impl PyEvolutionConfig {
                 if let Some(replacement) = replacement {
                     table.insert("replacement".to_string(), replacement.to_toml_value()?);
                 }
-            } // ADD A STRATEGY STEP 6 — the matching arm for your variant, writing
-              // `type` and one entry per field, as above.
+            } // ADD A STRATEGY STEP 6 — the matching arm for your variant:
+              //
+              //     PyEvolutionConfig::MyStrategy { num_my_events } => {
+              //         table.insert("type".to_string(), Value::String("my_strategy".to_string()));
+              //         table.insert("num_my_events".to_string(), integer("num_my_events", *num_my_events)?);
+              //     }
         }
         Ok(Value::Table(table))
     }
@@ -636,7 +640,12 @@ impl PyReplacementConfig {
             }
             PyReplacementConfig::Random {} => {
                 table.insert("type".to_string(), Value::String("random".to_string()));
-            } // ADD A REPLACEMENT STEP 3 (for SteadyState) — the matching arm for your variant.
+            } // ADD A REPLACEMENT STEP 3 (for SteadyState) — the matching arm:
+              //
+              //     PyReplacementConfig::Tournament { size } => {
+              //         table.insert("type".to_string(), Value::String("tournament".to_string()));
+              //         table.insert("size".to_string(), integer("size", *size)?);
+              //     }
         }
         Ok(Value::Table(table))
     }
@@ -655,8 +664,12 @@ impl PyScopeConfig {
                     Value::String("random_subset".to_string()),
                 );
                 table.insert("size".to_string(), integer("size", *size)?);
-            } // ADD A SCOPE STEP 5 — the matching arm for your variant, writing
-              // its own parameters and no other block's.
+            } // ADD A SCOPE STEP 5 — the matching arm for your variant:
+              //
+              //     PyScopeConfig::Neighbourhood { radius } => {
+              //         table.insert("type".to_string(), Value::String("neighbourhood".to_string()));
+              //         table.insert("radius".to_string(), integer("radius", *radius)?);
+              //     }
         }
         Ok(Value::Table(table))
     }
@@ -675,7 +688,12 @@ impl PySelectionConfig {
                     "tournament_size".to_string(),
                     integer("tournament_size", *tournament_size)?,
                 );
-            } // ADD A SELECTION STEP 5 — the matching arm for your variant.
+            } // ADD A SELECTION STEP 5 — the matching arm for your variant:
+              //
+              //     PySelectionConfig::Roulette { pressure } => {
+              //         table.insert("type".to_string(), Value::String("roulette".to_string()));
+              //         table.insert("pressure".to_string(), integer("pressure", *pressure)?);
+              //     }
         }
         Ok(Value::Table(table))
     }
@@ -687,7 +705,12 @@ impl PyCrossoverConfig {
         match self {
             PyCrossoverConfig::TwoPoint {} => {
                 table.insert("type".to_string(), Value::String("two_point".to_string()));
-            } // ADD A CROSSOVER STEP 5 — the matching arm for your variant.
+            } // ADD A CROSSOVER STEP 5 — the matching arm for your variant:
+              //
+              //     PyCrossoverConfig::Uniform { swap_rate } => {
+              //         table.insert("type".to_string(), Value::String("uniform".to_string()));
+              //         table.insert("swap_rate".to_string(), integer("swap_rate", *swap_rate)?);
+              //     }
         }
         Ok(Value::Table(table))
     }
@@ -720,7 +743,11 @@ impl PyEdgeEditMutationConfig {
         match self {
             PyEdgeEditMutationConfig::RerollGene {} => {
                 table.insert("type".to_string(), Value::String("reroll_gene".to_string()));
-            } // ADD A MUTATION STEP 4 (for EdgeEdit) — the matching arm for your variant.
+            } // ADD A MUTATION STEP 4 (for EdgeEdit) — the matching arm:
+              //
+              //     PyEdgeEditMutationConfig::MyMutation {} => {
+              //         table.insert("type".to_string(), Value::String("my_mutation".to_string()));
+              //     }
         }
         Value::Table(table)
     }
@@ -753,7 +780,11 @@ impl PySdaMutationConfig {
         match self {
             PySdaMutationConfig::RedrawOne {} => {
                 table.insert("type".to_string(), Value::String("redraw_one".to_string()));
-            } // ADD A MUTATION STEP 4 (for SDA) — the matching arm for your variant.
+            } // ADD A MUTATION STEP 4 (for SDA) — the matching arm:
+              //
+              //     PySdaMutationConfig::MyMutation {} => {
+              //         table.insert("type".to_string(), Value::String("my_mutation".to_string()));
+              //     }
         }
         Value::Table(table)
     }

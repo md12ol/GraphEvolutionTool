@@ -49,7 +49,9 @@ impl Crossover {
             // `Genome` grows a second method and every representation
             // implements it.
             Crossover::TwoPoint => first.crossover(second, rng),
-            // ADD A CROSSOVER STEP 2 — the arm performing your variant.
+            // ADD A CROSSOVER STEP 2 — the arm performing your variant:
+            //
+            //     Crossover::MyCrossover { some_param } => first.my_crossover(second, *some_param, rng),
         }
     }
 }
