@@ -79,9 +79,9 @@ impl Fitness for NodeCount {
     }
 }
 
-/// The same score under `Maximize`, so a test can tell an engine-oriented
+/// The same score under `Maximize`, so a test can tell a lower-is-better
 /// outcome from a converted one — under `NodeCount` the two are identical,
-/// because orienting a minimizing objective is the identity.
+/// because converting a minimizing objective changes nothing.
 pub(crate) struct MostNodes;
 
 impl Fitness for MostNodes {

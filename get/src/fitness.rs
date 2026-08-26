@@ -64,20 +64,6 @@ impl Direction {
 /// **Implement these, never call them.** Only `common::express_and_score` does,
 /// and it is what converts and what rejects `NaN`; a direct call compiles,
 /// skips both, and returns plausible numbers.
-// ADD AN OBJECTIVE STEP 1 — implement this trait for your own type, in this
-// file beside the shipped objectives. Validate the objective's own inputs in
-// its constructor and make it fallible if any are worth checking: the config
-// layer's validation does not run when GET is used as a library.
-//
-//     impl Fitness for MyObjective {
-//         fn evaluate(&self, graph: &Graph) -> f64 { ... }
-//         fn direction(&self) -> Direction { Direction::Maximize }
-//
-//         // Only if scoring draws randomness — every stochastic objective
-//         // here overrides it, because the default scores each graph on its
-//         // own and the scores stop being comparable.
-//         fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> { ... }
-//     }
 pub trait Fitness: Send + Sync {
     /// Score one graph, **as-measured** — never converted. Must not return
     /// `NaN`.
@@ -131,9 +117,8 @@ impl Fitness for Box<dyn Fitness> {
 
 /// Runs the epidemics that every SIR objective scores.
 ///
-/// The epidemic is the expensive part and all three objectives want the same
-/// one, so this runs the batch and each objective supplies only a reading —
-/// see [`EpiSpread`] for the smallest example.
+/// The epidemic is the expensive part and every SIR objective wants the same
+/// one, so this runs the batch and each objective supplies only a reading.
 ///
 /// **One scorer per run.** The batch counter is per-run state; two replicates
 /// sharing a scorer would let thread scheduling decide which run saw which
@@ -166,10 +151,7 @@ impl EpidemicScorer {
     /// for having been handed a milder outbreak. A new seed for the next batch,
     /// because reusing one forever would breed a population good at that
     /// outbreak rather than good at the disease.
-    ///
-    /// Steady-state pays a known cost here: its two children are scored under a
-    /// newer seed than the population they are compared against, so a graph
-    /// that drew an easy outbreak keeps that score until something replaces it.
+
     pub(crate) fn next_batch_seed(&self) -> u64 {
         let counter = self.batches_scored.fetch_add(1, Ordering::Relaxed);
         mix_seed(self.run_seed, counter)
@@ -184,8 +166,6 @@ impl EpidemicScorer {
     /// the graph. The division is safe — [`simulate_epidemics`] rejects an
     /// empty batch.
     pub fn mean_batch(&self, graphs: &[Graph], read: impl Fn(&Epidemic) -> f64 + Sync) -> Vec<f64> {
-        // Taken once, here, and handed to every graph below: inside the loop
-        // each graph would get its own dice.
         let seed = self.next_batch_seed();
 
         graphs
@@ -204,9 +184,6 @@ impl EpidemicScorer {
 }
 
 /// Turn a run seed and a batch number into that batch's seed.
-///
-/// SplitMix64: step a large odd constant `counter` times, then scramble. The
-/// result seeds a real generator and is never used as randomness itself.
 ///
 /// **Not `run_seed ^ counter`**: neighbouring run seeds would collide across
 /// batch numbers, so two replicates would replay each other's epidemics one
@@ -350,13 +327,8 @@ impl Fitness for EpiProfMatch {
 /// reference set, and compared by an RBF kernel. Zero is a perfect match, so
 /// this minimizes and says nothing about direction.
 ///
-/// The score is `1 - mean similarity` against a fixed reference, not MMD: with
-/// one candidate the within-candidate term of a two-sample statistic is
-/// degenerate, so the name would claim a test that is not being run.
-///
-/// # A reference set can make a whole family inert, silently
-///
-/// Rings and paths have clustering coefficient 0 at every node. A reference set
+/// **A reference set can make a whole family inert, silently.** Rings and paths
+/// have clustering coefficient 0 at every node. A reference set
 /// drawn only from those leaves `clustering_weight` live while the family it
 /// weights contributes nothing to any candidate's score, and nothing reports
 /// it. Give the weights a reference set that varies in the statistic weighted.
@@ -419,30 +391,28 @@ impl Fitness for StructMatch {
     }
 }
 
-/// A user's Python callable, used as an objective.
+// ADD AN OBJECTIVE STEP 1 — implement the trait for your own type, here beside
+// the shipped objectives. Validate the objective's own inputs in its
+// constructor and make it fallible if any are worth checking: the config
+// layer's validation does not run when GET is used as a library.
+//
+//     impl Fitness for MyObjective {
+//         fn evaluate(&self, graph: &Graph) -> f64 { ... }
+//         fn direction(&self) -> Direction { Direction::Maximize }
+//
+//         fn evaluate_batch(&self, graphs: &[Graph]) -> Vec<f64> { ... }  // if stochastic
+//     }
+
+/// A user's Python callable, used as an objective. Registered at runtime
+/// through `GraphEvolver::set_fitness_function`, with its [`Direction`] — that
+/// cannot be inferred from a function.
 ///
-/// `config.toml` only *selects* Python — `[fitness] type = "python"`. The
-/// callable itself is registered at runtime through
-/// `GraphEvolver::set_fitness_function`, together with its [`Direction`],
-/// because nothing can infer whether a user's function wants its value large or
-/// small.
-///
-/// # The callable takes a whole batch
-///
-/// One call receives the entire batch and returns one float per graph, in the
-/// same order:
-///
-/// ```python
-/// def fitness(batch):   # batch: list[(num_nodes, [(u, v, weight), ...])]
-///     return [score(n, edges) for (n, edges) in batch]
-/// ```
-///
-/// **A per-graph arrangement deadlocks** rather than merely running slowly: the
-/// trait's default `evaluate_batch` fans out over rayon and each worker tries to
-/// take the GIL while the calling thread holds it and blocks on rayon to finish.
-/// Nothing fails — the run hangs, carrying no message saying why. So Python is
-/// never called from inside a rayon closure: expression fans out into a
-/// `Vec<Graph>` first, and only then does the single batched call happen here.
+/// **Calling it per graph deadlocks** rather than merely running slowly: the
+/// trait's default `evaluate_batch` fans out over rayon, and each worker takes
+/// the GIL while the calling thread holds it and blocks on rayon to finish.
+/// Nothing fails — the run hangs with no message. So Python is never called
+/// inside a rayon closure: expression fans out into a `Vec<Graph>` first, and
+/// the single batched call happens here.
 ///
 /// [`Fitness`]'s methods return `f64` with no `Result` path, so a callable that
 /// raises, returns the wrong type, returns the wrong number of scores, or

@@ -1,7 +1,6 @@
 //! The genetic-algorithm engine that drives genomes toward a fitness target.
 //!
-//! [`Evolver`] is the shared interface; [`generational`] and [`steady_state`]
-//! are the two strategies.
+//! [`Evolver`] is the shared interface every strategy implements.
 
 pub mod common;
 pub mod generational;
@@ -15,8 +14,8 @@ pub(crate) mod test_support;
 pub use generational::GenerationalEvolver;
 pub use steady_state::SteadyStateEvolver;
 
-// ADD A STRATEGY STEP 1 — a new module beside these two, `evolver/<name>.rs`,
-// plus a `pub mod` line and a re-export above:
+// ADD A STRATEGY STEP 1 — a new module, `evolver/<name>.rs`, plus a `pub mod`
+// line and a re-export above:
 //
 //     pub mod my_strategy;
 //

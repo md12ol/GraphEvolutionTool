@@ -75,7 +75,7 @@ some_parameter = 0.5</code></pre>
   </p>
 </div>
 
-<h2>Route 1 — Python: A Registered Callable</h2>
+<h2 id="python-route">Route 1 — Python: A Registered Callable</h2>
 
 <p>
   Set <code>[fitness] type = "python"</code> in the config and register your function. No Rust, no
@@ -176,6 +176,12 @@ evolver.set_fitness_function(clustering_penalty, "minimize")</code></pre>
       returning scores in the wrong <i>order</i> is neither, and will quietly evolve nonsense.</li>
 </ul>
 
+<div class="warn not-in-release">
+  <b>Not part of the v0.9 release.</b> Both Rust routes below need GET as a crate, and GET does not
+  yet publish to crates.io — <a href="#python-route">Route 1</a>, a registered Python callable, is
+  the supported way to add an objective for now. This note is removed once the crate is obtainable.
+</div>
+
 <h2 id="rust-route">Route 2 — Rust: As a Library</h2>
 
 <p>
@@ -242,7 +248,7 @@ impl Fitness for EdgeBudget {
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/fitness.rs:71</code></td>
+    <tr><td>1</td><td><code>get/src/fitness.rs:394</code></td>
         <td>implement the trait, and validate the objective's inputs in its constructor</td></tr>
     <tr><td>2</td><td><code>get/src/config.rs:465</code>, <code>:491</code> and <code>:1083</code></td>
         <td>the config variant, its type name, and its validation arm</td></tr>
@@ -274,7 +280,7 @@ impl Fitness for EdgeBudget {
   with the type and its implementation, in <code>get/src/fitness.rs</code>:
 </p>
 
-<pre><code class="language-rust" data-example>// step 1 — fitness.rs:71
+<pre><code class="language-rust" data-example>// step 1 — fitness.rs:394
 pub struct MyObjective {
     threshold: f64,
 }

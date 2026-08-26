@@ -96,7 +96,7 @@ num_my_events = 500</code></pre>
 <table>
   <thead><tr><th>Step</th><th>Where</th><th>What</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td><code>get/src/evolver/mod.rs:23</code></td>
+    <tr><td>1</td><td><code>get/src/evolver/mod.rs:17</code></td>
         <td>A new module beside the two that exist, its <code>pub mod</code> and re-export lines,
             and the <code>Evolver</code> implementation inside it.</td></tr>
     <tr><td>2</td><td><code>get/src/config.rs:104</code></td>
@@ -123,7 +123,7 @@ num_my_events = 500</code></pre>
 
 <h2>Step 1 — The Module</h2>
 
-<pre><code class="language-rust">// step 1 — evolver/mod.rs:23
+<pre><code class="language-rust">// step 1 — evolver/mod.rs:17
 pub mod my_strategy;
 
 pub use my_strategy::MyStrategyEvolver;</code></pre>
