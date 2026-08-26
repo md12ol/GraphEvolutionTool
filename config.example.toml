@@ -85,10 +85,11 @@ num_epidemics  = 30
 # max_epidemic_retries = 5    # up to this many times. Set length 1 to disable.
 
 # ADD AN OBJECTIVE STEP 5 — an example block for your objective, commented out
-# beneath this one, if it ships. This file is what a user copies from, so an
-# objective missing from it is one most people never find. The last step is the
-# dispatch test -- search `ADD AN OBJECTIVE STEP 6` for the block helper it
-# may want first, and `ADD AN OBJECTIVE STEP 7` for the case itself.
+# beneath this one. This file is what a user copies from, so an objective
+# missing from it is one most people never find.
+#     [fitness]
+#     type       = "my_objective"
+#     some_param = 1.0
 
 # No seed appears anywhere in this file. One master seed goes to `run()`, and
 # the population, evolution, epidemics and replicates all derive from it.
@@ -153,7 +154,10 @@ num_epidemics  = 30
 # code, findable with `git grep -n "ADD A <THING> STEP"`.
 
 # ADD A STRATEGY STEP 7 — a commented-out `[evolution]` block for your strategy,
-# the way setup B is one for steady-state.
+# carrying whatever stopping condition it reads:
+#     [evolution]
+#     type           = "my_strategy"
+#     num_my_events  = 500
 #
 # ADD A SCOPE STEP 6 — a commented-out `[scope]` block naming your variant, with
 # parameters of its own:
@@ -162,24 +166,38 @@ num_epidemics  = 30
 #     radius = 2
 #
 # ADD A SELECTION STEP 6 — a commented-out `[selection]` block naming your
-# scheme. Only the scheme's own parameters; the scope sizes itself.
+# scheme. Only the scheme's own parameters; the scope sizes itself:
+#     [selection]
+#     type     = "roulette"
+#     pressure = 1.5
 #
 # ADD A CROSSOVER STEP 6 — a commented-out `[crossover]` block. This section
 # applies to whichever genome is selected, so an operator only some
-# representations can perform must be rejected in `Config::validate_crossover`.
+# representations can perform must be rejected in `Config::validate_crossover`:
+#     [crossover]
+#     type       = "my_crossover"
+#     some_param = 0.5
 #
 # ADD A GENOME STEP 7 — a commented-out `[genome]` block for your
-# representation, alongside edge-edit's and SDA's.
+# representation, beside the ones already here:
+#     [genome]
+#     type           = "my_genome"
+#     some_dimension = 256
 #
-# ADD A MUTATION STEP 4 (for EdgeEdit) — a `mutation = { type = "..." }` line
-# under edge-edit's `[genome]`, alongside `reroll_gene`, which is the only one
-# it ships and the default.
+# ADD A MUTATION STEP 4 (for EdgeEdit) — a `mutation` line under edge-edit's
+# `[genome]`, which is what selects the operator:
+#     [genome]
+#     type        = "edge_edit"
+#     gene_length = 256
+#     mutation    = { type = "my_mutation" }
 #
-# ADD A MUTATION STEP 4 (for SDA) — the same line under SDA's `[genome]`,
-# alongside `redraw_one`.
-#
-# An objective is the same shape of addition: the module doc at the top of
-# `get/src/fitness.rs` walks all seven of its steps.
+# ADD A MUTATION STEP 4 (for SDA) — a `mutation` line under SDA's `[genome]`,
+# which is what selects the operator:
+#     [genome]
+#     type         = "sda"
+#     num_states   = 12
+#     max_resp_len = 4
+#     mutation     = { type = "my_mutation" }
 
 
 # =============================================================================
