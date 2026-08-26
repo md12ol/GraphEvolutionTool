@@ -109,8 +109,8 @@ impl Graph {
         self.neighbors(node).len()
     }
 
-    /// Return the distinct neighbor at `index`, wrapping modulo the number of
-    /// distinct neighbors.
+    /// Return the distinct neighbour at `index`, wrapping modulo the number of
+    /// distinct neighbours.
     pub(crate) fn get_neighbor_at_index(&self, node: usize, index: usize) -> Option<usize> {
         let neighbors = self.neighbors(node);
         if neighbors.is_empty() {
