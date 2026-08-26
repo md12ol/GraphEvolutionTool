@@ -1,3 +1,6 @@
+//! The edge-edit representation: the genome, the operation mix it draws from,
+//! and the identity gene.
+
 use std::sync::Arc;
 #[cfg(test)]
 use std::sync::OnceLock;
@@ -17,20 +20,16 @@ use operations::GraphOperation;
 const OPERATION_COUNT: usize = 9;
 const OPCODE_MASK: u64 = 0xF;
 
-/// A whole gene that edits nothing: opcode 8 is `Null`, and the payload above
-/// it is unread, so a genome of these expresses to its base graph unchanged.
+/// A gene that edits nothing: opcode 8 is `Null` and its payload is unread.
+/// A starting population is built from these, so a run begins at the base graph
+/// rather than at a random one.
 pub const IDENTITY_GENE: u64 = 8;
 
-/// Relative probabilities for generating each edge-edit operation.
+/// Relative probabilities for generating each edge-edit operation, set under
+/// `[genome.operation_weights]` in `config.toml`.
 ///
-/// The default gives all nine operations equal probability. Set via
-/// `[genome.operation_weights]` in `config.toml`; any field omitted there falls
-/// back to that default, and a weight of `0.0` disables its operation outright.
-/// An unrecognized key in `[genome.operation_weights]` is rejected at load
-/// time rather than silently ignored.
-///
-/// Validated and compiled into a sampler by [`EdgeEditOperators`], which the
-/// population then shares.
+/// They need not sum to anything. An omitted field defaults to `1.0`; a weight
+/// of `0.0` disables its operation outright.
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct EdgeEditOperationWeights {
@@ -93,13 +92,6 @@ impl Default for EdgeEditOperationWeights {
 }
 
 /// A validated operation mix together with its prebuilt sampler.
-///
-/// Built once per run and shared across the whole population behind an `Arc`:
-/// the [`WeightedIndex`] is constructed once rather than on every mutation, and
-/// each individual carries a pointer instead of its own copy of the weights.
-///
-/// `weights` is retained alongside the sampler purely so the type stays
-/// readable in `Debug` output and comparable in tests; nothing samples from it.
 #[derive(Debug, PartialEq)]
 pub struct EdgeEditOperators {
     weights: EdgeEditOperationWeights,
@@ -107,8 +99,8 @@ pub struct EdgeEditOperators {
 }
 
 impl EdgeEditOperators {
-    /// Validate `weights` and compile them into a sampler, so weight errors
-    /// surface here — at startup, from config — rather than mid-run.
+    /// Validate `weights` and compile them into a sampler for the whole
+    /// population to share, so weight errors surface here rather than mid-run.
     pub fn new(weights: EdgeEditOperationWeights) -> Result<Arc<Self>, &'static str> {
         weights.validate()?;
         let distribution =
@@ -119,20 +111,10 @@ impl EdgeEditOperators {
         }))
     }
 
-    /// The mix that draws every operation with equal probability.
-    ///
-    /// Test-only: a run's mix always comes from `[genome.operation_weights]`
-    /// via [`EdgeEditOperators::new`]. Tests that do not care which operations
-    /// come out use this instead of spelling nine equal weights each time.
-    ///
-    /// Cached, so every caller shares one instance rather than each building
-    /// its own — which would reintroduce exactly the per-genome copy this type
-    /// exists to eliminate.
+    /// The mix that draws every operation with equal probability. A run's mix
+    /// always comes from `[genome.operation_weights]`, never from here.
     #[cfg(test)]
     fn uniform() -> Arc<Self> {
-        // A function-local `static` initialized once, on first call, and
-        // shared by every caller thereafter — Rust's version of a lazily-built
-        // singleton.
         static UNIFORM: OnceLock<Arc<EdgeEditOperators>> = OnceLock::new();
         Arc::clone(UNIFORM.get_or_init(|| {
             Self::new(EdgeEditOperationWeights::default()).expect("equal weights are valid")
@@ -140,11 +122,11 @@ impl EdgeEditOperators {
     }
 }
 
-/// Edit-script genome: a list of encoded graph-edit operations.
+/// A fixed-length script of graph edits, applied in order to a base graph.
 ///
-/// Each gene stores its opcode in the low four bits and a random 32-bit payload
-/// above it. During expression, that payload is decoded into four mixed-radix
-/// vertex parameters.
+/// A gene is an opcode in its low four bits and a 32-bit payload above them;
+/// the payload decodes into four vertex indices in base `num_nodes` when the
+/// genome is expressed.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EdgeEditGenome {
     pub genes: Vec<u64>,
@@ -152,28 +134,16 @@ pub struct EdgeEditGenome {
 }
 
 impl EdgeEditGenome {
-    /// Construct a genome from encoded genes and a shared operation mix.
+    /// Construct a genome from chosen genes and a shared operation mix.
     ///
-    /// Almost every individual is minted at random by
-    /// [`EdgeEditGenome::random_with_operators`] instead, so this is the path for
-    /// the callers that need a *chosen* gene sequence. There are two, and they
-    /// are why this is public rather than test-only.
-    ///
-    /// `dispatch` builds the identity individual a seeded run starts with —
-    /// [`IDENTITY_GENE`] repeated — which is a chosen sequence by definition. And
-    /// a caller driving an evolver directly needs a known starting population,
-    /// whether that is the genes read off a previous run's best individual, a
-    /// recorded edit script, or a deterministic fixture; without this, `genes`
-    /// would be readable with no supported way to feed them back.
+    /// Nothing here rejects a gene: one whose low four bits name no operation
+    /// is skipped when the genome is expressed, so a mistyped opcode is a
+    /// silently inert gene rather than an error.
     pub fn new_with_operators(genes: Vec<u64>, operators: Arc<EdgeEditOperators>) -> Self {
         Self { genes, operators }
     }
 
     /// Generate a random genome drawing opcodes from a shared operation mix.
-    ///
-    /// Infallible: the mix was validated when [`EdgeEditOperators::new`] built
-    /// it, so a whole population can be minted without per-individual error
-    /// handling.
     pub fn random_with_operators<R: Rng + ?Sized>(
         length: usize,
         operators: Arc<EdgeEditOperators>,
@@ -191,15 +161,12 @@ impl EdgeEditGenome {
         (payload << 4) | opcode
     }
 
+    /// `num_nodes` must be nonzero: this divides by it.
     fn decode_vertices(gene: u64, num_nodes: usize) -> [usize; 4] {
         let mut vertices = [0; 4];
         let mut payload = gene >> 4;
         let radix = num_nodes as u64;
 
-        // Extract four vertex indices from `payload` by treating it as a
-        // number in base `num_nodes`: each iteration peels off one "digit"
-        // (payload % radix) then shifts the remaining digits down
-        // (payload /= radix).
         for vertex in &mut vertices {
             *vertex = (payload % radix) as usize;
             payload /= radix;
@@ -219,9 +186,7 @@ impl Genome for EdgeEditGenome {
         }
 
         for &gene in &self.genes {
-            // Unrecognized opcode (only opcodes 0-8 are defined; the 4-bit
-            // field can hold up to 15): skip this gene and move to the next
-            // one.
+            // Opcodes 9-15 fit the four-bit field but name no operation.
             let Some(operation) = GraphOperation::from_opcode((gene & OPCODE_MASK) as u8) else {
                 continue;
             };
@@ -232,23 +197,11 @@ impl Genome for EdgeEditGenome {
         graph
     }
 
-    /// Two-point crossover over genes: draw two distinct cut points in
-    /// `0..=shared_length` and swap the half-open segment `[start, end)`,
-    /// leaving genes outside that window untouched on both sides.
+    /// Two-point crossover: swap the half-open gene segment `[start, end)`,
+    /// leaving the genes outside it untouched on both sides.
     ///
-    /// Declines to cross at all below two shared genes. With one there is
-    /// only a single possible pair of cut points, so the segment is forced to
-    /// gene 0 and nothing is actually being chosen; a gene carries nothing
-    /// but its own value, which makes that a one-gene exchange rather than a
-    /// crossover. `SdaGenome::crossover` does cross at that length, because
-    /// its state 0 takes `init_char` with it and so has something further to
-    /// exchange.
-    ///
-    /// The obligations every crossover carries — both children kept, both
-    /// parents left valid for the representation, every draw from `rng` — are
-    /// stated once on [`Genome::crossover`]. A gene is a self-contained
-    /// integer here, so leaving both sides valid costs nothing: swapping any
-    /// two decodable genes yields two decodable genomes.
+    /// Declines to cross below two shared genes: with one there is a single
+    /// possible pair of cut points, so nothing is being chosen.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) {
         let shared_length = self.genes.len().min(other.genes.len());
         if shared_length < 2 {
@@ -263,21 +216,14 @@ impl Genome for EdgeEditGenome {
 
     /// Reroll one gene, its opcode drawn from the operation mix.
     ///
-    /// Exactly one, per the [`Genome::mutate`] contract, which has the rest of
-    /// what a mutation owes: the engine's two dice rolls, why magnitudes are
-    /// not equalized across representations, and that every draw comes from
-    /// `rng`. This previously rolled `1..=4` against a hardcoded
-    /// `MAX_MUTATIONS`, which made the engine's `max_mutations` mean nothing
-    /// here; the count is the engine's to decide.
-    ///
-    /// *One mutation* is one gene, whatever that gene decodes to — replacing a
-    /// `null` with a nine-vertex `swap` counts the same as replacing one
-    /// `toggle` with another.
+    /// *One mutation* is one whole gene, whatever it decodes to — replacing a
+    /// `null` with a `swap` counts the same as replacing one `toggle` with
+    /// another.
     fn mutate<R: Rng + ?Sized>(&mut self, context: &Self::Context, rng: &mut R) {
         match context.mutation {
             EdgeEditMutation::RerollGene => {
-                // Nothing to reroll, so nothing happens -- the empty-genome
-                // no-op the trait contract requires, rather than a panic.
+                // An empty genome is left unchanged; the draw below would
+                // panic on an empty range.
                 if self.genes.is_empty() {
                     return;
                 }
@@ -285,9 +231,7 @@ impl Genome for EdgeEditGenome {
                 let gene_index = rng.random_range(0..self.genes.len());
                 self.genes[gene_index] = Self::generate_gene(rng, &self.operators.distribution);
             } // ADD A MUTATION STEP 2 (for EdgeEdit) — the arm performing your variant. Keep
-              // the exactly-one-mutation contract this method's own doc
-              // states. The step after this one is `config::EdgeEditMutationConfig`
-              // — search `ADD A MUTATION STEP 3 (for EdgeEdit)` for it.
+              // the exactly-one-mutation contract this method's own doc states.
         }
     }
 
