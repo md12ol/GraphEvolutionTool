@@ -90,7 +90,7 @@ mutation    = { type = "my_mutation", some_param = 0.5 }</code></pre>
   <tbody>
     <tr><td>1</td><td><code>get/src/genomes/genome.rs:108</code></td>
         <td>A variant on <code>enum EdgeEditMutation</code>, plus any parameters it reads.</td></tr>
-    <tr><td>2</td><td><code>get/src/genomes/edge_edit.rs:233</code></td>
+    <tr><td>2</td><td><code>get/src/genomes/edge_edit.rs:235</code></td>
         <td>The arm in <code>EdgeEditGenome::mutate</code> that performs it.</td></tr>
     <tr><td>3</td><td><code>get/src/config.rs:188</code> and
         <code>get/src/dispatch.rs:653</code></td>
@@ -107,7 +107,7 @@ mutation    = { type = "my_mutation", some_param = 0.5 }</code></pre>
 <pre><code class="language-rust">// step 1 — genomes/genome.rs:108
 MyMutation { some_param: f64 },
 
-// step 2 — genomes/edge_edit.rs:233
+// step 2 — genomes/edge_edit.rs:235
 EdgeEditMutation::MyMutation { some_param } =&gt; {
     // exactly one change to `self.genes`
 }
