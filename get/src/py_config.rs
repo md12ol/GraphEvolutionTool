@@ -10,8 +10,6 @@
 //! enums would break the TOML front end, because pyo3 rejects a unit variant in
 //! a complex enum and serde rejects the tuple variant it would become. It is
 //! also why several variants here carry an empty struct body.
-//!
-//! Runnable worked examples live in `examples/config_builder.py`.
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;

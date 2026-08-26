@@ -254,7 +254,7 @@ impl Fitness for EdgeBudget {
         <td>the config variant, its type name, and its validation arm</td></tr>
     <tr><td>3</td><td><code>get/src/dispatch.rs:219</code></td>
         <td>the arm turning the variant into a boxed objective</td></tr>
-    <tr><td>4</td><td><code>get/src/py_config.rs:501</code> and <code>:501</code></td>
+    <tr><td>4</td><td><code>get/src/py_config.rs:499</code> and <code>:499</code></td>
         <td>the Python variant and its attribute paths — optional</td></tr>
     <tr><td>5</td><td><code>config.example.toml:87</code></td>
         <td>an example block, if the objective ships</td></tr>
@@ -386,11 +386,11 @@ FitnessConfig::MyObjective { threshold } =&gt; {
 
 <h2>Steps 4 and 5 — Python and the Example, Both Optional</h2>
 
-<pre><code class="language-rust">// step 4 — py_config.rs:501   the Python-side variant
+<pre><code class="language-rust">// step 4 — py_config.rs:499   the Python-side variant
 #[pyo3(constructor = (threshold))]
 MyObjective { threshold: f64 },
 
-// step 4 — py_config.rs:501   an attribute path per validated field
+// step 4 — py_config.rs:499   an attribute path per validated field
 "threshold" =&gt; Some("config.fitness.threshold"),</code></pre>
 
 <p>

@@ -129,7 +129,7 @@ some_dimension = 256</code></pre>
     <tr><td>6</td><td><code>get/src/dispatch.rs:667</code></td>
         <td>One arm in the genome match, calling your step-5 builder. The <b>strategy</b> match is
             not touched — it is generic over the genome.</td></tr>
-    <tr><td>7</td><td><code>get/src/py_config.rs:478</code> and <code>:478</code></td>
+    <tr><td>7</td><td><code>get/src/py_config.rs:476</code> and <code>:476</code></td>
         <td><b>Optional.</b> The Python-side variant and its <code>to_toml_value</code> arm, plus
             one line in <code>python_attribute_path</code> per field step 4 validates by name.</td></tr>
   </tbody>
@@ -213,8 +213,8 @@ GenomeConfig::MyGenome(mine) =&gt; {
 
 <p>
   Leaving it out costs nothing elsewhere; the genome is then configurable from a TOML file but
-  absent from the Python API. The variant goes at <code>get/src/py_config.rs:478</code>, and the
-  <code>python_attribute_path</code> lines at <code>:478</code>.
+  absent from the Python API. The variant goes at <code>get/src/py_config.rs:476</code>, and the
+  <code>python_attribute_path</code> lines at <code>:476</code>.
 </p>
 
 <div class="callout">

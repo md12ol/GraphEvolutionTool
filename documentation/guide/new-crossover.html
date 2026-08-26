@@ -88,7 +88,7 @@ some_param = 0.5</code></pre>
             representation your operator can honour.</td></tr>
     <tr><td>4</td><td><code>get/src/dispatch.rs:900</code></td>
         <td>The arm mapping your <code>CrossoverConfig</code> onto the engine variant.</td></tr>
-    <tr><td>5</td><td><code>get/src/py_config.rs:220</code> and <code>:708</code></td>
+    <tr><td>5</td><td><code>get/src/py_config.rs:218</code> and <code>:706</code></td>
         <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
     <tr><td>6</td><td><code>config.example.toml:167</code></td>
         <td><b>Optional, and the step people skip.</b> A commented-out <code>[crossover]</code>
@@ -157,8 +157,8 @@ CrossoverConfig::MyCrossover { some_param } =&gt; {
 
 <p>
   Leaving step 5 out costs nothing elsewhere; the operator is then configurable from a TOML file but
-  absent from the Python API. The variant goes at <code>get/src/py_config.rs:220</code> and its
-  matching arm at <code>:708</code>.
+  absent from the Python API. The variant goes at <code>get/src/py_config.rs:218</code> and its
+  matching arm at <code>:706</code>.
 </p>
 
 <p>

@@ -117,7 +117,7 @@ pressure = 1.8</code></pre>
     <tr><td>4</td><td><code>get/src/dispatch.rs:980</code></td>
         <td>The arm mapping your config variant onto the engine variant. Steps 3 and 4 are one
             change split across two files.</td></tr>
-    <tr><td>5</td><td><code>get/src/py_config.rs:205</code> and <code>:691</code></td>
+    <tr><td>5</td><td><code>get/src/py_config.rs:203</code> and <code>:689</code></td>
         <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
     <tr><td>6</td><td><code>config.example.toml:164</code></td>
         <td><b>Optional.</b> A commented-out <code>[selection]</code> block naming your scheme —
@@ -183,7 +183,7 @@ SelectionConfig::Roulette { pressure } =&gt; {
 <p>
   Leaving these out costs nothing elsewhere; the scheme is then configurable from a TOML file but
   absent from the Python API. Step 5 is the mirrored variant on <code>PySelectionConfig</code>
-  (<code>get/src/py_config.rs:205</code>) and its matching arm (<code>:691</code>). Write
+  (<code>get/src/py_config.rs:203</code>) and its matching arm (<code>:689</code>). Write
   <b>your own parameters and no other block's</b> — the arm is building the
   <code>[selection]</code> table alone. Step 6 is a commented-out block in
   <code>config.example.toml:164</code>.
