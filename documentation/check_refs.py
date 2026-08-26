@@ -319,11 +319,13 @@ def main(fix):
             if branch is not None:
                 wanted += f" (for {branch})"
             candidates = markers(source, chain, step, branch)
-            if not candidates and (step is not None or branch is not None):
-                print(f"  {page} -> {last}:{line}: no {wanted} marker in {source}")
-                candidates = markers(source, chain)
             if not candidates:
-                print(f"  {page} -> {last}:{line}: no {chain} marker in {source}")
+                # Usually the wrong file rather than the wrong line — the page
+                # names a source that carries no such marker at all. Report and
+                # leave it: a repair here could only snap to some other step's
+                # or branch's marker, which is a write that fails the very
+                # check that prompted it.
+                print(f"  {page} -> {last}:{line}: no {wanted} marker in {source}")
                 out.append(ref.group(0))
                 continue
             best = min(candidates, key=lambda n: abs(n - line))
