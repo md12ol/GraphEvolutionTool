@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Check — and with --fix, repair — the site's `path:line` references.
 
-Every `file.rs:NNN` on the site points at an `ADD A ... STEP n` marker in the
-source. Run from the repository root.
+Every `file.rs:NNN` on the site points at the `ADD A ... STEP n` marker for
+*that* step — the exact line where the reader makes the edit the page is
+describing. Both halves are checked: the chain the page belongs to, and the
+step it names. Chain alone is not enough, because one file can carry several of
+a chain's markers and landing on a neighbour's sends the reader to the wrong
+edit. Run from the repository root.
 
     python3 documentation/check_refs.py          # report
     python3 documentation/check_refs.py --fix    # snap each reference to its marker
@@ -35,7 +39,68 @@ REF = re.compile(r"([a-z_]+\.rs|config\.example\.toml):(\d+)|<code>:(\d+)</code>
 # dash introducing what to do. A cross-reference — `search `ADD A ... STEP 4``
 # — is wrapped in backticks and carries no dash, and must not count: a
 # reference that snapped to one would point at prose about a different step.
-MARKER = re.compile(r"ADD AN? ([A-Z]+) STEP (\d+)(?: \([^)]*\))? \u2014")
+# The qualifier's first word is the branch — `(for SteadyState, Python half)`
+# is SteadyState — and where a chain forks it is a third thing to match on:
+# py_config.rs carries MUTATION step 4 for EdgeEdit *and* for SDA.
+MARKER = re.compile(
+    r"ADD AN? ([A-Z]+) STEP (\d+)(?: \((?:for )?([^),]+)[^)]*\))? \u2014")
+# The step a reference belongs to, from whatever names it last before the
+# reference itself: a step table's first cell, a code block's `// step n —`, or
+# prose saying `Step n is ...`. A letter suffix is part of the page's numbering,
+# not the marker's — 3a and 3b are both STEP 3. `Steps 4 and 5` is deliberately
+# not a cue: the code block under that heading carries its own.
+STEP_CUE = re.compile(r"<td>(\d+)[a-z]?</td>|[Ss]tep (\d+)[a-z]?\b")
+# The branch a reference belongs to, from the last <h2> above it: on a forked
+# page each branch gets its own heading and its own table. A heading naming no
+# branch leaves the reference unnarrowed rather than guessing.
+HEADING = re.compile(r"<h2[^>]*>.*?</h2>", re.S)
+
+
+def cued_step(text, before):
+    """The step number a reference at `before` belongs to, or None."""
+    found = None
+    for cue in STEP_CUE.finditer(text, 0, before):
+        found = cue.group(1) or cue.group(2)
+    return int(found) if found else None
+
+
+def sources():
+    """config.example.toml and every .rs under get/src."""
+    out = ["config.example.toml"]
+    for root, _, files in os.walk("get/src"):
+        out += [os.path.join(root, f) for f in files if f.endswith(".rs")]
+    return out
+
+
+def branch_names(chain):
+    """The branch qualifiers this chain's markers carry, e.g. EdgeEdit and SDA."""
+    out = set()
+    for source in sources():
+        for line in open(source).read().splitlines():
+            found = MARKER.search(line)
+            if found and found.group(1) == chain and found.group(3):
+                out.add(found.group(3))
+    return out
+
+
+def cued_branch(text, before, names):
+    """The branch a reference at `before` belongs to, or None.
+
+    The cue is the heading it sits under: on a forked page each branch has its
+    own <h2> and its own table. Prose elsewhere names both branches freely, so
+    only headings count, and a heading naming none of them — or more than one —
+    yields None and leaves the reference unnarrowed.
+    """
+    def flat(text):
+        return re.sub(r"[^a-z0-9]", "", re.sub(r"<[^>]+>", "", text).lower())
+
+    heading = None
+    for found in HEADING.finditer(text, 0, before):
+        heading = found.group(0)
+    if heading is None:
+        return None
+    hit = [name for name in names if flat(name) in flat(heading)]
+    return hit[0] if len(hit) == 1 else None
 
 
 def resolve(page, name):
@@ -49,12 +114,22 @@ def resolve(page, name):
     raise SystemExit(f"{page}: no source file named {name}")
 
 
-def markers(path, chain):
-    """Line numbers in `path` carrying a marker for `chain`, 1-based."""
+def markers(path, chain, step=None, branch=None):
+    """Line numbers in `path` carrying a marker for `chain`, 1-based.
+
+    With `step` and `branch`, only that step's, on that side of a fork. One
+    file can hold several markers even after both — `py_config.rs` carries
+    REPLACEMENT step 3 twice — so this narrows the candidates rather than
+    picking among them.
+    """
     out = []
     for number, line in enumerate(open(path).read().splitlines(), 1):
         found = MARKER.search(line)
         if found and (chain is None or found.group(1) == chain):
+            if step is not None and int(found.group(2)) != step:
+                continue
+            if branch is not None and found.group(3) != branch:
+                continue
             out.append(number)
     return out
 
@@ -173,9 +248,7 @@ def step_tables():
         rows = {n.rstrip("ab") for n, _ in re.findall(
             r"<tr><td>(\d+[ab]?)</td>(.*?)</tr>", open(path).read(), re.S)}
         marks = set()
-        for source in ["config.example.toml"] + [
-                os.path.join(r, f) for r, _, fs in os.walk("get/src")
-                for f in fs if f.endswith(".rs")]:
+        for source in sources():
             for line in open(source).read().splitlines():
                 found = MARKER.search(line)
                 if found and found.group(1) == chain:
@@ -197,6 +270,7 @@ def main(fix):
     total = wrong = repaired = 0
     for page in sorted(pages):
         chain = CHAIN.get(os.path.basename(page)[:-5])
+        names = branch_names(chain) if chain else set()
         text = open(page).read()
         out, last, cursor, touched = [], None, 0, False
 
@@ -218,20 +292,44 @@ def main(fix):
             lines = open(source).read().splitlines()
             here = lines[line - 1] if line <= len(lines) else ""
             found = MARKER.search(here)
+            step = cued_step(text, ref.start())
+            branch = cued_branch(text, ref.start(), names)
+            # The step and the branch matter as much as the chain. Several
+            # markers of one chain sit in one file, and a reference that lands
+            # on the wrong one of them is a live failure rather than a near
+            # miss: it sends the reader to a different edit than the one the
+            # page is describing. py_config.rs carries four MUTATION step 4
+            # markers, two per representation, so all three must agree.
+            right_chain = found and (chain is None or found.group(1) == chain)
+            right_step = found and (step is None or int(found.group(2)) == step)
+            right_branch = found and (branch is None or found.group(3) == branch)
 
-            if found and (chain is None or found.group(1) == chain):
+            if right_chain and right_step and right_branch:
                 out.append(ref.group(0))
                 continue
 
             wrong += 1
-            # Snap to the nearest marker of this page's chain in this file.
-            candidates = markers(source, chain)
+            # Snap to the nearest marker for this page's chain, step *and*
+            # branch. Those narrow first, so a whole-file nearest match cannot
+            # pull a reference onto its neighbour's marker — or, on a forked
+            # chain, onto the same step of the other representation.
+            wanted = chain
+            if step is not None:
+                wanted += f" step {step}"
+            if branch is not None:
+                wanted += f" (for {branch})"
+            candidates = markers(source, chain, step, branch)
             if not candidates:
-                print(f"  {page} -> {last}:{line}: no {chain} marker in {source}")
+                # Usually the wrong file rather than the wrong line — the page
+                # names a source that carries no such marker at all. Report and
+                # leave it: a repair here could only snap to some other step's
+                # or branch's marker, which is a write that fails the very
+                # check that prompted it.
+                print(f"  {page} -> {last}:{line}: no {wanted} marker in {source}")
                 out.append(ref.group(0))
                 continue
             best = min(candidates, key=lambda n: abs(n - line))
-            print(f"  {page} -> {last}:{line} is not a {chain} marker"
+            print(f"  {page} -> {last}:{line} is not a {wanted} marker"
                   f"{f'; nearest is :{best}' if fix else ''}")
             out.append(template % best if fix else ref.group(0))
             repaired += fix

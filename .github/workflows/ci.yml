@@ -68,7 +68,9 @@ jobs:
       # notice. It ran only when someone remembered to, which is the gate
       # `documentation/README.md` describes and PR #159 walked straight past —
       # its new `dispatch.rs` tests moved a marker 30 lines and left two pages
-      # pointing at the wrong one. A step here, rather than a job of its own,
+      # pointing at the wrong one. It matches the step number as well as the
+      # chain, so a reference cannot pass by landing on the marker next door.
+      # A step here, rather than a job of its own,
       # so the `main` ruleset's required check keeps the name it already has.
       - name: documentation references
         run: python3 documentation/check_refs.py
