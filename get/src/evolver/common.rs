@@ -544,7 +544,7 @@ mod tests {
     /// Guards the rule that nothing inside the engine converts. These are the
     /// oriented fitnesses a `Maximize` objective produces, and every field must
     /// come back still oriented — reinstating a conversion here flips the signs
-    /// of the first two assertions and fails the test. Spec §5.1.
+    /// of the first two assertions and fails the test.
     #[test]
     fn generation_stats_stays_in_engine_orientation_under_maximize() {
         // What `express_and_score` hands over for natural scores 2, 4, 6, 8
@@ -635,7 +635,7 @@ mod tests {
     #[test]
     fn a_boxed_objective_keeps_its_batched_override_through_express_and_score() {
         // The engine scores through `Box<dyn Fitness>` once the config layer
-        // erases the objective (§8), so the box has to reach the objective's own
+        // erases the objective, so the box has to reach the objective's own
         // `evaluate_batch` — not the trait default, which would call Python
         // once per individual from inside a rayon closure. Tested here rather
         // than in `fitness.rs` because this is the path the engine actually
@@ -904,7 +904,6 @@ mod tests {
             let mut child = IndexGenome::new(0);
             mutate_child(&mut child, &(), 1.0, 1, &mut rng);
 
-            // The contract this task exists to enforce: one call, one mutation.
             assert_eq!(child.mutations, 1, "max_mutations 1 must apply exactly one");
         }
     }
