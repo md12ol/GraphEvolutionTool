@@ -5,6 +5,8 @@ Type annotations here are written by hand and survive regeneration; everything
 else comes from the built module.
 """
 
+from typing import Callable
+
 __all__ = ['GraphEvolver', 'Config', 'EvolutionConfig', 'ReplacementConfig', 'ScopeConfig', 'SelectionConfig', 'CrossoverConfig', 'EdgeEditMutationConfig', 'SdaMutationConfig', 'GenomeConfig', 'FitnessConfig', 'SirParams', 'OperationWeights', 'RunResult', 'GenerationStats']
 
 class GraphEvolver:
@@ -17,10 +19,10 @@ class GraphEvolver:
     returns, so one evolver drives repeated runs with nothing stale from the
     previous one hanging off it.
     """
-    def __init__(self, config_path):
+    def __init__(self, config_path: str) -> None:
         ...
     @staticmethod
-    def from_config(config):
+    def from_config(config: Config) -> GraphEvolver:
         """Build from configuration assembled in Python, rather than from a file.
 
         Accepts exactly what a `config.toml` would, and reports a rejection in
@@ -32,7 +34,7 @@ class GraphEvolver:
         `config.toml` writer never meets.
         """
         ...
-    def load_reference_graphs(self, folder, min_node_index=0):
+    def load_reference_graphs(self, folder: str, min_node_index: int=0) -> list[tuple[str, int, list[tuple[int, int, int]]]]:
         """Read a folder of graphs, one file per graph, and hand them back.
 
         The bulk counterpart to `set_base_graph_from_file`, for reference data an
@@ -58,7 +60,7 @@ class GraphEvolver:
         loader's, each naming the file it came from.
         """
         ...
-    def run(self, seed, n_runs=1, max_cores=None):
+    def run(self, seed: int, n_runs: int=1, max_cores: int | None=None) -> list[RunResult]:
         """Evolve a population `n_runs` times and return what every run produced.
 
         **Always a list, one `RunResult` per replicate, in run order** — even at
@@ -85,7 +87,7 @@ class GraphEvolver:
         Raising any one of them scales the whole product.
         """
         ...
-    def set_base_graph(self, num_nodes, edges, min_node_index=0):
+    def set_base_graph(self, num_nodes: int, edges: list[tuple[int, int, int]], min_node_index: int=0) -> None:
         """Seed an edge-edit run from a graph the caller already has.
 
         `edges` is `(u, v, multiplicity)` — the same shape `run` hands back as
@@ -106,7 +108,7 @@ class GraphEvolver:
         `(2, 5)` and `(5, 2)` are one undirected edge.
         """
         ...
-    def set_base_graph_from_file(self, path, min_node_index=0):
+    def set_base_graph_from_file(self, path: str, min_node_index: int=0) -> None:
         """Seed an edge-edit run from an edge-list file, rather than from a list
         built in Python.
 
@@ -123,7 +125,7 @@ class GraphEvolver:
         empty file are each a `UserWarning` rather than an error.
         """
         ...
-    def set_fitness_function(self, callable, direction):
+    def set_fitness_function(self, callable: Callable[..., float], direction: str) -> None:
         """Register a Python callable as the objective, with the direction it is
         meant to be optimized in.
 
@@ -144,59 +146,59 @@ class GraphEvolver:
 
 class Config:
     """Everything the genetic algorithm needs for a run."""
-    def __init__(self, evolution, population_size, network_size, crossover_rate, mutation_rate, scope, selection, genome, fitness, max_edge_multiplicity=1, max_mutations=1, crossover=None):
+    def __init__(self, evolution: EvolutionConfig, population_size: int, network_size: int, crossover_rate: float, mutation_rate: float, scope: ScopeConfig, selection: SelectionConfig, genome: GenomeConfig, fitness: FitnessConfig, max_edge_multiplicity: int=1, max_mutations: int=1, crossover: CrossoverConfig | None=None) -> None:
         ...
     @property
-    def crossover(self):
+    def crossover(self) -> CrossoverConfig:
         """Recombination operator; two-point when unset."""
         ...
     @property
-    def crossover_rate(self):
+    def crossover_rate(self) -> float:
         """Probability that a selected pair is recombined."""
         ...
     @property
-    def evolution(self):
+    def evolution(self) -> EvolutionConfig:
         """Which evolution strategy to run."""
         ...
     @property
-    def fitness(self):
+    def fitness(self) -> FitnessConfig:
         """Fitness objective."""
         ...
     @property
-    def genome(self):
+    def genome(self) -> GenomeConfig:
         """Genome representation and its dimensions."""
         ...
     @property
-    def max_edge_multiplicity(self):
+    def max_edge_multiplicity(self) -> int:
         """Edge-weight cap; 1 is unweighted."""
         ...
     @property
-    def max_mutations(self):
+    def max_mutations(self) -> int:
         """How many mutations a mutating child takes, drawn uniformly from
         `1..=max_mutations`.
         """
         ...
     @property
-    def mutation_rate(self):
+    def mutation_rate(self) -> float:
         """Probability that a child is mutated at all."""
         ...
     @property
-    def network_size(self):
+    def network_size(self) -> int:
         """Number of nodes in every expressed graph."""
         ...
     @property
-    def population_size(self):
+    def population_size(self) -> int:
         """Number of individuals in the population."""
         ...
     @property
-    def scope(self):
+    def scope(self) -> ScopeConfig:
         """Which slice of the population one breeding event draws from."""
         ...
     @property
-    def selection(self):
+    def selection(self) -> SelectionConfig:
         """Parent-selection strategy, applied within that scope."""
         ...
-    def to_toml(self):
+    def to_toml(self) -> str:
         """Render this config as the TOML document GET parses — the record of what
         was run, byte for byte.
 
@@ -209,10 +211,10 @@ class EvolutionConfig:
 
     class Generational:
         """Whole-population replacement, run `num_generations` times."""
-        def __init__(self, num_generations, elite_count=1):
+        def __init__(self, num_generations: int, elite_count: int=1) -> None:
             ...
         @property
-        def elite_count(self):
+        def elite_count(self) -> int:
             """Best individuals carried forward untouched each generation.
 
             Must be less than `population_size` — equal would mean nothing ever
@@ -220,7 +222,7 @@ class EvolutionConfig:
             """
             ...
         @property
-        def num_generations(self):
+        def num_generations(self) -> int:
             """Whole-population replacements to run."""
             ...
 
@@ -229,16 +231,16 @@ class EvolutionConfig:
 
         One event touches one scope, not the whole population.
         """
-        def __init__(self, num_mating_events, replacement=None):
+        def __init__(self, num_mating_events: int, replacement: ReplacementConfig | None=None) -> None:
             ...
         @property
-        def num_mating_events(self):
+        def num_mating_events(self) -> int:
             """Single breeding events to run. One event touches one scope, not the whole
             population.
             """
             ...
         @property
-        def replacement(self):
+        def replacement(self) -> ReplacementConfig:
             """Who the children overwrite; omitted, the least fit.
 
             `Worst` is what makes steady-state self-elitist; `Random` gives that up.
@@ -252,7 +254,7 @@ class ReplacementConfig:
         """Children overwrite individuals drawn uniformly from the scope, giving up
         steady-state's self-elitism.
         """
-        def __init__(self):
+        def __init__(self) -> None:
             ...
 
     class Worst:
@@ -260,7 +262,7 @@ class ReplacementConfig:
 
         This is what makes steady-state self-elitist.
         """
-        def __init__(self):
+        def __init__(self) -> None:
             ...
 
 class ScopeConfig:
@@ -268,15 +270,15 @@ class ScopeConfig:
 
     class Global:
         """Every individual is a candidate. Consumes no randomness."""
-        def __init__(self):
+        def __init__(self) -> None:
             ...
 
     class RandomSubset:
         """`size` distinct individuals, drawn uniformly without replacement."""
-        def __init__(self, size):
+        def __init__(self, size: int) -> None:
             ...
         @property
-        def size(self):
+        def size(self) -> int:
             """At least 1 and at most `population_size` — and at least 4 under steady-
             state, which needs two parents and two distinct individuals for them to
             replace. Generational has no such floor.
@@ -291,17 +293,17 @@ class SelectionConfig:
 
         Consumes no randomness — the scope did the drawing.
         """
-        def __init__(self):
+        def __init__(self) -> None:
             ...
 
     class Tournament:
         """Draws `tournament_size` members of the scope with replacement and takes the
         best, once per parent.
         """
-        def __init__(self, tournament_size):
+        def __init__(self, tournament_size: int) -> None:
             ...
         @property
-        def tournament_size(self):
+        def tournament_size(self) -> int:
             """At least 1. May exceed the population — the floor is checked against the
             scope's `size` instead.
             """
@@ -314,7 +316,7 @@ class CrossoverConfig:
         """Two cut points, the middle segment exchanged. The only operator that
         ships.
         """
-        def __init__(self):
+        def __init__(self) -> None:
             ...
 
 class EdgeEditMutationConfig:
@@ -322,7 +324,7 @@ class EdgeEditMutationConfig:
 
     class RerollGene:
         """Redraws one edit operation in the genome."""
-        def __init__(self):
+        def __init__(self) -> None:
             ...
 
 class SdaMutationConfig:
@@ -332,7 +334,7 @@ class SdaMutationConfig:
         """Redraws one element of the automaton — the initial character, a transition's
         target, or its response.
         """
-        def __init__(self):
+        def __init__(self) -> None:
             ...
 
 class GenomeConfig:
@@ -340,18 +342,18 @@ class GenomeConfig:
 
     class EdgeEdit:
         """A list of edit operations; the graph is what replaying them produces."""
-        def __init__(self, gene_length, operation_weights=None, mutation=None):
+        def __init__(self, gene_length: int, operation_weights: OperationWeights | None=None, mutation: EdgeEditMutationConfig | None=None) -> None:
             ...
         @property
-        def gene_length(self):
+        def gene_length(self) -> int:
             """Number of edit operations in the genome."""
             ...
         @property
-        def mutation(self):
+        def mutation(self) -> EdgeEditMutationConfig | None:
             """Which mutation the run applies; omitted, the default one."""
             ...
         @property
-        def operation_weights(self):
+        def operation_weights(self) -> OperationWeights | None:
             """Relative weight per edit operation; omitted, every operation weighs
             1.0.
             """
@@ -363,22 +365,22 @@ class GenomeConfig:
         No `num_chars`: the alphabet is `max_edge_multiplicity + 1`, so every
         character is a legal edge weight.
         """
-        def __init__(self, num_states, max_resp_len, init_state=0, init_char_mutation_rate=None, transition_vs_response_rate=None, mutation=None):
+        def __init__(self, num_states: int, max_resp_len: int, init_state: int=0, init_char_mutation_rate: float | None=None, transition_vs_response_rate: float | None=None, mutation: SdaMutationConfig | None=None) -> None:
             ...
         @property
-        def init_char_mutation_rate(self):
+        def init_char_mutation_rate(self) -> float | None:
             """Chance a mutation redraws the initial character instead of touching the
             transition table; omitted, the default rate.
             """
             ...
         @property
-        def init_state(self):
+        def init_state(self) -> int:
             """State the automaton starts in. Must be less than `num_states`, or
             expression panics.
             """
             ...
         @property
-        def max_resp_len(self):
+        def max_resp_len(self) -> int:
             """Longest response string a transition may emit.
 
             Responses are drawn from `1..=max_resp_len` and are never empty, which is
@@ -386,15 +388,15 @@ class GenomeConfig:
             """
             ...
         @property
-        def mutation(self):
+        def mutation(self) -> SdaMutationConfig | None:
             """Which mutation the run applies; omitted, the default one."""
             ...
         @property
-        def num_states(self):
+        def num_states(self) -> int:
             """States in the automaton."""
             ...
         @property
-        def transition_vs_response_rate(self):
+        def transition_vs_response_rate(self) -> float | None:
             """Chance of redrawing a transition's target rather than its response, once
             the initial character was not chosen.
             """
@@ -409,23 +411,23 @@ class FitnessConfig:
 
     class EpiLength:
         """Timesteps to burn out. Maximized."""
-        def __init__(self, sir):
+        def __init__(self, sir: SirParams) -> None:
             ...
         @property
-        def sir(self):
+        def sir(self) -> SirParams:
             """Epidemic sampling parameters, shared by the three epidemic objectives."""
             ...
 
     class EpiProfMatch:
         """RMSE against a target profile. Minimized."""
-        def __init__(self, sir, target_profile):
+        def __init__(self, sir: SirParams, target_profile: list[float]) -> None:
             ...
         @property
-        def sir(self):
+        def sir(self) -> SirParams:
             """Epidemic sampling parameters, shared by the three epidemic objectives."""
             ...
         @property
-        def target_profile(self):
+        def target_profile(self) -> list[float]:
             """The profile the run is scored against, compared verbatim — nothing is
             prepended to it and nothing is rescaled.
             """
@@ -433,10 +435,10 @@ class FitnessConfig:
 
     class EpiSpread:
         """Total ever-infected. Maximized."""
-        def __init__(self, sir):
+        def __init__(self, sir: SirParams) -> None:
             ...
         @property
-        def sir(self):
+        def sir(self) -> SirParams:
             """Epidemic sampling parameters, shared by the three epidemic objectives."""
             ...
 
@@ -445,7 +447,7 @@ class FitnessConfig:
         `GraphEvolver.set_fitness_function`. Whether it is maximized or minimized is
         declared at registration, not here.
         """
-        def __init__(self):
+        def __init__(self) -> None:
             ...
 
     class StructMatch:
@@ -453,16 +455,16 @@ class FitnessConfig:
 
         Minimized; requires `max_edge_multiplicity = 1`.
         """
-        def __init__(self, reference_folder, degree_bins=50, clustering_bins=50, spectral_bins=50, degree_gamma=1.0, clustering_gamma=1.0, spectral_gamma=1.0, degree_weight=1.0, clustering_weight=1.0, spectral_weight=1.0, density_weight=1.0):
+        def __init__(self, reference_folder: str, degree_bins: int=50, clustering_bins: int=50, spectral_bins: int=50, degree_gamma: float=1.0, clustering_gamma: float=1.0, spectral_gamma: float=1.0, degree_weight: float=1.0, clustering_weight: float=1.0, spectral_weight: float=1.0, density_weight: float=1.0) -> None:
             ...
         @property
-        def clustering_bins(self):
+        def clustering_bins(self) -> int:
             """Histogram bins for the clustering statistics. More bins resolve finer
             differences and need more reference graphs to fill them.
             """
             ...
         @property
-        def clustering_gamma(self):
+        def clustering_gamma(self) -> float:
             """RBF bandwidth for the clustering statistics. Must be finite and greater
             than zero — the kernel divides by it. Too large is the dangerous
             direction: the kernel collapses to zero for every candidate, the whole
@@ -471,20 +473,20 @@ class FitnessConfig:
             """
             ...
         @property
-        def clustering_weight(self):
+        def clustering_weight(self) -> float:
             """How much the clustering family counts. Finite and non-negative; the three
             family weights cannot all be zero, which would score every candidate
             identically.
             """
             ...
         @property
-        def degree_bins(self):
+        def degree_bins(self) -> int:
             """Histogram bins for the degree statistics. More bins resolve finer
             differences and need more reference graphs to fill them.
             """
             ...
         @property
-        def degree_gamma(self):
+        def degree_gamma(self) -> float:
             """RBF bandwidth for the degree statistics. Must be finite and greater than
             zero — the kernel divides by it. Too large is the dangerous direction:
             the kernel collapses to zero for every candidate, the whole population
@@ -493,20 +495,20 @@ class FitnessConfig:
             """
             ...
         @property
-        def degree_weight(self):
+        def degree_weight(self) -> float:
             """How much the degree family counts. Finite and non-negative; the three
             family weights cannot all be zero, which would score every candidate
             identically.
             """
             ...
         @property
-        def density_weight(self):
+        def density_weight(self) -> float:
             """How much distance from the reference set's mean density counts. Zero
             switches the penalty off.
             """
             ...
         @property
-        def reference_folder(self):
+        def reference_folder(self) -> str:
             """Folder of reference graphs, one edge-list file each.
 
             Not checked when the config is parsed — validation does no I/O, so a
@@ -514,13 +516,13 @@ class FitnessConfig:
             """
             ...
         @property
-        def spectral_bins(self):
+        def spectral_bins(self) -> int:
             """Histogram bins for the spectral statistics. More bins resolve finer
             differences and need more reference graphs to fill them.
             """
             ...
         @property
-        def spectral_gamma(self):
+        def spectral_gamma(self) -> float:
             """RBF bandwidth for the spectral statistics. Must be finite and greater
             than zero — the kernel divides by it. Too large is the dangerous
             direction: the kernel collapses to zero for every candidate, the whole
@@ -529,7 +531,7 @@ class FitnessConfig:
             """
             ...
         @property
-        def spectral_weight(self):
+        def spectral_weight(self) -> float:
             """How much the spectral family counts. Finite and non-negative; the three
             family weights cannot all be zero, which would score every candidate
             identically.
@@ -542,26 +544,26 @@ class SirParams:
     Nothing is range-checked here; every field is checked when the config is
     handed to an evolver.
     """
-    def __init__(self, infection_rate, num_epidemics, patient_zero=None, min_epidemic_length=3, max_epidemic_retries=5):
+    def __init__(self, infection_rate: float, num_epidemics: int, patient_zero: int | None=None, min_epidemic_length: int=3, max_epidemic_retries: int=5) -> None:
         ...
     @property
-    def infection_rate(self):
+    def infection_rate(self) -> float:
         """Per-edge transmission probability per timestep."""
         ...
     @property
-    def max_epidemic_retries(self):
+    def max_epidemic_retries(self) -> int:
         """Attempts before keeping whatever came out."""
         ...
     @property
-    def min_epidemic_length(self):
+    def min_epidemic_length(self) -> int:
         """Outbreaks shorter than this are re-rolled; 1 disables the re-roll."""
         ...
     @property
-    def num_epidemics(self):
+    def num_epidemics(self) -> int:
         """Outbreaks averaged per evaluation."""
         ...
     @property
-    def patient_zero(self):
+    def patient_zero(self) -> int | None:
         """Pinned patient zero; left unset, a fresh node is drawn per epidemic."""
         ...
 
@@ -571,7 +573,7 @@ class OperationWeights:
     Every weight defaults to 1.0, so the operations are equally likely; 0.0
     disables an operation outright.
     """
-    def __init__(self, toggle=1.0, hop=1.0, add=1.0, delete=1.0, swap=1.0, local_toggle=1.0, local_add=1.0, local_delete=1.0, null=1.0):
+    def __init__(self, toggle: float=1.0, hop: float=1.0, add: float=1.0, delete: float=1.0, swap: float=1.0, local_toggle: float=1.0, local_add: float=1.0, local_delete: float=1.0, null: float=1.0) -> None:
         ...
 
 class RunResult:
@@ -581,48 +583,48 @@ class RunResult:
     reusable across runs and never reports a previous one's numbers.
     """
     @property
-    def best_edges(self):
+    def best_edges(self) -> list[tuple[int, int, int]]:
         """The best individual's expressed network, as `(u, v, multiplicity)`."""
         ...
     @property
-    def best_fitness(self):
+    def best_fitness(self) -> float:
         """Best of the **final** population, **as-measured** — the units and sign
         your objective returned. Matches `history`'s last row, which a
         stochastic objective may have scored worse than an earlier one.
         """
         ...
     @property
-    def best_genome_repr(self):
+    def best_genome_repr(self) -> str:
         """The best individual's genome, via `Genome::print`."""
         ...
     @property
-    def config_toml(self):
+    def config_toml(self) -> str:
         """The TOML document this run's config was parsed from. `save_results`
         writes it beside the best individual, so the run can be reproduced.
         """
         ...
     @property
-    def history(self):
+    def history(self) -> list[GenerationStats]:
         """The convergence log, one row per logged iteration."""
         ...
     @property
-    def num_nodes(self):
+    def num_nodes(self) -> int:
         """How many nodes that network has, isolated ones included."""
         ...
     @property
-    def run_index(self):
+    def run_index(self) -> int:
         """Which replicate this is, `0`-based. With `seed`, the pair that
         reproduces this exact run.
         """
         ...
-    def save_logs(self, filename):
+    def save_logs(self, filename: str) -> None:
         """Write the convergence log to `filename` as CSV.
 
         Every row carries `seed` and `run_index`, so logs from several runs
         concatenate into one file and stay separable.
         """
         ...
-    def save_results(self, filename):
+    def save_results(self, filename: str) -> None:
         """Write the best individual to `filename`, and the run's config TOML
         alongside it at `{filename}.toml`.
 
@@ -630,7 +632,7 @@ class RunResult:
         """
         ...
     @property
-    def seed(self):
+    def seed(self) -> int:
         """The seed `run` was called with."""
         ...
 
@@ -641,26 +643,26 @@ class GenerationStats:
     events under steady-state.
     """
     @property
-    def best_fitness(self):
+    def best_fitness(self) -> float:
         """Best fitness in the population at this iteration."""
         ...
     @property
-    def ci_95(self):
+    def ci_95(self) -> float:
         """Half-width of the 95% confidence interval on `mean_fitness`, using the
         **sample** deviation, dividing by `n - 1` — not `std_dev` beside it.
         Zero for a population of one, never `NaN`.
         """
         ...
     @property
-    def iteration(self):
+    def iteration(self) -> int:
         """Generation number, or mating-event number."""
         ...
     @property
-    def mean_fitness(self):
+    def mean_fitness(self) -> float:
         """Population mean fitness at this iteration."""
         ...
     @property
-    def std_dev(self):
+    def std_dev(self) -> float:
         """**Population** standard deviation, dividing by `n`. Zero for a
         population of one.
         """
