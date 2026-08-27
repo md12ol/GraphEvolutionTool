@@ -33,3 +33,8 @@ handoff_edge_multiplicity_cap_simplification.md
 run_log.csv
 best_individual.txt
 best_individual.txt.toml
+
+# `maturin develop` writes the built module into the package source directory.
+# The wheel gets its copy from the build, never from here.
+python/get/*.so
+python/get/*.pyd
