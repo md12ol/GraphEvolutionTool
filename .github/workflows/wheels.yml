@@ -142,7 +142,11 @@ jobs:
     needs: publish-testpypi
     # Only on a tag, and only after TestPyPI took the same artifacts — a failure
     # there is the last cheap warning before an unrepeatable upload.
-    if: startsWith(github.ref, 'refs/tags/v')
+    #
+    # `needs.publish-testpypi.result` is spelled out because a job carrying its
+    # own `if:` loses the implicit "all needs succeeded" gate. Without it this
+    # job would still reach its reviewer after TestPyPI had failed outright.
+    if: startsWith(github.ref, 'refs/tags/v') && needs.publish-testpypi.result == 'success'
     runs-on: ubuntu-latest
     # `pypi` requires a reviewer, so this job waits for a human even when a tag
     # reaches it by accident.
