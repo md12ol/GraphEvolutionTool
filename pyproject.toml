@@ -22,6 +22,7 @@ classifiers = [
 ]
 
 [project.urls]
+Documentation = "https://md12ol.github.io/GraphEvolutionTool/"
 Homepage = "https://github.com/md12ol/GraphEvolutionTool"
 Repository = "https://github.com/md12ol/GraphEvolutionTool"
 Issues = "https://github.com/md12ol/GraphEvolutionTool/issues"
