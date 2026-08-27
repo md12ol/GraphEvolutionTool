@@ -553,8 +553,8 @@ mod tests {
 
     #[test]
     fn a_boxed_objective_forwards_every_method_including_the_defaulted_ones() {
-        // The erasure in §8 hands the evolver a Box<dyn Fitness>. If the
-        // forwarding impl omits either defaulted method it still compiles, and
+        // Erasure hands the evolver a Box<dyn Fitness>. If the forwarding
+        // impl omits either defaulted method it still compiles, and
         // both failures are silent: `direction` reports Minimize and runs the
         // search backwards, `evaluate_batch` reverts to the per-graph
         // rayon fan-out that deadlocks a Python objective.
@@ -706,7 +706,7 @@ def fitness(batch):
     #[test]
     fn the_registered_direction_is_what_the_objective_reports() {
         // Nothing can infer this from the callable, so it is registered
-        // alongside it — and getting it wrong runs the search backwards (§5).
+        // alongside it — and getting it wrong runs the search backwards.
         Python::attach(|py| {
             let (minimizing, _m) = py_objective(py, COUNTING_OBJECTIVE, Direction::Minimize);
             let (maximizing, _n) = py_objective(py, COUNTING_OBJECTIVE, Direction::Maximize);
@@ -718,7 +718,7 @@ def fitness(batch):
 
     #[test]
     fn a_second_handle_scores_identically_to_the_first() {
-        // Replicates need an objective instance each (§8.1); this is how the
+        // Replicates need an objective instance each; this is how the
         // dispatch layer will make them.
         Python::attach(|py| {
             let (objective, module) = py_objective(py, COUNTING_OBJECTIVE, Direction::Maximize);
@@ -1172,7 +1172,7 @@ def fitness(batch):
         );
     }
 
-    /// Issue #18's own verification: one seed reproduces a whole run.
+    /// One seed reproduces a whole run.
     ///
     /// Two objectives built identically score the same batches in the same
     /// order, and must agree score for score — not just on the first batch,
@@ -1194,8 +1194,8 @@ def fitness(batch):
         }
 
         // And a different run seed must not replay it, or replicates would be
-        // copies of each other rather than independent samples (§8.1). Both
-        // sides are fresh, so this compares first batch against first batch.
+        // copies of each other rather than independent samples. Both sides
+        // are fresh, so this compares first batch against first batch.
         let this_seed = EpiSpread::new(chancy_batch(3), 4242);
         let other_seed = EpiSpread::new(chancy_batch(3), 4243);
         assert_ne!(
