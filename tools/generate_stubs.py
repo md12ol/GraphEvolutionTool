@@ -74,6 +74,17 @@ CALLABLE_TYPES = (
 )
 
 
+def def_args(source):
+    """The `ast.arguments` of a one-line `def`, narrowed for the type checker.
+
+    `ast.parse` gives back a list of `stmt`, and only a `FunctionDef` carries
+    `.args`; the assert is what says so rather than leaving it implied.
+    """
+    node = ast.parse(source).body[0]
+    assert isinstance(node, ast.FunctionDef), source
+    return node.args
+
+
 def parse_signature(text, receiver):
     """`__text_signature__` to an `ast.arguments`, or None if there isn't one.
 
@@ -97,10 +108,9 @@ def parse_signature(text, receiver):
     if receiver is not None and not inner.startswith(receiver):
         inner = receiver + (", " + inner if inner else "")
     try:
-        tree = ast.parse(f"def _{'(' + inner + ')'}: ...")
+        return def_args(f"def _({inner}): ...")
     except SyntaxError:
         return None
-    return tree.body[0].args
 
 
 def all_args(args):
@@ -190,7 +200,7 @@ def render_class(cls, name, path, saved, docs, displaced, depth):
             out.append("")
             out += render_class(value, attr, key, saved, docs, displaced, depth + 1)
         elif isinstance(value, types.GetSetDescriptorType):
-            args = ast.parse("def _(self): ...").body[0].args
+            args = def_args("def _(self): ...")
             out += render_function(
                 attr, args, saved.get(key, {}).get("return"), ["property"], body,
                 pick_doc(value, key, docs, displaced),
@@ -202,7 +212,7 @@ def render_class(cls, name, path, saved, docs, displaced, depth):
                 getattr(target, "__text_signature__", None), None if static else "self"
             )
             if args is None:
-                args = ast.parse("def _(self, *args, **kwargs): ...").body[0].args
+                args = def_args("def _(self, *args, **kwargs): ...")
             apply_annotations(args, saved.get(key, {}))
             out += render_function(
                 attr, args, saved.get(key, {}).get("return"),
@@ -221,7 +231,8 @@ def render_class(cls, name, path, saved, docs, displaced, depth):
 def read_existing(path):
     """Annotations, docstrings and imports from an existing stub, by dotted path."""
     try:
-        source = open(path, encoding="utf-8").read()
+        with open(path, encoding="utf-8") as handle:
+            source = handle.read()
     except FileNotFoundError:
         return {}, {}, []
     tree = ast.parse(source)
@@ -299,7 +310,8 @@ def main():
 
     if args.check:
         try:
-            current = open(args.out, encoding="utf-8").read()
+            with open(args.out, encoding="utf-8") as handle:
+                current = handle.read()
         except FileNotFoundError:
             sys.exit(f"{args.out} does not exist; run this without --check")
         if current != text:
