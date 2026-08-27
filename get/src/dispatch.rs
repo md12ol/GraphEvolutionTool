@@ -750,9 +750,8 @@ mod tests {
     use crate::genomes::Genome;
 
     // Fixtures are deliberately local rather than shared with `lib.rs`'s test
-    // module. Test helpers cannot be imported across sibling `#[cfg(test)]`
-    // modules without giving them a home in the lib target, which GitHub #56
-    // calls out as a decision to make on purpose rather than by default.
+    // module: test helpers cannot be imported across sibling `#[cfg(test)]`
+    // modules without giving them a home in the lib target.
     const SIR_FITNESS: &str =
         "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.05\nnum_epidemics = 30\n";
     const PYTHON_FITNESS: &str = "[fitness]\ntype = \"python\"\n";
@@ -890,7 +889,7 @@ mod tests {
         // a default of `Minimize`, so a boxed objective whose direction is not
         // forwarded reports "minimize" whatever it holds — and both maximizing
         // objectives then run the search backwards while merely looking
-        // unconverged (§5.1). Nothing panics and no number looks wrong.
+        // unconverged. Nothing panics and no number looks wrong.
         let cases = [
             (sir_block("epi_spread", ""), Direction::Maximize),
             (sir_block("epi_length", ""), Direction::Maximize),
@@ -946,7 +945,6 @@ mod tests {
             .objective(2, None)
             .expect("second replicate's objective");
 
-        // Same reference set means the same score for the same graph.
         let mut candidate = Graph::new(3, 1);
         candidate.set_edges(&[(0, 1, 1), (1, 2, 1), (0, 2, 1)]);
         assert_eq!(first.evaluate(&candidate), second.evaluate(&candidate));
@@ -1093,12 +1091,12 @@ mod tests {
 
     #[test]
     fn struct_match_reference_warns_through_python_for_every_load_warning() {
-        // GitHub #145: `struct_match_reference` used to call `to_graph`
-        // straight after `load_edge_folder` and never look at `.warnings`,
-        // so a reference folder built with, say, both directions of every
-        // undirected edge loaded clean through this path and loud through
-        // `load_reference_graphs` — the same kind of folder, two different
-        // front ends, one of them silent.
+        // The bug this covers: `struct_match_reference` used to call
+        // `to_graph` straight after `load_edge_folder` and never look at
+        // `.warnings`, so a reference folder built with, say, both
+        // directions of every undirected edge loaded clean through this
+        // path and loud through `load_reference_graphs` — the same kind of
+        // folder, two different front ends, one of them silent.
         Python::attach(|py| {
             let evolver = evolver_with(&struct_match_block_with_warnings("python"));
 
@@ -1197,7 +1195,7 @@ mod tests {
 
     #[test]
     fn an_omitted_patient_zero_stays_unpinned_through_the_mapping() {
-        // `None` means "draw a fresh node per epidemic" (§5.2). Defaulting it to
+        // `None` means "draw a fresh node per epidemic". Defaulting it to
         // node 0 instead would seed every outbreak from the same vertex and
         // quietly change what the objective measures.
         let config = config_with(SIR_FITNESS);
@@ -1211,7 +1209,7 @@ mod tests {
 
     #[test]
     fn each_call_builds_a_fresh_sir_objective() {
-        // §8.1: replicates must not share an objective, because every SIR
+        // Replicates must not share an objective, because every SIR
         // objective owns an `EpidemicScorer` whose counter is per-run state.
         // Sharing one lets thread scheduling decide which run sees which seed.
         let evolver = evolver_with(SIR_FITNESS);
@@ -1495,7 +1493,7 @@ mod tests {
 
     #[test]
     fn the_sda_start_derives_its_alphabet_from_the_edge_multiplicity_cap() {
-        // §3.2: `num_chars` is never configured, it is `max_edge_multiplicity + 1`
+        // `num_chars` is never configured, it is `max_edge_multiplicity + 1`
         // — the cap is 3 in this fixture, so the alphabet is 4. Configuring it
         // separately would let the automaton emit a character that
         // `Graph::set_edge` then clamps, losing structure with nothing reported.
@@ -1530,7 +1528,7 @@ mod tests {
     fn an_out_of_range_init_state_is_reported_rather_than_panicking() {
         // `SdaGenome::run` indexes its response table with `init_state`, so this
         // panics during expression if it gets through — and a panic crossing the
-        // FFI reaches the user as an opaque `PanicException` (§7). `run` is the
+        // FFI reaches the user as an opaque `PanicException`. `run` is the
         // path that matters, so the check is exercised through it.
         let mut evolver = evolver_with_genome(
             "[genome]\ntype = \"sda\"\nnum_states = 4\nmax_resp_len = 3\ninit_state = 9\n",
@@ -1785,9 +1783,9 @@ mod tests {
 
     #[test]
     fn every_strategy_by_genome_combination_runs_end_to_end() {
-        // #26's verify-by: all four arms of the dispatch complete a real run.
-        // Before this, three of the four had never been executed at all — the
-        // types line up whether or not the arms are wired to the right evolver.
+        // All four arms of the dispatch complete a real run. Before this,
+        // three of the four had never been executed at all — the types line
+        // up whether or not the arms are wired to the right evolver.
         let combinations = [
             ("generational × edge_edit", GENERATIONAL, EDGE_EDIT),
             ("generational × sda", GENERATIONAL, SDA),
@@ -1920,20 +1918,19 @@ mod tests {
 
     #[test]
     fn a_seeded_base_graph_reaches_every_replicate_on_the_rayon_arm() {
-        // #84: #72 (`set_base_graph`) and #83 (replicate runs) were each
-        // tested against the other's absence. This is their intersection —
-        // a seeded run through `n_runs > 1` on the concurrent arm, which
-        // `evolve` reaches once per `seeds.par_iter()` entry.
+        // `set_base_graph` and replicate runs were each tested against the
+        // other's absence; this is their intersection — a seeded run
+        // through `n_runs > 1` on the concurrent arm, which `evolve` reaches
+        // once per `seeds.par_iter()` entry.
         assert_seeded_base_graph_reaches_every_replicate(Some(4));
     }
 
     #[test]
     fn a_seeded_base_graph_reaches_every_replicate_on_the_sequential_arm() {
-        // The other half of #84: the same seeded config, forced onto the
-        // sequential loop at the top of `run_replicates` by pinning
-        // `max_cores` to 1 rather than by a python fitness type, so this
-        // exercises the same `for` loop
-        // `a_python_objective_runs_its_replicates_through_the_sequential_arm`
+        // The same seeded config as the rayon-arm test above, forced onto
+        // the sequential loop at the top of `run_replicates` by pinning
+        // `max_cores` to 1 rather than by a python fitness type — the same
+        // `for` loop `a_python_objective_runs_its_replicates_through_the_sequential_arm`
         // reaches, but with a native objective and a base graph to check.
         assert_seeded_base_graph_reaches_every_replicate(Some(1));
     }
@@ -2154,9 +2151,9 @@ mod tests {
 
     #[test]
     fn one_seed_reproduces_a_whole_run_and_another_changes_it() {
-        // The guarantee the single `seed` argument exists to give (§7, §8.1).
-        // It covers the population, the evolution and the epidemics at once,
-        // since all three derive from it.
+        // The guarantee the single `seed` argument exists to give: it covers
+        // the population, the evolution and the epidemics at once, since all
+        // three derive from it.
         let config = runnable(GENERATIONAL, EDGE_EDIT);
         let run = |seed: u64| {
             let objective: Box<dyn Fitness> =
@@ -2184,10 +2181,9 @@ mod tests {
 
     #[test]
     fn two_struct_match_replicates_at_one_seed_agree() {
-        // The second test #99 asks every new objective for. It is worth having
-        // here specifically because this objective reads from disk: a loader
-        // that let filesystem order into the reference set -- which
-        // `load_edge_folder` sorts precisely to prevent -- would give two
+        // Worth having specifically because this objective reads from disk:
+        // a loader that let filesystem order into the reference set — which
+        // `load_edge_folder` sorts precisely to prevent — would give two
         // replicates different targets, and the run would still look fine.
         let evolver = evolver_with(&struct_match_block("replicates"));
         let run = |seed: u64| {
@@ -2297,10 +2293,10 @@ mod tests {
             assert!(u < 8 && v < 8);
         }
 
-        // Task 4's verify-by: seed, run_index and the config TOML reach the
-        // result and the TOML round-trips.
+        // Seed, run_index and the config TOML reach the result, and the
+        // TOML round-trips.
         assert_eq!(result.seed, 8, "the seed run was called with");
-        assert_eq!(result.run_index, 0, "hard 0 until replicates land (#20)");
+        assert_eq!(result.run_index, 0, "hard 0 until replicates land");
         Config::from_toml_str(&result.config_toml).expect("the provenance TOML round-trips");
         assert_eq!(result.config_toml, config_toml);
     }
@@ -2319,11 +2315,11 @@ mod tests {
 
     #[test]
     fn the_core_cap_changes_the_speed_and_never_the_answer() {
-        // The issue's own verify-by, and the strongest isolation check available
-        // at this level: if replicates shared an objective, its per-run epidemic
-        // counter would be advanced by whichever run got there first, so four
-        // concurrent replicates would not reproduce four sequential ones. Equal
-        // results across the two caps is that cross-talk not happening.
+        // The strongest isolation check available at this level: if
+        // replicates shared an objective, its per-run epidemic counter would
+        // be advanced by whichever run got there first, so four concurrent
+        // replicates would not reproduce four sequential ones. Equal results
+        // across the two caps is that cross-talk not happening.
         let mut evolver = replicate_evolver();
 
         let sequential = Python::attach(|py| evolver.run(py, 20260813, 4, Some(1)))
@@ -2352,9 +2348,9 @@ mod tests {
 
     #[test]
     fn extending_a_request_reproduces_the_replicates_already_collected() {
-        // The other half of the issue's verify-by, through the public call
-        // rather than the seed helper: a user who has collected three
-        // replicates and wants five keeps the three they had.
+        // Through the public call rather than the seed helper: a user who
+        // has collected three replicates and wants five keeps the three
+        // they had.
         let mut evolver = replicate_evolver();
 
         let three = Python::attach(|py| evolver.run(py, 99, 3, Some(2))).expect("three replicates");
@@ -2452,11 +2448,11 @@ mod tests {
 
     #[test]
     fn save_logs_writes_one_row_per_logged_iteration_plus_a_header() {
-        // Task 5's verify-by: row count is `num_generations + 1` under
-        // generational and `num_mating_events / population_size + 1` under
-        // steady-state. `GENERATIONAL` and `STEADY_STATE` are `runnable`'s
-        // fixtures: population_size 6, num_generations 3, num_mating_events 12
-        // — 4 and 3 rows respectively.
+        // Row count is `num_generations + 1` under generational and
+        // `num_mating_events / population_size + 1` under steady-state.
+        // `GENERATIONAL` and `STEADY_STATE` are `runnable`'s fixtures:
+        // population_size 6, num_generations 3, num_mating_events 12 — 4 and
+        // 3 rows respectively.
         for (evolution, expected_rows) in [(GENERATIONAL, 4), (STEADY_STATE, 3)] {
             let mut evolver = GraphEvolver {
                 config: runnable(evolution, EDGE_EDIT),
@@ -2505,9 +2501,9 @@ mod tests {
 
     #[test]
     fn save_results_writes_the_best_individual_and_a_reparseable_config() {
-        // Task 6's verify-by: both files exist, and the derived TOML path
-        // parses back through the same `Config::from_toml_str` the run itself
-        // used — that round-trip is the whole point of the provenance record.
+        // Both files exist, and the derived TOML path parses back through
+        // the same `Config::from_toml_str` the run itself used — that
+        // round-trip is the whole point of the provenance record.
         let config_toml = "population_size = 6\n\
              network_size = 8\n\
              max_edge_multiplicity = 2\n\
@@ -2579,8 +2575,7 @@ mod tests {
         // `infection_rate` is high here on purpose. At the shipped example's 0.05
         // an outbreak on a sparse graph dies immediately whatever the topology,
         // so every individual scores about the same and there is no gradient to
-        // climb — measured 2026-08-11, see `issues.md`. This test needs a signal,
-        // not a realistic parameter.
+        // climb. This test needs a signal, not a realistic parameter.
         let evolved = "[evolution]\ntype = \"generational\"\nnum_generations = 25\n";
         let unevolved = "[evolution]\ntype = \"generational\"\nnum_generations = 0\n";
 
