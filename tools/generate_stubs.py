@@ -159,7 +159,12 @@ def pick_doc(obj, key, saved_docs, displaced):
 def render_class(cls, name, path, saved, docs, displaced, depth):
     pad = "    " * depth
     body = "    " * (depth + 1)
-    out = [f"{pad}class {name}:"]
+    # A complex-enum variant is a real subclass of its enum at runtime, and a
+    # caller passes one wherever the enum is expected. Declaring it without the
+    # base makes every such call a type error.
+    bases = [b.__name__ for b in cls.__bases__ if b is not object]
+    inherits = "(" + ", ".join(bases) + ")" if bases else ""
+    out = [f"{pad}class {name}{inherits}:"]
     doc = pick_doc(cls, path, docs, displaced)
     if doc:
         out += render_doc_lines(doc, body)
