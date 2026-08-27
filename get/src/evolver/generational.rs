@@ -463,7 +463,7 @@ mod tests {
     /// identity and this is invisible.
     ///
     /// `Walk(20..=27)` is the starting population, so the best under `Maximize`
-    /// is 28 nodes — engine-oriented to -28.0.
+    /// is 28 nodes — converted to lower-is-better, -28.0.
     #[test]
     fn the_outcome_stays_engine_oriented_and_carries_the_direction() {
         let mut evolver = walk_evolver(8, 0);

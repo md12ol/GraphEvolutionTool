@@ -552,7 +552,7 @@ mod tests {
         let oriented = [-2.0, -4.0, -6.0, -8.0];
         let stats = generation_stats(1, &oriented);
 
-        // Engine orientation, not the objective's units: the natural best is
+        // Lower-is-better, not the objective's units: the natural best is
         // 8.0 and it stays -8.0 here. The boundary is what turns it back.
         assert_eq!(stats.best_fitness, -8.0);
         assert_eq!(stats.mean_fitness, -5.0);
@@ -730,8 +730,8 @@ mod tests {
         assert_eq!(best_index(&[7.0]), 0);
         assert_eq!(best_index(&[2.0, 2.0, 2.0]), 0, "a tie keeps the first");
         assert_eq!(best_index(&[9.0, 4.0, 4.0]), 1);
-        // Engine orientation is lower-is-better, so the largest value never
-        // wins however it is spelled.
+        // Lower-is-better, so the largest value never wins however it is
+        // spelled.
         assert_eq!(best_index(&[f64::INFINITY, 0.0]), 1);
         // `orient` rejects NaN long before this, so the guard is defensive —
         // but a plain `<` comparison would silently report a poisoned slot as
