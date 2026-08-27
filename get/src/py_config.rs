@@ -277,7 +277,7 @@ pub enum PyGenomeConfig {
 /// Fitness objective and its parameters.
 ///
 /// The epidemic objectives read one simulation differently, so they share a
-/// single [`PySirParams`] block.
+/// single `SirParams` block.
 #[pyclass(name = "FitnessConfig")]
 #[derive(Debug, Clone)]
 pub enum PyFitnessConfig {
