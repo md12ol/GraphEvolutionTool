@@ -10,7 +10,8 @@ parameter names and defaults into `__text_signature__`. This reads both off the
 imported module, so the stubs cannot drift from the code that produced them —
 there is no second copy of a signature to keep in step.
 
-**It preserves type annotations you add by hand, and that is the whole design.**
+**It preserves type annotations and docstrings you add by hand, and that is the
+whole design.**
 `__text_signature__` carries names and defaults but no types, so the generated
 file starts untyped and is annotated by hand once. A regeneration that discarded
 that work would make the tool unusable after its first run, so instead every
@@ -19,8 +20,16 @@ belongs to. Add a parameter in Rust and it appears here unannotated; remove one
 and its annotation goes with it; rename one and the annotation is dropped, which
 is correct — the old name no longer describes anything.
 
-Module-level `import` lines in the existing file are preserved the same way, so
-`from typing import ...` written for a hand annotation survives.
+Module-level `import` lines are preserved the same way, so `from typing import
+...` written for a hand annotation survives.
+
+Hand-written **docstrings** are preserved only where the module supplies none.
+PyO3 0.27 drops `///` comments on complex-enum variants and their fields — 48 of
+`get`'s 102 documentable items, including every `FitnessConfig` variant — so for
+those the stub is the only place documentation can live. Where the module does
+supply a docstring it wins, because that one comes from the Rust and is the copy
+that cannot go stale; a hand-written docstring displaced that way is reported
+rather than dropped silently.
 
 **Standard library only, like everything else in `tools/`.** It does need the
 module importable, which means building it first; `--check` is the same
@@ -96,7 +105,7 @@ def apply_annotations(args, saved):
             arg.annotation = ast.parse(text, mode="eval").body
 
 
-def render_function(name, args, returns, decorators, indent):
+def render_function(name, args, returns, decorators, indent, doc=None):
     fn = ast.FunctionDef(
         name=name,
         args=args,
@@ -106,13 +115,15 @@ def render_function(name, args, returns, decorators, indent):
         type_params=[],
     )
     ast.fix_missing_locations(fn)
-    return [indent + line for line in ast.unparse(fn).splitlines()]
+    lines = [indent + line for line in ast.unparse(fn).splitlines()]
+    if doc:
+        # `ast.unparse` renders the body as a trailing `...`; the docstring goes
+        # above it, at the body's indent.
+        lines[-1:-1] = render_doc_lines(doc, indent + "    ")
+    return lines
 
 
-def render_docstring(obj, indent):
-    doc = obj.__doc__
-    if not doc:
-        return []
+def render_doc_lines(doc, indent):
     lines = doc.strip().splitlines()
     if len(lines) == 1:
         return [f'{indent}"""{lines[0]}"""']
@@ -122,18 +133,33 @@ def render_docstring(obj, indent):
     return out
 
 
-def render_class(cls, name, path, saved, depth):
+def pick_doc(obj, key, saved_docs, displaced):
+    """The module's docstring if it has one, else whatever the stub carried."""
+    own = (obj.__doc__ or "").strip()
+    kept = saved_docs.get(key)
+    if own:
+        if kept and kept.strip() != own:
+            displaced.append(key)
+        return own
+    return kept
+
+
+def render_class(cls, name, path, saved, docs, displaced, depth):
     pad = "    " * depth
     body = "    " * (depth + 1)
     out = [f"{pad}class {name}:"]
-    out += render_docstring(cls, body)
+    doc = pick_doc(cls, path, docs, displaced)
+    if doc:
+        out += render_doc_lines(doc, body)
 
     # The constructor's signature is on the class; PyO3 leaves `__new__` generic.
     init = parse_signature(getattr(cls, "__text_signature__", None), "self")
     if init is not None:
         key = f"{path}.__init__"
         apply_annotations(init, saved.get(key, {}))
-        out += render_function("__init__", init, saved.get(key, {}).get("return"), [], body)
+        out += render_function(
+            "__init__", init, saved.get(key, {}).get("return"), [], body, docs.get(key)
+        )
 
     wrote = len(out) > 1
     for attr in sorted(cls.__dict__):
@@ -145,10 +171,13 @@ def render_class(cls, name, path, saved, depth):
             # A complex-enum variant is a nested class, and carries the
             # constructor a caller actually reaches for.
             out.append("")
-            out += render_class(value, attr, key, saved, depth + 1)
+            out += render_class(value, attr, key, saved, docs, displaced, depth + 1)
         elif isinstance(value, types.GetSetDescriptorType):
             args = ast.parse("def _(self): ...").body[0].args
-            out += render_function(attr, args, saved.get(key, {}).get("return"), ["property"], body)
+            out += render_function(
+                attr, args, saved.get(key, {}).get("return"), ["property"], body,
+                pick_doc(value, key, docs, displaced),
+            )
         elif isinstance(value, CALLABLE_TYPES):
             static = isinstance(value, staticmethod)
             target = value.__func__ if static else value
@@ -161,6 +190,7 @@ def render_class(cls, name, path, saved, depth):
             out += render_function(
                 attr, args, saved.get(key, {}).get("return"),
                 ["staticmethod"] if static else [], body,
+                pick_doc(target, key, docs, displaced),
             )
         else:
             continue
@@ -172,20 +202,28 @@ def render_class(cls, name, path, saved, depth):
 
 
 def read_existing(path):
-    """Annotations and imports from an existing stub, keyed by dotted path."""
+    """Annotations, docstrings and imports from an existing stub, by dotted path."""
     try:
         source = open(path, encoding="utf-8").read()
     except FileNotFoundError:
-        return {}, []
+        return {}, {}, []
     tree = ast.parse(source)
     saved = {}
+    docs = {}
     imports = []
 
     def walk(node, prefix):
         for child in node.body:
             if isinstance(child, ast.ClassDef):
-                walk(child, f"{prefix}{child.name}.")
+                key = f"{prefix}{child.name}"
+                doc = ast.get_docstring(child, clean=True)
+                if doc:
+                    docs[key] = doc
+                walk(child, f"{key}.")
             elif isinstance(child, ast.FunctionDef):
+                doc = ast.get_docstring(child, clean=True)
+                if doc:
+                    docs[f"{prefix}{child.name}"] = doc
                 entry = {}
                 for arg in all_args(child.args):
                     if arg.annotation is not None:
@@ -198,10 +236,10 @@ def read_existing(path):
                 imports.append(ast.unparse(child))
 
     walk(tree, "")
-    return saved, imports
+    return saved, docs, imports
 
 
-def generate(module, saved, imports):
+def generate(module, saved, docs, imports, displaced):
     lines = [HEADER, ""]
     if imports:
         lines += sorted(set(imports)) + [""]
@@ -214,7 +252,7 @@ def generate(module, saved, imports):
         if not isinstance(value, type):
             continue
         lines.append("")
-        lines += render_class(value, name, name, saved, 0)
+        lines += render_class(value, name, name, saved, docs, displaced, 0)
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -232,8 +270,15 @@ def main():
     except ImportError as err:
         sys.exit(f"cannot import `get` — build it first with `maturin develop --release`: {err}")
 
-    saved, imports = read_existing(args.out)
-    text = generate(module, saved, imports)
+    saved, docs, imports = read_existing(args.out)
+    displaced = []
+    text = generate(module, saved, docs, imports, displaced)
+
+    # A hand-written docstring only loses to one the module now supplies. Say so:
+    # silently discarding it is how the stub stops being worth hand-editing.
+    for key in displaced:
+        print(f"note: {key} now has a docstring in the module; the stub's was dropped",
+              file=sys.stderr)
 
     if args.check:
         try:
