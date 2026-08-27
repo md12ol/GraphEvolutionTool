@@ -1189,11 +1189,11 @@ num_epidemics  = 30
 
     #[test]
     fn a_whole_number_in_the_target_profile_may_be_written_without_a_decimal_point() {
-        // Measured 2026-08-10, not assumed: `toml` widens an integer element
-        // into the `f64` the field asks for, so a hand-written `[0, 2, 7]` is
-        // accepted rather than rejected as a type error. Worth a test because
-        // the opposite is the obvious guess, and the natural way to write a
-        // profile by hand is without decimal points.
+        // `toml` widens an integer element into the `f64` the field asks for,
+        // so a hand-written `[0, 2, 7]` is accepted rather than rejected as a
+        // type error. Worth a test because the opposite is the obvious
+        // guess, and the natural way to write a profile by hand is without
+        // decimal points.
         match fitness_of(&fitness_config_text(
             "[fitness]\ntype = \"epi_prof_match\"\ninfection_rate = 0.05\nnum_epidemics = 30\n\
              target_profile = [0, 2, 7]\n",
@@ -1225,15 +1225,11 @@ num_epidemics  = 30
 
     #[test]
     fn a_stray_fitness_seed_is_rejected_by_name() {
-        // Serde still cannot catch this, and that has not changed: it buffers
-        // the content of a `#[serde(flatten)]` field, so `deny_unknown_fields`
-        // never fires — measured 2026-08-05 with the attribute on `SirParams`
-        // itself. The key is caught by reading the raw text instead, because
-        // the migration hazard is silent: an old config keeping `seed = 42`
+        // Serde cannot catch this: `#[serde(flatten)]` buffers the field's
+        // content, so `deny_unknown_fields` on `SirParams` never fires. The
+        // key is caught by reading the raw text instead, because the
+        // migration hazard is silent: an old config keeping `seed = 42`
         // would otherwise get a different seeding model with no error.
-        //
-        // Supersedes #24's `an_unknown_fitness_key_is_ignored_rather_than_rejected`,
-        // which pinned the gap this closes.
         let error = Config::from_toml_str(&fitness_config_text(
             "[fitness]\ntype = \"epi_spread\"\ninfection_rate = 0.05\n\
              num_epidemics = 30\nseed = 42\n",
@@ -1248,8 +1244,8 @@ num_epidemics  = 30
 
     #[test]
     fn a_target_profile_under_any_other_objective_is_rejected_as_a_contradiction() {
-        // Spec §8: the profile is required by `epi_prof_match` and "rejected as
-        // a contradiction if supplied for any other objective". Caught in the
+        // The profile is required by `epi_prof_match` and rejected as a
+        // contradiction if supplied for any other objective. Caught in the
         // same raw-text pass as `seed`, and for the same reason — the flatten
         // swallows it, so the realistic mistake of switching objective and
         // leaving the profile behind would otherwise run as a spread
@@ -1316,8 +1312,6 @@ num_epidemics  = 30
             other => panic!("expected epi_spread, got {other:?}"),
         }
     }
-
-    // ---- `Config::validate` — spec §7's constraints -----------------------
 
     /// Parse without validating, so a test can break exactly one field of an
     /// otherwise-valid fixture and check that `validate` catches that field.
@@ -1724,9 +1718,9 @@ num_epidemics  = 30
         let zero = config_with_fitness(&format!("{SIR_BASE}min_epidemic_length = 0\n"));
         assert_eq!(validation_field(&zero), "min_epidemic_length");
 
-        // 1 means "never re-roll" — every epidemic has length >= 1 under the
-        // §5.2 convention, so 1 is the only way to opt out of the re-roll's
-        // deliberate bias. Pinned so nobody "corrects" the floor to 2.
+        // 1 means "never re-roll" — every epidemic already has length >= 1,
+        // so 1 is the only way to opt out of the re-roll's deliberate bias.
+        // Pinned so nobody "corrects" the floor to 2.
         config_with_fitness(&format!("{SIR_BASE}min_epidemic_length = 1\n"))
             .validate()
             .expect("min_epidemic_length = 1 disables the re-roll and is legal");
@@ -1809,8 +1803,6 @@ num_epidemics  = 30
         );
     }
 
-    // ---- `Config::from_path` ----------------------------------------------
-
     /// The sequence both front ends run: read the file, parse it, validate it.
     /// Spelled out here rather than behind a `Config::from_path` helper —
     /// there was one, and nothing could use it, because every real caller also
@@ -1831,16 +1823,6 @@ num_epidemics  = 30
         ))
         .expect("the shipped example config should load and validate");
     }
-
-    // `the_examples_commented_struct_match_block_parses_and_matches_the_defaults`
-    // was here. It uncommented the example's struct_match [fitness] block,
-    // parsed it, and pinned the defaults the file documented against the ones
-    // the code applies. The block is gone as of the joint meeting of
-    // 2026-08-20: no shipped example uses struct_match, because it needs
-    // reference data a new reader does not have. The defaults it guarded are
-    // now documented on the site rather than in the file, where no test can
-    // reach them -- which is a real loss, recorded here rather than left to be
-    // rediscovered.
 
     #[test]
     fn a_missing_config_file_is_an_io_error_rather_than_a_panic() {

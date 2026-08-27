@@ -938,8 +938,6 @@ mod tests {
         graph
     }
 
-    // --- density ---
-
     #[test]
     fn density_is_the_fraction_of_possible_edges_present() {
         // A triangle is complete on 3 nodes.
@@ -987,8 +985,6 @@ mod tests {
         assert!((density(&weighted) - density(&path_of_three())).abs() < 1e-12);
     }
 
-    // --- reference set construction ---
-
     /// An empty reference set is an error, not a perfect score. The source
     /// returns 0.0 here, which makes a mistyped reference folder look like a
     /// solved problem.
@@ -1019,8 +1015,6 @@ mod tests {
         let expected = (2.0 / 3.0 + 1.0) / 2.0;
         assert!((stats.mean_density() - expected).abs() < 1e-12);
     }
-
-    // --- the kernel score ---
 
     /// The gamma and weight preconditions, which nothing but these asserts
     /// enforces on the route-3 path.

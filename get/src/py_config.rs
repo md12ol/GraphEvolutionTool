@@ -1081,8 +1081,8 @@ mod tests {
 
         match genome {
             // Destructured exhaustively, no `..`: a field added to
-            // `EdgeEditGenomeConfig` and forgotten here fails to compile, which
-            // is the drift guard `traps.md` describes for the config mirror.
+            // `EdgeEditGenomeConfig` and forgotten here fails to compile,
+            // which is this module's drift guard for the config mirror.
             GenomeConfig::EdgeEdit(EdgeEditGenomeConfig {
                 gene_length,
                 operation_weights,
@@ -1171,7 +1171,7 @@ mod tests {
         match parsed.genome {
             // Destructured exhaustively, no `..`: a field added to
             // `SdaGenomeConfig` and forgotten here fails to compile, which is
-            // the drift guard `traps.md` describes for the config mirror.
+            // this module's drift guard for the config mirror.
             GenomeConfig::Sda(SdaGenomeConfig {
                 num_states,
                 max_resp_len,

@@ -463,8 +463,6 @@ mod tests {
         );
     }
 
-    // --- The epidemic runner: position-indexed seeding and the re-roll ------
-
     /// Two connected nodes at rate 0.5: an epidemic is `length == 2` when it
     /// transmits and `length == 1` when it does not. That split is what lets
     /// these tests tell *which* attempt was kept.
@@ -678,9 +676,9 @@ mod tests {
         assert!(epidemic.profile.is_empty());
     }
 
-    /// Zero here means *no epidemic existed*, not *nobody was infected* — since
-    /// the §5.2 amendment a lone patient zero is `length == 1`, so only a
-    /// nodeless graph can produce `0`. Deliberate; see `sir_sim`'s doc comment.
+    /// Zero here means *no epidemic existed*, not *nobody was infected* — a
+    /// lone patient zero is `length == 1`, so only a nodeless graph can
+    /// produce `0`. Deliberate; see `sir_sim`'s doc comment.
     #[test]
     fn an_empty_graph_produces_no_epidemic() {
         let graph = Graph::new(0, 1);

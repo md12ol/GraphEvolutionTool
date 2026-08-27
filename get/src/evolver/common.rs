@@ -544,7 +544,7 @@ mod tests {
     /// Guards the rule that nothing inside the engine converts. These are the
     /// oriented fitnesses a `Maximize` objective produces, and every field must
     /// come back still oriented — reinstating a conversion here flips the signs
-    /// of the first two assertions and fails the test. Spec §5.1.
+    /// of the first two assertions and fails the test.
     #[test]
     fn generation_stats_stays_in_engine_orientation_under_maximize() {
         // What `express_and_score` hands over for natural scores 2, 4, 6, 8
@@ -552,7 +552,7 @@ mod tests {
         let oriented = [-2.0, -4.0, -6.0, -8.0];
         let stats = generation_stats(1, &oriented);
 
-        // Engine orientation, not the objective's units: the natural best is
+        // Lower-is-better, not the objective's units: the natural best is
         // 8.0 and it stays -8.0 here. The boundary is what turns it back.
         assert_eq!(stats.best_fitness, -8.0);
         assert_eq!(stats.mean_fitness, -5.0);
@@ -635,7 +635,7 @@ mod tests {
     #[test]
     fn a_boxed_objective_keeps_its_batched_override_through_express_and_score() {
         // The engine scores through `Box<dyn Fitness>` once the config layer
-        // erases the objective (§8), so the box has to reach the objective's own
+        // erases the objective, so the box has to reach the objective's own
         // `evaluate_batch` — not the trait default, which would call Python
         // once per individual from inside a rayon closure. Tested here rather
         // than in `fitness.rs` because this is the path the engine actually
@@ -730,8 +730,8 @@ mod tests {
         assert_eq!(best_index(&[7.0]), 0);
         assert_eq!(best_index(&[2.0, 2.0, 2.0]), 0, "a tie keeps the first");
         assert_eq!(best_index(&[9.0, 4.0, 4.0]), 1);
-        // Engine orientation is lower-is-better, so the largest value never
-        // wins however it is spelled.
+        // Lower-is-better, so the largest value never wins however it is
+        // spelled.
         assert_eq!(best_index(&[f64::INFINITY, 0.0]), 1);
         // `orient` rejects NaN long before this, so the guard is defensive —
         // but a plain `<` comparison would silently report a poisoned slot as
@@ -904,7 +904,6 @@ mod tests {
             let mut child = IndexGenome::new(0);
             mutate_child(&mut child, &(), 1.0, 1, &mut rng);
 
-            // The contract this task exists to enforce: one call, one mutation.
             assert_eq!(child.mutations, 1, "max_mutations 1 must apply exactly one");
         }
     }

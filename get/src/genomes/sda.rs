@@ -486,7 +486,7 @@ mod tests {
     #[test]
     fn express_folds_the_run_into_the_upper_triangle_in_row_major_order() {
         let genome = small_genome();
-        // small_genome has a 2-char alphabet, so the matching cap is 1 (§3.2).
+        // small_genome has a 2-char alphabet, so the matching cap is 1.
         let context = express_context(3, 1);
 
         let graph = genome.express(&context);
@@ -501,14 +501,14 @@ mod tests {
     fn express_of_zero_or_one_node_contexts_is_an_untouched_empty_graph() {
         let genome = small_genome();
 
-        // small_genome has a 2-char alphabet, so the matching cap is 1 (§3.2).
+        // small_genome has a 2-char alphabet, so the matching cap is 1.
         for num_nodes in [0, 1] {
             let context = express_context(num_nodes, 1);
             assert_eq!(genome.express(&context), Graph::new(num_nodes, 1));
         }
     }
 
-    /// §3.2's derived-alphabet invariant, oversized case: a genome with more
+    /// The derived-alphabet invariant, oversized case: a genome with more
     /// characters than `context.max_edge_multiplicity + 1` allows is refused
     /// at `express` rather than silently letting `Graph::set_edge` clamp the
     /// surplus characters onto the cap. `Graph::set_edge`'s own clamping
@@ -527,7 +527,7 @@ mod tests {
         genome.express(&context);
     }
 
-    /// §3.2's derived-alphabet invariant, undersized case: a genome with
+    /// The derived-alphabet invariant, undersized case: a genome with
     /// fewer characters than the cap allows would silently leave the upper
     /// edge weights unreachable rather than exploring the space the context
     /// configured. Refused the same way as the oversized case.
@@ -548,7 +548,7 @@ mod tests {
         let context = express_context(3, cap);
 
         // Doesn't panic: random_with_edge_multiplicity_cap derives num_chars
-        // from the same cap the context carries, satisfying §3.2 by
+        // from the same cap the context carries, satisfying the invariant by
         // construction.
         genome.express(&context);
     }

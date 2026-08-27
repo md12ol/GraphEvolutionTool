@@ -1345,9 +1345,9 @@ mod tests {
         });
     }
 
-    /// GitHub #152: the objective reads a reference folder under a sanity
-    /// bound, not under `network_size`, and this call has to agree with it or a
-    /// set a run scores against cannot be inspected from Python.
+    /// The objective reads a reference folder under a sanity bound, not
+    /// under `network_size`, and this call has to agree with it or a set a
+    /// run scores against cannot be inspected from Python.
     #[test]
     fn a_reference_graph_larger_than_network_size_is_read() {
         Python::attach(|py| {
@@ -1372,8 +1372,9 @@ mod tests {
         });
     }
 
-    /// The other half of #152: raising the cap is not removing it. A file
-    /// indexed the wrong way — a global dataset index, say — still fails.
+    /// The other half of the sanity bound: raising the cap is not removing
+    /// it. A file indexed the wrong way — a global dataset index, say — still
+    /// fails.
     #[test]
     fn a_reference_graph_above_the_sanity_bound_is_still_rejected() {
         Python::attach(|py| {
@@ -1499,9 +1500,9 @@ mod tests {
 
     #[test]
     fn a_python_config_with_no_registered_callable_is_an_error_not_a_panic() {
-        // The second half of #19's verify-by. Without this the run would reach
-        // scoring with nothing to call and panic somewhere inside the engine,
-        // where the message would name none of this.
+        // Without this the run would reach scoring with nothing to call and
+        // panic somewhere inside the engine, where the message would name
+        // none of this.
         let evolver = evolver_with(PYTHON_FITNESS);
 
         // `map(|_| ())` because `Box<dyn Fitness>` is not `Debug`, which
@@ -1540,7 +1541,7 @@ mod tests {
 
     #[test]
     fn each_call_hands_back_its_own_objective() {
-        // Replicates need one instance each (§8.1), so the seam is re-run per
+        // Replicates need one instance each, so the seam is re-run per
         // replicate rather than handing the same box to several runs.
         Python::attach(|py| {
             let mut evolver = evolver_with(PYTHON_FITNESS);
@@ -1642,8 +1643,8 @@ mod tests {
     #[test]
     fn from_config_rejects_what_the_toml_front_end_would_reject() {
         // Zero clamps every edge weight to nothing under any genome, so the run
-        // would look like a broken fitness function rather than a bad config
-        // (spec §7, GitHub #6). The TOML path rejects it; so must this one.
+        // would look like a broken fitness function rather than a bad config.
+        // The TOML path rejects it; so must this one.
         let mut config = a_valid_config();
         config.max_edge_multiplicity = 0;
 

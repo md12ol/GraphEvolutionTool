@@ -312,7 +312,7 @@ mod tests {
     fn elites_survive_as_genomes_while_their_recorded_fitness_moves() {
         // The elite genomes are copied forward untouched, but they are rescored
         // with everyone else — so under a stochastic objective their numbers move
-        // while they themselves do not. Spec §6.2.
+        // while they themselves do not.
         let objective = Alternating {
             passes: AtomicUsize::new(0),
         };
@@ -463,7 +463,7 @@ mod tests {
     /// identity and this is invisible.
     ///
     /// `Walk(20..=27)` is the starting population, so the best under `Maximize`
-    /// is 28 nodes — engine-oriented to -28.0. Spec §5.1.
+    /// is 28 nodes — converted to lower-is-better, -28.0.
     #[test]
     fn the_outcome_stays_engine_oriented_and_carries_the_direction() {
         let mut evolver = walk_evolver(8, 0);
