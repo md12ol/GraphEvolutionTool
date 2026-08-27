@@ -67,8 +67,8 @@ impl PyGenerationStats {
 
 /// Everything one run produced.
 ///
-/// Returned by [`crate::GraphEvolver::run`]. The evolver keeps none of it, so it
-/// is reusable across runs and never reports a previous one's numbers.
+/// Returned by `GraphEvolver.run`. The evolver keeps none of it, so it is
+/// reusable across runs and never reports a previous one's numbers.
 #[pyclass(name = "RunResult", frozen)]
 #[derive(Debug)]
 pub struct PyRunResult {
