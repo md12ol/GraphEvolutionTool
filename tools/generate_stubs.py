@@ -34,6 +34,11 @@ rather than dropped silently.
 **Standard library only, like everything else in `tools/`.** It does need the
 module importable, which means building it first; `--check` is the same
 generation compared against the tree rather than written to it.
+
+**Python 3.9 or newer**, for `ast.unparse`. That is a floor on running this
+script, not on the package: `pyproject.toml` supports 3.8 and the wheel is built
+against the 3.8 ABI. CI runs the check in its own job for exactly this reason —
+the wheel-building job uses 3.8.
 """
 
 import argparse
@@ -41,6 +46,13 @@ import ast
 import importlib
 import sys
 import types
+
+if not hasattr(ast, "unparse"):
+    sys.exit(
+        f"tools/generate_stubs.py needs Python 3.9 or newer for `ast.unparse`; "
+        f"this is {sys.version.split()[0]}. The package still supports 3.8 — "
+        f"only this script does not."
+    )
 
 DEFAULT_OUT = "python/get/__init__.pyi"
 
