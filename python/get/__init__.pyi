@@ -209,7 +209,7 @@ class Config:
 class EvolutionConfig:
     """Which evolution strategy to run, and its strategy-specific settings."""
 
-    class Generational:
+    class Generational(EvolutionConfig):
         """Whole-population replacement, run `num_generations` times."""
         def __init__(self, num_generations: int, elite_count: int=1) -> None:
             ...
@@ -226,7 +226,7 @@ class EvolutionConfig:
             """Whole-population replacements to run."""
             ...
 
-    class SteadyState:
+    class SteadyState(EvolutionConfig):
         """Single breeding events, `num_mating_events` of them.
 
         One event touches one scope, not the whole population.
@@ -250,14 +250,14 @@ class EvolutionConfig:
 class ReplacementConfig:
     """Which members of a scope a mating event's children overwrite."""
 
-    class Random:
+    class Random(ReplacementConfig):
         """Children overwrite individuals drawn uniformly from the scope, giving up
         steady-state's self-elitism.
         """
         def __init__(self) -> None:
             ...
 
-    class Worst:
+    class Worst(ReplacementConfig):
         """Children overwrite the least fit of the scope.
 
         This is what makes steady-state self-elitist.
@@ -268,12 +268,12 @@ class ReplacementConfig:
 class ScopeConfig:
     """The slice of the population one breeding event draws from."""
 
-    class Global:
+    class Global(ScopeConfig):
         """Every individual is a candidate. Consumes no randomness."""
         def __init__(self) -> None:
             ...
 
-    class RandomSubset:
+    class RandomSubset(ScopeConfig):
         """`size` distinct individuals, drawn uniformly without replacement."""
         def __init__(self, size: int) -> None:
             ...
@@ -288,7 +288,7 @@ class ScopeConfig:
 class SelectionConfig:
     """Parent-selection strategy."""
 
-    class Best:
+    class Best(SelectionConfig):
         """Takes the scope's fittest, in rank order.
 
         Consumes no randomness — the scope did the drawing.
@@ -296,7 +296,7 @@ class SelectionConfig:
         def __init__(self) -> None:
             ...
 
-    class Tournament:
+    class Tournament(SelectionConfig):
         """Draws `tournament_size` members of the scope with replacement and takes the
         best, once per parent.
         """
@@ -312,7 +312,7 @@ class SelectionConfig:
 class CrossoverConfig:
     """Recombination operator."""
 
-    class TwoPoint:
+    class TwoPoint(CrossoverConfig):
         """Two cut points, the middle segment exchanged. The only operator that
         ships.
         """
@@ -322,7 +322,7 @@ class CrossoverConfig:
 class EdgeEditMutationConfig:
     """Which mutation an edge-edit genome applies."""
 
-    class RerollGene:
+    class RerollGene(EdgeEditMutationConfig):
         """Redraws one edit operation in the genome."""
         def __init__(self) -> None:
             ...
@@ -330,7 +330,7 @@ class EdgeEditMutationConfig:
 class SdaMutationConfig:
     """Which mutation an SDA genome applies."""
 
-    class RedrawOne:
+    class RedrawOne(SdaMutationConfig):
         """Redraws one element of the automaton — the initial character, a transition's
         target, or its response.
         """
@@ -340,7 +340,7 @@ class SdaMutationConfig:
 class GenomeConfig:
     """Genome representation and the dimensions used to build random individuals."""
 
-    class EdgeEdit:
+    class EdgeEdit(GenomeConfig):
         """A list of edit operations; the graph is what replaying them produces."""
         def __init__(self, gene_length: int, operation_weights: OperationWeights | None=None, mutation: EdgeEditMutationConfig | None=None) -> None:
             ...
@@ -359,7 +359,7 @@ class GenomeConfig:
             """
             ...
 
-    class Sda:
+    class Sda(GenomeConfig):
         """A self-driving automaton whose output is read as the graph's edges.
 
         No `num_chars`: the alphabet is `max_edge_multiplicity + 1`, so every
@@ -409,7 +409,7 @@ class FitnessConfig:
     single `SirParams` block.
     """
 
-    class EpiLength:
+    class EpiLength(FitnessConfig):
         """Timesteps to burn out. Maximized."""
         def __init__(self, sir: SirParams) -> None:
             ...
@@ -418,7 +418,7 @@ class FitnessConfig:
             """Epidemic sampling parameters, shared by the three epidemic objectives."""
             ...
 
-    class EpiProfMatch:
+    class EpiProfMatch(FitnessConfig):
         """RMSE against a target profile. Minimized."""
         def __init__(self, sir: SirParams, target_profile: list[float]) -> None:
             ...
@@ -433,7 +433,7 @@ class FitnessConfig:
             """
             ...
 
-    class EpiSpread:
+    class EpiSpread(FitnessConfig):
         """Total ever-infected. Maximized."""
         def __init__(self, sir: SirParams) -> None:
             ...
@@ -442,7 +442,7 @@ class FitnessConfig:
             """Epidemic sampling parameters, shared by the three epidemic objectives."""
             ...
 
-    class Python:
+    class Python(FitnessConfig):
         """A Python callable registered before the run, via
         `GraphEvolver.set_fitness_function`. Whether it is maximized or minimized is
         declared at registration, not here.
@@ -450,7 +450,7 @@ class FitnessConfig:
         def __init__(self) -> None:
             ...
 
-    class StructMatch:
+    class StructMatch(FitnessConfig):
         """How closely a graph's structure matches a set of reference graphs.
 
         Minimized; requires `max_edge_multiplicity = 1`.

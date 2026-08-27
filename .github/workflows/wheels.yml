@@ -122,6 +122,14 @@ jobs:
           python -m pip install --no-index --find-links dist graph-evolution-tool
           python tools/generate_stubs.py --check
 
+      - name: Python tests
+        # Nothing ran these before: `cargo test` does not build the Python
+        # module, so `tools/`'s tests had no job that could import it. The stub
+        # tests read the stub and the module independently, which is what
+        # `--check` above cannot do — it compares the generator against itself.
+        shell: bash
+        run: python -m unittest discover -s tools -v
+
   # The abi3 promise, actually tested.
   #
   # `pyproject.toml` says `requires-python = ">=3.8"` and the wheel is built

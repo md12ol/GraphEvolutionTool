@@ -103,7 +103,7 @@ class ConversionTest(unittest.TestCase):
 
     def test_each_undirected_edge_appears_once(self):
         for name in sorted(os.listdir(self.output)):
-            seen = set()
+            seen: set[tuple[int, int]] = set()
             for row in edge_rows(os.path.join(self.output, name)):
                 low, high, _ = row.split(",")
                 pair = (int(low), int(high))
