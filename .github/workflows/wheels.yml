@@ -1,12 +1,13 @@
 # Builds the Python extension module as a wheel for Linux, macOS and Windows,
-# and publishes to TestPyPI.
+# and publishes to TestPyPI and then to PyPI.
 #
 # The filename matters: PyPI's Trusted Publisher config names this workflow
 # explicitly, so renaming this file breaks publishing until the config on
 # pypi.org is edited to match.
 #
-# Publishing to the real PyPI is deliberately NOT here. A version number, once
-# uploaded, can never be reused, so that step is its own reviewed change.
+# Both publish jobs need a version tag, and the PyPI one needs a reviewer to
+# approve its environment as well. A version number, once uploaded, can never be
+# reused.
 
 name: wheels
 
@@ -135,3 +136,27 @@ jobs:
           # TestPyPI keeps its own copy of every version, and a version there
           # cannot be reused either. Re-running a tag should not fail the job.
           skip-existing: true
+
+  publish-pypi:
+    name: publish to PyPI
+    needs: publish-testpypi
+    # Only on a tag, and only after TestPyPI took the same artifacts — a failure
+    # there is the last cheap warning before an unrepeatable upload.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    # `pypi` requires a reviewer, so this job waits for a human even when a tag
+    # reaches it by accident.
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+
+      # No `skip-existing` here, unlike TestPyPI. A version on real PyPI can
+      # never be reused, so a re-run hitting one that already exists is a
+      # mistake to stop on rather than pass over.
+      - uses: pypa/gh-action-pypi-publish@release/v1
