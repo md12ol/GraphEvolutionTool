@@ -463,8 +463,6 @@ mod tests {
         );
     }
 
-    // --- The epidemic runner: position-indexed seeding and the re-roll ------
-
     /// Two connected nodes at rate 0.5: an epidemic is `length == 2` when it
     /// transmits and `length == 1` when it does not. That split is what lets
     /// these tests tell *which* attempt was kept.
