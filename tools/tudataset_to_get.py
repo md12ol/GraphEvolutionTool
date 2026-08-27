@@ -81,7 +81,7 @@ def read_indicator(path):
     """
     node_graph = {}
     graph_ids = []
-    graph_nodes = {}
+    graph_nodes: dict[int, list[int]] = {}
 
     with open(path, "r") as handle:
         for index, raw_line in enumerate(handle):
@@ -130,8 +130,8 @@ def read_edges(path, node_graph, local_index):
     `DS_A.txt` carries both directions, and the second one is dropped here
     rather than left for GET's loader to warn about.
     """
-    edges_by_graph = {}
-    seen_by_graph = {}
+    edges_by_graph: dict[int, list[tuple[int, int]]] = {}
+    seen_by_graph: dict[int, set[tuple[int, int]]] = {}
     self_loops = 0
     duplicate_rows = 0
 

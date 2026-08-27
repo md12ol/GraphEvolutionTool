@@ -211,7 +211,7 @@ def render_class(cls, name, path, saved, docs, displaced, depth):
             )
         elif isinstance(value, CALLABLE_TYPES):
             static = isinstance(value, staticmethod)
-            target = value.__func__ if static else value
+            target = value.__func__ if isinstance(value, staticmethod) else value
             args = parse_signature(
                 getattr(target, "__text_signature__", None), None if static else "self"
             )
@@ -303,7 +303,7 @@ def main():
         sys.exit(f"cannot import `get` — build it first with `maturin develop --release`: {err}")
 
     saved, docs, imports = read_existing(args.out)
-    displaced = []
+    displaced: list[str] = []
     text = generate(module, saved, docs, imports, displaced)
 
     # A hand-written docstring only loses to one the module now supplies. Say so:

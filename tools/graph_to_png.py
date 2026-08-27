@@ -28,6 +28,14 @@ import zlib
 
 # --- Drawing constants -------------------------------------------------------
 
+# The invocation lines from the docstring above. Read out rather than indexed at
+# the point of use: `__doc__` is `str | None`, and `python -OO` strips it.
+USAGE = (
+    (__doc__ or "").strip().split("\n\n")[1]
+    if __doc__
+    else "usage: python3 tools/graph_to_png.py <edges.txt> [out.png]"
+)
+
 SIZE = 900  # output edge length in pixels, square
 SUPERSAMPLE = 3  # rendered at SIZE * this, then box-filtered down
 MARGIN = 60  # keeps node circles off the edge of the image
@@ -289,7 +297,7 @@ def draw(num_nodes, edges, positions):
 
 def main(argv):
     if not 2 <= len(argv) <= 3:
-        print(__doc__.strip().split("\n\n")[1], file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         return 1
 
     source = argv[1]
