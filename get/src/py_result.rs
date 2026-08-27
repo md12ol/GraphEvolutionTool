@@ -37,7 +37,7 @@ pub(crate) fn as_comment(label: &str, value: &str) -> String {
 ///
 /// `iteration` counts generations under the generational strategy and mating
 /// events under steady-state.
-#[pyclass(name = "GenerationStats", frozen, get_all)]
+#[pyclass(name = "GenerationStats", module = "get", frozen, get_all)]
 #[derive(Debug, Clone)]
 pub struct PyGenerationStats {
     /// Generation number, or mating-event number.
@@ -69,7 +69,7 @@ impl PyGenerationStats {
 ///
 /// Returned by `GraphEvolver.run`. The evolver keeps none of it, so it is
 /// reusable across runs and never reports a previous one's numbers.
-#[pyclass(name = "RunResult", frozen)]
+#[pyclass(name = "RunResult", module = "get", frozen)]
 #[derive(Debug)]
 pub struct PyRunResult {
     /// Best of the **final** population, **as-measured** — the units and sign

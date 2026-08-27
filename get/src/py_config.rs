@@ -20,7 +20,7 @@ use toml::map::Map;
 ///
 /// Nothing is range-checked here; every field is checked when the config is
 /// handed to an evolver.
-#[pyclass(name = "SirParams")]
+#[pyclass(name = "SirParams", module = "get")]
 #[derive(Debug, Clone)]
 pub struct PySirParams {
     /// Per-edge transmission probability per timestep.
@@ -71,7 +71,7 @@ impl PySirParams {
 ///
 /// Every weight defaults to 1.0, so the operations are equally likely; 0.0
 /// disables an operation outright.
-#[pyclass(name = "OperationWeights")]
+#[pyclass(name = "OperationWeights", module = "get")]
 #[derive(Debug, Clone)]
 pub struct PyOperationWeights {
     pub toggle: f64,
@@ -132,7 +132,7 @@ impl Default for PyOperationWeights {
 }
 
 /// Which evolution strategy to run, and its strategy-specific settings.
-#[pyclass(name = "EvolutionConfig")]
+#[pyclass(name = "EvolutionConfig", module = "get")]
 #[derive(Debug, Clone)]
 pub enum PyEvolutionConfig {
     // `elite_count`'s default of 1 has to match `config`'s `default_elite_count`;
@@ -160,7 +160,7 @@ pub enum PyEvolutionConfig {
 }
 
 /// Which members of a scope a mating event's children overwrite.
-#[pyclass(name = "ReplacementConfig")]
+#[pyclass(name = "ReplacementConfig", module = "get")]
 #[derive(Debug, Clone)]
 pub enum PyReplacementConfig {
     #[pyo3(constructor = ())]
@@ -176,7 +176,7 @@ pub enum PyReplacementConfig {
 }
 
 /// The slice of the population one breeding event draws from.
-#[pyclass(name = "ScopeConfig")]
+#[pyclass(name = "ScopeConfig", module = "get")]
 #[derive(Debug, Clone)]
 pub enum PyScopeConfig {
     #[pyo3(constructor = ())]
@@ -193,7 +193,7 @@ pub enum PyScopeConfig {
 }
 
 /// Parent-selection strategy.
-#[pyclass(name = "SelectionConfig")]
+#[pyclass(name = "SelectionConfig", module = "get")]
 #[derive(Debug, Clone)]
 pub enum PySelectionConfig {
     #[pyo3(constructor = ())]
@@ -210,7 +210,7 @@ pub enum PySelectionConfig {
 }
 
 /// Recombination operator.
-#[pyclass(name = "CrossoverConfig")]
+#[pyclass(name = "CrossoverConfig", module = "get")]
 #[derive(Debug, Clone)]
 pub enum PyCrossoverConfig {
     #[pyo3(constructor = ())]
@@ -230,7 +230,7 @@ impl Default for PyCrossoverConfig {
 }
 
 /// Genome representation and the dimensions used to build random individuals.
-#[pyclass(name = "GenomeConfig")]
+#[pyclass(name = "GenomeConfig", module = "get")]
 #[derive(Debug, Clone)]
 pub enum PyGenomeConfig {
     #[pyo3(constructor = (gene_length, operation_weights = None, mutation = None))]
@@ -278,7 +278,7 @@ pub enum PyGenomeConfig {
 ///
 /// The epidemic objectives read one simulation differently, so they share a
 /// single `SirParams` block.
-#[pyclass(name = "FitnessConfig")]
+#[pyclass(name = "FitnessConfig", module = "get")]
 #[derive(Debug, Clone)]
 pub enum PyFitnessConfig {
     /// Total ever-infected. Maximized.
@@ -338,7 +338,7 @@ pub enum PyFitnessConfig {
 }
 
 /// Everything the genetic algorithm needs for a run.
-#[pyclass(name = "Config")]
+#[pyclass(name = "Config", module = "get")]
 #[derive(Debug, Clone)]
 pub struct PyConfig {
     /// Which evolution strategy to run.
@@ -715,7 +715,7 @@ impl PyCrossoverConfig {
 }
 
 /// Which mutation an edge-edit genome applies.
-#[pyclass(name = "EdgeEditMutationConfig")]
+#[pyclass(name = "EdgeEditMutationConfig", module = "get")]
 #[derive(Debug, Clone)]
 pub enum PyEdgeEditMutationConfig {
     #[pyo3(constructor = ())]
@@ -752,7 +752,7 @@ impl PyEdgeEditMutationConfig {
 }
 
 /// Which mutation an SDA genome applies.
-#[pyclass(name = "SdaMutationConfig")]
+#[pyclass(name = "SdaMutationConfig", module = "get")]
 #[derive(Debug, Clone)]
 pub enum PySdaMutationConfig {
     #[pyo3(constructor = ())]

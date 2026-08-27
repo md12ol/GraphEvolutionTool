@@ -41,6 +41,12 @@ manifest-path = "get/Cargo.toml"
 # becomes `graph_evolution_tool` and every existing example breaks.
 module-name = "get"
 
+# The package carries Python source now — `py.typed` and the generated
+# `__init__.pyi` — so maturin merges the compiled module into `python/get/`
+# rather than emitting a package of its own. Without this the stubs are built
+# but never land in the wheel, and an editor has nothing to read.
+python-source = "python"
+
 # Re-enables what `get/Cargo.toml` deliberately leaves off.
 #
 # `extension-module` suppresses linking libpython, leaving the Python C API
