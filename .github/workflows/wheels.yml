@@ -102,6 +102,47 @@ jobs:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
           path: dist
 
+  # The abi3 promise, actually tested.
+  #
+  # `pyproject.toml` says `requires-python = ">=3.8"` and the wheel is built
+  # once, against the 3.8 ABI, on the strength of abi3 keeping it importable on
+  # every later version. Nothing verified that: `build` imports the wheel only on
+  # the 3.8 it was built with, so a break on a newer interpreter would first be
+  # reported by a user.
+  #
+  # Linux x86_64 only. This tests the *interpreter* axis, and one platform is
+  # enough for that; the platform axis is what `build`'s own matrix covers.
+  abi3:
+    name: import on python ${{ matrix.python }}
+    needs: build
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor, the current stable, and the newest — a version dropping off
+        # this list should be a deliberate edit, not a default carrying on.
+        python: ['3.8', '3.12', '3.13']
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: wheels-linux-x86_64
+          path: dist
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install the built wheel and import it
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install --no-index --find-links dist graph-evolution-tool
+          python -c "import get, sys; print(sys.version); print('imported', get.__file__)"
+          # Touching the API rather than only importing: a missing symbol from an
+          # ABI mismatch shows up on first use, not at import.
+          python -c "import get; print(get.SirParams(infection_rate=0.3, num_epidemics=2))"
+
   # One stable name for `main`'s ruleset to require.
   #
   # A required status check is matched by literal name, and `build` renders one
@@ -116,20 +157,31 @@ jobs:
   # with no explanation of what actually broke.
   wheels-ok:
     name: wheels ok
-    needs: build
+    needs: [build, abi3]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Every wheel built
+      - name: Every wheel built, and imports on every supported Python
         run: |
           echo "build result: ${{ needs.build.result }}"
+          echo "abi3 result:  ${{ needs.abi3.result }}"
           test "${{ needs.build.result }}" = success
+          test "${{ needs.abi3.result }}" = success
 
   publish-testpypi:
     name: publish to TestPyPI
-    needs: build
+    needs: [build, abi3]
     # Only on a tag, and never from a fork's pull request.
-    if: startsWith(github.ref, 'refs/tags/v')
+    #
+    # Both results are spelled out for the same reason `publish-pypi` spells out
+    # its one: a job carrying its own `if:` loses the implicit "all needs
+    # succeeded" gate. Without them a partly-failed matrix would reach this step
+    # with only some platforms' artifacts present and publish that set.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v')
+      && needs.build.result == 'success'
+      && needs.abi3.result == 'success'
+
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
