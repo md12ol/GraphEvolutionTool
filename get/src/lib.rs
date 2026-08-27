@@ -106,7 +106,7 @@ pub(crate) fn emit_load_warnings_maybe(
 /// **It holds no results.** A run's state lives in the `RunResult` that `run`
 /// returns, so one evolver drives repeated runs with nothing stale from the
 /// previous one hanging off it.
-#[pyclass]
+#[pyclass(module = "get")]
 pub struct GraphEvolver {
     config: Config,
     /// The objective registered by `set_fitness_function`, set only when
