@@ -19,7 +19,10 @@ population_size       = 100
 network_size          = 100   # must equal the base graph's `# nodes` header
 max_edge_multiplicity = 3     # above 1, so an edge can carry parallel copies
                               # and `toggle`/`local_toggle` have a range to
-                              # move through rather than a flag to flip
+                              # move through rather than a flag to flip.
+                              # Parallel copies are separate transmission
+                              # chances, so raising this raises the effective
+                              # infection rate between the nodes it joins
 
 crossover_rate = 0.9
 mutation_rate  = 0.2
@@ -67,11 +70,13 @@ null         = 0.5   # do nothing — a gene that holds its place, letting an
 
 [fitness]
 type                 = "epi_spread"
-infection_rate       = 0.2   # lower than 01's 0.5, because the base graph is
-                             # already well connected: at 0.5 an outbreak on
-                             # the ring reaches ~99 of 100 nodes before
-                             # evolution starts, and an objective already at
-                             # its ceiling gives selection nothing to act on
+infection_rate       = 0.2   # per edge copy per timestep, and a node's chances
+                             # from every infectious neighbour combine: a ring
+                             # node has degree 4, so at 0.5 it is infected with
+                             # probability 1 - 0.5^4 = 94% per step. That
+                             # reaches ~99 of 100 nodes before evolution starts,
+                             # and an objective already at its ceiling gives
+                             # selection nothing to act on
 num_epidemics        = 20
 patient_zero         = 0   # pinned, so every individual is scored from the
                            # same starting node; omit for a fresh random one
