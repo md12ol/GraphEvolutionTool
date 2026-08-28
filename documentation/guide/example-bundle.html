@@ -380,6 +380,7 @@ import sys
 
 CONFIG_SUFFIX = &quot;.toml&quot;
 LOG_NAME = &quot;run_log.csv&quot;
+BEST_INDIVIDUAL = &quot;best_individual.txt&quot;
 
 # Beyond this many folders a filename listing them all stops being a filename,
 # so the set is identified by a digest of every name instead. The digest is of
@@ -790,6 +791,90 @@ def draw_convergence(examples, out_dir):
     return path
 
 
+def best_individual_path(run):
+    &quot;&quot;&quot;The winning network&#x27;s edge file for one replicate, or None if absent.&quot;&quot;&quot;
+    candidate = os.path.join(run.directory, BEST_INDIVIDUAL)
+    return candidate if os.path.isfile(candidate) else None
+
+
+def infer_direction(examples):
+    &quot;&quot;&quot;Whether a larger fitness is better, judged from how the runs moved.
+
+    GET does not tell Python which way an objective points — `RunResult` has no
+    orientation, and a callable registered through `set_fitness_function` gets
+    its direction at registration, where nothing downstream can see it. So the
+    direction is read from the runs themselves: evolution improves, so whichever
+    way the population&#x27;s best fitness travelled from first iteration to last is
+    the direction that counts as better.
+
+    Averaged over every run given, which is what makes it safe on a single
+    unlucky replicate. Pass `--maximize` or `--minimize` to override it — an
+    objective already near its optimum at iteration zero can drift the wrong way
+    and fool this.
+    &quot;&quot;&quot;
+    first = 0.0
+    last = 0.0
+    counted = 0
+    for example in examples:
+        for run in example.runs:
+            first += run.best_fitness[0]
+            last += run.best_fitness[-1]
+            counted += 1
+
+    if counted == 0:
+        return True
+    return last &gt;= first
+
+
+def draw_best_networks(examples, out_dir, maximize):
+    &quot;&quot;&quot;Render each folder&#x27;s best replicate, one PNG per `example_N`.
+
+    Drawn by `graph_to_png.py`, which ships beside this file and is the same
+    renderer the repository uses elsewhere — it reads the edge format
+    `save_results` writes and lays out deterministically, so the same winner
+    always produces the same picture.
+    &quot;&quot;&quot;
+    try:
+        import graph_to_png
+    except ImportError:
+        raise ValueError(
+            &quot;graph_to_png.py is not beside this script, so the winning network &quot;
+            &quot;cannot be drawn. It ships in the same bundle; unpack the whole zip.&quot;
+        ) from None
+
+    written = []
+    for example in examples:
+        best_run = None
+        best_value = None
+        for run in example.runs:
+            if best_individual_path(run) is None:
+                continue
+            value = run.final_fitness
+            better = best_value is None or (value &gt; best_value if maximize else value &lt; best_value)
+            if better:
+                best_value = value
+                best_run = run
+
+        if best_run is None:
+            print(f&quot;{example.name}: no {BEST_INDIVIDUAL} in any replicate, nothing to draw&quot;)
+            continue
+
+        source = best_individual_path(best_run)
+        num_nodes, edges = graph_to_png.read_graph(source)
+        positions = graph_to_png.layout(num_nodes, edges)
+        size, pixels = graph_to_png.draw(num_nodes, edges, positions)
+
+        destination = output_path([example], out_dir, &quot;best_network&quot;)
+        graph_to_png.write_png(destination, size, pixels)
+        written.append(destination)
+        print(
+            f&quot;{example.name}: best is {best_run.name} at {best_value:g} &quot;
+            f&quot;({num_nodes} nodes, {len(edges)} edges)&quot;
+        )
+
+    return written
+
+
 def summarise(examples):
     &quot;&quot;&quot;Print what was read, so a comparison can be checked before it is drawn.&quot;&quot;&quot;
     for example in examples:
@@ -807,6 +892,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(&quot;folders&quot;, nargs=&quot;+&quot;, help=&quot;one or more output/example_N directories&quot;)
     parser.add_argument(&quot;--out&quot;, help=&quot;where generated files go (default: beside the folders)&quot;)
+    direction = parser.add_mutually_exclusive_group()
+    direction.add_argument(
+        &quot;--maximize&quot;,
+        dest=&quot;maximize&quot;,
+        action=&quot;store_true&quot;,
+        default=None,
+        help=&quot;treat a larger fitness as better, instead of judging from the runs&quot;,
+    )
+    direction.add_argument(
+        &quot;--minimize&quot;,
+        dest=&quot;maximize&quot;,
+        action=&quot;store_false&quot;,
+        help=&quot;treat a smaller fitness as better, instead of judging from the runs&quot;,
+    )
     args = parser.parse_args()
 
     try:
@@ -820,8 +919,15 @@ def main():
 
     summarise(examples)
 
+    maximize = args.maximize
+    if maximize is None:
+        maximize = infer_direction(examples)
+        judged = &quot;larger is better&quot; if maximize else &quot;smaller is better&quot;
+        print(f&quot;direction judged from the runs: {judged} (override with --maximize/--minimize)&quot;)
+
     try:
         written = [draw_boxplot(examples, args.out), draw_convergence(examples, args.out)]
+        written.extend(draw_best_networks(examples, args.out, maximize))
     except ValueError as error:
         print(f&quot;error: {error}&quot;, file=sys.stderr)
         return 1
@@ -1038,14 +1144,32 @@ def layout(num_nodes, edges):
 
     # Rescale to fill the square, so a layout that settled small is not drawn
     # as a dot in the middle.
-    xs = [x for x, _ in positions]
-    ys = [y for _, y in positions]
+    #
+    # Measured over the nodes that have an edge, not over every node. An
+    # isolated node feels repulsion and no attraction, so it drifts to the rim
+    # and stops; a span taken over all of them is set by those strays, and
+    # dividing by it shrinks the connected part — the part worth looking at —
+    # to a dot. That is the very outcome this rescale exists to avoid, and an
+    # evolved graph almost always has a few isolated nodes.
+    connected = set()
+    for u, v, _ in edges:
+        connected.add(u)
+        connected.add(v)
+    measured = sorted(connected) if connected else range(num_nodes)
+
+    xs = [positions[node][0] for node in measured]
+    ys = [positions[node][1] for node in measured]
     span_x = (max(xs) - min(xs)) or 1.0
     span_y = (max(ys) - min(ys)) or 1.0
     span = max(span_x, span_y)
+    centre_x = min(xs) + span_x / 2
+    centre_y = min(ys) + span_y / 2
+
+    # Strays land outside the unit square once the span is the core&#x27;s, so they
+    # are held at the border rather than drawn off the canvas.
     for position in positions:
-        position[0] = 0.5 + (position[0] - (min(xs) + span_x / 2)) / span
-        position[1] = 0.5 + (position[1] - (min(ys) + span_y / 2)) / span
+        position[0] = min(1.0, max(0.0, 0.5 + (position[0] - centre_x) / span))
+        position[1] = min(1.0, max(0.0, 0.5 + (position[1] - centre_y) / span))
 
     return positions
 

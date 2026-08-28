@@ -165,14 +165,32 @@ def layout(num_nodes, edges):
 
     # Rescale to fill the square, so a layout that settled small is not drawn
     # as a dot in the middle.
-    xs = [x for x, _ in positions]
-    ys = [y for _, y in positions]
+    #
+    # Measured over the nodes that have an edge, not over every node. An
+    # isolated node feels repulsion and no attraction, so it drifts to the rim
+    # and stops; a span taken over all of them is set by those strays, and
+    # dividing by it shrinks the connected part — the part worth looking at —
+    # to a dot. That is the very outcome this rescale exists to avoid, and an
+    # evolved graph almost always has a few isolated nodes.
+    connected = set()
+    for u, v, _ in edges:
+        connected.add(u)
+        connected.add(v)
+    measured = sorted(connected) if connected else range(num_nodes)
+
+    xs = [positions[node][0] for node in measured]
+    ys = [positions[node][1] for node in measured]
     span_x = (max(xs) - min(xs)) or 1.0
     span_y = (max(ys) - min(ys)) or 1.0
     span = max(span_x, span_y)
+    centre_x = min(xs) + span_x / 2
+    centre_y = min(ys) + span_y / 2
+
+    # Strays land outside the unit square once the span is the core's, so they
+    # are held at the border rather than drawn off the canvas.
     for position in positions:
-        position[0] = 0.5 + (position[0] - (min(xs) + span_x / 2)) / span
-        position[1] = 0.5 + (position[1] - (min(ys) + span_y / 2)) / span
+        position[0] = min(1.0, max(0.0, 0.5 + (position[0] - centre_x) / span))
+        position[1] = min(1.0, max(0.0, 0.5 + (position[1] - centre_y) / span))
 
     return positions
 
