@@ -42,7 +42,10 @@ type        = "edge_edit"
 gene_length = 256
 
 [fitness]
-# No parameters here, and none are possible: the direction is declared where
-# the callable is registered, because nothing can infer whether someone's
-# function wants its value large or small.
+# No parameters here, and none are possible — this is the one objective that
+# takes none. Both the target degree and the direction to optimize in live in
+# `python_from_config.py`, beside the callable: a registered function can read
+# whatever it likes, so there is nothing for the config to describe, and
+# nothing can infer whether someone's function wants its value large or small.
+# To change the target degree, edit the Python, not this file.
 type = "python"
