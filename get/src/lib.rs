@@ -782,6 +782,13 @@ pub fn utc_stamp() -> String {
 /// `stamp` is passed in rather than read here: every replicate of one invocation
 /// belongs in the same timestamped directory, and reading the clock per
 /// replicate would scatter them the moment a run crossed a second boundary.
+///
+/// Run folders count from one and are zero-padded to the width of `n_runs`, so
+/// ten replicates sort as `run_01` through `run_10` rather than `run_1`,
+/// `run_10`, `run_2` — in a shell, a file browser, or a glob. `run_index`
+/// itself stays zero-based: it is half of the `(seed, run_index)` pair that
+/// reproduces a replicate, and renumbering it would invite asking for the
+/// wrong one.
 pub fn run_output_dir(
     out_dir: Option<&str>,
     stamp: &str,
@@ -795,7 +802,8 @@ pub fn run_output_dir(
 
     let mut path = Path::new(root).join(format!("{stamp}-{seed}"));
     if n_runs > 1 {
-        path = path.join(format!("run_{run_index}"));
+        let width = n_runs.to_string().len();
+        path = path.join(format!("run_{:0width$}", run_index + 1, width = width));
     }
     path
 }
@@ -935,6 +943,44 @@ mod tests {
 
     use crate::fitness::Fitness;
     use crate::graph::Graph;
+
+    #[test]
+    fn a_single_replicate_gets_no_run_folder() {
+        let path = run_output_dir(Some("out"), "20260828-071233", 7, 0, 1);
+        assert_eq!(path, PathBuf::from("out/20260828-071233-7"));
+    }
+
+    #[test]
+    fn run_folders_count_from_one_while_run_index_stays_zero_based() {
+        let first = run_output_dir(Some("out"), "20260828-071233", 7, 0, 2);
+        assert_eq!(first, PathBuf::from("out/20260828-071233-7/run_1"));
+    }
+
+    #[test]
+    fn run_folders_are_padded_to_the_width_of_n_runs_so_ten_replicates_sort() {
+        let mut names = Vec::new();
+        for run_index in 0..10 {
+            let path = run_output_dir(Some("out"), "20260828-071233", 7, run_index, 10);
+            names.push(path.file_name().unwrap().to_str().unwrap().to_string());
+        }
+        assert_eq!(names[0], "run_01");
+        assert_eq!(names[9], "run_10");
+
+        // The property the padding exists for: lexical order is run order.
+        let mut sorted = names.clone();
+        sorted.sort();
+        assert_eq!(sorted, names);
+    }
+
+    #[test]
+    fn without_an_output_directory_every_replicate_shares_the_working_directory() {
+        // Why `get-run` rejects `--runs N` above 1 without `--out`: the paths
+        // collide rather than being distinguished by the run index.
+        let first = run_output_dir(None, "20260828-071233", 7, 0, 5);
+        let second = run_output_dir(None, "20260828-071233", 7, 1, 5);
+        assert_eq!(first, PathBuf::from("."));
+        assert_eq!(first, second);
+    }
 
     /// A config whose `[fitness]` block is exactly `fitness_block`, with the
     /// rest of the document held fixed.

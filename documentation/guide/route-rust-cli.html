@@ -167,10 +167,10 @@ output/20260821-141233-7/best_individual.txt.toml</code></pre>
 
 <pre><code class="language-bash">get-run config.toml 7 --runs 4 --out output</code></pre>
 
-<pre><code class="language-bash">output/20260821-141233-7/run_0/run_log.csv
-output/20260821-141233-7/run_1/run_log.csv
+<pre><code class="language-bash">output/20260821-141233-7/run_1/run_log.csv
 output/20260821-141233-7/run_2/run_log.csv
-output/20260821-141233-7/run_3/run_log.csv</code></pre>
+output/20260821-141233-7/run_3/run_log.csv
+output/20260821-141233-7/run_4/run_log.csv</code></pre>
 
 <div class="callout">
   <p>
@@ -180,8 +180,10 @@ output/20260821-141233-7/run_3/run_log.csv</code></pre>
   </p>
   <p>
     One master seed goes in and GET derives one seed per replicate. Reproduce a replicate by
-    re-running with the same master seed and reading the same <code>run_&lt;i&gt;</code> — the
-    derived seed is not something you pass back in.
+    re-running with the same master seed and reading the same run folder — the derived seed is not
+    something you pass back in. Run folders count from one and are zero-padded to the width of
+    <code>--runs</code>, so ten replicates sort as <code>run_01</code> through <code>run_10</code>;
+    the <code>run_index</code> recorded in the log stays zero-based.
   </p>
 </div>
 
