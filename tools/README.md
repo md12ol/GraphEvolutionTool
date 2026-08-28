@@ -40,9 +40,15 @@ step in both `ci.yml` and `pages.yml`, so a bundle that was edited without a
 rebuild fails the pull request rather than shipping a download one version
 behind the page describing it.
 
-The archive is byte-stable: entry order is sorted and every timestamp is fixed,
-because `zipfile` otherwise stamps each entry with its file's mtime and every
-checkout would produce a different zip. Two things are deliberately excluded —
+Entry order is sorted and every timestamp is fixed, because `zipfile` otherwise
+stamps each entry with its file's mtime and a rebuild would show up as a diff
+for no reason. That is not enough to make the archive byte-stable across
+machines, and `--check` does not assume it is: DEFLATE output depends on the
+zlib build, so zlib-ng and stock zlib compress the same files to different
+bytes. The check compares the archive's **members and their contents** against
+`get-examples/` instead — a hash comparison fails on whichever machine did not
+build the committed zip, which is a red check that detects nothing. Two things
+are deliberately excluded —
 `__pycache__`, and everything under `output/` except the `.gitkeep` that carries
 the empty directory into the archive. That second one matters: this script is
 normally run by someone who has been running the examples, and without it the

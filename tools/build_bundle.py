@@ -10,9 +10,13 @@ Run it after changing anything under `get-examples/`:
 
     python3 tools/build_bundle.py
 
-`--check` rebuilds into memory and compares against what is committed, exiting
-non-zero on any difference. That is what CI runs, and it is the only thing
-stopping the download from drifting a version behind the page describing it.
+`--check` compares what is committed against `get-examples/` and exits non-zero
+on any difference. That is what CI runs, and it is the only thing stopping the
+download from drifting a version behind the page describing it.
+
+The archive is checked by its *contents*, not its bytes: DEFLATE output is not
+fixed by its input, so an archive built against zlib-ng and one built against
+stock zlib hold identical files and differ byte for byte.
 """
 
 import argparse
@@ -84,6 +88,44 @@ def build_zip(files):
             with open(os.path.join(BUNDLE, relative), "rb") as handle:
                 archive.writestr(info, handle.read())
     return buffer.getvalue()
+
+
+def zip_differences(files):
+    """How the committed archive differs from `get-examples/`, if it does.
+
+    Compares the member list and each member's bytes rather than the archive's
+    own bytes. DEFLATE output is not fixed by its input: zlib-ng and stock zlib
+    compress identical files to different bytes, so two correct archives of the
+    same directory disagree byte for byte and a hash comparison would fail on
+    whichever machine did not build the committed one.
+    """
+    relative_zip = os.path.relpath(ZIP_PATH, REPO)
+    try:
+        archive = zipfile.ZipFile(ZIP_PATH)
+    except FileNotFoundError:
+        return [f"{relative_zip} is missing"]
+    except zipfile.BadZipFile:
+        return [f"{relative_zip} is not readable as a zip"]
+
+    problems = []
+    with archive:
+        expected = [f"get-examples/{relative}" for relative in files]
+        if archive.namelist() != expected:
+            missing = sorted(set(expected) - set(archive.namelist()))
+            extra = sorted(set(archive.namelist()) - set(expected))
+            if missing:
+                problems.append(f"{relative_zip} is missing {', '.join(missing)}")
+            if extra:
+                problems.append(f"{relative_zip} still holds {', '.join(extra)}")
+            if not missing and not extra:
+                problems.append(f"{relative_zip} lists its members in a different order")
+            return problems
+
+        for relative, name in zip(files, expected):
+            with open(os.path.join(BUNDLE, relative), "rb") as handle:
+                if archive.read(name) != handle.read():
+                    problems.append(f"{relative_zip} holds a stale {relative}")
+    return problems
 
 
 def section(relative):
@@ -173,10 +215,10 @@ def main():
         print(f"no files found under {BUNDLE}", file=sys.stderr)
         return 1
 
-    archive = build_zip(files)
     page = build_page(files).encode("utf-8")
 
     if not args.check:
+        archive = build_zip(files)
         with open(ZIP_PATH, "wb") as handle:
             handle.write(archive)
         with open(PAGE_PATH, "wb") as handle:
@@ -186,18 +228,19 @@ def main():
         return 0
 
     stale = []
-    for path, fresh in ((ZIP_PATH, archive), (PAGE_PATH, page)):
-        try:
-            with open(path, "rb") as handle:
-                committed = handle.read()
-        except FileNotFoundError:
-            stale.append(f"{os.path.relpath(path, REPO)} is missing")
-            continue
-        if committed != fresh:
+    stale.extend(zip_differences(files))
+
+    try:
+        with open(PAGE_PATH, "rb") as handle:
+            committed_page = handle.read()
+    except FileNotFoundError:
+        stale.append(f"{os.path.relpath(PAGE_PATH, REPO)} is missing")
+    else:
+        if committed_page != page:
             stale.append(
-                f"{os.path.relpath(path, REPO)} is stale "
-                f"(committed {hashlib.sha256(committed).hexdigest()[:12]}, "
-                f"rebuilt {hashlib.sha256(fresh).hexdigest()[:12]})"
+                f"{os.path.relpath(PAGE_PATH, REPO)} is stale "
+                f"(committed {hashlib.sha256(committed_page).hexdigest()[:12]}, "
+                f"rebuilt {hashlib.sha256(page).hexdigest()[:12]})"
             )
 
     for problem in stale:
