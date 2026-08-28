@@ -25,11 +25,23 @@ error says so if it is missing.
 import argparse
 import csv
 import glob
+import hashlib
 import os
 import sys
 
 CONFIG_SUFFIX = ".toml"
 LOG_NAME = "run_log.csv"
+
+# Beyond this many folders a filename listing them all stops being a filename,
+# so the set is identified by a digest of every name instead. The digest is of
+# the whole sorted set, so two different comparisons never collide.
+MAX_NAME_PARTS = 4
+NAME_DIGEST_LENGTH = 8
+
+# Boxes of one config sit together; this is the empty slot between groups.
+GROUP_GAP = 1
+
+NO_CONFIG = "(no config copied in)"
 
 # The columns `RunResult.save_logs` writes. Read by name rather than by
 # position, so a column added to the middle of that header does not silently
@@ -165,6 +177,142 @@ def expand(paths):
     return found
 
 
+def pyplot():
+    """matplotlib's pyplot, with the message this script owes a reader without it.
+
+    Imported here rather than at the top so that reading and summarising work on
+    an interpreter that has only GET installed — the plots are the one part of
+    the bundle with a dependency, and it should fail where it is used.
+    """
+    try:
+        import matplotlib
+    except ImportError:
+        raise ValueError(
+            "the plots need matplotlib, which is not installed.\n"
+            "    pip install matplotlib\n"
+            "Reading and summarising work without it."
+        ) from None
+
+    # Chosen before pyplot is imported: without it matplotlib looks for a
+    # display and fails on a headless machine, which is where a batch of runs
+    # is most likely to be analysed.
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    return plt
+
+
+def comparison_slug(examples):
+    """A filename fragment naming exactly this set of folders.
+
+    Sorted, so the same comparison requested in a different order writes the
+    same file rather than a second copy, and distinct, so analysing
+    `{1, 2}` and then `{1, 3}` into one directory leaves four files rather than
+    silently overwriting two.
+    """
+    names = sorted(example.name for example in examples)
+    if len(names) <= MAX_NAME_PARTS:
+        return "+".join(names)
+
+    digest = hashlib.sha256("\0".join(names).encode("utf-8")).hexdigest()
+    return f"{names[0]}+{len(names) - 1}-more-{digest[:NAME_DIGEST_LENGTH]}"
+
+
+def output_path(examples, out_dir, kind):
+    """Where one generated plot goes, with its directory created."""
+    if out_dir is None:
+        parents = []
+        for example in examples:
+            parents.append(os.path.dirname(os.path.abspath(example.directory)))
+        out_dir = os.path.commonpath(parents) if len(parents) > 1 else parents[0]
+
+    os.makedirs(out_dir, exist_ok=True)
+    return os.path.join(out_dir, f"{kind}__{comparison_slug(examples)}.png")
+
+
+def group_by_config(examples):
+    """`[(config, [example, ...]), ...]`, in the order the configs first appear.
+
+    Two folders produced by the same configuration are replicated experiments
+    rather than different ones, and the plots put them side by side so that
+    reads as what it is.
+    """
+    order = []
+    groups = {}
+    for example in examples:
+        key = example.config or NO_CONFIG
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(example)
+
+    grouped = []
+    for key in order:
+        grouped.append((key, groups[key]))
+    return grouped
+
+
+def draw_boxplot(examples, out_dir):
+    """One box per example folder, folders of the same config grouped together.
+
+    Returns the path written, or None when there is nothing worth drawing: a
+    boxplot of a single folder says nothing its final fitness does not.
+
+    The y-axis is shared, and two configs optimising different objectives do
+    not share a scale — the colour and the legend name the config for exactly
+    that reason, so a reader can see when they are looking at two units rather
+    than one.
+    """
+    if len(examples) < 2:
+        print("only one folder given, so no boxplot: a single box compares nothing")
+        return None
+
+    plt = pyplot()
+    grouped = group_by_config(examples)
+    colours = plt.get_cmap("tab10").colors
+
+    data = []
+    positions = []
+    labels = []
+    box_colours = []
+    handles = []
+    position = 0
+    for index, (config, members) in enumerate(grouped):
+        colour = colours[index % len(colours)]
+        for example in members:
+            data.append(example.final_fitnesses)
+            positions.append(position)
+            labels.append(example.name)
+            box_colours.append(colour)
+            position += 1
+        position += GROUP_GAP
+        handles.append((config, colour))
+
+    figure, axes = plt.subplots(figsize=(max(6, len(data) * 1.4), 5))
+    drawn = axes.boxplot(data, positions=positions, widths=0.6, patch_artist=True)
+
+    for box, colour in zip(drawn["boxes"], box_colours):
+        box.set_facecolor(colour)
+        box.set_alpha(0.65)
+
+    axes.set_xticks(positions)
+    axes.set_xticklabels(labels, rotation=45, ha="right")
+    axes.set_ylabel("best fitness at the end of the run")
+    axes.set_title("Final fitness by example folder")
+    axes.yaxis.grid(True, alpha=0.3)
+
+    patches = []
+    for config, colour in handles:
+        patches.append(plt.Rectangle((0, 0), 1, 1, facecolor=colour, alpha=0.65))
+    axes.legend(patches, [config for config, _ in handles], title="configuration", fontsize="small")
+
+    path = output_path(examples, out_dir, "boxplot")
+    figure.tight_layout()
+    figure.savefig(path, dpi=140)
+    plt.close(figure)
+    return path
+
+
 def summarise(examples):
     """Print what was read, so a comparison can be checked before it is drawn."""
     for example in examples:
@@ -194,6 +342,15 @@ def main():
         return 1
 
     summarise(examples)
+
+    try:
+        written = draw_boxplot(examples, args.out)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
+    if written:
+        print(f"wrote {written}")
     return 0
 
 

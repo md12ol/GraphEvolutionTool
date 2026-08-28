@@ -374,11 +374,23 @@ error says so if it is missing.
 import argparse
 import csv
 import glob
+import hashlib
 import os
 import sys
 
 CONFIG_SUFFIX = &quot;.toml&quot;
 LOG_NAME = &quot;run_log.csv&quot;
+
+# Beyond this many folders a filename listing them all stops being a filename,
+# so the set is identified by a digest of every name instead. The digest is of
+# the whole sorted set, so two different comparisons never collide.
+MAX_NAME_PARTS = 4
+NAME_DIGEST_LENGTH = 8
+
+# Boxes of one config sit together; this is the empty slot between groups.
+GROUP_GAP = 1
+
+NO_CONFIG = &quot;(no config copied in)&quot;
 
 # The columns `RunResult.save_logs` writes. Read by name rather than by
 # position, so a column added to the middle of that header does not silently
@@ -514,6 +526,142 @@ def expand(paths):
     return found
 
 
+def pyplot():
+    &quot;&quot;&quot;matplotlib&#x27;s pyplot, with the message this script owes a reader without it.
+
+    Imported here rather than at the top so that reading and summarising work on
+    an interpreter that has only GET installed — the plots are the one part of
+    the bundle with a dependency, and it should fail where it is used.
+    &quot;&quot;&quot;
+    try:
+        import matplotlib
+    except ImportError:
+        raise ValueError(
+            &quot;the plots need matplotlib, which is not installed.\n&quot;
+            &quot;    pip install matplotlib\n&quot;
+            &quot;Reading and summarising work without it.&quot;
+        ) from None
+
+    # Chosen before pyplot is imported: without it matplotlib looks for a
+    # display and fails on a headless machine, which is where a batch of runs
+    # is most likely to be analysed.
+    matplotlib.use(&quot;Agg&quot;)
+    import matplotlib.pyplot as plt
+
+    return plt
+
+
+def comparison_slug(examples):
+    &quot;&quot;&quot;A filename fragment naming exactly this set of folders.
+
+    Sorted, so the same comparison requested in a different order writes the
+    same file rather than a second copy, and distinct, so analysing
+    `{1, 2}` and then `{1, 3}` into one directory leaves four files rather than
+    silently overwriting two.
+    &quot;&quot;&quot;
+    names = sorted(example.name for example in examples)
+    if len(names) &lt;= MAX_NAME_PARTS:
+        return &quot;+&quot;.join(names)
+
+    digest = hashlib.sha256(&quot;\0&quot;.join(names).encode(&quot;utf-8&quot;)).hexdigest()
+    return f&quot;{names[0]}+{len(names) - 1}-more-{digest[:NAME_DIGEST_LENGTH]}&quot;
+
+
+def output_path(examples, out_dir, kind):
+    &quot;&quot;&quot;Where one generated plot goes, with its directory created.&quot;&quot;&quot;
+    if out_dir is None:
+        parents = []
+        for example in examples:
+            parents.append(os.path.dirname(os.path.abspath(example.directory)))
+        out_dir = os.path.commonpath(parents) if len(parents) &gt; 1 else parents[0]
+
+    os.makedirs(out_dir, exist_ok=True)
+    return os.path.join(out_dir, f&quot;{kind}__{comparison_slug(examples)}.png&quot;)
+
+
+def group_by_config(examples):
+    &quot;&quot;&quot;`[(config, [example, ...]), ...]`, in the order the configs first appear.
+
+    Two folders produced by the same configuration are replicated experiments
+    rather than different ones, and the plots put them side by side so that
+    reads as what it is.
+    &quot;&quot;&quot;
+    order = []
+    groups = {}
+    for example in examples:
+        key = example.config or NO_CONFIG
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(example)
+
+    grouped = []
+    for key in order:
+        grouped.append((key, groups[key]))
+    return grouped
+
+
+def draw_boxplot(examples, out_dir):
+    &quot;&quot;&quot;One box per example folder, folders of the same config grouped together.
+
+    Returns the path written, or None when there is nothing worth drawing: a
+    boxplot of a single folder says nothing its final fitness does not.
+
+    The y-axis is shared, and two configs optimising different objectives do
+    not share a scale — the colour and the legend name the config for exactly
+    that reason, so a reader can see when they are looking at two units rather
+    than one.
+    &quot;&quot;&quot;
+    if len(examples) &lt; 2:
+        print(&quot;only one folder given, so no boxplot: a single box compares nothing&quot;)
+        return None
+
+    plt = pyplot()
+    grouped = group_by_config(examples)
+    colours = plt.get_cmap(&quot;tab10&quot;).colors
+
+    data = []
+    positions = []
+    labels = []
+    box_colours = []
+    handles = []
+    position = 0
+    for index, (config, members) in enumerate(grouped):
+        colour = colours[index % len(colours)]
+        for example in members:
+            data.append(example.final_fitnesses)
+            positions.append(position)
+            labels.append(example.name)
+            box_colours.append(colour)
+            position += 1
+        position += GROUP_GAP
+        handles.append((config, colour))
+
+    figure, axes = plt.subplots(figsize=(max(6, len(data) * 1.4), 5))
+    drawn = axes.boxplot(data, positions=positions, widths=0.6, patch_artist=True)
+
+    for box, colour in zip(drawn[&quot;boxes&quot;], box_colours):
+        box.set_facecolor(colour)
+        box.set_alpha(0.65)
+
+    axes.set_xticks(positions)
+    axes.set_xticklabels(labels, rotation=45, ha=&quot;right&quot;)
+    axes.set_ylabel(&quot;best fitness at the end of the run&quot;)
+    axes.set_title(&quot;Final fitness by example folder&quot;)
+    axes.yaxis.grid(True, alpha=0.3)
+
+    patches = []
+    for config, colour in handles:
+        patches.append(plt.Rectangle((0, 0), 1, 1, facecolor=colour, alpha=0.65))
+    axes.legend(patches, [config for config, _ in handles], title=&quot;configuration&quot;, fontsize=&quot;small&quot;)
+
+    path = output_path(examples, out_dir, &quot;boxplot&quot;)
+    figure.tight_layout()
+    figure.savefig(path, dpi=140)
+    plt.close(figure)
+    return path
+
+
 def summarise(examples):
     &quot;&quot;&quot;Print what was read, so a comparison can be checked before it is drawn.&quot;&quot;&quot;
     for example in examples:
@@ -543,6 +691,15 @@ def main():
         return 1
 
     summarise(examples)
+
+    try:
+        written = draw_boxplot(examples, args.out)
+    except ValueError as error:
+        print(f&quot;error: {error}&quot;, file=sys.stderr)
+        return 1
+
+    if written:
+        print(f&quot;wrote {written}&quot;)
     return 0
 
 
