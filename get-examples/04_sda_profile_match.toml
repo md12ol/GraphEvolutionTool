@@ -1,0 +1,60 @@
+# 04 — match an epidemic curve, with non-elitist replacement
+#
+#     python python_from_config.py 04_sda_profile_match.toml
+#
+# The richest of the four, and the only one with a **minimized** objective:
+# 01-03 all push a number up, this one drives an error down towards zero.
+#
+# It is also the only one that is not self-elitist. 02 replaces the scope's
+# *worst*, so the best individual in a scope can never be overwritten. Here
+# replacement is uniform, so it can be — and the best fitness of the run may
+# fall between events rather than only improving. That is deliberate: it trades
+# guaranteed progress for a population that escapes local optima more easily.
+
+population_size       = 100
+network_size          = 100
+max_edge_multiplicity = 1
+
+crossover_rate = 0.9
+mutation_rate  = 0.3
+max_mutations  = 2
+
+[evolution]
+type              = "steady_state"
+num_mating_events = 20000
+replacement       = { type = "random" }  # distinct members of the scope, drawn
+                                         # uniformly; the scope's best is not
+                                         # protected
+
+[scope]
+type = "random_subset"
+size = 8
+
+[selection]
+type = "best"
+
+[crossover]
+type = "two_point"
+
+[genome]
+type                        = "sda"
+num_states                  = 16
+max_resp_len                = 6
+init_state                  = 1
+init_char_mutation_rate     = 0.05
+transition_vs_response_rate = 0.4
+mutation                    = { type = "redraw_one" }
+
+[fitness]
+# Compared verbatim against each simulated outbreak: nothing is prepended for
+# patient zero and nothing is rescaled. One entry per timestep — how many nodes
+# are newly infected at that step — so the length of this list is the length of
+# the epidemic you are asking for.
+#
+# The comparison is asymmetric. An outbreak that ends early is penalized for
+# the whole remaining target; one that outlasts the target is not penalized at
+# all. So this rewards matching *or exceeding* the tail.
+type           = "epi_prof_match"
+infection_rate = 0.4
+num_epidemics  = 20
+target_profile = [1, 3, 8, 17, 24, 19, 11, 5, 2, 1]

@@ -1,0 +1,48 @@
+# 05 — the exercise: an objective you write yourself
+#
+#     python python_from_config.py 05_exercise_degree_match.toml
+#
+# **This one does not run until you edit the Python.** Everything above
+# `[fitness]` is 01 again, deliberately — the exercise is the Python change,
+# and a complicated config would put the difficulty in the wrong place.
+#
+# `type = "python"` only *selects* a registered callable. It does not say what
+# the callable is, and a run reaches this file with nothing registered and
+# stops. Open `python_from_config.py`, find the one commented-out block in it,
+# uncomment it, and run this file again.
+#
+# The objective it scores: **how many nodes have exactly the target degree.**
+# Maximized. Nothing about that is special — it is small enough to read in one
+# sitting and it rewards a shape the epidemic objectives never ask for.
+
+population_size       = 100
+network_size          = 100
+max_edge_multiplicity = 1
+
+crossover_rate = 0.9
+mutation_rate  = 0.2
+
+[evolution]
+type            = "generational"
+num_generations = 150
+elite_count     = 1
+
+[scope]
+type = "global"
+
+[selection]
+type            = "tournament"
+tournament_size = 5
+
+[crossover]
+type = "two_point"
+
+[genome]
+type        = "edge_edit"
+gene_length = 256
+
+[fitness]
+# No parameters here, and none are possible: the direction is declared where
+# the callable is registered, because nothing can infer whether someone's
+# function wants its value large or small.
+type = "python"
