@@ -29,10 +29,11 @@ are. `05` is the exercise: it stops with a message asking for an objective until
 you uncomment the one block in `register_objective` below.
 
 Results are written to `output/example_N/`, N counting up from whatever is
-already there, so one run never overwrites another. Each replicate writes its
-convergence log, the winning network as an edge list GET can read back — so one
-run's result can be the next run's base graph — and the configuration it ran
-under.
+already there, so one run never overwrites another. Each example folder keeps a
+copy of the configuration that produced it, so the folder says what it is
+without opening anything inside it, and holds one `run_M/` per replicate. Each
+replicate writes its convergence log and the winning network as an edge list GET
+can read back — so one run's result can be the next run's base graph.
 
 Every parameter lives in the TOML, the base graph included — `03` names its
 starting network with a `base_graph` key, resolved beside the configuration
@@ -40,15 +41,18 @@ file rather than beside whatever directory you ran from.
 """
 
 import os
+import shutil
 import sys
 
 import get
 
-N_RUNS = 2
+N_RUNS = 10
 """How many replicates to draw from the master seed.
 
-Each replicate gets its own derived seed, so the same master seed reproduces
-the whole set.
+Each replicate gets its own derived seed, so they are independent samples of
+the same configuration and the master seed still reproduces the whole set. Ten
+rather than two because an example folder is one distribution when it is
+plotted, and a box drawn from two points describes nothing.
 """
 
 DEFAULT_SEED = 7
@@ -97,7 +101,7 @@ def register_objective(evolver):
 
 
 def next_example_directory():
-    """The `output/example_N/` this invocation writes to.
+    """The `output/example_N/` this invocation writes to, created.
 
     N is one past the highest that already exists, so a second run of the same
     configuration lands beside the first instead of on top of it.
@@ -113,7 +117,9 @@ def next_example_directory():
             if number > highest:
                 highest = number
 
-    return os.path.join(OUTPUT_ROOT, f"{prefix}{highest + 1}")
+    directory = os.path.join(OUTPUT_ROOT, f"{prefix}{highest + 1}")
+    os.makedirs(directory, exist_ok=True)
+    return directory
 
 
 def run_directory(example_directory, run_index):
@@ -121,11 +127,13 @@ def run_directory(example_directory, run_index):
 
     `run_index` is zero-based, because `(seed, run_index)` is the pair that
     reproduces a replicate. The directory is numbered from one, matching what
-    the run prints.
+    the run prints, and zero-padded to the width of `N_RUNS` so that ten or more
+    replicates still sort in order in a shell, a file browser, or a glob.
     """
     directory = example_directory
     if N_RUNS > 1:
-        directory = os.path.join(directory, f"run_{run_index + 1}")
+        width = len(str(N_RUNS))
+        directory = os.path.join(directory, f"run_{run_index + 1:0{width}d}")
     os.makedirs(directory, exist_ok=True)
     return directory
 
@@ -158,6 +166,7 @@ def main():
     # Claimed after the run, so a run that fails leaves no empty directory
     # behind and does not consume a number.
     example_directory = next_example_directory()
+    shutil.copy2(config_path, os.path.join(example_directory, os.path.basename(config_path)))
 
     for run_index, result in enumerate(results):
         if N_RUNS > 1:
