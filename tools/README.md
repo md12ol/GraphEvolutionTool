@@ -25,6 +25,29 @@ Regenerating is byte-stable: the ring is deterministic by construction and the
 power-law graph is seeded, so a rerun that changes a file means this script
 changed. **Output is 0-indexed**, which is what `[genome] base_graph` reads.
 
+## `build_bundle.py`
+
+Builds the two things the website serves for the example bundle, both from
+`get-examples/` and both checked in:
+
+```bash
+python3 tools/build_bundle.py           # write them
+python3 tools/build_bundle.py --check   # compare against what is committed
+```
+
+Run it after changing anything under `get-examples/`. `--check` is a required CI
+step in both `ci.yml` and `pages.yml`, so a bundle that was edited without a
+rebuild fails the pull request rather than shipping a download one version
+behind the page describing it.
+
+The archive is byte-stable: entry order is sorted and every timestamp is fixed,
+because `zipfile` otherwise stamps each entry with its file's mtime and every
+checkout would produce a different zip. Two things are deliberately excluded —
+`__pycache__`, and everything under `output/` except the `.gitkeep` that carries
+the empty directory into the archive. That second one matters: this script is
+normally run by someone who has been running the examples, and without it the
+published zip would ship whoever built it last.
+
 ## `graph_to_png.py`
 
 Draws a GET edge file as a PNG — a run's `best_individual.txt`, a base graph, a
