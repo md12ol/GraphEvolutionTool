@@ -21,13 +21,16 @@
 <h2>Start Here: The Example Bundle</h2>
 
 <p>
-  <a href="../get-examples.zip"><b>Download get-examples.zip</b></a> &mdash; one Python script and
-  five complete configurations, laid out so every path inside resolves. It is the fastest way to see
-  this route working, and the rest of this page explains what the files in it do.
+  <a href="../get-examples.zip"><b>Download get-examples.zip</b></a> &mdash; a script that runs the
+  examples, a script that plots what they produced, and five complete configurations, laid out so
+  every path inside resolves. It is the fastest way to see this route working, and the rest of this
+  page explains what the files in it do.
 </p>
 
 <pre><code class="language-bash">get-examples/
-  python_from_config.py     the only Python file, and the only one you edit
+  python_from_config.py     runs one configuration; the only file you edit
+  analyze_output.py         plots the folders the runs produced
+  graph_to_png.py           draws one result, standard library only
   01_edge_edit_generational.toml
   02_sda_steady_state.toml
   03_edge_edit_base_graph.toml
@@ -218,6 +221,57 @@ for run_index, result in enumerate(results):
   ones you already had. Reproduce a replicate with the same master seed and the same index — its
   derived seed is not a handle you can pass back in.
 </p>
+
+<h2>Plotting What Came Out</h2>
+
+<p>
+  Ten replicates is ten folders of CSV, which is not a result you can look at. The bundle's second
+  script reads the folders <code>python_from_config.py</code> wrote and turns them into pictures:
+</p>
+
+<pre><code class="language-bash">pip install matplotlib networkx scipy
+
+python analyze_output.py output/example_1 output/example_2
+python analyze_output.py output/example_*</code></pre>
+
+<p>
+  Give it two or more <code>example_N/</code> folders and it writes three things beside them: a
+  <b>boxplot</b> of final fitness with one box per folder, a <b>convergence plot</b> with every
+  replicate in grey and one average per folder, and one <b>rendered PNG</b> of each folder's
+  best network. Give it a single folder and the boxplot is skipped with a note — one box compares
+  nothing.
+</p>
+
+<div class="tip">
+  <b>Every generated filename names the folders it came from</b>, so analysing
+  <code>{example_1, example_2}</code> and then <code>{example_1, example_3}</code> into the same
+  directory leaves four plots rather than silently overwriting two.
+</div>
+
+<p>
+  Two details are worth knowing before you read the output. Each <b>configuration gets its own
+  panel</b> on the convergence plot and its own colour on the boxplot, because two configurations
+  optimise different objectives — averaging across them would produce a number in no unit, and
+  their iteration counts differ by orders of magnitude. And the average line is computed
+  <b>over whichever replicates reached each iteration</b>, so one run that stops early neither
+  truncates the average nor drags it down; where the supporting count falls, the plot marks it.
+</p>
+
+<p>
+  The network render colours nodes by degree and edges by multiplicity, so a hub and a doubled edge
+  are visible rather than inferred. Nodes with no edges at all are drawn in grey on a ring outside
+  the graph — a layout that solves for them puts them in the middle, which is the one place a
+  disconnected node should never appear.
+</p>
+
+<div class="callout">
+  <p>
+    <b>This is the only file in the bundle that needs anything installed.</b> It is a workshop tool
+    rather than part of the package, so it may depend on what the wheel does not. For a picture with
+    no installation at all, <code>graph_to_png.py</code> ships beside it and draws any single result
+    using nothing but the standard library.
+  </p>
+</div>
 
 <h2>An Objective Written in Python</h2>
 
