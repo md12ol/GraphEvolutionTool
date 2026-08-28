@@ -11,26 +11,39 @@ With no `--out`, each generated file lands beside the folders it was drawn
 from, named after the set that produced it, so analysing two different
 comparisons into the same `output/` does not overwrite either.
 
-**This script needs matplotlib, and it is the only file in the bundle that
-needs anything.** Everything else here runs on a bare interpreter with GET
-installed. This one is a workshop tool rather than part of the package, so it
-may depend on things the wheel does not:
+**This script is the only file in the bundle that needs anything installed.**
+Everything else here runs on a bare interpreter with GET. This one is a
+workshop tool rather than part of the package, so it may depend on what the
+wheel does not:
 
-    pip install matplotlib
+    pip install matplotlib networkx scipy
 
-Reading and summarising work without it; only the plots require it, and the
-error says so if it is missing.
+matplotlib draws the two plots; networkx lays the winning network out, and its
+Kamada-Kawai layout is what needs scipy. Reading and summarising work with none
+of them installed, and each error says which one is missing.
+
+**No installation at all?** `graph_to_png.py`, beside this file, turns any one
+result into a PNG using nothing but the standard library:
+
+    python graph_to_png.py output/example_1/run_01/best_individual.txt
+
+It is the fallback rather than the main path. Its layout starts from a circle,
+which makes it reproducible without a seed but means a ring-shaped picture can
+be the starting condition rather than the graph, and it shows neither node
+degree nor edge multiplicity — the two things this script colours for.
 """
 
 import argparse
 import csv
 import glob
 import hashlib
+import math
 import os
 import sys
 
 CONFIG_SUFFIX = ".toml"
 LOG_NAME = "run_log.csv"
+BEST_INDIVIDUAL = "best_individual.txt"
 
 # Beyond this many folders a filename listing them all stops being a filename,
 # so the set is identified by a digest of every name instead. The digest is of
@@ -40,6 +53,10 @@ NAME_DIGEST_LENGTH = 8
 
 # Boxes of one config sit together; this is the empty slot between groups.
 GROUP_GAP = 1
+
+# Where isolated nodes are ringed, in the coordinates Kamada-Kawai returns for
+# the connected part — outside it, so they read as detached rather than central.
+STRAY_RADIUS = 1.35
 
 NO_CONFIG = "(no config copied in)"
 
@@ -441,6 +458,213 @@ def draw_convergence(examples, out_dir):
     return path
 
 
+def best_individual_path(run):
+    """The winning network's edge file for one replicate, or None if absent."""
+    candidate = os.path.join(run.directory, BEST_INDIVIDUAL)
+    return candidate if os.path.isfile(candidate) else None
+
+
+def infer_direction(examples):
+    """Whether a larger fitness is better, judged from how the runs moved.
+
+    GET does not tell Python which way an objective points — `RunResult` has no
+    orientation, and a callable registered through `set_fitness_function` gets
+    its direction at registration, where nothing downstream can see it. So the
+    direction is read from the runs themselves: evolution improves, so whichever
+    way the population's best fitness travelled from first iteration to last is
+    the direction that counts as better.
+
+    Averaged over every run given, which is what makes it safe on a single
+    unlucky replicate. Pass `--maximize` or `--minimize` to override it — an
+    objective already near its optimum at iteration zero can drift the wrong way
+    and fool this.
+    """
+    first = 0.0
+    last = 0.0
+    counted = 0
+    for example in examples:
+        for run in example.runs:
+            first += run.best_fitness[0]
+            last += run.best_fitness[-1]
+            counted += 1
+
+    if counted == 0:
+        return True
+    return last >= first
+
+
+def networkx():
+    """The `networkx` module, with the message this script owes a reader without it."""
+    try:
+        import networkx
+    except ImportError:
+        raise ValueError(
+            "drawing the winning network needs networkx and scipy:\n"
+            "    pip install networkx scipy\n"
+            "For a picture with no installation at all, run the graph file through "
+            "graph_to_png.py, which ships beside this script."
+        ) from None
+    return networkx
+
+
+def read_edge_file(path):
+    """`(num_nodes, edges)` from a GET edge file.
+
+    Parsed by `graph_to_png.py`, which ships beside this script and already
+    reads the format `save_results` writes — including the `# nodes = N` header,
+    without which a node that has no edges is invisible and the count comes up
+    short by exactly the nodes hardest to notice.
+    """
+    try:
+        import graph_to_png
+    except ImportError:
+        raise ValueError(
+            "graph_to_png.py is not beside this script, and it is what reads the "
+            "edge-file format. Unpack the whole bundle rather than one file."
+        ) from None
+    return graph_to_png.read_graph(path)
+
+
+def best_run_of(example, maximize):
+    """The replicate with the best fitness that also wrote a network to draw."""
+    best_run = None
+    best_value = None
+    for run in example.runs:
+        if best_individual_path(run) is None:
+            continue
+        value = run.final_fitness
+        if best_value is None or (value > best_value if maximize else value < best_value):
+            best_value = value
+            best_run = run
+    return best_run, best_value
+
+
+def network_positions(graph, nx):
+    """Node positions: Kamada-Kawai over the connected part, strays on a ring.
+
+    Isolated nodes are placed rather than solved for. Kamada-Kawai works from
+    shortest-path distances, which are undefined between disconnected nodes, and
+    it settles them in a tight knot at the **centre** — where a reader reads
+    "central, therefore important" about the one kind of node that is connected
+    to nothing. Putting them on a ring outside the graph says what they are.
+    """
+    core = []
+    strays = []
+    for node in graph.nodes:
+        if graph.degree(node) > 0:
+            core.append(node)
+        else:
+            strays.append(node)
+
+    if len(core) > 2:
+        positions = nx.kamada_kawai_layout(graph.subgraph(core))
+    elif core:
+        positions = nx.circular_layout(graph.subgraph(core))
+    else:
+        positions = {}
+
+    for index, node in enumerate(strays):
+        angle = 2 * math.pi * index / max(len(strays), 1)
+        positions[node] = (
+            STRAY_RADIUS * math.cos(angle),
+            STRAY_RADIUS * math.sin(angle),
+        )
+    return positions, core, strays
+
+
+def draw_best_networks(examples, out_dir, maximize):
+    """Render each folder's best replicate, one PNG per `example_N`.
+
+    Node colour is degree and edge colour is multiplicity, because those are the
+    two things a picture can show that a fitness number cannot: which nodes
+    became hubs, and where the run spent its parallel edges. The multiplicity
+    scale appears only when some edge actually carries more than one copy —
+    under `max_edge_multiplicity = 1` every edge is a 1 and a colourbar saying
+    so is furniture.
+    """
+    plt = pyplot()
+    nx = networkx()
+
+    written = []
+    for example in examples:
+        best_run, best_value = best_run_of(example, maximize)
+        if best_run is None:
+            print(f"{example.name}: no {BEST_INDIVIDUAL} in any replicate, nothing to draw")
+            continue
+
+        num_nodes, edges = read_edge_file(best_individual_path(best_run))
+        graph = nx.Graph()
+        graph.add_nodes_from(range(num_nodes))
+        for start, end, weight in edges:
+            if start != end:
+                graph.add_edge(start, end, weight=weight)
+
+        positions, core, strays = network_positions(graph, nx)
+        weights = []
+        for start, end in graph.edges:
+            weights.append(graph[start][end]["weight"])
+        multigraph = max(weights, default=1) > 1
+
+        figure, axes = plt.subplots(figsize=(8.5, 8.5))
+        drawn_edges = nx.draw_networkx_edges(
+            graph,
+            positions,
+            ax=axes,
+            width=1.0,
+            alpha=0.75,
+            edge_color=weights if multigraph else "0.55",
+            edge_cmap=plt.get_cmap("plasma") if multigraph else None,
+        )
+        if core:
+            nx.draw_networkx_nodes(
+                graph,
+                positions,
+                ax=axes,
+                nodelist=core,
+                node_size=60,
+                node_color=[graph.degree(node) for node in core],
+                cmap="viridis",
+            )
+        if strays:
+            nx.draw_networkx_nodes(
+                graph,
+                positions,
+                ax=axes,
+                nodelist=strays,
+                node_size=45,
+                node_color="0.75",
+                edgecolors="0.45",
+                linewidths=0.6,
+            )
+        if multigraph:
+            bar = figure.colorbar(drawn_edges, ax=axes, shrink=0.6, label="edge multiplicity")
+            # A multiplicity is a count of parallel copies, so the scale is
+            # labelled with the integers it can actually take: "1.4 edges" is
+            # not a thing the graph can contain.
+            bar.set_ticks(list(range(min(weights), max(weights) + 1)))
+
+        stray_note = f", {len(strays)} isolated on the outer ring" if strays else ""
+        axes.set_title(
+            f"{example.name}: {best_run.name}, fitness {best_value:g}\n"
+            f"{num_nodes} nodes, {graph.number_of_edges()} edges{stray_note}",
+            fontsize="medium",
+        )
+        axes.set_axis_off()
+
+        destination = output_path([example], out_dir, "best_network")
+        figure.tight_layout()
+        figure.savefig(destination, dpi=140)
+        plt.close(figure)
+
+        written.append(destination)
+        print(
+            f"{example.name}: best is {best_run.name} at {best_value:g} "
+            f"({num_nodes} nodes, {graph.number_of_edges()} edges{stray_note})"
+        )
+
+    return written
+
+
 def summarise(examples):
     """Print what was read, so a comparison can be checked before it is drawn."""
     for example in examples:
@@ -458,6 +682,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("folders", nargs="+", help="one or more output/example_N directories")
     parser.add_argument("--out", help="where generated files go (default: beside the folders)")
+    direction = parser.add_mutually_exclusive_group()
+    direction.add_argument(
+        "--maximize",
+        dest="maximize",
+        action="store_true",
+        default=None,
+        help="treat a larger fitness as better, instead of judging from the runs",
+    )
+    direction.add_argument(
+        "--minimize",
+        dest="maximize",
+        action="store_false",
+        help="treat a smaller fitness as better, instead of judging from the runs",
+    )
     args = parser.parse_args()
 
     try:
@@ -471,8 +709,15 @@ def main():
 
     summarise(examples)
 
+    maximize = args.maximize
+    if maximize is None:
+        maximize = infer_direction(examples)
+        judged = "larger is better" if maximize else "smaller is better"
+        print(f"direction judged from the runs: {judged} (override with --maximize/--minimize)")
+
     try:
         written = [draw_boxplot(examples, args.out), draw_convergence(examples, args.out)]
+        written.extend(draw_best_networks(examples, args.out, maximize))
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
