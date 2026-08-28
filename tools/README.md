@@ -4,6 +4,27 @@ Nothing here is part of GET. These are standard-library Python scripts, run by
 hand, that prepare data for it or read what it produced. They are not a package,
 not an entry point in `pyproject.toml`, and not built into the wheel.
 
+## `make_base_graphs.py`
+
+Writes the three base graphs the example bundle feeds to edge editing — a
+double ring, an empty graph, and a power-law cluster graph.
+
+```bash
+python3 tools/make_base_graphs.py get-examples
+```
+
+One optional argument, the output directory, defaulting to the working
+directory. It overwrites the three files rather than merging into them.
+
+The three share a node count so one config can name any of them in turn and the
+results are comparable; they differ only in structure. The ring joins each node
+to its ±1 *and* ±2 neighbours, for a degree of 4 — a plain cycle leaves every
+node at degree 2, where most of edge-edit's operations have nothing to work on.
+
+Regenerating is byte-stable: the ring is deterministic by construction and the
+power-law graph is seeded, so a rerun that changes a file means this script
+changed. **Output is 0-indexed**, which is what `[genome] base_graph` reads.
+
 ## `graph_to_png.py`
 
 Draws a GET edge file as a PNG — a run's `best_individual.txt`, a base graph, a
