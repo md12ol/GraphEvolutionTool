@@ -313,6 +313,134 @@ def draw_boxplot(examples, out_dir):
     return path
 
 
+def average_curve(runs):
+    """`(iterations, mean_best_fitness, contributing)` averaged across `runs`.
+
+    Averaged **by iteration number and over whatever runs reached it**, not by
+    row index and not over a common prefix. Three properties follow, and each
+    matters for a real set of replicates:
+
+    - Runs are matched on the evolver's own `iteration` value, so a run logged
+      at a different cadence still lines up with the others.
+    - A run that stopped early contributes to every iteration it reached and to
+      none after, so one short outlier neither truncates the average to its own
+      length nor drags it down past its end.
+    - No value is interpolated or invented; an iteration nobody logged is not
+      in the result at all.
+
+    `contributing` is how many runs stood behind each point, which is what the
+    caller marks on the plot so a thinly-supported tail is visible as one.
+    """
+    totals = {}
+    counts = {}
+    for run in runs:
+        for iteration, value in zip(run.iterations, run.best_fitness):
+            totals[iteration] = totals.get(iteration, 0.0) + value
+            counts[iteration] = counts.get(iteration, 0) + 1
+
+    iterations = sorted(totals)
+    means = []
+    contributing = []
+    for iteration in iterations:
+        means.append(totals[iteration] / counts[iteration])
+        contributing.append(counts[iteration])
+    return iterations, means, contributing
+
+
+def first_thinning(iterations, contributing):
+    """The first iteration backed by fewer runs than the fullest point, or None."""
+    if not contributing:
+        return None
+
+    fullest = max(contributing)
+    for iteration, count in zip(iterations, contributing):
+        if count < fullest:
+            return iteration
+    return None
+
+
+def draw_convergence(examples, out_dir):
+    """Every replicate in grey, one coloured average per folder, one panel per config.
+
+    Two decisions shape this plot, and both come from the same fact: folders
+    produced by different configurations optimise different objectives.
+
+    The average is **per folder**, never one line for the whole comparison —
+    averaging two objectives together gives a number in no unit at all. With one
+    folder given, that collapses to exactly one average over its replicates.
+
+    Each configuration gets its **own panel**, rather than a shared pair of
+    axes. Iteration counts differ by orders of magnitude between configurations
+    — 150 against 20000 among the shipped examples — so a shared x-axis crushes
+    the shorter run into the left edge and hides the convergence it was drawn to
+    show. Panels keep every curve readable at its own scale, which is the whole
+    point of plotting it.
+    """
+    plt = pyplot()
+    colours = plt.get_cmap("tab10").colors
+    grouped = group_by_config(examples)
+
+    figure, panels = plt.subplots(
+        1,
+        len(grouped),
+        figsize=(max(7.0, 6.0 * len(grouped)), 5.2),
+        squeeze=False,
+    )
+
+    folder_index = 0
+    for panel, (config, members) in zip(panels[0], grouped):
+        grey_label = "individual runs"
+        for example in members:
+            for run in example.runs:
+                panel.plot(
+                    run.iterations,
+                    run.best_fitness,
+                    color="0.75",
+                    linewidth=0.8,
+                    zorder=1,
+                    label=grey_label,
+                )
+                grey_label = None
+
+        for example in members:
+            iterations, means, contributing = average_curve(example.runs)
+            colour = colours[folder_index % len(colours)]
+            folder_index += 1
+            panel.plot(
+                iterations,
+                means,
+                color=colour,
+                linewidth=2.2,
+                zorder=3,
+                label=f"{example.name}: average of {len(example.runs)}",
+            )
+
+            thinning = first_thinning(iterations, contributing)
+            if thinning is not None:
+                panel.axvline(
+                    thinning,
+                    color=colour,
+                    linestyle=":",
+                    linewidth=1.2,
+                    zorder=2,
+                    label=f"{example.name}: fewer runs beyond here",
+                )
+
+        panel.set_xlabel("iteration")
+        panel.set_title(config, fontsize="medium")
+        panel.grid(True, alpha=0.3)
+        panel.legend(fontsize="small")
+
+    panels[0][0].set_ylabel("best fitness")
+    figure.suptitle("Convergence: every run, and the average per folder")
+
+    path = output_path(examples, out_dir, "convergence")
+    figure.tight_layout()
+    figure.savefig(path, dpi=140)
+    plt.close(figure)
+    return path
+
+
 def summarise(examples):
     """Print what was read, so a comparison can be checked before it is drawn."""
     for example in examples:
@@ -344,13 +472,14 @@ def main():
     summarise(examples)
 
     try:
-        written = draw_boxplot(examples, args.out)
+        written = [draw_boxplot(examples, args.out), draw_convergence(examples, args.out)]
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
-    if written:
-        print(f"wrote {written}")
+    for path in written:
+        if path:
+            print(f"wrote {path}")
     return 0
 
 
