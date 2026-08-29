@@ -167,6 +167,11 @@
   <tbody>
     <tr><td><code>gene_length</code></td><td>required</td>
         <td>Number of edit operations in the genome. The graph is what replaying them produces.</td></tr>
+    <tr><td><code>base_graph</code></td><td>the empty graph</td>
+        <td>An edge-list file the edits are applied to. A <b>relative path from the location of the
+            <code>.toml</code> file</b>, not from your working directory. The file's
+            <code># nodes = N</code> header must equal <code>network_size</code>. Read as
+            0-indexed.</td></tr>
     <tr><td><code>mutation</code></td><td><code>{ type = "reroll_gene" }</code></td>
         <td>Which mutation operator applies. See <a href="new-mutation.html">Add a Mutation
             Operator</a>.</td></tr>
@@ -333,8 +338,12 @@
         <td>One master seed is passed to the run call; the population, evolution, epidemics and
             replicates all derive from it. Writing <code>seed</code> under <code>[fitness]</code> is
             rejected by name, because it used to live there.</td></tr>
-    <tr><td>A <b>base graph</b></td>
-        <td>Set on the evolver before running — no key names one. See
+    <tr><td>A base graph in <b>your own node numbering</b>, or one supplied
+            <b>without a config file</b></td>
+        <td><code>[genome] base_graph</code> covers the ordinary case, but it is 0-indexed and it
+            resolves against the config file — so a file numbered from 1, or a config assembled as
+            objects in Python, still needs <code>set_base_graph_from_file</code> and its
+            <code>min_node_index</code>. See
             <a href="route-python-objects.html">Python: Config Objects</a>.</td></tr>
     <tr><td>Replicate count, output folder</td>
         <td>Arguments to the run, not the configuration. See the route pages.</td></tr>
