@@ -113,7 +113,7 @@ num_my_events = 500</code></pre>
             genome with no match on strategy inside it.</td></tr>
     <tr><td>6</td><td><code>get/src/py_config.rs:153</code> and <code>:621</code></td>
         <td><b>Optional.</b> The Python-side variant, and its <code>to_toml_value</code> arm.</td></tr>
-    <tr><td>7</td><td><code>config.example.toml:156</code></td>
+    <tr><td>7</td><td><code>config.example.toml:161</code></td>
         <td><b>Optional, and the step people skip.</b> A commented-out <code>[evolution]</code>
             block for your strategy. The shipped example is what a user copies from, so a strategy
             missing from it is one most people never find.</td></tr>
@@ -186,7 +186,7 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 
 <p>
   Step 7 is a commented-out <code>[evolution]</code> block in
-  <code>config.example.toml:156</code>, beside generational's and steady-state's. <b>It is the step
+  <code>config.example.toml:161</code>, beside generational's and steady-state's. <b>It is the step
   people skip</b>, and it costs nothing mechanically — the example file is simply what a user copies
   from, so a strategy missing from it is one most people never find. The test suite parses and
   validates that file, so a block that does not parse fails the build rather than a user's

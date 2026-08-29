@@ -263,7 +263,7 @@ impl Fitness for EdgeBudget {
         <td>the arm turning the variant into a boxed objective</td></tr>
     <tr><td>4</td><td><code>get/src/py_config.rs:326</code> and <code>:499</code></td>
         <td>the Python variant and its attribute paths — optional</td></tr>
-    <tr><td>5</td><td><code>config.example.toml:87</code></td>
+    <tr><td>5</td><td><code>config.example.toml:92</code></td>
         <td>an example block, if the objective ships</td></tr>
     <tr><td>6</td><td><code>get/src/dispatch.rs:868</code></td>
         <td>a helper returning the objective's <code>[fitness]</code> block — skippable, see
@@ -409,7 +409,7 @@ MyObjective { threshold: f64 },
 </p>
 
 <p>
-  Step 5 is a commented-out block in <code>config.example.toml:87</code>. The example file is what a
+  Step 5 is a commented-out block in <code>config.example.toml:92</code>. The example file is what a
   user copies from, so an objective missing from it is one most people never find — and the test
   suite parses and validates that file, so a block that does not parse fails the build rather than a
   user's afternoon.
