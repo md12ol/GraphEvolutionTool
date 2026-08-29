@@ -151,7 +151,7 @@ num_epidemics  = 30</code></pre>
 <pre><code class="language-bash">$ get-run config.toml 7
 run_log.csv                 # one row per logged iteration
 best_individual.txt         # the winner as a loadable edge list
-best_individual.txt.toml    # the exact config this run used</code></pre>
+config.toml                 # the exact config this run used</code></pre>
 
 <p>
   A second invocation overwrites them. With <code>--out</code>, each invocation gets its own
@@ -161,7 +161,7 @@ best_individual.txt.toml    # the exact config this run used</code></pre>
 <pre><code class="language-bash">$ get-run config.toml 7 --out output
 output/20260821-141233-7/run_log.csv
 output/20260821-141233-7/best_individual.txt
-output/20260821-141233-7/best_individual.txt.toml</code></pre>
+output/20260821-141233-7/config.toml</code></pre>
 
 <h2>Several Replicates</h2>
 

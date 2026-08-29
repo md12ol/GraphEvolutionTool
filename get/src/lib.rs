@@ -663,7 +663,7 @@ pub struct RunSummary {
     /// `seed`.
     run_index: usize,
     /// The TOML document this run's config was parsed from. Private:
-    /// `save_results` writes it to `{filename}.toml`.
+    /// `save_results` writes it beside the results as `config.toml`.
     config_toml: String,
 }
 
@@ -698,7 +698,7 @@ impl RunSummary {
     }
 
     /// Write the best individual to `filename`, and the run's config TOML
-    /// alongside it at `{filename}.toml`.
+    /// beside it as `config.toml`.
     pub fn save_results(&self, filename: &str) -> std::io::Result<()> {
         use std::io::Write;
 
@@ -718,7 +718,11 @@ impl RunSummary {
             writeln!(file, "{u},{v},{weight}")?;
         }
 
-        std::fs::write(format!("{filename}.toml"), &self.config_toml)?;
+        // Beside the results file, not derived from its name: several replicates
+        // written into one folder share the config that produced them, so one
+        // `config.toml` per folder is the record.
+        let config_path = Path::new(filename).with_file_name("config.toml");
+        std::fs::write(config_path, &self.config_toml)?;
         Ok(())
     }
 }

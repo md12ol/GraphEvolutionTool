@@ -15,7 +15,7 @@ struct Args {
 
 const USAGE: &str = "usage: get-run <config.toml> [seed] [--runs N] [--out DIR]
 
-Writes run_log.csv and best_individual.txt (+ .toml) into the working directory,
+Writes run_log.csv, best_individual.txt and config.toml into the working directory,
 or into DIR/<timestamp>-<seed>/ with --out, where each replicate of a multi-run
 invocation gets its own run_<index>/ sub-directory.
 
@@ -166,7 +166,7 @@ fn main() -> ExitCode {
 
         let best_path = directory.join("best_individual.txt");
         match summary.save_results(&best_path.to_string_lossy()) {
-            Ok(()) => println!("wrote {} (+ .toml)", best_path.display()),
+            Ok(()) => println!("wrote {} (+ config.toml)", best_path.display()),
             Err(err) => eprintln!("warning: could not write {}: {err}", best_path.display()),
         }
     }

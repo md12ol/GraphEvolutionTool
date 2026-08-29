@@ -35,7 +35,7 @@ AGENTS.md
 # is run from. Generated per run, never shared.
 run_log.csv
 best_individual.txt
-best_individual.txt.toml
+config.toml
 
 # `maturin develop` writes the built module into the package source directory.
 # The wheel gets its copy from the build, never from here.
