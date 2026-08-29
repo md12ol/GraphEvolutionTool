@@ -377,7 +377,8 @@ print(len(result.best_edges))          # the winning network, as (u, v, weight) 
 print(len(result.history))             # the convergence log, one row per generation
 
 result.save_logs("convergence.csv")    # iteration, best, mean, std_dev, ci_95, seed, run_index
-result.save_results("results.txt")     # best individual, with the run's config TOML alongside
+result.save_results("results.txt")     # the best individual, as a loadable edge file
+result.save_config(".")                # the run's config TOML, as config.toml
 </code></pre>
 
 <div class="note">

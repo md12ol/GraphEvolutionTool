@@ -485,7 +485,8 @@ best = max(results, key=lambda r: r.best_fitness)   # epi_spread maximizes
 print(best.best_fitness, best.best_edges, best.best_genome_repr)
 
 best.save_logs("convergence.csv")     # the seven columns above
-best.save_results("results.txt")      # best individual, with the run's config TOML alongside</code></pre>
+best.save_results("results.txt")      # the best individual, as a loadable edge file
+best.save_config(".")                 # the run's config TOML, as config.toml</code></pre>
 
 <p>
   The config TOML written beside the results is the <b>provenance record of what produced
