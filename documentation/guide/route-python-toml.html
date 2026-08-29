@@ -10,7 +10,7 @@
 <body data-page="guide/route-python-toml.html">
 <main>
 
-<p class="page-kicker">Using GET</p>
+<p class="page-kicker">Use Python</p>
 <h1>Python: TOML File</h1>
 <p class="lede">
   Keep the parameters in a document instead of in code. Point <code>GraphEvolver</code> at the file,
@@ -21,7 +21,7 @@
 <h2>Start Here: The Example Bundle</h2>
 
 <p>
-  <a href="../get-examples.zip"><b>Download get-examples.zip</b></a> &mdash; a script that runs the
+  <a href="../get-examples.zip"><b>Download get-examples.zip</b></a> — a script that runs the
   examples, a script that plots what they produced, and five complete configurations, laid out so
   every path inside resolves. It is the fastest way to see this route working, and the rest of this
   page explains what the files in it do.
@@ -61,43 +61,33 @@ python python_from_config.py 04_sda_profile_match.toml</code></pre>
 <p>
   Every file is also <a href="example-bundle.html">readable here without downloading it</a>. Results
   land in <code>output/example_N/</code>, N counting up as you go, with one folder per replicate
-  inside &mdash; so a second run never overwrites the first, and each example folder holds enough
+  inside — so a second run never overwrites the first, and each example folder holds enough
   replicates to compare.
 </p>
 
 <h2>Install</h2>
 
 <p>
-  The distribution is <code>graph-evolution-tool</code>; it imports as <code>get</code>.
+  Version 0.9.0a1 is published on PyPI as a pre-release. The distribution is
+  <code>graph-evolution-tool</code>, while Python imports <code>get</code>.
 </p>
 
 <pre><code class="language-bash">python3 -m venv .venv
 source .venv/bin/activate
-pip install graph-evolution-tool
+python -m pip install --upgrade pip
+python -m pip install graph-evolution-tool
 python -c "import get; print(get.__name__)"</code></pre>
 
-
-
-<div class="tip">
-  <b>Building from a checkout instead.</b> If you want the working copy rather than the published
-  package — or the package is not on PyPI yet — build the extension module with
-  <a href="https://www.maturin.rs">maturin</a>. It compiles the Rust and installs it into the
-  active virtual environment under the import name <code>get</code>:
-  <pre><code class="language-bash">git clone https://github.com/md12ol/GraphEvolutionTool
-cd GraphEvolutionTool
-python3 -m venv .venv &amp;&amp; source .venv/bin/activate
-python3 -m ensurepip --upgrade      # only if this Python has no pip
-pip install maturin
-maturin develop --release</code></pre>
-  A Rust toolchain is needed for this and not for <code>pip install</code>; get one from
-  <a href="https://rustup.rs">rustup.rs</a>. Re-run <code>maturin develop</code> after every change
-  to the Rust — the installed module does not track the source.
+<div class="note">
+  <b>Pin recorded work.</b> Use <code>graph-evolution-tool==0.9.0a1</code> when an experiment must
+  resolve the same package later.
+  A Rust toolchain is needed only when building a development checkout from source.
 </div>
 
 <h2>The Config Document</h2>
 
 <p>
-  Four tagged sections plus a handful of top-level keys. Each <code>type</code> selects a variant,
+  Five required tagged sections plus a handful of top-level keys. Each <code>type</code> selects a variant,
   and the rest of that section's keys depend on which one you chose.
 </p>
 
@@ -126,7 +116,7 @@ gene_length = 256
 
 [fitness]                     # epi_spread | epi_length | epi_prof_match | struct_match | python
 type           = "epi_spread"
-infection_rate = 0.5          # much lower and every graph scores alike
+infection_rate = 0.5
 num_epidemics  = 30</code></pre>
 
 <div class="warn">
@@ -160,13 +150,13 @@ best.save_results("best_individual.txt")</code></pre>
 </p>
 
 <div class="note">
-  <b>A base graph is set on the evolver, not in the document.</b> No key in the config names one.
-  Call <code>evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code> between
-  constructing the evolver and running it. The file is one edge per line and <b>must</b> carry a
-  <code># nodes = N</code> header — a node with no edges is invisible to any count taken from the
-  edges, so a count inferred from the rows is short by exactly the nodes hardest to notice. See
-  <a href="route-python-objects.html#starting-from-a-graph-you-already-have">Starting From a Graph
-  You Already Have</a>.
+  <b>A TOML config can name its starting graph.</b> Under an edge-edit <code>[genome]</code>, set
+  <code>base_graph = "base_graph.csv"</code>. A relative path is resolved beside the TOML file, the
+  graph is read as 0-indexed, and its required <code># nodes = N</code> header must equal
+  <code>network_size</code>. Use
+  <code>evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code> after construction
+  instead when your file is 1-indexed or selected dynamically. See
+  <a href="data-and-inputs.html">Data &amp; Inputs</a>.
 </div>
 
 <h2>Reading a Result</h2>
@@ -188,15 +178,14 @@ best.save_results("best_individual.txt")</code></pre>
 
 <p>
   The document is parsed and checked when you construct the evolver, not part-way through a run. In
-  most sections an unknown key is an error rather than a silent default — a misspelled
-  <code>tournament_sise</code> stops you immediately instead of quietly running a different
-  experiment.
+  field values are validated, but unknown-key handling is not uniformly strict. Only
+  <code>[genome]</code> and <code>[genome.operation_weights]</code> reject every unknown key. A typo
+  such as <code>elite_cuont</code> can be ignored and leave a default in use.
 </p>
 
 <div class="warn">
-  <b><code>[fitness]</code> is the exception, and it is worth knowing.</b> Its variants flatten
-  their SIR block into the section, and a flattened block is the one place serde cannot refuse an
-  unrecognised key — so a typo there is <b>ignored</b>, leaving the default in place. Two keys are
+  <b>Check all config keys against the reference.</b> <code>[fitness]</code> has an additional
+  flattening limitation: a typo there can also be <b>ignored</b>, leaving the default in place. Two keys are
   singled out and rejected by name because they are the mistakes that change a run silently:
   <code>seed</code>, which belongs on <code>run</code>, and <code>target_profile</code> under a
   variant that has no use for it. Anything else misspelled under <code>[fitness]</code> passes
@@ -210,11 +199,20 @@ except ValueError as err:
 
 <h2>Several Replicates</h2>
 
-<pre><code class="language-python">results = evolver.run(seed=7, n_runs=8, max_cores=4)
+<pre><code class="language-python">from pathlib import Path
+
+results = evolver.run(seed=7, n_runs=8, max_cores=4)
 
 for run_index, result in enumerate(results):
-    result.save_logs(f"output/run_{run_index}/run_log.csv")
-    result.save_results(f"output/run_{run_index}/best_individual.txt")</code></pre>
+    run_dir = Path("output") / f"run_{run_index}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    result.save_logs(str(run_dir / "run_log.csv"))
+    result.save_results(str(run_dir / "best_individual.txt"))</code></pre>
+
+<div class="note">
+  <b>Keep one configuration per experiment.</b> <code>save_results</code> writes only the named
+  network. Preserve the original TOML once at the experiment root, as the bundle runner does.
+</div>
 
 <p>
   One master seed in, one derived seed per replicate. Asking for more replicates never changes the
@@ -249,27 +247,23 @@ python analyze_output.py output/example_*</code></pre>
 </div>
 
 <p>
-  Two details are worth knowing before you read the output. Each <b>configuration gets its own
-  panel</b> on the convergence plot and its own colour on the boxplot, because two configurations
-  optimise different objectives — averaging across them would produce a number in no unit, and
-  their iteration counts differ by orders of magnitude. And the average line is computed
-  <b>over whichever replicates reached each iteration</b>, so one run that stops early neither
-  truncates the average nor drags it down; where the supporting count falls, the plot marks it.
+  Each <b>configuration gets its own panel</b> on the convergence plot and its own colour on the
+  boxplot, because configurations can optimize different objectives and use different iteration
+  counts. The average line uses whichever replicates reached each iteration; when that supporting
+  count falls, the plot marks it.
 </p>
 
 <p>
-  The network render colours nodes by degree and edges by multiplicity, so a hub and a doubled edge
-  are visible rather than inferred. Nodes with no edges at all are drawn in grey on a ring outside
-  the graph — a layout that solves for them puts them in the middle, which is the one place a
-  disconnected node should never appear.
+  The network render colours nodes by degree and edges by multiplicity. Isolated nodes are drawn in
+  grey on a ring outside the graph, where they cannot be mistaken for highly connected central
+  nodes.
 </p>
 
 <div class="callout">
   <p>
-    <b>This is the only file in the bundle that needs anything installed.</b> It is a workshop tool
-    rather than part of the package, so it may depend on what the wheel does not. For a picture with
-    no installation at all, <code>graph_to_png.py</code> ships beside it and draws any single result
-    using nothing but the standard library.
+    <b>Only the analysis script needs extra packages.</b> It is a workshop tool rather than part of
+    GET. For a picture with no installation at all, <code>graph_to_png.py</code> draws a single result
+    using only the standard library.
   </p>
 </div>
 
@@ -306,7 +300,7 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
   If you would rather generate configurations than hand-write them, the same typed objects the other
   Python route uses will serialize to this format — useful for sweeping a parameter across many
   files. See <a href="route-python-objects.html">Python: Config Objects</a>, and
-  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/config_builder.py"><code>config_builder.py</code></a>, which builds configurations
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0/examples/config_builder.py"><code>config_builder.py</code></a>, which builds configurations
   without running anything.
 </p>
 
@@ -314,14 +308,14 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
 
 <p>
   The <a href="../get-examples.zip">example bundle</a> at the top of this page is this route end to
-  end: a script that takes a config path and a seed, and five configurations covering every option
-  described above. Every file in it is
-  <a href="example-bundle.html">readable here</a> without downloading.
+  end: a script that takes a config path and a seed, and five configurations covering the options
+  described above. Every file in it is <a href="example-bundle.html">readable here</a> without
+  downloading.
 </p>
 
 <p>
   For a single document showing every key at once rather than five that build up to it, see
-  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/config.example.toml"><code>config.example.toml</code></a>.
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0/config.example.toml"><code>config.example.toml</code></a>.
 </p>
 
 </main>

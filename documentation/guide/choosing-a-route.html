@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Choose the Python, TOML, Rust library, or command-line route for Graph Evolution Tool.">
+<title>Choose a Route · GET Docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/choosing-a-route.html">
+<main>
+
+<p class="page-kicker">Start Here</p>
+<h1>Choose a Route</h1>
+<p class="lede">All four routes reach the same engine. Choose by where you want the experiment
+settings to live and whether you need Python inside the scoring loop.</p>
+
+<h2>Recommended Starting Point</h2>
+
+<p>
+  Start with <a href="route-python-objects.html">Python config objects</a> while you are learning or
+  building settings programmatically. Move to <a href="route-python-toml.html">Python with TOML</a>
+  when the configuration should be a file you can archive, diff, and share.
+</p>
+
+<div class="warn">
+  <b>Rust routes currently require the source checkout.</b> The crate is not published to crates.io.
+  They are valid development routes, but not registry dependencies in 0.9.0a1.
+</div>
+
+<h2>Route Comparison</h2>
+
+<div class="table-wrap">
+<table class="route-table">
+  <thead><tr><th>Route</th><th>Availability</th><th>Best when</th><th>Settings live in</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><a href="route-python-objects.html">Python config objects</a></td>
+      <td><span class="availability ready">Published</span></td>
+      <td>You want typed, generated, or notebook-friendly configuration.</td>
+      <td>Python code</td>
+    </tr>
+    <tr>
+      <td><a href="route-python-toml.html">Python with TOML</a></td>
+      <td><span class="availability ready">Published</span></td>
+      <td>You want a reproducible experiment document and Python results.</td>
+      <td>A TOML file</td>
+    </tr>
+    <tr>
+      <td><a href="route-rust-library.html">Rust library</a></td>
+      <td><span class="availability source">Source only</span></td>
+      <td>You need a fast native objective or are embedding GET in Rust.</td>
+      <td>Rust code</td>
+    </tr>
+    <tr>
+      <td><a href="route-rust-cli.html">get-run command line</a></td>
+      <td><span class="availability source">Source only</span></td>
+      <td>You want a pinned source build driven entirely by a config file.</td>
+      <td>A TOML file</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Choose by Task</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>I want to…</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td>Run GET for the first time</td><td><a href="getting-started.html">Getting Started</a>, then Python config objects</td></tr>
+    <tr><td>Try complete configurations and plot their results</td><td><a href="example-bundle.html">Example Bundle</a> and <a href="../get-examples.zip">downloadable files</a></td></tr>
+    <tr><td>Write and archive config files</td><td><a href="route-python-toml.html">Python with TOML</a> and the <a href="configuration.html">Configuration Reference</a></td></tr>
+    <tr><td>Generate many configurations from code</td><td><a href="route-python-objects.html">Python config objects</a></td></tr>
+    <tr><td>Score networks with Python</td><td><a href="route-python-objects.html#your-own-objective">A registered Python objective</a></td></tr>
+    <tr><td>Remove Python from a performance-critical objective</td><td><a href="route-rust-library.html">Rust library</a>, from a checkout</td></tr>
+    <tr><td>Run a config file without writing a driver program</td><td><a href="route-rust-cli.html">get-run</a>, built from a checkout</td></tr>
+    <tr><td>Add functionality to GET itself</td><td><a href="contributing.html">Contributor Guide</a> and the <a href="extending.html">Extension Map</a></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>The Configuration Is Shared</h2>
+
+<p>
+  Python config objects and TOML describe the same schema. The objects serialize to TOML, and the
+  Rust parser validates that document. The <a href="configuration.html">Configuration Reference</a>
+  therefore applies to both Python routes and to <code>get-run</code>.
+</p>
+
+<h2>Where to Continue</h2>
+
+<p>
+  New users should run <a href="getting-started.html">Getting Started</a>. To learn by modifying
+  working files, download the <a href="../get-examples.zip">example bundle</a>. If you already have a
+  working environment, open the route page from the table above. If a term such as genome, fitness,
+  or selection is unfamiliar, read <a href="concepts.html">Concepts &amp; Vocabulary</a> first.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

@@ -84,6 +84,7 @@ jobs:
       - name: example bundle is current
         run: python3 tools/build_bundle.py --check
 
+
       # First of the Rust checks: it is the cheapest of them and needs no
       # build, so a formatting-only failure reports in seconds instead of
       # after a compile.
@@ -99,6 +100,16 @@ jobs:
 
       - name: cargo test
         run: cargo test -p graph-evolution-tool --features cli
+
+      # `check_refs.py` proves a block points where it says; this proves the
+      # code in it works: Python blocks type-checked against the shipped stub,
+      # TOML blocks fed to the real loader. After `cargo test` because that is
+      # what builds the `get-run` the TOML half needs — placed earlier it would
+      # skip that half and report a green it had not earned.
+      - name: documentation examples run
+        run: |
+          python3 -m pip install --quiet mypy
+          python3 tools/check_doc_examples.py
 
       # The examples are the only proof that the Rust-library route reaches
       # what it promises. Narrowing something only an external caller needs

@@ -203,7 +203,7 @@ def build_page(files):
 <body data-page="guide/example-bundle.html">
 <main>
 
-<p class="page-kicker">Using GET</p>
+<p class="page-kicker">Use Python</p>
 <h1>The Example Bundle</h1>
 <p class="lede">
   Every file in the download, readable here without unpacking it. These are the

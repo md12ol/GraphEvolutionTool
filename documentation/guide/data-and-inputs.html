@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Check whether GET's graph model fits your data, prepare edge files, and preserve biological identifiers.">
+<title>Data &amp; Inputs · GET Docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/data-and-inputs.html">
+<main>
+
+<p class="page-kicker">Reference</p>
+<h1>Data &amp; Inputs</h1>
+<p class="lede">Check that GET can represent your network, then convert external identifiers into
+the integer node indices the engine uses.</p>
+
+<h2>Is GET Suitable for This Network?</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>GET currently represents</th><th>Implication</th></tr></thead>
+  <tbody>
+    <tr><td>A fixed number of nodes</td><td>Evolution changes edges, not the node set.</td></tr>
+    <tr><td>Undirected edges</td><td>A regulatory edge <code>A → B</code> cannot retain its direction.</td></tr>
+    <tr><td>Integer edge multiplicities</td><td>Continuous weights, signs, and confidence scores need an explicit conversion.</td></tr>
+    <tr><td>No node or edge attributes</td><td>Gene type, pathway, condition, and other metadata must live in your objective or a side table.</td></tr>
+    <tr><td>Dense graph storage</td><td>Memory grows quadratically with node count; benchmark a representative small run before committing to a large network.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn">
+  <b>Do not silently discard domain meaning to fit the model.</b> If direction, signed edges,
+  attributes, or a changing node set are central to the research question, GET's current graph type
+  is not a faithful representation without a reviewed transformation.
+</div>
+
+<h2>Edge-file Format</h2>
+
+<p>Each file is comma-separated, contains one integer <code>start,end,weight</code> edge per line,
+and includes exactly one node-count header. Lines beginning with <code>#</code> are comments.</p>
+
+<pre><code class="language-text"># nodes = 5
+# source IDs are recorded in node_ids.csv
+1,2,1
+2,4,1
+4,5,1</code></pre>
+
+<ul>
+  <li>Pass <code>min_node_index=1</code> for this 1-based example; use 0 for 0-based data.</li>
+  <li>Self-loops, non-integers, out-of-range nodes, negative weights, and weights above the configured cap are errors.</li>
+  <li>Undirected duplicates such as <code>2,4</code> and <code>4,2</code> collapse; the last weight wins with a warning.</li>
+  <li>A zero-weight row adds no edge and produces a warning.</li>
+  <li>The header is required because isolated nodes cannot be inferred from edge rows.</li>
+</ul>
+
+<pre><code class="language-python">evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre>
+
+<h2>Choose How the Base Graph Is Loaded</h2>
+
+<p>
+  For the usual TOML route, put the path directly under an edge-edit genome. Relative paths resolve
+  from the TOML file's directory, not from the shell's working directory:
+</p>
+
+<pre><code class="language-toml">[genome]
+type = "edge_edit"
+gene_length = 256
+base_graph = "base_graph.csv"</code></pre>
+
+<p>
+  This config key reads 0-indexed nodes and requires the file's <code># nodes = N</code> value to
+  equal <code>network_size</code>. Use <code>set_base_graph_from_file</code> instead for a 1-indexed
+  file, a dynamically chosen file, or a configuration assembled as Python objects. Use one loader
+  per evolver; do not apply both to the same run.
+</p>
+
+<h2>Preserve Biological Identifiers</h2>
+
+<p>GET returns the numbering supplied to the first graph loader, but it does not store gene or
+protein labels. Create and archive a one-to-one mapping before the run:</p>
+
+<pre><code class="language-text">node_id,biological_id
+1,TP53
+2,MDM2
+3,CDKN1A
+4,ATM
+5,BAX</code></pre>
+
+<ol>
+  <li>Normalize identifiers to one namespace and record the source/database version.</li>
+  <li>Assign each retained identifier one integer; keep isolated nodes in the mapping and node count.</li>
+  <li>Build the edge file using those integers and archive both files together.</li>
+  <li>Map <code>result.best_edges</code> back through the same table; never infer labels from row order later.</li>
+</ol>
+
+<h2>Reference Graph Folders</h2>
+
+<p>The <code>struct_match</code> objective reads every usable reference graph from
+<code>reference_folder</code>. Each graph uses the same edge-file format and its own
+<code># nodes = N</code> header. The folder must exist and contain at least one usable graph. Archive
+the exact folder contents and identifier conventions; the TOML path alone does not preserve them.</p>
+
+<h2>Provenance Checklist</h2>
+
+<ul>
+  <li>GET tag and resolved commit, plus dependency/environment details</li>
+  <li>Run code and complete configuration</li>
+  <li>Master seed, replicate index, and any custom-objective seed</li>
+  <li>Base graph, reference folder, identifier map, source/version, and licenses</li>
+  <li>Custom objective code and scientific reporting/validation method</li>
+</ul>
+
+<p>Continue to <a href="configuration.html">Configuration Reference</a> for parameter details,
+<a href="route-python-toml.html">Python with TOML</a> for the normal config-file route, or
+<a href="route-python-objects.html#starting-from-a-graph-you-already-have">Python config objects</a>
+for explicit loaders.</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

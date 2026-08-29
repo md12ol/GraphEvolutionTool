@@ -1,4 +1,9 @@
-<svg viewBox="0 0 700 320" role="img" aria-label="Convergence of a 60-generation edge-edit run scored on epidemic spread: best fitness rises from 10 to 35 infected nodes and the population mean follows it.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 320" role="img" aria-label="Convergence of a 60-generation edge-edit run scored on epidemic spread: best fitness rises from 10 to 35 infected nodes and the population mean follows it.">
+  <style>
+    .d-fill-bg{fill:#fff}.d-stroke{stroke:#7890ad;fill:none}.d-stroke-acc{stroke:#166e70;fill:none}
+    .d-text-sm{fill:#526579;font:11px system-ui,sans-serif}
+  </style>
+  <rect width="700" height="320" fill="#f6f8fb"/>
   <g style="color:var(--border-firm)">
   <line x1="62" y1="274.0" x2="682" y2="274.0" class="d-stroke" stroke-width="0.6" opacity="0.35"/>
   <text x="54" y="278.0" class="d-text-sm" text-anchor="end">3</text>

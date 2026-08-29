@@ -10,7 +10,7 @@
 <body data-page="guide/route-rust-cli.html">
 <main>
 
-<p class="page-kicker">Using GET</p>
+<p class="page-kicker">Use Rust</p>
 <h1>Rust: The get-run CLI</h1>
 <p class="lede">
   One command, one config file, three output files. No Python interpreter and no compiled module to
@@ -18,7 +18,7 @@
 </p>
 
 <div class="warn not-in-release">
-  <b>Not part of the v0.9 release.</b> The Rust route isn't what this release presents — GET does
+  <b>Source only in 0.9.0a1.</b> GET does
   not yet publish to crates.io, and <a href="route-python-toml.html">the Python route</a> is the
   supported one for now. This note is removed once the crate is obtainable.
 </div>
@@ -43,10 +43,9 @@ cargo build --release -p graph-evolution-tool --features cli --bin get-run
 <p>
   Releases are listed at
   <a href="https://github.com/md12ol/GraphEvolutionTool/releases">github.com/md12ol/GraphEvolutionTool/releases</a>;
-  a release is an annotated tag on <code>main</code>, so the tag name is the whole provenance record
-  you need to reproduce a build. The other three routes install a published package instead and
-  never need the repository — see <a href="route-rust-library.html">Rust: As a Library</a> if you
-  want the crate rather than the binary.
+  use <code>v0.9.0a1</code> for this release. Record the resolved commit as well as the tag. The Rust
+  routes start from a checkout because the crate is not published to crates.io; see
+  <a href="route-rust-library.html">Rust: As a Library</a> for an application dependency.
 </p>
 
 <div class="warn">
@@ -121,7 +120,7 @@ gene_length = 256
 
 [fitness]                     # epi_spread | epi_length | epi_prof_match | struct_match
 type           = "epi_spread"
-infection_rate = 0.5          # much lower and every graph scores alike
+infection_rate = 0.5
 num_epidemics  = 30</code></pre>
 
 <div class="warn">

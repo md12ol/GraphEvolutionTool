@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Plain-language introduction to graphs, genomes, fitness, selection, variation, and evolution in GET.">
+<title>Concepts &amp; Vocabulary · GET Docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/concepts.html">
+<main>
+
+<p class="page-kicker">Start Here</p>
+<h1>Concepts &amp; Vocabulary</h1>
+<p class="lede">The minimum theory needed to understand a GET run, written for readers coming from
+computer science, bioinformatics, data science, or somewhere between them.</p>
+
+<h2>The Problem GET Solves</h2>
+
+<p>
+  Suppose you can assign a number to a network: epidemic spread, similarity to known networks,
+  robustness after node removal, or a measure from your own research. Trying every possible graph
+  becomes impossible very quickly. GET uses an evolutionary search to explore promising candidates
+  without enumerating them all.
+</p>
+
+<div class="note">
+  <b>Evolutionary search does not prove that it found the global optimum.</b> It returns the best
+  candidate it found under the representation, settings, objective, seed, and stopping point you
+  supplied. Replicates and convergence plots help you judge the search.
+</div>
+
+<h2>A Run in Six Steps</h2>
+
+<ol class="step-list">
+  <li><b>Create a population.</b> GET starts with many genomes—compact recipes for candidate graphs.</li>
+  <li><b>Express each genome.</b> Every recipe produces a graph with the configured number of nodes.</li>
+  <li><b>Score each graph.</b> The objective returns one fitness value per candidate.</li>
+  <li><b>Select parents.</b> Better-scoring candidates are more likely to breed.</li>
+  <li><b>Create variation.</b> Crossover combines parents and mutation changes the children.</li>
+  <li><b>Repeat.</b> The strategy replaces candidates and continues until its configured stopping point.</li>
+</ol>
+
+<h2>The Terms</h2>
+
+<dl class="glossary-grid">
+  <div><dt>Graph or network</dt><dd>Nodes connected by edges. GET uses undirected edges with an integer multiplicity, which can act as a weight.</dd></div>
+  <div><dt>Node</dt><dd>An entity in the network—for example a protein, gene, metabolite, person, or abstract state.</dd></div>
+  <div><dt>Edge</dt><dd>A relationship between two different nodes. GET does not keep self-loops.</dd></div>
+  <div><dt>Genome</dt><dd>A compact recipe that GET can mutate and cross over. Expressing the recipe produces a graph.</dd></div>
+  <div><dt>Population</dt><dd>The set of candidate genomes being searched at one time.</dd></div>
+  <div><dt>Expression</dt><dd>The deterministic step that turns one genome into its graph.</dd></div>
+  <div><dt>Objective or fitness function</dt><dd>The measurement that turns one graph into one number and declares whether higher or lower is better.</dd></div>
+  <div><dt>Selection</dt><dd>The rule used to choose which candidates become parents.</dd></div>
+  <div><dt>Crossover</dt><dd>Recombination: exchanging part of two parent genomes to make two children.</dd></div>
+  <div><dt>Mutation</dt><dd>A random change to a child genome. In GET, one call applies exactly one mutation.</dd></div>
+  <div><dt>Evolution strategy</dt><dd>The outer schedule: who breeds, who is replaced, when scores are logged, and when the run stops.</dd></div>
+  <div><dt>Replicate</dt><dd>An independent run derived from the same master seed. Replicates help distinguish a reliable pattern from one random trajectory.</dd></div>
+</dl>
+
+<div class="warn">
+  <b>“Genome” is an algorithm term here.</b> For a bioinformatics reader, it does not mean the
+  organism's DNA sequence. It means GET's evolvable encoding of a graph. A node in that graph could
+  still represent a biological gene if that is how you define the network.
+</div>
+
+<h2>Graph, Genome, and Objective Are Different</h2>
+
+<p>
+  The graph is the research object you eventually inspect. The genome is only the representation
+  used during search. The objective says which expressed graphs are useful. Keeping these separate
+  lets the same objective compare graphs produced by different representations.
+</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Question</th><th>GET concept</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>What do I want to study?</td><td>Graph</td><td>A protein-interaction network</td></tr>
+    <tr><td>How can the search change it?</td><td>Genome</td><td>A list of edge edits applied to a starting network</td></tr>
+    <tr><td>What counts as better?</td><td>Objective</td><td>Match a reference distribution while penalizing edge cost</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>The Two Shipped Genomes</h2>
+
+<h3>Edge-edit</h3>
+
+<p>
+  An edge-edit genome is a fixed-length script of graph operations. It is a natural choice when you
+  have a starting graph or want direct changes such as adding, removing, or reweighting edges.
+</p>
+
+<h3>SDA</h3>
+
+<p>
+  An SDA genome is a small state machine that writes one value for every possible node pair. It is
+  an indirect, generative representation: changing one state-table entry can affect many edges.
+</p>
+
+<p>See <a href="pipeline.html#genomes">Genomes in the Pipeline guide</a> for their exact encodings.</p>
+
+<h2>Fitness Direction</h2>
+
+<p>
+  Some objectives are maximized and others minimized. You declare the direction; GET does not infer
+  it. Inside the engine all scores are converted to lower-is-better, then converted back when results
+  leave the config-driven routes. This is why extension authors must use the shared scoring path.
+</p>
+
+<h2>Randomness and Reproducibility</h2>
+
+<p>
+  Selection, mutation, crossover, starting populations, and stochastic objectives consume random
+  numbers. A master seed repeats the sequence for fixed code and inputs. Use several replicates for
+  conclusions; preserve the exact commit, run code, config, seed/index, input graphs, custom
+  objective, dependencies, and relevant environment.
+</p>
+
+<h2>Continue Deeper</h2>
+
+<ul>
+  <li><a href="pipeline.html">The Pipeline</a> follows the exact implementation loop.</li>
+  <li><a href="variation.html">Variation &amp; Selection</a> explains how children are made and replaced.</li>
+  <li><a href="fitness.html">Fitness &amp; Output</a> covers objectives, SIR simulation, seeds, and logs.</li>
+</ul>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

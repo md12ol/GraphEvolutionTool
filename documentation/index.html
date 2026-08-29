@@ -3,432 +3,129 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GET — Graph Evolution Tool Documentation</title>
+<meta name="description" content="Learn what Graph Evolution Tool does, run it from Python, and understand how it evolves networks against an objective.">
+<title>Graph Evolution Tool documentation</title>
 <link rel="stylesheet" href="assets/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
 </head>
 <body data-page="index.html">
 <main>
 
-<p class="page-kicker">Graph Evolution Tool</p>
-<h1>Evolve Networks Against an Objective</h1>
-<p class="lede">
-  Graph Evolution Tool (GET) searches for graphs that score well on a measure you choose — how far
-  a simulated epidemic spreads, how closely a network's structure matches a reference set, or any
-  objective you write yourself in Python or Rust. You describe the experiment in a config file or
-  in Python; GET runs an evolutionary algorithm in Rust and hands back the best network it found,
-  plus the convergence log that produced it.
-</p>
+<section class="hero">
+  <p class="page-kicker">Graph Evolution Tool · GET</p>
+  <h1>Design networks by evolving them</h1>
+  <p class="lede">
+    GET searches for a graph that performs well on a goal you define. It repeatedly builds candidate
+    networks, measures them, and breeds the better candidates. Use it from Python, a TOML config file,
+    or—when working from the source tree—Rust.
+  </p>
+</section>
 
-<div class="cards">
-  <a class="card" href="guide/pipeline.html">
-    <h3>The Pipeline →</h3>
-    <p>How a run works: the genome → graph → fitness loop, the two representations, and the graph
-       they build.</p>
+<div class="status-banner" role="note">
+  <span class="status-label">v0.9.0a1</span>
+  <div><b>Python 0.9.0a1 is published on PyPI as a pre-release.</b> Install it with
+  <code>pip install graph-evolution-tool</code>. The Rust crate remains source-only. The
+  <a href="guide/getting-started.html">Getting Started guide</a> gives a two-minute test run.</div>
+</div>
+
+<h2>Choose Your Starting Point</h2>
+
+<div class="path-grid">
+  <a class="path-card" href="guide/getting-started.html">
+    <span class="eyebrow">I want to use GET</span>
+    <h3>Run a small experiment</h3>
+    <p>Build the Python module, evolve a network, and inspect the result.</p>
+    <span class="card-action">Getting Started →</span>
   </a>
-  <a class="card" href="guide/route-python-objects.html">
-    <h3>Python: Config Objects →</h3>
-    <p>Build a run out of typed objects and read the results back as Python values. No file to
-       maintain.</p>
+  <a class="path-card" href="guide/concepts.html">
+    <span class="eyebrow">I want to understand it</span>
+    <h3>Learn the ideas first</h3>
+    <p>Graphs, genomes, objectives, selection, variation, and what the loop is doing.</p>
+    <span class="card-action">Concepts &amp; Vocabulary →</span>
   </a>
-  <a class="card" href="guide/route-python-toml.html">
-    <h3>Python: TOML File →</h3>
-    <p>Keep the parameters in a document you can archive, diff and hand to someone else.</p>
-  </a>
-  <a class="card" href="guide/route-rust-library.html">
-    <h3>Rust: As a Library →</h3>
-    <p>Depend on the crate, write your objective as a Rust type, drive an evolver directly.</p>
-  </a>
-  <a class="card" href="guide/route-rust-cli.html">
-    <h3>Rust: The get-run CLI →</h3>
-    <p>One command, one config file, three output files. No interpreter in the loop.</p>
-  </a>
-  <a class="card" href="guide/extending.html">
-    <h3>Extension Points →</h3>
-    <p>Add an objective, genome, strategy, selection scheme or variation operator.</p>
+  <a class="path-card" href="guide/contributing.html">
+    <span class="eyebrow">I want to contribute</span>
+    <h3>Find the right extension point</h3>
+    <p>Set up the repository, run its checks, and follow the map to the code you need.</p>
+    <span class="card-action">Contributor Guide →</span>
   </a>
 </div>
 
-<h2>What It Produces</h2>
-
-<figure>
-<svg viewBox="0 0 720 374" role="img" aria-label="Two 40-node graphs side by side. The edge-edit run starts from an empty graph and ends with 89 edges, evolved to spread an epidemic as widely as possible.">
-  <g style="color:var(--border-firm)">
-  <text x="170" y="16" class="d-text-acc" text-anchor="middle">generation 0 — an empty base graph</text>
-
-    <circle cx="170.0" cy="32.0" r="3.5" class="d-fill-acc"/><circle cx="170.0" cy="32.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="192.5" cy="33.8" r="3.5" class="d-fill-acc"/><circle cx="192.5" cy="33.8" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="214.5" cy="39.0" r="3.5" class="d-fill-acc"/><circle cx="214.5" cy="39.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="235.4" cy="47.7" r="3.5" class="d-fill-acc"/><circle cx="235.4" cy="47.7" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="254.6" cy="59.5" r="3.5" class="d-fill-acc"/><circle cx="254.6" cy="59.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="271.8" cy="74.2" r="3.5" class="d-fill-acc"/><circle cx="271.8" cy="74.2" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="286.5" cy="91.4" r="3.5" class="d-fill-acc"/><circle cx="286.5" cy="91.4" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="298.3" cy="110.6" r="3.5" class="d-fill-acc"/><circle cx="298.3" cy="110.6" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="307.0" cy="131.5" r="3.5" class="d-fill-acc"/><circle cx="307.0" cy="131.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="312.2" cy="153.5" r="3.5" class="d-fill-acc"/><circle cx="312.2" cy="153.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="314.0" cy="176.0" r="3.5" class="d-fill-acc"/><circle cx="314.0" cy="176.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="312.2" cy="198.5" r="3.5" class="d-fill-acc"/><circle cx="312.2" cy="198.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="307.0" cy="220.5" r="3.5" class="d-fill-acc"/><circle cx="307.0" cy="220.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="298.3" cy="241.4" r="3.5" class="d-fill-acc"/><circle cx="298.3" cy="241.4" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="286.5" cy="260.6" r="3.5" class="d-fill-acc"/><circle cx="286.5" cy="260.6" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="271.8" cy="277.8" r="3.5" class="d-fill-acc"/><circle cx="271.8" cy="277.8" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="254.6" cy="292.5" r="3.5" class="d-fill-acc"/><circle cx="254.6" cy="292.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="235.4" cy="304.3" r="3.5" class="d-fill-acc"/><circle cx="235.4" cy="304.3" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="214.5" cy="313.0" r="3.5" class="d-fill-acc"/><circle cx="214.5" cy="313.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="192.5" cy="318.2" r="3.5" class="d-fill-acc"/><circle cx="192.5" cy="318.2" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="170.0" cy="320.0" r="3.5" class="d-fill-acc"/><circle cx="170.0" cy="320.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="147.5" cy="318.2" r="3.5" class="d-fill-acc"/><circle cx="147.5" cy="318.2" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="125.5" cy="313.0" r="3.5" class="d-fill-acc"/><circle cx="125.5" cy="313.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="104.6" cy="304.3" r="3.5" class="d-fill-acc"/><circle cx="104.6" cy="304.3" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="85.4" cy="292.5" r="3.5" class="d-fill-acc"/><circle cx="85.4" cy="292.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="68.2" cy="277.8" r="3.5" class="d-fill-acc"/><circle cx="68.2" cy="277.8" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="53.5" cy="260.6" r="3.5" class="d-fill-acc"/><circle cx="53.5" cy="260.6" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="41.7" cy="241.4" r="3.5" class="d-fill-acc"/><circle cx="41.7" cy="241.4" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="33.0" cy="220.5" r="3.5" class="d-fill-acc"/><circle cx="33.0" cy="220.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="27.8" cy="198.5" r="3.5" class="d-fill-acc"/><circle cx="27.8" cy="198.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="26.0" cy="176.0" r="3.5" class="d-fill-acc"/><circle cx="26.0" cy="176.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="27.8" cy="153.5" r="3.5" class="d-fill-acc"/><circle cx="27.8" cy="153.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="33.0" cy="131.5" r="3.5" class="d-fill-acc"/><circle cx="33.0" cy="131.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="41.7" cy="110.6" r="3.5" class="d-fill-acc"/><circle cx="41.7" cy="110.6" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="53.5" cy="91.4" r="3.5" class="d-fill-acc"/><circle cx="53.5" cy="91.4" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="68.2" cy="74.2" r="3.5" class="d-fill-acc"/><circle cx="68.2" cy="74.2" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="85.4" cy="59.5" r="3.5" class="d-fill-acc"/><circle cx="85.4" cy="59.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="104.6" cy="47.7" r="3.5" class="d-fill-acc"/><circle cx="104.6" cy="47.7" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="125.5" cy="39.0" r="3.5" class="d-fill-acc"/><circle cx="125.5" cy="39.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="147.5" cy="33.8" r="3.5" class="d-fill-acc"/><circle cx="147.5" cy="33.8" r="3.5" class="d-stroke" stroke-width="0.8"/>
-  </g>
-  <g style="color:var(--border-firm)" transform="translate(380 0)">
-  <text x="170" y="16" class="d-text-acc" text-anchor="middle">generation 60 — 89 edges</text>
-    <line x1="170.0" y1="32.0" x2="271.8" y2="277.8" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="170.0" y1="32.0" x2="27.8" y2="153.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="192.5" y1="33.8" x2="147.5" y2="318.2" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="192.5" y1="33.8" x2="85.4" y2="292.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="214.5" y1="39.0" x2="254.6" y2="59.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="214.5" y1="39.0" x2="298.3" y2="110.6" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="214.5" y1="39.0" x2="271.8" y2="277.8" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="214.5" y1="39.0" x2="104.6" y2="304.3" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="214.5" y1="39.0" x2="53.5" y2="260.6" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="214.5" y1="39.0" x2="33.0" y2="131.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="214.5" y1="39.0" x2="53.5" y2="91.4" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="235.4" y1="47.7" x2="235.4" y2="304.3" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="235.4" y1="47.7" x2="214.5" y2="313.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="235.4" y1="47.7" x2="104.6" y2="304.3" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="254.6" y1="59.5" x2="271.8" y2="74.2" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="254.6" y1="59.5" x2="271.8" y2="277.8" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="254.6" y1="59.5" x2="170.0" y2="320.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="254.6" y1="59.5" x2="27.8" y2="198.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="254.6" y1="59.5" x2="41.7" y2="110.6" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="254.6" y1="59.5" x2="85.4" y2="59.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="271.8" y1="74.2" x2="312.2" y2="198.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="271.8" y1="74.2" x2="53.5" y2="260.6" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="271.8" y1="74.2" x2="125.5" y2="39.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="286.5" y1="91.4" x2="298.3" y2="241.4" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="286.5" y1="91.4" x2="254.6" y2="292.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="286.5" y1="91.4" x2="27.8" y2="153.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="298.3" y1="110.6" x2="307.0" y2="131.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="298.3" y1="110.6" x2="271.8" y2="277.8" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="298.3" y1="110.6" x2="27.8" y2="153.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="298.3" y1="110.6" x2="33.0" y2="131.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="298.3" y1="110.6" x2="104.6" y2="47.7" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="307.0" y1="131.5" x2="271.8" y2="277.8" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="307.0" y1="131.5" x2="27.8" y2="153.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="312.2" y1="153.5" x2="312.2" y2="198.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="312.2" y1="153.5" x2="147.5" y2="318.2" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="312.2" y1="153.5" x2="125.5" y2="313.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="312.2" y1="153.5" x2="27.8" y2="198.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="312.2" y1="153.5" x2="53.5" y2="91.4" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="314.0" y1="176.0" x2="286.5" y2="260.6" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="314.0" y1="176.0" x2="271.8" y2="277.8" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="312.2" y1="198.5" x2="53.5" y2="91.4" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="307.0" y1="220.5" x2="271.8" y2="277.8" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="307.0" y1="220.5" x2="170.0" y2="320.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="298.3" y1="241.4" x2="271.8" y2="277.8" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="298.3" y1="241.4" x2="254.6" y2="292.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="298.3" y1="241.4" x2="214.5" y2="313.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="298.3" y1="241.4" x2="147.5" y2="318.2" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="298.3" y1="241.4" x2="104.6" y2="304.3" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="298.3" y1="241.4" x2="68.2" y2="277.8" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="298.3" y1="241.4" x2="53.5" y2="260.6" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="286.5" y1="260.6" x2="271.8" y2="277.8" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="286.5" y1="260.6" x2="147.5" y2="318.2" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="286.5" y1="260.6" x2="85.4" y2="59.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="271.8" y1="277.8" x2="254.6" y2="292.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="271.8" y1="277.8" x2="235.4" y2="304.3" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="271.8" y1="277.8" x2="125.5" y2="313.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="271.8" y1="277.8" x2="41.7" y2="241.4" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="271.8" y1="277.8" x2="27.8" y2="153.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="271.8" y1="277.8" x2="33.0" y2="131.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="271.8" y1="277.8" x2="85.4" y2="59.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="254.6" y1="292.5" x2="170.0" y2="320.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="235.4" y1="304.3" x2="192.5" y2="318.2" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="235.4" y1="304.3" x2="41.7" y2="241.4" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="214.5" y1="313.0" x2="85.4" y2="292.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="214.5" y1="313.0" x2="41.7" y2="241.4" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="214.5" y1="313.0" x2="33.0" y2="220.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="214.5" y1="313.0" x2="53.5" y2="91.4" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="192.5" y1="318.2" x2="33.0" y2="220.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="170.0" y1="320.0" x2="104.6" y2="304.3" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="147.5" y1="318.2" x2="125.5" y2="313.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="147.5" y1="318.2" x2="41.7" y2="241.4" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="147.5" y1="318.2" x2="27.8" y2="198.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="125.5" y1="313.0" x2="33.0" y2="220.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="125.5" y1="313.0" x2="26.0" y2="176.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="104.6" y1="304.3" x2="26.0" y2="176.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="85.4" y1="292.5" x2="41.7" y2="241.4" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="85.4" y1="292.5" x2="33.0" y2="131.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="85.4" y1="292.5" x2="41.7" y2="110.6" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="85.4" y1="292.5" x2="68.2" y2="74.2" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="85.4" y1="292.5" x2="104.6" y2="47.7" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="68.2" y1="277.8" x2="53.5" y2="260.6" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="68.2" y1="277.8" x2="53.5" y2="91.4" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="53.5" y1="260.6" x2="33.0" y2="220.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="53.5" y1="260.6" x2="53.5" y2="91.4" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="27.8" y1="198.5" x2="26.0" y2="176.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="27.8" y1="153.5" x2="147.5" y2="33.8" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="41.7" y1="110.6" x2="125.5" y2="39.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="68.2" y1="74.2" x2="85.4" y2="59.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <line x1="104.6" y1="47.7" x2="125.5" y2="39.0" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
-    <circle cx="170.0" cy="32.0" r="3.5" class="d-fill-acc"/><circle cx="170.0" cy="32.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="192.5" cy="33.8" r="3.5" class="d-fill-acc"/><circle cx="192.5" cy="33.8" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="214.5" cy="39.0" r="3.5" class="d-fill-acc"/><circle cx="214.5" cy="39.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="235.4" cy="47.7" r="3.5" class="d-fill-acc"/><circle cx="235.4" cy="47.7" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="254.6" cy="59.5" r="3.5" class="d-fill-acc"/><circle cx="254.6" cy="59.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="271.8" cy="74.2" r="3.5" class="d-fill-acc"/><circle cx="271.8" cy="74.2" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="286.5" cy="91.4" r="3.5" class="d-fill-acc"/><circle cx="286.5" cy="91.4" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="298.3" cy="110.6" r="3.5" class="d-fill-acc"/><circle cx="298.3" cy="110.6" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="307.0" cy="131.5" r="3.5" class="d-fill-acc"/><circle cx="307.0" cy="131.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="312.2" cy="153.5" r="3.5" class="d-fill-acc"/><circle cx="312.2" cy="153.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="314.0" cy="176.0" r="3.5" class="d-fill-acc"/><circle cx="314.0" cy="176.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="312.2" cy="198.5" r="3.5" class="d-fill-acc"/><circle cx="312.2" cy="198.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="307.0" cy="220.5" r="3.5" class="d-fill-acc"/><circle cx="307.0" cy="220.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="298.3" cy="241.4" r="3.5" class="d-fill-acc"/><circle cx="298.3" cy="241.4" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="286.5" cy="260.6" r="3.5" class="d-fill-acc"/><circle cx="286.5" cy="260.6" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="271.8" cy="277.8" r="3.5" class="d-fill-acc"/><circle cx="271.8" cy="277.8" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="254.6" cy="292.5" r="3.5" class="d-fill-acc"/><circle cx="254.6" cy="292.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="235.4" cy="304.3" r="3.5" class="d-fill-acc"/><circle cx="235.4" cy="304.3" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="214.5" cy="313.0" r="3.5" class="d-fill-acc"/><circle cx="214.5" cy="313.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="192.5" cy="318.2" r="3.5" class="d-fill-acc"/><circle cx="192.5" cy="318.2" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="170.0" cy="320.0" r="3.5" class="d-fill-acc"/><circle cx="170.0" cy="320.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="147.5" cy="318.2" r="3.5" class="d-fill-acc"/><circle cx="147.5" cy="318.2" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="125.5" cy="313.0" r="3.5" class="d-fill-acc"/><circle cx="125.5" cy="313.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="104.6" cy="304.3" r="3.5" class="d-fill-acc"/><circle cx="104.6" cy="304.3" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="85.4" cy="292.5" r="3.5" class="d-fill-acc"/><circle cx="85.4" cy="292.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="68.2" cy="277.8" r="3.5" class="d-fill-acc"/><circle cx="68.2" cy="277.8" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="53.5" cy="260.6" r="3.5" class="d-fill-acc"/><circle cx="53.5" cy="260.6" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="41.7" cy="241.4" r="3.5" class="d-fill-acc"/><circle cx="41.7" cy="241.4" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="33.0" cy="220.5" r="3.5" class="d-fill-acc"/><circle cx="33.0" cy="220.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="27.8" cy="198.5" r="3.5" class="d-fill-acc"/><circle cx="27.8" cy="198.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="26.0" cy="176.0" r="3.5" class="d-fill-acc"/><circle cx="26.0" cy="176.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="27.8" cy="153.5" r="3.5" class="d-fill-acc"/><circle cx="27.8" cy="153.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="33.0" cy="131.5" r="3.5" class="d-fill-acc"/><circle cx="33.0" cy="131.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="41.7" cy="110.6" r="3.5" class="d-fill-acc"/><circle cx="41.7" cy="110.6" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="53.5" cy="91.4" r="3.5" class="d-fill-acc"/><circle cx="53.5" cy="91.4" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="68.2" cy="74.2" r="3.5" class="d-fill-acc"/><circle cx="68.2" cy="74.2" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="85.4" cy="59.5" r="3.5" class="d-fill-acc"/><circle cx="85.4" cy="59.5" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="104.6" cy="47.7" r="3.5" class="d-fill-acc"/><circle cx="104.6" cy="47.7" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="125.5" cy="39.0" r="3.5" class="d-fill-acc"/><circle cx="125.5" cy="39.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
-    <circle cx="147.5" cy="33.8" r="3.5" class="d-fill-acc"/><circle cx="147.5" cy="33.8" r="3.5" class="d-stroke" stroke-width="0.8"/>
-  </g>
-</svg>
-<figcaption>The same run, start and end. An edge-edit genome begins from an empty 40-node graph and
-finishes with 89 edges, selected only for how far a simulated epidemic spreads across them — nothing
-told it to build that shape. Seed <code>20260821</code>; regenerate with
-<code>tools/make_doc_figures.py</code>.</figcaption>
-</figure>
-
-<h2>The Idea in One Picture</h2>
+<h2>What GET Does</h2>
 
 <p>
-  Everything in GET is a loop around four things. A <b>genome</b> is a compact recipe. Expressing it
-  produces a <b>graph</b>. Scoring that graph produces a <b>fitness</b> number. An <b>evolver</b>
-  uses those numbers to decide which genomes get to have children, and the loop goes round again.
+  You supply an experiment: how many nodes the graph has, how candidates are represented, and the
+  number that says whether one graph is better than another. GET handles the evolutionary search.
 </p>
 
 <figure>
-<svg viewBox="0 0 760 268" role="img" aria-label="The GET pipeline: a genome expresses to a graph, the graph is scored to a fitness value, and the evolver selects and breeds genomes.">
-  <defs>
-    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
-    </marker>
-  </defs>
-  <g style="color:var(--border-firm)">
-
-  <rect x="20"  y="58" width="190" height="76" rx="9" class="d-fill-acc"/>
-  <rect x="20"  y="58" width="190" height="76" rx="9" class="d-stroke"/>
-  <text x="115" y="90"  class="d-text" text-anchor="middle" font-weight="600">Genome *</text>
-  <text x="115" y="112" class="d-text-sm" text-anchor="middle">edits, or an automaton</text>
-
-  <rect x="285" y="58" width="190" height="76" rx="9" class="d-fill-box"/>
-  <rect x="285" y="58" width="190" height="76" rx="9" class="d-stroke"/>
-  <text x="380" y="90"  class="d-text" text-anchor="middle" font-weight="600">Graph</text>
-  <text x="380" y="112" class="d-text-sm" text-anchor="middle">n nodes, weighted edges</text>
-
-  <rect x="550" y="58" width="190" height="76" rx="9" class="d-fill-good"/>
-  <rect x="550" y="58" width="190" height="76" rx="9" class="d-stroke"/>
-  <text x="645" y="90"  class="d-text" text-anchor="middle" font-weight="600">Fitness *</text>
-  <text x="645" y="112" class="d-text-sm" text-anchor="middle">one f64 per individual</text>
-
-  <path d="M214 96 L281 96" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#ar)" style="color:var(--accent)"/>
-  <text x="247" y="86" class="d-text-acc" text-anchor="middle">express</text>
-
-  <path d="M479 96 L546 96" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#ar)" style="color:var(--accent)"/>
-  <text x="512" y="86" class="d-text-acc" text-anchor="middle">score</text>
-
-  <path d="M645 138 L645 196 L115 196 L115 138" class="d-stroke-acc" stroke-width="1.6"
-        marker-end="url(#ar)" style="color:var(--accent)"/>
-  <rect x="230" y="178" width="300" height="36" rx="7" class="d-fill-bg"/>
-  <rect x="230" y="178" width="300" height="36" rx="7" class="d-stroke"/>
-  <text x="380" y="201" class="d-text" text-anchor="middle">Evolver *: select * · breed * · mutate *</text>
-
-  </g>
-</svg>
-<figcaption>Each stage is an independent trait, so representations and objectives swap without
-touching the engine. <b>*</b> marks a box you choose rather than one that is fixed — every one is a
-named option in the table below, set from a config file and extensible in the source.</figcaption>
+<ol class="loop-flow" aria-label="The GET evolution loop">
+  <li><b>1. Genome</b><span>a compact recipe</span></li>
+  <li><b>2. Graph</b><span>the network it builds</span></li>
+  <li><b>3. Fitness</b><span>your objective's score</span></li>
+  <li><b>4. Evolve</b><span>select, change, and repeat</span></li>
+</ol>
+<figcaption>The graph is the thing you care about. The genome is the form GET can mutate and breed.</figcaption>
 </figure>
 
-<h2>What You Get to Choose</h2>
+<p>
+  You do not need prior knowledge of evolutionary algorithms or graph theory to begin. The
+  <a href="guide/concepts.html">concepts page</a> introduces the terms; the deeper
+  <a href="guide/pipeline.html">pipeline guide</a> explains the implementation.
+</p>
+
+<h2>What Goes In and What Comes Back</h2>
 
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Axis</th><th>Options</th><th>Where</th></tr></thead>
+  <thead><tr><th>You provide</th><th>GET provides</th></tr></thead>
   <tbody>
-    <tr>
-      <td><b>Representation</b></td>
-      <td><a href="guide/pipeline.html#edge-edit">edge-edit</a> — a script of edits over a starting
-          graph · <a href="guide/pipeline.html#sda">SDA</a> — an automaton that writes a graph from
-          scratch</td>
-      <td><code>[genome] type</code></td>
-    </tr>
-    <tr>
-      <td><b>Strategy</b></td>
-      <td><a href="guide/variation.html#generational">generational</a> — replace everyone each
-          round · <a href="guide/variation.html#steady-state">steady-state</a> — one mating at a
-          time</td>
-      <td><code>[evolution] type</code></td>
-    </tr>
-    <tr>
-      <td><b>Objective</b></td>
-      <td><code>epi_spread</code> · <code>epi_length</code> · <code>epi_prof_match</code> ·
-          <code>struct_match</code> · or
-          <a href="guide/new-fitness.html">your own</a>, in Python or Rust</td>
-      <td><code>[fitness] type</code></td>
-    </tr>
-    <tr>
-      <td><b>Scope</b></td>
-      <td>Which slice of the population one breeding event may touch —
-          <code>global</code> · <code>random_subset</code></td>
-      <td><code>[scope] type</code></td>
-    </tr>
-    <tr>
-      <td><b>Selection</b></td>
-      <td>Which of that slice become parents — <code>tournament</code> · <code>best</code></td>
-      <td><code>[selection] type</code></td>
-    </tr>
-    <tr>
-      <td><b>Replacement</b></td>
-      <td>Which of that slice the children overwrite — <code>worst</code></td>
-      <td><code>[evolution] replacement</code></td>
-    </tr>
-    <tr>
-      <td><b>Crossover</b></td>
-      <td>Applies to whichever representation is running — <code>two_point</code></td>
-      <td><code>[crossover] type</code></td>
-    </tr>
-    <tr>
-      <td><b>Mutation</b></td>
-      <td>Chosen <i>per genome</i>, because the two representations' mutations share no shape</td>
-      <td><code>[genome] mutation</code></td>
-    </tr>
+    <tr><td>Graph size and optional starting graph</td><td>The best graph as weighted edge triples</td></tr>
+    <tr><td>A built-in or custom objective</td><td>The winning score and genome representation</td></tr>
+    <tr><td>Population, selection, mutation, and stopping settings</td><td>A convergence history for every logged iteration</td></tr>
+    <tr><td>A master seed and number of replicates</td><td>Run metadata and saveable results; preserve the code, inputs, and environment too</td></tr>
   </tbody>
 </table>
 </div>
 
-<p>
-  The three axes of a breeding event — scope, selection and replacement — are independent, and
-  every combination is legal. <a href="guide/variation.html#event">Variation &amp; Selection</a>
-  has what each one decides.
-</p>
+<h2>An Actual Result</h2>
 
-<h2>A Complete Run</h2>
+<figure class="result-figure">
+  <img src="assets/evolved-network.svg" alt="An empty 40-node starting graph beside the evolved result, which has 89 edges.">
+  <figcaption>An edge-edit run starts with no edges and evolves a network selected for epidemic spread. This is measured output, not a mock-up.</figcaption>
+</figure>
 
-<pre><code class="language-python">import get
+<h2>Where GET Fits</h2>
 
-config = get.Config(
-    evolution       = get.EvolutionConfig.Generational(num_generations=500, elite_count=1),
-    population_size = 200,
-    network_size    = 100,
-    crossover_rate  = 0.9,
-    mutation_rate   = 0.2,
-    scope           = get.ScopeConfig.Global(),
-    selection       = get.SelectionConfig.Tournament(tournament_size=5),
-    genome          = get.GenomeConfig.EdgeEdit(gene_length=256),
-    fitness         = get.FitnessConfig.EpiSpread(
-        sir = get.SirParams(infection_rate=0.5, num_epidemics=30)
-    ),
-)
-
-evolver = get.GraphEvolver.from_config(config)
-results = evolver.run(seed=20260812)   # one master seed drives everything
-result  = results[0]                   # run() always returns a list, one entry per replicate
-
-print(result.best_fitness)             # nodes infected, as-measured
-print(len(result.best_edges))          # the winning network, as (u, v, weight) triples
-print(len(result.history))             # the convergence log, one row per generation
-
-result.save_logs("convergence.csv")    # iteration, best, mean, std_dev, ci_95, seed, run_index
-result.save_results("results.txt")     # the best individual, as a loadable edge file
-result.save_config(".")                # the run's config TOML, as config.toml
-</code></pre>
-
-<div class="note">
-  <b>That <code>infection_rate</code> is high on purpose.</b> At <code>0.05</code> an outbreak on a
-  sparse 100-node graph dies almost immediately whatever the topology, so every individual scores
-  alike and selection has no gradient to follow. The same value is used by
-  <code>config.example.toml</code> and <code>examples/config_builder.py</code>.
+<div class="path-grid">
+  <div class="path-card">
+    <span class="eyebrow">GET is useful when</span>
+    <h3>You can score a candidate network</h3>
+    <p>Your score might measure epidemic behavior, similarity to reference networks, robustness,
+    cost, or a domain-specific property written in Python or Rust.</p>
+  </div>
+  <div class="path-card">
+    <span class="eyebrow">GET does not decide</span>
+    <h3>What biological meaning is valid</h3>
+    <p>For a gene, protein, metabolic, or contact network, you define what nodes, edges, and a good
+    score mean. GET optimizes that definition; it does not infer biological truth.</p>
+  </div>
+  <div class="path-card">
+    <span class="eyebrow">Check the data model</span>
+    <h3>Fixed nodes and undirected edges</h3>
+    <p>GET uses integer-indexed, attribute-free graphs with dense storage. Read
+    <a href="guide/data-and-inputs.html">Data &amp; Inputs</a> before adapting a biological network.</p>
+  </div>
 </div>
 
-<h2>Getting Started</h2>
+<h2>Next Step</h2>
 
 <p>
-  Pick the route that matches how you want to drive GET — the four route cards above are one page
-  each, written to be read alone and carrying the complete worked example for that route.
-  Whichever you choose, the same experiment is expressible in the others: the Python configuration
-  objects serialize to TOML and <i>that</i> is what Rust parses, so neither front end can accept a
-  configuration the other would reject, and the generated TOML doubles as the provenance record of
-  a run.
+  If you want a working result, continue to <a href="guide/getting-started.html">Getting Started</a>
+  or modify the complete files in the <a href="guide/example-bundle.html">Example Bundle</a>.
+  If you already know the package and need a particular interface, use
+  <a href="guide/choosing-a-route.html">Choose a Route</a>.
 </p>
-
-<h2>Where to Go Next</h2>
-
-<div class="table-wrap">
-<table>
-  <thead><tr><th>If you want to…</th><th>Read</th></tr></thead>
-  <tbody>
-    <tr><td>run an experiment and get numbers out</td>
-        <td><a href="guide/route-python-objects.html">Python: Config Objects</a> →
-            <a href="guide/fitness.html#output">Logs &amp; Results</a></td></tr>
-    <tr><td>understand what a run actually does</td>
-        <td><a href="guide/pipeline.html">The Pipeline</a> →
-            <a href="guide/variation.html">Variation &amp; Selection</a> →
-            <a href="guide/fitness.html">Fitness &amp; Output</a></td></tr>
-    <tr><td>look up what a config key does</td>
-        <td><a href="guide/configuration.html">Configuration Reference</a></td></tr>
-    <tr><td>score graphs by something other than the built-ins</td>
-        <td><a href="guide/new-fitness.html">Add an Objective</a></td></tr>
-    <tr><td>add a representation, strategy or operator</td>
-        <td><a href="guide/extending.html">Extension Points</a></td></tr>
-    <tr><td>know why GET is shaped the way it is</td>
-        <td><a href="design-notes.html">Design Notes</a></td></tr>
-  </tbody>
-</table>
-</div>
-
-<div class="note">
-  <b>About This Documentation.</b> Every page here describes what the code does today, checked
-  against the source rather than against any design document. No page describes an unbuilt
-  feature.
-</div>
 
 </main>
 <script src="assets/site.js"></script>

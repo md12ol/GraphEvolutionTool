@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Install Graph Evolution Tool from PyPI and run a small Python experiment.">
+<title>Getting Started · GET Docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/getting-started.html">
+<main>
+
+<p class="page-kicker">Start Here</p>
+<h1>Getting Started</h1>
+<p class="lede">Install the Python package, run a small experiment, and identify the main
+parts of the result. No graph theory or evolutionary-computing background is required.</p>
+
+<div class="status-banner" role="note">
+  <span class="status-label">v0.9.0a1</span>
+  <div><b>Version 0.9.0a1 is published on PyPI as a pre-release.</b> Pin the version when an experiment must resolve
+  the same package later.</div>
+</div>
+
+<h2>Before You Begin</h2>
+
+<ul>
+  <li>Python 3.8 or newer</li>
+  <li>A supported 64-bit Linux, macOS, or Windows platform</li>
+</ul>
+
+<p>You can confirm the tools are visible with:</p>
+
+<pre><code class="language-bash">python3 --version
+python3 -m pip --version</code></pre>
+
+<h2>1. Install the Python Package</h2>
+
+<pre><code class="language-bash">python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install graph-evolution-tool
+python -c "import get; print('GET imported')"</code></pre>
+
+<div class="note">
+  <b>Windows activation:</b> after creating the environment, use
+  <code>.venv\Scripts\activate</code>. The remaining commands are the same.
+</div>
+
+<p>
+  The project is named <code>graph-evolution-tool</code>, but Python imports it as <code>get</code>.
+  PyPI provides version <code>0.9.0a1</code> as pre-release platform wheels. Pin it with
+  <code>graph-evolution-tool==0.9.0a1</code> when an environment must resolve the same release later.
+  Contributors changing Rust source should instead follow the <a href="contributing.html">source-build guide</a>.
+</p>
+
+<h2>2. Run a Small Evolution</h2>
+
+<p>Save this as <code>first_run.py</code> in your working directory:</p>
+
+<pre><code class="language-python">import get
+
+config = get.Config(
+    population_size=16,
+    network_size=12,
+    crossover_rate=0.9,
+    mutation_rate=0.2,
+    evolution=get.EvolutionConfig.Generational(
+        num_generations=5,
+        elite_count=1,
+    ),
+    scope=get.ScopeConfig.Global(),
+    selection=get.SelectionConfig.Tournament(tournament_size=3),
+    genome=get.GenomeConfig.EdgeEdit(gene_length=32),
+    fitness=get.FitnessConfig.EpiSpread(
+        sir=get.SirParams(infection_rate=0.5, num_epidemics=4)
+    ),
+)
+
+evolver = get.GraphEvolver.from_config(config)
+result = evolver.run(seed=7, n_runs=1)[0]
+
+print("best score:", result.best_fitness)
+print("edges:", len(result.best_edges))
+print("genome:", result.best_genome_repr)
+print("history rows:", len(result.history))</code></pre>
+
+<pre><code class="language-bash">python first_run.py</code></pre>
+
+<p>
+  The exact result is deterministic for this version and seed. You should see one score, an edge
+  count, the winning genome representation, and six history rows: the initial population plus five
+  generations.
+</p>
+
+<h2>3. Read the Result</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Result</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>best_fitness</code></td><td>The objective value of the winning graph, in the direction you requested.</td></tr>
+    <tr><td><code>best_edges</code></td><td><code>(u, v, multiplicity)</code> triples for the winning network.</td></tr>
+    <tr><td><code>best_genome_repr</code></td><td>The winning individual's genome, formatted by its genome implementation.</td></tr>
+    <tr><td><code>history</code></td><td>The best and population-level scores at each logged iteration.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Save the convergence log, winning graph and genome, and the configuration when you are ready:</p>
+
+<pre><code class="language-python">result.save_logs("run_log.csv")
+result.save_results("best_individual.txt")
+result.save_config(".")                     # writes config.toml</code></pre>
+
+<h2>What to Change First</h2>
+
+<ul>
+  <li>Increase <code>num_generations</code> after the small run works.</li>
+  <li>Use <code>n_runs</code> greater than one for replicates.</li>
+  <li>Choose a different built-in objective or <a href="route-python-objects.html#your-own-objective">write a Python objective</a>.</li>
+  <li>Move the settings into a <a href="route-python-toml.html">TOML file</a> when you want an experiment document to archive and compare.</li>
+</ul>
+
+<h2>If It Does Not Run</h2>
+
+<p>
+  Go to <a href="troubleshooting.html">Troubleshooting</a> for import, compiler, configuration,
+  output-path, and stalled-evolution problems. If the run works and you want the theory, continue
+  with <a href="concepts.html">Concepts &amp; Vocabulary</a>.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

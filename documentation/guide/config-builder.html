@@ -1,0 +1,1056 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Build a valid GET config.toml by choosing options the parser accepts.">
+<title>Config Builder · GET Docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/config-builder.html">
+<main>
+
+<p class="page-kicker">Use Python</p>
+<h1>Config Builder</h1>
+<p class="lede">Choose a setup and this writes the file. Every option is one the parser
+accepts and every number is checked against the constraint <code>Config::validate</code>
+applies, so a file this page hands you loads.</p>
+
+<div class="note">
+  <b>Nothing leaves your browser.</b> The document is assembled here as you type. The
+  <a href="configuration.html">Configuration Reference</a> is the same schema written out, and
+  <a href="route-python-toml.html">Python: TOML File</a> shows what to do with the result.
+</div>
+
+<div class="cb-shell">
+
+  <div class="cb-form">
+
+    <!-- ---------------- the run ---------------- -->
+    <section class="cb-block">
+      <h2>The run <span class="tbl">top level</span></h2>
+      <p class="cb-note">Size and rates that apply whatever else you choose. Later
+      sections read these back — the elite count and the scope size are both bounded by
+      the population.</p>
+
+      <div class="cb-fields">
+        <div class="cb-grid2">
+          <div class="cb-field">
+            <label class="cb-label" for="population_size">Population <span class="key">population_size</span><span class="cb-req">required</span></label>
+            <input type="number" id="population_size" min="1" step="1" placeholder="200">
+            <p class="cb-hint" data-hint="population_size">Individuals held at once.</p>
+          </div>
+          <div class="cb-field">
+            <label class="cb-label" for="network_size">Nodes per graph <span class="key">network_size</span><span class="cb-req">required</span></label>
+            <input type="number" id="network_size" min="1" step="1" placeholder="100">
+            <p class="cb-hint" data-hint="network_size">Every expressed graph has this many nodes.</p>
+          </div>
+        </div>
+
+        <div class="cb-grid2">
+          <div class="cb-field">
+            <label class="cb-label" for="crossover_rate">Crossover rate <span class="key">crossover_rate</span><span class="cb-req">required</span></label>
+            <input type="number" id="crossover_rate" min="0" max="1" step="0.01" placeholder="0.9">
+            <p class="cb-hint" data-hint="crossover_rate">Chance a selected pair recombines. 0.0–1.0.</p>
+          </div>
+          <div class="cb-field">
+            <label class="cb-label" for="mutation_rate">Mutation rate <span class="key">mutation_rate</span><span class="cb-req">required</span></label>
+            <input type="number" id="mutation_rate" min="0" max="1" step="0.01" placeholder="0.2">
+            <p class="cb-hint" data-hint="mutation_rate">Chance a child mutates at all. 0.0–1.0.</p>
+          </div>
+        </div>
+
+        <details class="cb-adv">
+          <summary>Edge weights and mutation count <span class="sum-note">— both default, omitted unless changed</span></summary>
+          <div class="cb-adv-body">
+            <div class="cb-grid2">
+              <div class="cb-field" data-unless-fitness="struct_match">
+                <label class="cb-label" for="max_edge_multiplicity">Edge-weight cap <span class="key">max_edge_multiplicity</span></label>
+                <input type="number" id="max_edge_multiplicity" min="1" max="255" step="1" value="1">
+                <p class="cb-hint" data-hint="max_edge_multiplicity">1 is unweighted; up to 255 allows parallel edges.</p>
+              </div>
+              <div class="cb-field" data-when-fitness="struct_match">
+                <span class="cb-label">Edge-weight cap <span class="key">max_edge_multiplicity</span></span>
+                <p class="cb-hint pinned">Pinned to <code>1</code> and left out of the file:
+                <code>struct_match</code> is unweighted by construction and the parser rejects any
+                other cap. Choose a different objective to set it.</p>
+              </div>
+              <div class="cb-field">
+                <label class="cb-label" for="max_mutations">Mutations per child <span class="key">max_mutations</span></label>
+                <input type="number" id="max_mutations" min="1" step="1" value="1">
+                <p class="cb-hint" data-hint="max_mutations">A mutating child takes 1..=this, drawn uniformly.</p>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- ---------------- strategy ---------------- -->
+    <section class="cb-block">
+      <h2>Evolution strategy <span class="tbl">[evolution]</span></h2>
+      <p class="cb-note">What one step of the run is, and when it stops.</p>
+
+      <div class="cb-fields">
+        <div>
+          <span class="cb-label" id="lbl-evolution">Strategy <span class="key">type</span><span class="cb-req">required</span></span>
+          <div class="cb-choices" role="group" aria-labelledby="lbl-evolution" data-group="evolution"></div>
+        </div>
+
+        <div data-when-evolution="generational" class="cb-grid2">
+          <div class="cb-field">
+            <label class="cb-label" for="num_generations">Generations <span class="key">num_generations</span><span class="cb-req">required</span></label>
+            <input type="number" id="num_generations" min="1" step="1" placeholder="500">
+            <p class="cb-hint" data-hint="num_generations">Whole population replaced each one.</p>
+          </div>
+          <div class="cb-field">
+            <label class="cb-label" for="elite_count">Elites carried <span class="key">elite_count</span></label>
+            <input type="number" id="elite_count" min="0" step="1" value="1">
+            <p class="cb-hint" data-hint="elite_count">Defaults to 1. Must be below the population.</p>
+          </div>
+        </div>
+
+        <div data-when-evolution="steady_state" class="cb-fields">
+          <div class="cb-field">
+            <label class="cb-label" for="num_mating_events">Mating events <span class="key">num_mating_events</span><span class="cb-req">required</span></label>
+            <input type="number" id="num_mating_events" min="1" step="1" placeholder="100000">
+            <p class="cb-hint" data-hint="num_mating_events">One pair bred and reinserted per event.</p>
+          </div>
+          <div>
+            <span class="cb-label" id="lbl-replacement">Who the children overwrite <span class="key">replacement</span></span>
+            <div class="cb-choices" role="group" aria-labelledby="lbl-replacement" data-group="replacement"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------- scope + selection ---------------- -->
+    <section class="cb-block">
+      <h2>Who breeds <span class="tbl">[scope]</span> <span class="tbl">[selection]</span></h2>
+      <p class="cb-note">Two separate questions. The scope is the slice one breeding
+      event may touch; selection picks the parents out of that slice. A tournament of
+      six inside a subset of six is not the same thing as either one alone.</p>
+
+      <div class="cb-fields">
+        <div>
+          <span class="cb-label" id="lbl-scope">Scope <span class="key">type</span><span class="cb-req">required</span></span>
+          <div class="cb-choices" role="group" aria-labelledby="lbl-scope" data-group="scope"></div>
+        </div>
+
+        <div data-when-scope="random_subset" class="cb-field" style="max-width:16rem">
+          <label class="cb-label" for="scope_size">Subset size <span class="key">size</span><span class="cb-req">required</span></label>
+          <input type="number" id="scope_size" min="1" step="1" placeholder="6">
+          <p class="cb-hint" data-hint="scope_size">Distinct individuals, drawn fresh each event.</p>
+        </div>
+
+        <div>
+          <span class="cb-label" id="lbl-selection">Selection <span class="key">type</span><span class="cb-req">required</span></span>
+          <div class="cb-choices" role="group" aria-labelledby="lbl-selection" data-group="selection"></div>
+        </div>
+
+        <div data-when-selection="tournament" class="cb-field" style="max-width:16rem">
+          <label class="cb-label" for="tournament_size">Tournament size <span class="key">tournament_size</span><span class="cb-req">required</span></label>
+          <input type="number" id="tournament_size" min="1" step="1" placeholder="5">
+          <p class="cb-hint" data-hint="tournament_size">Sampled with replacement, so it may exceed the scope.</p>
+        </div>
+
+        <div>
+          <span class="cb-label" id="lbl-crossover">Recombination <span class="key">[crossover] type</span></span>
+          <div class="cb-choices" role="group" aria-labelledby="lbl-crossover" data-group="crossover"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------- genome ---------------- -->
+    <section class="cb-block">
+      <h2>Representation <span class="tbl">[genome]</span></h2>
+      <p class="cb-note">How an individual encodes a graph. This decides which keys
+      the section takes — they do not overlap.</p>
+
+      <div class="cb-fields">
+        <div>
+          <span class="cb-label" id="lbl-genome">Genome <span class="key">type</span><span class="cb-req">required</span></span>
+          <div class="cb-choices" role="group" aria-labelledby="lbl-genome" data-group="genome"></div>
+        </div>
+
+        <!-- edge_edit -->
+        <div data-when-genome="edge_edit" class="cb-fields">
+          <div class="cb-field" style="max-width:16rem">
+            <label class="cb-label" for="gene_length">Gene length <span class="key">gene_length</span><span class="cb-req">required</span></label>
+            <input type="number" id="gene_length" min="1" step="1" placeholder="256">
+            <p class="cb-hint" data-hint="gene_length">Edit operations in one individual's script.</p>
+          </div>
+
+          <div class="cb-field">
+            <label class="cb-label" for="base_graph">Base graph <span class="key">base_graph</span></label>
+            <input type="text" id="base_graph" placeholder="left out — every individual edits the empty graph">
+            <p class="cb-hint" data-hint="base_graph">A file the run starts from, resolved relative to the
+            config file's own directory. Needs a <code># nodes = N</code> header, and that count must be
+            <code>network_size</code>. Read as 0-indexed.</p>
+          </div>
+
+          <details class="cb-adv">
+            <summary>Operation weights <span class="sum-note">— all 1.0 by default; at least one must be positive</span></summary>
+            <div class="cb-adv-body">
+              <p class="cb-hint" style="margin:0">Relative probability of drawing each edit. Leave every
+              one at 1.0 and the table is omitted entirely. On an empty base graph, five of
+              the nine do nothing until <code>add</code> or <code>toggle</code> have built structure.</p>
+              <div class="cb-weights" id="weights"></div>
+            </div>
+          </details>
+        </div>
+
+        <!-- sda -->
+        <div data-when-genome="sda" class="cb-fields">
+          <div class="cb-grid2">
+            <div class="cb-field">
+              <label class="cb-label" for="num_states">States <span class="key">num_states</span><span class="cb-req">required</span></label>
+              <input type="number" id="num_states" min="1" step="1" placeholder="12">
+              <p class="cb-hint" data-hint="num_states">Nodes in the automaton.</p>
+            </div>
+            <div class="cb-field">
+              <label class="cb-label" for="max_resp_len">Max response length <span class="key">max_resp_len</span><span class="cb-req">required</span></label>
+              <input type="number" id="max_resp_len" min="1" step="1" placeholder="4">
+              <p class="cb-hint" data-hint="max_resp_len">Characters a transition may emit.</p>
+            </div>
+          </div>
+          <p class="cb-hint" style="margin:0">No <code>num_chars</code>: the alphabet is
+          <code>max_edge_multiplicity + 1</code><span id="alphabet-note"></span>, so every character
+          is a legal edge weight.</p>
+
+          <details class="cb-adv">
+            <summary>Start state and mutation rates <span class="sum-note">— all default, omitted unless changed</span></summary>
+            <div class="cb-adv-body">
+              <div class="cb-grid2">
+                <div class="cb-field">
+                  <label class="cb-label" for="init_state">Start state <span class="key">init_state</span></label>
+                  <input type="number" id="init_state" min="0" step="1" value="0">
+                  <p class="cb-hint" data-hint="init_state">Must be below <code>num_states</code>.</p>
+                </div>
+                <div class="cb-field">
+                  <label class="cb-label" for="init_char_mutation_rate">Initial-character rate <span class="key">init_char_mutation_rate</span></label>
+                  <input type="number" id="init_char_mutation_rate" min="0" max="1" step="0.01" value="0.04">
+                  <p class="cb-hint" data-hint="init_char_mutation_rate">Chance a mutation redraws the first character instead.</p>
+                </div>
+              </div>
+              <div class="cb-field" style="max-width:20rem">
+                <label class="cb-label" for="transition_vs_response_rate">Transition vs response <span class="key">transition_vs_response_rate</span></label>
+                <input type="number" id="transition_vs_response_rate" min="0" max="1" step="0.01" value="0.5">
+                <p class="cb-hint" data-hint="transition_vs_response_rate">Applies only when the initial character was not redrawn.</p>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------- fitness ---------------- -->
+    <section class="cb-block">
+      <h2>Objective <span class="tbl">[fitness]</span></h2>
+      <p class="cb-note">What a graph is scored on. Three of these read one SIR
+      simulation differently and share its parameter block.</p>
+
+      <div class="cb-fields">
+        <div>
+          <span class="cb-label" id="lbl-fitness">Objective <span class="key">type</span><span class="cb-req">required</span></span>
+          <div class="cb-choices" role="group" aria-labelledby="lbl-fitness" data-group="fitness"></div>
+        </div>
+
+        <!-- SIR block, shared by the three epidemic objectives -->
+        <div data-when-fitness="epi_spread epi_length epi_prof_match" class="cb-fields">
+          <div class="cb-grid2">
+            <div class="cb-field">
+              <label class="cb-label" for="infection_rate">Infection rate <span class="key">infection_rate</span><span class="cb-req">required</span></label>
+              <input type="number" id="infection_rate" min="0" max="1" step="0.01" placeholder="0.5">
+              <p class="cb-hint" data-hint="infection_rate">Per-edge, per-timestep. Too low and every graph scores alike.</p>
+            </div>
+            <div class="cb-field">
+              <label class="cb-label" for="num_epidemics">Epidemics per evaluation <span class="key">num_epidemics</span><span class="cb-req">required</span></label>
+              <input type="number" id="num_epidemics" min="1" step="1" placeholder="30">
+              <p class="cb-hint" data-hint="num_epidemics">Fitness is their average.</p>
+            </div>
+          </div>
+
+          <details class="cb-adv">
+            <summary>Patient zero and short-outbreak re-rolls <span class="sum-note">— all default, omitted unless changed</span></summary>
+            <div class="cb-adv-body">
+              <div class="cb-field" style="max-width:20rem">
+                <label class="cb-label" for="patient_zero">Pinned patient zero <span class="key">patient_zero</span></label>
+                <input type="number" id="patient_zero" min="0" step="1" placeholder="left out — fresh random node each epidemic">
+                <p class="cb-hint" data-hint="patient_zero">A node index, so below <code>network_size</code>. Leave blank to draw fresh.</p>
+              </div>
+              <div class="cb-grid2">
+                <div class="cb-field">
+                  <label class="cb-label" for="min_epidemic_length">Minimum length <span class="key">min_epidemic_length</span></label>
+                  <input type="number" id="min_epidemic_length" min="1" step="1" value="3">
+                  <p class="cb-hint" data-hint="min_epidemic_length">Shorter outbreaks are re-simulated. 1 disables it.</p>
+                </div>
+                <div class="cb-field">
+                  <label class="cb-label" for="max_epidemic_retries">Retries <span class="key">max_epidemic_retries</span></label>
+                  <input type="number" id="max_epidemic_retries" min="1" step="1" value="5">
+                  <p class="cb-hint" data-hint="max_epidemic_retries">Attempts before keeping whatever came out.</p>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <!-- epi_prof_match -->
+        <div data-when-fitness="epi_prof_match" class="cb-field">
+          <label class="cb-label" for="target_profile">Target profile <span class="key">target_profile</span><span class="cb-req">required</span></label>
+          <input type="text" id="target_profile" placeholder="1, 3, 8, 17, 24, 19, 11, 5, 2, 1">
+          <p class="cb-hint" data-hint="target_profile">Newly-infected per timestep, compared verbatim — nothing is
+          prepended for patient zero and nothing is rescaled, so give it at the size of network you are building.</p>
+        </div>
+
+        <!-- struct_match -->
+        <div data-when-fitness="struct_match" class="cb-fields">
+          <div class="cb-field">
+            <label class="cb-label" for="reference_folder">Reference graph folder <span class="key">reference_folder</span><span class="cb-req">required</span></label>
+            <input type="text" id="reference_folder" placeholder="reference_graphs/">
+            <p class="cb-hint" data-hint="reference_folder">One edge list per graph — <code>start,end,weight</code> per line,
+            and a <code># nodes = N</code> header on every file. Not opened until the objective is built, so a
+            wrong path fails at run rather than here.</p>
+          </div>
+
+          <details class="cb-adv">
+            <summary>Bins, bandwidths and family weights <span class="sum-note">— all default, omitted unless changed</span></summary>
+            <div class="cb-adv-body">
+              <p class="cb-hint" style="margin:0">Three statistic families — degree, clustering, spectral —
+              each binned, each with an RBF bandwidth, each weighted. A weight of 0 switches its family
+              off; they cannot all be 0. Bandwidths that are too large collapse every score to zero,
+              which looks like a healthy run searching nothing.</p>
+              <div class="cb-weights" id="struct_fields"></div>
+              <div class="cb-field" style="max-width:16rem">
+                <label class="cb-label" for="density_weight">Density penalty <span class="key">density_weight</span></label>
+                <input type="number" id="density_weight" min="0" step="0.1" value="1">
+                <p class="cb-hint" data-hint="density_weight">Distance from the reference set's mean density. 0 switches it off.</p>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <!-- python -->
+        <div data-when-fitness="python">
+          <div class="note">
+            <b>Nothing else goes in the file.</b> The objective's parameters belong to your
+            callable. Register it before the run with
+            <code>evolver.set_fitness_function(callable, direction)</code> — it takes a batch of graphs and
+            returns one float per graph.
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /form-col -->
+
+  <!-- ---------------- panel ---------------- -->
+  <div class="cb-panel-col">
+    <div class="cb-panel">
+      <div class="cb-panel-head">
+        <h2>config.toml</h2>
+        <span class="cb-stamp notok" id="stamp">incomplete</span>
+      </div>
+      <pre class="cb-toml"><code id="out"></code></pre>
+      <div class="cb-gate">
+        <ul class="cb-todo" id="todo"></ul>
+        <div class="cb-actions">
+          <div class="cb-btn-row">
+            <button class="cb-btn" id="copy" disabled>Copy</button>
+            <button class="cb-btn primary" id="download" disabled>Download</button>
+          </div>
+          <p class="cb-save-note" id="save-note"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /shell -->
+
+<p class="footnote">Every constraint enforced here is one <code>Config::validate</code>
+applies, and the wording of each failure is the parser's own. What this page cannot check is
+what the parser also cannot: whether <code>reference_folder</code> exists, and whether a
+target profile is the right shape for your network, and whether <code>base_graph</code> names a file
+that exists. A base graph numbered from 1 rather than 0 has no key here: it goes through
+<code>set_base_graph_from_file(path, min_node_index)</code> on the evolver instead.</p>
+
+
+</main>
+<script src="../assets/site.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------- the schema, mirroring get/src/config.rs ---------------- */
+
+  var CHOICES = {
+    evolution: [
+      { v: "generational", d: "whole population replaced each step" },
+      { v: "steady_state", d: "one pair bred and reinserted at a time" }
+    ],
+    replacement: [
+      { v: "worst",  d: "least fit of the scope — self-elitist" },
+      { v: "random", d: "uniform; the scope's best can be lost" }
+    ],
+    scope: [
+      { v: "global",        d: "every individual is a candidate" },
+      { v: "random_subset", d: "a fresh slice per breeding event" }
+    ],
+    selection: [
+      { v: "best",       d: "the fittest of the scope" },
+      { v: "tournament", d: "sampled with replacement" }
+    ],
+    crossover: [
+      { v: "two_point", d: "swap one contiguous band" }
+    ],
+    genome: [
+      { v: "edge_edit", d: "a script of edits to a base graph" },
+      { v: "sda",       d: "an automaton that emits the graph" }
+    ],
+    fitness: [
+      { v: "epi_spread",     d: "total ever-infected — maximized" },
+      { v: "epi_length",     d: "timesteps to burn out — maximized" },
+      { v: "epi_prof_match", d: "RMSE against a curve — minimized" },
+      { v: "struct_match",   d: "match real reference graphs — minimized" },
+      { v: "python",         d: "your own callable, registered in code" }
+    ]
+  };
+
+  var WEIGHTS = ["toggle", "hop", "add", "delete", "swap",
+                 "local_toggle", "local_add", "local_delete", "null"];
+
+  var STRUCT_FAMILIES = ["degree", "clustering", "spectral"];
+
+  /* Defaults, from the `#[serde(default = ...)]` functions. A field left equal to
+     its default is omitted from the output — the file says only what you chose. */
+  var DEFAULTS = {
+    max_edge_multiplicity: 1, max_mutations: 1, elite_count: 1,
+    replacement: "worst", crossover: "two_point",
+    init_state: 0, init_char_mutation_rate: 0.04, transition_vs_response_rate: 0.5,
+    min_epidemic_length: 3, max_epidemic_retries: 5,
+    density_weight: 1
+  };
+  STRUCT_FAMILIES.forEach(function (f) {
+    DEFAULTS[f + "_bins"] = 50;
+    DEFAULTS[f + "_gamma"] = 1;
+    DEFAULTS[f + "_weight"] = 1;
+  });
+
+  var state = {
+    evolution: null, replacement: "worst", scope: null, selection: null,
+    crossover: "two_point", genome: null, fitness: null
+  };
+  var weightValues = {};
+  WEIGHTS.forEach(function (w) { weightValues[w] = 1; });
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------------- build the choice buttons ---------------- */
+
+  Object.keys(CHOICES).forEach(function (group) {
+    var host = document.querySelector('[data-group="' + group + '"]');
+    if (!host) { return; }
+    CHOICES[group].forEach(function (opt) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "cb-choice";
+      b.setAttribute("aria-pressed", String(state[group] === opt.v));
+      b.dataset.group = group;
+      b.dataset.value = opt.v;
+      b.innerHTML = '<span class="cname"></span><span class="cdesc"></span>';
+      b.querySelector(".cname").textContent = opt.v;
+      b.querySelector(".cdesc").textContent = opt.d;
+      b.addEventListener("click", function () {
+        state[group] = opt.v;
+        Array.prototype.forEach.call(host.querySelectorAll(".cb-choice"), function (o) {
+          o.setAttribute("aria-pressed", String(o.dataset.value === opt.v));
+        });
+        render();
+      });
+      host.appendChild(b);
+    });
+  });
+
+  /* ---------------- build the repeated numeric fields ---------------- */
+
+  var wHost = $("weights");
+  WEIGHTS.forEach(function (w) {
+    var d = document.createElement("div");
+    d.className = "cb-field";
+    d.innerHTML =
+      '<label class="cb-label" for="w_' + w + '"><span class="key">' + w + '</span></label>' +
+      '<input type="number" id="w_' + w + '" min="0" step="0.1" value="1">';
+    wHost.appendChild(d);
+  });
+
+  var sHost = $("struct_fields");
+  STRUCT_FAMILIES.forEach(function (f) {
+    ["bins", "gamma", "weight"].forEach(function (part) {
+      var id = f + "_" + part;
+      var d = document.createElement("div");
+      d.className = "cb-field";
+      d.innerHTML =
+        '<label class="cb-label" for="' + id + '"><span class="key">' + id + '</span></label>' +
+        '<input type="number" id="' + id + '" min="0" step="' +
+          (part === "bins" ? "1" : "0.1") + '" value="' + DEFAULTS[id] + '">' +
+        '<p class="cb-hint" data-hint="' + id + '"></p>';
+      sHost.appendChild(d);
+    });
+  });
+
+  /* ---------------- reading and checking values ---------------- */
+
+  var problems = [];   // blocks generation
+  var fieldMsg  = {};  // id -> message shown under that input
+
+  function note(id, msg, where, hard) {
+    if (id) { fieldMsg[id] = msg; }
+    problems.push({ msg: msg, where: where || id, err: hard !== false });
+  }
+
+  /** Raw text of an input, or "" when it does not exist / is blank. */
+  function raw(id) {
+    var el = $(id);
+    return el ? el.value.trim() : "";
+  }
+
+  /**
+   * A required number. Records a problem and returns null when absent or outside
+   * the parser's range. `int` rejects a fractional value, which TOML would type as
+   * a float and serde would refuse for a `usize`.
+   */
+  function num(id, label, opts) {
+    opts = opts || {};
+    var text = raw(id);
+    if (text === "") {
+      if (opts.optional) { return null; }
+      problems.push({ msg: "Set " + label, where: id, err: false });
+      return null;
+    }
+    var v = Number(text);
+    if (!isFinite(v)) { note(id, "must be a finite number", id); return null; }
+    if (opts.int && !Number.isInteger(v)) { note(id, "must be a whole number", id); return null; }
+    if (opts.min !== undefined && v < opts.min) {
+      note(id, opts.minMsg || ("must be at least " + opts.min), id); return null;
+    }
+    if (opts.max !== undefined && v > opts.max) {
+      note(id, opts.maxMsg || ("must be at most " + opts.max), id); return null;
+    }
+    return v;
+  }
+
+  function rate(id, label) {
+    return num(id, label, { min: 0, max: 1, minMsg: "must be between 0.0 and 1.0",
+                            maxMsg: "must be between 0.0 and 1.0" });
+  }
+
+  /* ---------------- TOML rendering helpers ---------------- */
+
+  /* Every key the struct declares as f64. The parser accepts a bare `1` for these
+     — measured, it coerces — but writing `1.0` matches config.example.toml and
+     keeps a rate visibly a rate. */
+  var FLOAT_KEYS = {
+    crossover_rate: 1, mutation_rate: 1,
+    init_char_mutation_rate: 1, transition_vs_response_rate: 1,
+    infection_rate: 1, density_weight: 1
+  };
+  WEIGHTS.forEach(function (w) { FLOAT_KEYS[w] = 1; });
+  STRUCT_FAMILIES.forEach(function (f) {
+    FLOAT_KEYS[f + "_gamma"] = 1;
+    FLOAT_KEYS[f + "_weight"] = 1;
+  });
+
+  function float(v) { return Number.isInteger(v) ? v.toFixed(1) : String(v); }
+  function fmt(key, v) {
+    if (typeof v !== "number") { return v; }
+    return FLOAT_KEYS[key] ? float(v) : String(v);
+  }
+  function path(v)                { return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"'); }
+  function kv(lines, key, v)      { lines.push(key + " = " + fmt(key, v)); }
+  function kvs(lines, key, s)     { lines.push(key + ' = "' + s + '"'); }
+  function opt(lines, key, v)     { if (v !== null && v !== DEFAULTS[key]) { kv(lines, key, v); } }
+
+  /* ---------------- the build ---------------- */
+
+  function build() {
+    problems = [];
+    fieldMsg = {};
+    var L = [];
+
+    /* --- top level --- */
+    var pop = num("population_size", "a population size", { int: true, min: 1 });
+    var net = num("network_size", "a network size", { int: true, min: 1 });
+    // struct_match is unweighted by construction and the parser rejects any other
+    // cap, so its field is hidden rather than validated: there is nothing to get
+    // wrong, and nothing to write, since 1 is also the default.
+    var mem = state.fitness === "struct_match" ? 1
+            : num("max_edge_multiplicity", "the edge cap", {
+                int: true, min: 1, max: 255,
+                minMsg: "must be between 1 and 255", maxMsg: "must be between 1 and 255"
+              });
+    var maxMut = num("max_mutations", "the mutation count", {
+      int: true, min: 1,
+      minMsg: "must be at least 1, since a mutating child takes 1..=max_mutations mutations"
+    });
+    var cx = rate("crossover_rate", "a crossover rate");
+    var mu = rate("mutation_rate", "a mutation rate");
+
+    if (pop !== null) { kv(L, "population_size", pop); }
+    if (net !== null) { kv(L, "network_size", net); }
+    if (mem !== null && mem !== DEFAULTS.max_edge_multiplicity) { kv(L, "max_edge_multiplicity", mem); }
+    if (L.length) { L.push(""); }
+    if (cx !== null) { kv(L, "crossover_rate", cx); }
+    if (mu !== null) { kv(L, "mutation_rate", mu); }
+    if (maxMut !== null && maxMut !== DEFAULTS.max_mutations) { kv(L, "max_mutations", maxMut); }
+
+    /* --- [evolution] --- */
+    if (!state.evolution) {
+      problems.push({ msg: "Choose an evolution strategy", where: "[evolution]", err: false });
+    } else {
+      L.push("", "[evolution]");
+      kvs(L, "type", state.evolution);
+      if (state.evolution === "generational") {
+        var gens = num("num_generations", "a generation count", { int: true, min: 1 });
+        if (gens !== null) { kv(L, "num_generations", gens); }
+        var elite = num("elite_count", "the elite count", { int: true, min: 0, optional: true });
+        if (elite !== null && pop !== null && elite >= pop) {
+          note("elite_count",
+               "must be less than population_size (" + pop + "); equal means nothing breeds",
+               "elite_count");
+        } else {
+          opt(L, "elite_count", elite);
+        }
+      } else {
+        var events = num("num_mating_events", "a mating-event count", { int: true, min: 1 });
+        if (events !== null) { kv(L, "num_mating_events", events); }
+        if (state.replacement !== DEFAULTS.replacement) {
+          L.push('replacement = { type = "' + state.replacement + '" }');
+        }
+      }
+    }
+
+    /* --- [scope] --- */
+    if (!state.scope) {
+      problems.push({ msg: "Choose a scope", where: "[scope]", err: false });
+    } else {
+      L.push("", "[scope]");
+      kvs(L, "type", state.scope);
+      if (state.scope === "random_subset") {
+        var size = num("scope_size", "a subset size", {
+          int: true, min: 1,
+          minMsg: "must be at least 1: a scope of nobody has no parents to draw"
+        });
+        if (size !== null && pop !== null && size > pop) {
+          note("scope_size",
+               "must be at most population_size (" + pop + "): a scope of distinct " +
+               "individuals cannot be drawn from fewer", "scope_size");
+        } else if (size !== null && state.evolution === "steady_state" && size < 4) {
+          note("scope_size",
+               "must be at least 4 for the steady-state evolver: 2 parents and the 2 " +
+               "individuals they replace must be distinct", "scope_size");
+        } else if (size !== null) {
+          kv(L, "size", size);
+        }
+      }
+    }
+
+    /* --- [selection] --- */
+    if (!state.selection) {
+      problems.push({ msg: "Choose a selection scheme", where: "[selection]", err: false });
+    } else {
+      L.push("", "[selection]");
+      kvs(L, "type", state.selection);
+      if (state.selection === "tournament") {
+        var ts = num("tournament_size", "a tournament size", {
+          int: true, min: 1,
+          minMsg: "must be at least 1: a tournament of nobody has no winner"
+        });
+        if (ts !== null) { kv(L, "tournament_size", ts); }
+      }
+    }
+
+    /* --- [crossover] --- only emitted when it is not the default operator --- */
+    if (state.crossover !== DEFAULTS.crossover) {
+      L.push("", "[crossover]");
+      kvs(L, "type", state.crossover);
+    }
+
+    /* --- [genome] --- */
+    if (!state.genome) {
+      problems.push({ msg: "Choose a genome", where: "[genome]", err: false });
+    } else {
+      L.push("", "[genome]");
+      kvs(L, "type", state.genome);
+
+      if (state.genome === "edge_edit") {
+        var gl = num("gene_length", "a gene length", { int: true, min: 1 });
+        if (gl !== null) { kv(L, "gene_length", gl); }
+
+        // Edge-edit's alone: SDA generates its graph rather than editing one, and
+        // `deny_unknown_fields` refuses this key under an SDA [genome].
+        var base = raw("base_graph");
+        if (base !== "") { kvs(L, "base_graph", path(base)); }
+
+        var anyChanged = false, allValid = true, positive = false;
+        WEIGHTS.forEach(function (w) {
+          var v = num("w_" + w, "", { min: 0, optional: true,
+                                      minMsg: "operation weights must be finite and non-negative" });
+          if (v === null) { v = 1; allValid = false; }
+          weightValues[w] = v;
+          if (v !== 1) { anyChanged = true; }
+          if (v > 0) { positive = true; }
+        });
+        if (allValid && !positive) {
+          note("w_toggle", "at least one operation weight must be positive", "operation_weights");
+        } else if (anyChanged && allValid) {
+          L.push("", "[genome.operation_weights]");
+          WEIGHTS.forEach(function (w) { kv(L, w, weightValues[w]); });
+        }
+      } else {
+        var states = num("num_states", "a state count", { int: true, min: 1 });
+        var resp   = num("max_resp_len", "a response length", { int: true, min: 1 });
+        if (states !== null) { kv(L, "num_states", states); }
+        if (resp !== null)   { kv(L, "max_resp_len", resp); }
+
+        var init = num("init_state", "the start state", { int: true, min: 0, optional: true });
+        if (init !== null && states !== null && init >= states) {
+          note("init_state",
+               "must be less than num_states (" + states + "); the response table is " +
+               "indexed with it", "init_state");
+        } else {
+          opt(L, "init_state", init);
+        }
+        opt(L, "init_char_mutation_rate", rate("init_char_mutation_rate", ""));
+        opt(L, "transition_vs_response_rate", rate("transition_vs_response_rate", ""));
+      }
+    }
+
+    /* --- [fitness] --- */
+    if (!state.fitness) {
+      problems.push({ msg: "Choose an objective", where: "[fitness]", err: false });
+    } else {
+      L.push("", "[fitness]");
+      kvs(L, "type", state.fitness);
+
+      if (state.fitness === "epi_spread" || state.fitness === "epi_length" ||
+          state.fitness === "epi_prof_match") {
+        var ir = rate("infection_rate", "an infection rate");
+        var ne = num("num_epidemics", "an epidemic count", {
+          int: true, min: 1, minMsg: "must be at least 1, since fitness is their average"
+        });
+        if (ir !== null) { kv(L, "infection_rate", ir); }
+        if (ne !== null) { kv(L, "num_epidemics", ne); }
+
+        var pz = num("patient_zero", "", { int: true, min: 0, optional: true });
+        if (pz !== null && net !== null && pz >= net) {
+          note("patient_zero",
+               "must be less than network_size (" + net + "), since it is a node index",
+               "patient_zero");
+        } else if (pz !== null) {
+          kv(L, "patient_zero", pz);
+        }
+        opt(L, "min_epidemic_length", num("min_epidemic_length", "", {
+          int: true, min: 1, optional: true, minMsg: "must be at least 1; 1 disables the re-roll"
+        }));
+        opt(L, "max_epidemic_retries", num("max_epidemic_retries", "", {
+          int: true, min: 1, optional: true,
+          minMsg: "must be at least 1, or no epidemic is ever run"
+        }));
+
+        if (state.fitness === "epi_prof_match") {
+          var text = raw("target_profile");
+          if (text === "") {
+            problems.push({ msg: "Give a target profile", where: "target_profile", err: false });
+          } else {
+            var parts = text.split(/[,\s]+/).filter(function (p) { return p !== ""; });
+            var bad = -1, vals = [];
+            parts.forEach(function (p, i) {
+              var v = Number(p);
+              if (!isFinite(v)) { if (bad < 0) { bad = i; } } else { vals.push(v); }
+            });
+            if (bad >= 0) {
+              note("target_profile",
+                   "element " + bad + " is not a finite number; every element must be finite",
+                   "target_profile");
+            } else if (vals.length === 0) {
+              note("target_profile",
+                   "must have at least one element; there is nothing to score against otherwise",
+                   "target_profile");
+            } else {
+              L.push("target_profile = [" + vals.map(float).join(", ") + "]");
+            }
+          }
+        }
+      } else if (state.fitness === "struct_match") {
+        var folder = raw("reference_folder");
+        if (folder === "") {
+          problems.push({ msg: "Name a reference-graph folder", where: "reference_folder", err: false });
+        } else {
+          kvs(L, "reference_folder", path(folder));
+        }
+
+        var weightTotal = 0, weightsOk = true;
+        STRUCT_FAMILIES.forEach(function (f) {
+          var bins = num(f + "_bins", "", { int: true, min: 1, optional: true,
+                                            minMsg: "must be at least 1" });
+          opt(L, f + "_bins", bins);
+        });
+        STRUCT_FAMILIES.forEach(function (f) {
+          var g = num(f + "_gamma", "", { optional: true });
+          if (g !== null && g <= 0) {
+            note(f + "_gamma",
+                 "must be finite and greater than zero; the RBF kernel divides by it",
+                 f + "_gamma");
+          } else {
+            opt(L, f + "_gamma", g);
+          }
+        });
+        STRUCT_FAMILIES.forEach(function (f) {
+          var w = num(f + "_weight", "", { min: 0, optional: true,
+                                           minMsg: "must be finite and non-negative" });
+          if (w === null) { weightsOk = false; } else { weightTotal += w; opt(L, f + "_weight", w); }
+        });
+        if (weightsOk && weightTotal === 0) {
+          note("degree_weight",
+               "at least one of degree_weight, clustering_weight and spectral_weight must be " +
+               "greater than zero, or every graph scores the same", "degree_weight");
+        }
+        opt(L, "density_weight", num("density_weight", "", {
+          min: 0, optional: true, minMsg: "must be finite and non-negative; 0 switches the penalty off"
+        }));
+      }
+      /* python carries no keys at all: its parameters belong to the callable. */
+    }
+
+    return L.join("\n") + "\n";
+  }
+
+  /* ---------------- syntax highlighting for the preview ---------------- */
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function highlight(toml) {
+    return toml.split("\n").map(function (line) {
+      if (/^\s*\[/.test(line)) { return '<span class="tok-tbl">' + esc(line) + "</span>"; }
+      var m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)(\s*=\s*)(.*)$/);
+      if (!m) { return esc(line); }
+      var value = m[3]
+        .replace(/"([^"]*)"/g, '<span class="tok-str">"$1"</span>')
+        .replace(/\b(\d+\.?\d*)\b(?![^<]*<\/span>)/g, '<span class="tok-num">$1</span>');
+      return '<span class="tok-key">' + esc(m[1]) + "</span>" + esc(m[2]) + value;
+    }).join("\n");
+  }
+
+  /* ---------------- live bounds ----------------
+
+     Four fields are bounded by the value of another field, and one more by the
+     strategy, so the bound is not a constant and cannot sit in the markup. Each
+     render re-derives it and writes it onto the input as `min`/`max` — which is
+     both what the browser's own spinner obeys and what `clamp` below reads. */
+
+  var boundMsg = {};
+
+  /** An input's value as an integer, or null when blank or fractional. */
+  function intOf(id) {
+    var text = raw(id);
+    if (text === "") { return null; }
+    var v = Number(text);
+    return Number.isInteger(v) ? v : null;
+  }
+
+  function limit(id, lo, hi, msg) {
+    var el = $(id);
+    if (!el) { return; }
+    if (lo === null) { el.removeAttribute("min"); } else { el.min = String(lo); }
+    if (hi === null) { el.removeAttribute("max"); } else { el.max = String(hi); }
+    if (msg) { boundMsg[id] = msg; }
+  }
+
+  function bounds() {
+    boundMsg = {};
+    var pop = intOf("population_size");
+    var net = intOf("network_size");
+    var states = intOf("num_states");
+
+    // Elites are carried rather than bred from, so the last one must leave
+    // somebody to breed.
+    limit("elite_count", 0, pop === null ? null : pop - 1,
+          pop === null ? "" : "At most " + (pop - 1) + " — one below the population.");
+
+    // The scope is drawn without replacement. Steady-state also overwrites two
+    // members of the scope it bred from, and those must not be the parents.
+    var floor = state.evolution === "steady_state" ? 4 : 1;
+    limit("scope_size", floor, pop,
+          (pop === null ? "At least " + floor + "." : floor + " to " + pop + ".") +
+          (floor === 4 ? " Steady-state needs 2 parents and 2 distinct individuals to replace." : ""));
+
+    limit("init_state", 0, states === null ? null : states - 1,
+          states === null ? "" : "At most " + (states - 1) + " — one below num_states.");
+
+    limit("patient_zero", 0, net === null ? null : net - 1,
+          net === null ? "" : "A node index, so at most " + (net - 1) + ".");
+
+    // The SDA alphabet is derived, never configured, so show what the current
+    // cap makes it — including the 1 that struct_match pins the cap to.
+    var mem = state.fitness === "struct_match" ? 1 : intOf("max_edge_multiplicity");
+    $("alphabet-note").textContent = mem === null ? "" : " = " + (mem + 1) + " here";
+  }
+
+  /**
+   * Pull a value back inside the bound its field currently carries.
+   *
+   * On `change` — a blur or a spinner click — and never on `input`: clamping
+   * mid-keystroke rewrites the 1 of a 100 someone is still typing.
+   */
+  function clamp(el) {
+    if (el.type !== "number" || el.value.trim() === "") { return; }
+    var v = Number(el.value);
+    if (!isFinite(v)) { el.value = ""; return; }
+    if (el.getAttribute("step") === "1" && !Number.isInteger(v)) { v = Math.round(v); }
+    if (el.min !== "" && v < Number(el.min)) { v = Number(el.min); }
+    if (el.max !== "" && v > Number(el.max)) { v = Number(el.max); }
+    el.value = String(v);
+  }
+
+  /* ---------------- render ---------------- */
+
+  var toml = "";
+
+  function render() {
+    // Show only the sub-blocks that belong to the current choices.
+    Array.prototype.forEach.call(document.querySelectorAll("[data-when-evolution]"), function (el) {
+      el.hidden = el.dataset.whenEvolution.split(" ").indexOf(state.evolution) < 0;
+    });
+    ["scope", "selection", "genome", "fitness"].forEach(function (g) {
+      var cap = g.charAt(0).toUpperCase() + g.slice(1);
+      Array.prototype.forEach.call(document.querySelectorAll("[data-when-" + g + "]"), function (el) {
+        el.hidden = el.dataset["when" + cap].split(" ").indexOf(state[g]) < 0;
+      });
+      Array.prototype.forEach.call(document.querySelectorAll("[data-unless-" + g + "]"), function (el) {
+        el.hidden = el.dataset["unless" + cap].split(" ").indexOf(state[g]) >= 0;
+      });
+    });
+
+    bounds();
+    toml = build();
+
+    // Per-field messages, restoring each field's own explanatory hint when clean.
+    Array.prototype.forEach.call(document.querySelectorAll(".cb-hint[data-hint]"), function (p) {
+      var id = p.dataset.hint;
+      if (!p.dataset.base) { p.dataset.base = p.innerHTML; }
+      if (fieldMsg[id]) {
+        p.innerHTML = "<b>" + id + "</b> " + esc(fieldMsg[id]);
+        p.classList.add("bad");
+      } else {
+        p.innerHTML = p.dataset.base +
+          (boundMsg[id] ? ' <span class="lim">' + esc(boundMsg[id]) + "</span>" : "");
+        p.classList.remove("bad");
+      }
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("input"), function (el) {
+      if (fieldMsg[el.id]) { el.dataset.state = "bad"; }
+      else if (el.value.trim() === "" && el.placeholder) { el.dataset.state = "unset"; }
+      else { el.dataset.state = "ok"; }
+    });
+
+    $("out").innerHTML = highlight(toml);
+
+    // The gate. Choices still to make come first — they are what unlocks the rest.
+    var todo = $("todo");
+    todo.innerHTML = "";
+    problems.slice().sort(function (a, b) { return (a.err ? 1 : 0) - (b.err ? 1 : 0); })
+      .forEach(function (p) {
+        var li = document.createElement("li");
+        if (p.err) { li.className = "err"; }
+        li.innerHTML = '<span><span class="where">' + esc(String(p.where)) + "</span> — " +
+                       esc(p.msg) + "</span>";
+        todo.appendChild(li);
+      });
+
+    var ready = problems.length === 0;
+    if (ready) {
+      var li = document.createElement("li");
+      li.className = "done";
+      li.innerHTML = "<span>Every required choice is made and every value is in range.</span>";
+      todo.appendChild(li);
+    }
+    $("stamp").textContent = ready ? "ready" : (problems.length + " to settle");
+    $("stamp").className = "cb-stamp " + (ready ? "ok" : "notok");
+    $("copy").disabled = !ready;
+    $("download").disabled = !ready;
+    if (!ready) { setNote("", ""); }
+  }
+
+  function setNote(msg, kind) {
+    var n = $("save-note");
+    n.textContent = msg;
+    n.className = "cb-save-note" + (kind ? " " + kind : "");
+  }
+
+  /* ---------------- actions ---------------- */
+
+  $("copy").addEventListener("click", function () {
+    navigator.clipboard.writeText(toml).then(function () {
+      setNote("Copied. Paste it into config.toml beside your run.", "ok");
+    }, function () {
+      setNote("Could not reach the clipboard — select the text above instead.", "bad");
+    });
+  });
+
+  /* Two homes, two save routes. Inside the Claude viewer the frame cannot start a
+     download itself, so the `downloads` capability asks the viewer instead — and its
+     allowlist has no `.toml`, hence the `.txt` and the rename line. Served as an
+     ordinary page, the blob link is the better answer and keeps the real name. */
+  $("download").addEventListener("click", function () {
+    var btn = $("download");
+    btn.disabled = true;
+    setNote("Saving…", "");
+
+    var viewer = (window.claude && typeof window.claude.use === "function")
+      ? window.claude.use("downloads") : Promise.resolve(null);
+
+    viewer.then(function (downloads) {
+      if (!downloads) {
+        var url = URL.createObjectURL(new Blob([toml], { type: "text/plain" }));
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = "config.toml";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        setNote("Saved as config.toml.", "ok");
+        btn.disabled = false;
+        return;
+      }
+      return downloads.save({ filename: "config.txt", data: toml }).then(function () {
+        setNote("Saved as config.txt — rename it to config.toml.", "ok");
+        btn.disabled = false;
+      }, function (err) {
+        var code = err && err.code;
+        if (code === "declined") { setNote("Save cancelled.", ""); }
+        else if (code === "rate_limited") { setNote("A save prompt is already open.", "bad"); }
+        else { setNote("Saving is unavailable here — use Copy instead.", "bad"); }
+        btn.disabled = false;
+      });
+    }).catch(function () {
+      setNote("Saving is unavailable here — use Copy instead.", "bad");
+      btn.disabled = false;
+    });
+  });
+
+  document.addEventListener("input", function (e) {
+    if (e.target.tagName === "INPUT") { render(); }
+  });
+
+  document.addEventListener("change", function (e) {
+    if (e.target.tagName === "INPUT") { clamp(e.target); render(); }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

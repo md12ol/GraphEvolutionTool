@@ -10,7 +10,7 @@
 <body data-page="guide/configuration.html">
 <main>
 
-<p class="page-kicker">Using GET</p>
+<p class="page-kicker">Reference</p>
 <h1>Configuration Reference</h1>
 <p class="lede">
   Every key a GET configuration accepts: what it does, what else it can be, what rejects it. This is
@@ -205,12 +205,12 @@
   <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
   <tbody>
     <tr><td><code>num_states</code></td><td>required</td>
-        <td>States in the automaton.</td></tr>
+        <td>States in the automaton. Must be in <code>1..=65536</code>.</td></tr>
     <tr><td><code>max_resp_len</code></td><td>required</td>
-        <td>Longest response string a transition may emit. Responses are drawn from
+        <td>Longest response string a transition may emit; must be at least 1. Responses are drawn from
             <code>1..=max_resp_len</code>, never empty, which is what guarantees the automaton
             terminates.</td></tr>
-    <tr><td><code>init_state</code></td><td>required</td>
+    <tr><td><code>init_state</code></td><td><code>0</code></td>
         <td>State the automaton starts in. Must be <b>less than</b> <code>num_states</code>.</td></tr>
     <tr><td><code>init_char_mutation_rate</code></td><td><code>0.04</code></td>
         <td>Chance a mutation targets the initial character rather than the tables. In
@@ -275,7 +275,7 @@
     <tr><td><code>num_epidemics</code></td><td>required</td>
         <td>Epidemics averaged per evaluation. At least 1 — fitness is their mean.</td></tr>
     <tr><td><code>patient_zero</code></td><td>random each epidemic</td>
-        <td>Fix the seed node instead.</td></tr>
+        <td>Fix the seed node instead. When set, it must be less than <code>network_size</code>.</td></tr>
     <tr><td><code>min_epidemic_length</code></td><td><code>3</code></td>
         <td>Outbreaks shorter than this are re-simulated. Set to 1 to disable the re-roll.</td></tr>
     <tr><td><code>max_epidemic_retries</code></td><td><code>5</code></td>
@@ -287,9 +287,9 @@
 <h3><code>epi_prof_match</code></h3>
 
 <p>
-  <code>target_profile</code> — required, an array of numbers, at least one element. Compared
-  verbatim at the size of the network being built: nothing is prepended and nothing is rescaled.
-  Supplying it under any other objective is rejected by name.
+  <code>target_profile</code> — required, a non-empty array of finite numbers. Comparison covers the
+  target array's length: a shorter epidemic is padded with zeros, and a longer epidemic's tail is
+  ignored. Nothing is prepended or rescaled. Supplying it under another objective is rejected.
 </p>
 
 <h3><code>struct_match</code></h3>
@@ -305,7 +305,7 @@
     <tr><td><code>degree_bins</code> · <code>clustering_bins</code> · <code>spectral_bins</code></td>
         <td><code>50</code></td>
         <td>Histogram bins per statistic family. More bins resolve finer differences and need more
-            reference graphs to fill them.</td></tr>
+            reference graphs to fill them. Each bin count must be at least 1.</td></tr>
     <tr><td><code>degree_gamma</code> · <code>clustering_gamma</code> · <code>spectral_gamma</code></td>
         <td><code>1.0</code></td>
         <td>RBF bandwidths. Must be finite and greater than zero — the kernel divides by them.</td></tr>
@@ -314,8 +314,8 @@
         <td>How much each family counts. Finite and non-negative; <b>they cannot all be zero</b>,
             which would score every candidate identically.</td></tr>
     <tr><td><code>density_weight</code></td><td><code>1.0</code></td>
-        <td>How much distance from the reference set's mean density counts. Zero switches the penalty
-            off.</td></tr>
+        <td>How much distance from the reference set's mean density counts. Must be finite and
+            non-negative; zero switches the penalty off.</td></tr>
   </tbody>
 </table>
 </div>
@@ -372,16 +372,18 @@
 <h2>When a Value Is Rejected</h2>
 
 <p>
-  Validation runs <b>once, up front</b> — every check above happens before any individual is created,
-  so a bad configuration fails in milliseconds rather than mid-run. The error names the field and the
+  Most validation runs <b>once, up front</b>, so common bad configurations fail before evolution.
+  Some SDA dimension constraints and filesystem-dependent checks are currently reached only when a
+  run starts; they should be moved into package validation. The error names the field and the
   constraint. From Python it arrives as a <code>ValueError</code> naming the <i>attribute path</i>
   you would have written (<code>config.scope.size</code>), not the TOML key, so the message matches
   the code in front of you.
 </p>
 
 <p>
-  The one thing validation deliberately does not do is touch the filesystem. A path-valued setting —
-  today only <code>reference_folder</code> — is checked when the run starts instead.
+  Validation deliberately does not touch the filesystem. A path-valued setting—today only
+  <code>reference_folder</code>—is checked when the run starts; the folder must exist and contain at
+  least one usable reference graph.
 </p>
 
 </main>

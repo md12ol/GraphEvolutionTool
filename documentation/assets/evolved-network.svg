@@ -1,4 +1,9 @@
-<svg viewBox="0 0 720 374" role="img" aria-label="Two 40-node graphs side by side. The edge-edit run starts from an empty graph and ends with 89 edges, evolved to spread an epidemic as widely as possible.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 374" role="img" aria-label="Two 40-node graphs side by side. The edge-edit run starts from an empty graph and ends with 89 edges, evolved to spread an epidemic as widely as possible.">
+  <style>
+    .d-fill-acc{fill:#e7f0ff}.d-stroke{stroke:#7890ad;fill:none}.d-stroke-acc{stroke:#2f65a7;fill:none}
+    .d-text-acc{fill:#244f84;font:600 12px system-ui,sans-serif}
+  </style>
+  <rect width="720" height="374" fill="#f6f8fb"/>
   <g style="color:var(--border-firm)">
   <text x="170" y="16" class="d-text-acc" text-anchor="middle">generation 0 — an empty base graph</text>
 

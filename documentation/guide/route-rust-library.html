@@ -10,7 +10,7 @@
 <body data-page="guide/route-rust-library.html">
 <main>
 
-<p class="page-kicker">Using GET</p>
+<p class="page-kicker">Use Rust</p>
 <h1>Rust: As a Library</h1>
 <p class="lede">
   Depend on the crate, write your objective as a Rust type, and drive an evolver directly. No config
@@ -19,37 +19,36 @@
 </p>
 
 <div class="warn not-in-release">
-  <b>Not part of the v0.9 release.</b> The Rust route isn't what this release presents — GET does
-  not yet publish to crates.io, and <a href="route-python-toml.html">the Python route</a> is the
-  supported one for now. This note is removed once the crate is obtainable.
+  <b>Source only in 0.9.0a1.</b> GET is not published to crates.io. Use the pinned source tag
+  below, or choose <a href="route-python-toml.html">the Python route</a>. Do not use
+  <code>cargo add graph-evolution-tool</code> yet: it cannot currently install this package.
 </div>
 
 <h2>Add the Dependency</h2>
 
-<pre><code class="language-bash">cargo add graph-evolution-tool</code></pre>
-
-<p>or, equivalently, by hand:</p>
-
 <pre><code class="language-toml"># Cargo.toml
 [dependencies]
-graph-evolution-tool = "0.9"</code></pre>
+graph-evolution-tool = { git = "https://github.com/md12ol/GraphEvolutionTool", tag = "v0.9.0a1" }</code></pre>
+
+<p>
+  The tag selects version <code>0.9.0a1</code>. For published results, pin a reviewed commit
+  rather than a moving branch and commit <code>Cargo.lock</code>. A local checkout can instead use
+  <code>graph-evolution-tool = { path = "../GraphEvolutionTool/get" }</code> during development.
+</p>
 
 <div class="note">
   <b>The package is <code>graph-evolution-tool</code>; the crate you <code>use</code> is
-  <code>get</code>.</b> <code>get</code> was taken on crates.io in 2024 and on PyPI, and a taken
-  name cannot be reclaimed — so the published name differs from the import on both registries, the
-  same arrangement as <code>pip install scikit-learn</code> giving you <code>import sklearn</code>.
+  <code>get</code>.</b> The registry name <code>get</code> is unavailable, so the future package name
+  differs from the import/crate name, like <code>pip install scikit-learn</code> and
+  <code>import sklearn</code>.
   Every path below is <code>use get::…</code> and that does not change.
 </div>
 
 <div class="callout">
   <p>
-    <b>Pin the version exactly if the numbers will be published.</b>
-    <code>graph-evolution-tool = "0.9"</code> is a caret requirement, so cargo is free to take any
-    later 0.9.x. Write <code>graph-evolution-tool = "=0.9.0"</code> and commit your
-    <code>Cargo.lock</code> when the dependency needs to
-    be the exact code behind a paper's results — this route exists for people who care about that,
-    and a moving version makes results depend on whichever one happened to be resolved.
+    <b>A source pin and lockfile are not a complete scientific record.</b> Also preserve the run
+    code, configuration, base/reference graphs, custom objective code, and relevant environment
+    details. Pinning source prevents dependency drift; it does not preserve inputs outside Cargo.
   </p>
 </div>
 
@@ -199,8 +198,8 @@ for row in &amp;outcome.history {
 
 <p>
   You own the loop, so replicates are yours to run. Derive each seed from one master value so the
-  set is reproducible, and keep the pair <code>(master seed, index)</code> — that is what reproduces
-  a replicate.
+  random stream can be repeated, and keep the pair <code>(master seed, index)</code>. Reproducing the
+  experiment also requires the same source, run assembly, objective code, data, and environment.
 </p>
 
 <pre><code class="language-rust">use rand::{Rng, SeedableRng};
@@ -239,7 +238,7 @@ for run_index in 0..n_runs {
 
 <p>
   These live in the crate's own repository rather than in the published package, so read them at
-  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/get/examples">get/examples</a>; from a clone of GET they run with:
+  <a href="https://github.com/md12ol/GraphEvolutionTool/tree/v0.9.0/get/examples">get/examples</a>; from a clone of GET they run with:
 </p>
 
 <pre><code class="language-bash">cargo run -p graph-evolution-tool --features cli --example library_route</code></pre>
