@@ -52,13 +52,18 @@ type = "two_point"
 type        = "edge_edit"
 gene_length = 256
 
-# The base graph is deliberately not a key here — it is data, not configuration.
-# Set it through the evolver: `set_base_graph(100, edges)`, or
-# `set_base_graph_from_file("base_graph.csv", min_node_index=0)`, where
+# `base_graph` names a file the edit script starts from. It is a relative path
+# from the location of THIS file, not from the directory you run in. Left unset,
+# a run starts from an empty graph, which leaves five of the nine edit operations
+# inert until `add` or `toggle` have built some structure.
+# base_graph = "base_graph.csv"
+#
+# The file needs a `# nodes = N` header, and that count must equal network_size.
+# It is read 0-indexed. For a file numbered from anything else, or for a config
+# assembled in Python rather than read from a file, set it on the evolver
+# instead: `set_base_graph(100, edges)`, or
+# `set_base_graph_from_file("base_graph.csv", min_node_index=1)`, where
 # `min_node_index` is where your own numbering starts and results come back in.
-# The file needs a `# nodes = N` header. Left unset, a run starts from an empty
-# graph, which leaves five of the nine edit operations inert until `add` or
-# `toggle` have built some structure.
 
 # Relative probability of drawing each edit operation. Omit the table to leave
 # every operation at 1.0; at least one must be positive.
