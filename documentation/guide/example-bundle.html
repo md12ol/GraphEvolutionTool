@@ -813,8 +813,8 @@ def best_individual_path(run):
     return candidate if os.path.isfile(candidate) else None
 
 
-def infer_direction(examples):
-    &quot;&quot;&quot;Whether a larger fitness is better, judged from how the runs moved.
+def infer_direction(example):
+    &quot;&quot;&quot;Whether a larger fitness is better in `example`, judged from its runs.
 
     GET does not tell Python which way an objective points — `RunResult` has no
     orientation, and a callable registered through `set_fitness_function` gets
@@ -823,19 +823,25 @@ def infer_direction(examples):
     way the population&#x27;s best fitness travelled from first iteration to last is
     the direction that counts as better.
 
-    Averaged over every run given, which is what makes it safe on a single
-    unlucky replicate. Pass `--maximize` or `--minimize` to override it — an
-    objective already near its optimum at iteration zero can drift the wrong way
-    and fool this.
+    **One folder at a time, never pooled.** The objective is a property of the
+    configuration, so two folders can point opposite ways — `epi_prof_match`
+    minimizes an RMSE while `epi_spread` maximizes a node count — and the
+    shipped examples do exactly that. Judging them together lets whichever
+    objective has the larger numbers decide for the other, which silently draws
+    the *worst* replicate of the folder that lost the vote.
+
+    Every replicate of this one folder is counted, which is what makes it safe
+    on a single unlucky run. Pass `--maximize` or `--minimize` to override it —
+    an objective already near its optimum at iteration zero can drift the wrong
+    way and fool this.
     &quot;&quot;&quot;
     first = 0.0
     last = 0.0
     counted = 0
-    for example in examples:
-        for run in example.runs:
-            first += run.best_fitness[0]
-            last += run.best_fitness[-1]
-            counted += 1
+    for run in example.runs:
+        first += run.best_fitness[0]
+        last += run.best_fitness[-1]
+        counted += 1
 
     if counted == 0:
         return True
@@ -921,8 +927,11 @@ def network_positions(graph, nx):
     return positions, core, strays
 
 
-def draw_best_networks(examples, out_dir, maximize):
+def draw_best_networks(examples, out_dir, directions):
     &quot;&quot;&quot;Render each folder&#x27;s best replicate, one PNG per `example_N`.
+
+    `directions` maps a folder&#x27;s name to whether larger is better in it. Per
+    folder rather than one flag for the whole comparison: see `infer_direction`.
 
     Node colour is degree and edge colour is multiplicity, because those are the
     two things a picture can show that a fitness number cannot: which nodes
@@ -936,7 +945,7 @@ def draw_best_networks(examples, out_dir, maximize):
 
     written = []
     for example in examples:
-        best_run, best_value = best_run_of(example, maximize)
+        best_run, best_value = best_run_of(example, directions[example.name])
         if best_run is None:
             print(f&quot;{example.name}: no {BEST_INDIVIDUAL} in any replicate, nothing to draw&quot;)
             continue
@@ -1058,15 +1067,26 @@ def main():
 
     summarise(examples)
 
-    maximize = args.maximize
-    if maximize is None:
-        maximize = infer_direction(examples)
-        judged = &quot;larger is better&quot; if maximize else &quot;smaller is better&quot;
-        print(f&quot;direction judged from the runs: {judged} (override with --maximize/--minimize)&quot;)
+    # One direction per folder. The flag, when given, is deliberately global:
+    # it is the answer for a comparison of folders sharing an objective, and on
+    # a mixed set there is no single right value to pass — which is why the
+    # inferred case is the one that has to be per folder.
+    directions = {}
+    for example in examples:
+        if args.maximize is None:
+            directions[example.name] = infer_direction(example)
+        else:
+            directions[example.name] = args.maximize
+
+    if args.maximize is None:
+        for example in examples:
+            judged = &quot;larger is better&quot; if directions[example.name] else &quot;smaller is better&quot;
+            print(f&quot;{example.name}: direction judged from its runs: {judged}&quot;)
+        print(&quot;override either way with --maximize/--minimize&quot;)
 
     try:
         written = [draw_boxplot(examples, args.out), draw_convergence(examples, args.out)]
-        written.extend(draw_best_networks(examples, args.out, maximize))
+        written.extend(draw_best_networks(examples, args.out, directions))
     except ValueError as error:
         print(f&quot;error: {error}&quot;, file=sys.stderr)
         return 1
