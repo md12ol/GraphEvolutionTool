@@ -78,7 +78,7 @@ radius = 3</code></pre>
 
 <p>Every step is marked at its own site. One command lists the chain:</p>
 
-<pre><code class="language-bash">git grep -n "ADD A SCOPE STEP" get/src config.example.toml</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A SCOPE STEP" get/src config.example.toml    # 6 steps, 7 sites</code></pre>
 
 <div class="table-wrap">
 <table>
@@ -261,8 +261,8 @@ fn neighbourhood_stays_in_range_and_is_reproducible() {
   chains:
 </p>
 
-<pre><code class="language-bash">git grep -n "ADD A SELECTION STEP" get/src config.example.toml      # six steps
-git grep -n "ADD A REPLACEMENT STEP" get/src    # three steps</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A SELECTION STEP" get/src config.example.toml      # 6 steps, 7 sites
+git grep -n "ADD A REPLACEMENT STEP" get/src    # 3 steps, 6 sites</code></pre>
 
 <p>
   See <a href="new-selection.html">Add a Selection Scheme</a> and
