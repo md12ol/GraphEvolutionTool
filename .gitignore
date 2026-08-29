@@ -41,3 +41,5 @@ best_individual.txt.toml
 # The wheel gets its copy from the build, never from here.
 python/get/*.so
 python/get/*.pyd
+
+documentation-audit/
