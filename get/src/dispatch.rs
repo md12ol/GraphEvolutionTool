@@ -2501,9 +2501,9 @@ mod tests {
 
     #[test]
     fn save_results_writes_the_best_individual_and_a_reparseable_config() {
-        // Both files exist, and the derived TOML path parses back through
-        // the same `Config::from_toml_str` the run itself used — that
-        // round-trip is the whole point of the provenance record.
+        // Both files exist, and the `config.toml` beside the results parses
+        // back through the same `Config::from_toml_str` the run itself used —
+        // that round-trip is the whole point of the provenance record.
         let config_toml = "population_size = 6\n\
              network_size = 8\n\
              max_edge_multiplicity = 2\n\
@@ -2543,26 +2543,30 @@ mod tests {
         )
         .expect("one run returns exactly one result");
 
-        let path =
+        // Its own folder: the config lands under a fixed name now, so two
+        // concurrent tests writing into `temp_dir()` would collide on it.
+        let folder =
             std::env::temp_dir().join(format!("get_save_results_test_{}", std::process::id()));
+        std::fs::create_dir_all(&folder).expect("temp folder");
+        let path = folder.join("best_individual.txt");
         let path_str = path.to_str().expect("temp path is valid UTF-8");
         result
             .save_results(path_str)
             .expect("save_results writes successfully");
 
         let contents = std::fs::read_to_string(&path).expect("the results file was written");
-        std::fs::remove_file(&path).expect("results temp file cleans up");
         assert!(contents.contains(&format!("best_fitness = {}", result.best_fitness)));
         assert!(contents.contains(&result.best_genome_repr));
         for &(u, v, weight) in &result.best_edges {
             assert!(contents.contains(&format!("{u},{v},{weight}")));
         }
 
-        let toml_path = format!("{path_str}.toml");
-        let toml_contents = std::fs::read_to_string(&toml_path).expect("the TOML file was written");
-        std::fs::remove_file(&toml_path).expect("TOML temp file cleans up");
+        let toml_contents =
+            std::fs::read_to_string(folder.join("config.toml")).expect("the TOML file was written");
         assert_eq!(toml_contents, config_toml);
         Config::from_toml_str(&toml_contents).expect("the provenance TOML round-trips");
+
+        std::fs::remove_dir_all(&folder).expect("temp folder cleans up");
     }
 
     #[test]

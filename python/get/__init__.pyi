@@ -626,7 +626,7 @@ class RunResult:
         ...
     def save_results(self, filename: str) -> None:
         """Write the best individual to `filename`, and the run's config TOML
-        alongside it at `{filename}.toml`.
+        beside it as `config.toml`.
 
         **The file is a loadable edge list**, which GET reads back unedited.
         """

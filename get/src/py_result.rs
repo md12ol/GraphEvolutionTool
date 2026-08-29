@@ -146,7 +146,7 @@ impl PyRunResult {
     }
 
     /// Write the best individual to `filename`, and the run's config TOML
-    /// alongside it at `{filename}.toml`.
+    /// beside it as `config.toml`.
     ///
     /// **The file is a loadable edge list**, which GET reads back unedited.
     pub fn save_results(&self, filename: &str) -> PyResult<()> {
@@ -169,9 +169,15 @@ impl PyRunResult {
             })?;
         }
 
-        let config_path = format!("{filename}.toml");
+        // Beside the results file, not derived from its name: several
+        // replicates written into one folder share the config that produced
+        // them, so one `config.toml` per folder is the record.
+        let config_path = std::path::Path::new(filename).with_file_name("config.toml");
         std::fs::write(&config_path, &self.config_toml).map_err(|err| {
-            PyIOError::new_err(format!("could not write to {config_path}: {err}"))
+            PyIOError::new_err(format!(
+                "could not write to {}: {err}",
+                config_path.display()
+            ))
         })?;
 
         Ok(())
@@ -277,8 +283,8 @@ mod tests {
         assert_eq!(loaded.edges, vec![(0, 1, 2), (1, 3, 1)]);
         assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
 
-        // The provenance TOML is written beside it, under a derived name.
-        let config = std::fs::read_to_string(folder.join("best.csv.toml"))
+        // The provenance TOML is written beside it, under a fixed name.
+        let config = std::fs::read_to_string(folder.join("config.toml"))
             .expect("the config should be written alongside");
         assert_eq!(config, "population_size = 10\n");
 
