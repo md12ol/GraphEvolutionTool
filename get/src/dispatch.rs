@@ -2501,7 +2501,7 @@ mod tests {
 
     #[test]
     fn save_results_writes_the_best_individual_and_a_reparseable_config() {
-        // Both files exist, and the `config.toml` beside the results parses
+        // Both files exist, and the `config.toml` the folder carries parses
         // back through the same `Config::from_toml_str` the run itself used —
         // that round-trip is the whole point of the provenance record.
         let config_toml = "population_size = 6\n\
@@ -2543,7 +2543,7 @@ mod tests {
         )
         .expect("one run returns exactly one result");
 
-        // Its own folder: the config lands under a fixed name now, so two
+        // Its own folder: the config lands under a fixed name, so two
         // concurrent tests writing into `temp_dir()` would collide on it.
         let folder =
             std::env::temp_dir().join(format!("get_save_results_test_{}", std::process::id()));
@@ -2561,6 +2561,11 @@ mod tests {
             assert!(contents.contains(&format!("{u},{v},{weight}")));
         }
 
+        // Written separately from the individual: it describes the invocation,
+        // not this replicate, so `save_results` no longer emits it.
+        result
+            .save_config(folder.to_str().expect("temp path is valid UTF-8"))
+            .expect("save_config writes successfully");
         let toml_contents =
             std::fs::read_to_string(folder.join("config.toml")).expect("the TOML file was written");
         assert_eq!(toml_contents, config_toml);

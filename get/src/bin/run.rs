@@ -15,7 +15,7 @@ struct Args {
 
 const USAGE: &str = "usage: get-run <config.toml> [seed] [--runs N] [--out DIR]
 
-Writes run_log.csv, best_individual.txt and config.toml into the working directory,
+Writes run_log.csv and best_individual.txt into the working directory,
 or into DIR/<timestamp>-<seed>/ with --out, where each replicate of a multi-run
 invocation gets its own run_<index>/ sub-directory.
 
@@ -120,6 +120,20 @@ fn main() -> ExitCode {
         }
     };
 
+    // Once per invocation, not once per replicate: every summary carries the
+    // same document, so this is the folder they all share. Written before the
+    // loop so it lands even if a later replicate's own writes fail.
+    if let Some(first) = summaries.first() {
+        let experiment = get::experiment_output_dir(args.out_dir.as_deref(), &stamp, args.seed);
+        match std::fs::create_dir_all(&experiment).and_then(|()| first.save_config(&experiment)) {
+            Ok(()) => println!("\nwrote {}", experiment.join("config.toml").display()),
+            Err(err) => eprintln!(
+                "\nwarning: could not write {}: {err}",
+                experiment.join("config.toml").display()
+            ),
+        }
+    }
+
     for (run_index, summary) in summaries.iter().enumerate() {
         if args.n_runs > 1 {
             // Zero-based: `run_index` is half of the pair that reproduces a
@@ -166,7 +180,7 @@ fn main() -> ExitCode {
 
         let best_path = directory.join("best_individual.txt");
         match summary.save_results(&best_path.to_string_lossy()) {
-            Ok(()) => println!("wrote {} (+ config.toml)", best_path.display()),
+            Ok(()) => println!("wrote {}", best_path.display()),
             Err(err) => eprintln!("warning: could not write {}: {err}", best_path.display()),
         }
     }

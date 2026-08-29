@@ -100,14 +100,16 @@ last  = best.history[-1]
 print(f"{first:.3f} -> {last.best_fitness:.3f} over {last.iteration} generations")
 
 best.save_logs("run_log.csv")
-best.save_results("best_individual.txt")   # also writes config.toml beside it</code></pre>
+best.save_results("best_individual.txt")
+best.save_config(".")                      # writes config.toml into the folder</code></pre>
 
 <div class="callout">
   <p>
     <b>Write <code>config_toml</code> out with your results.</b> On this route the parameters live
     in a program someone will edit, so the file is the only record of what a given set of numbers
-    was actually produced by. <code>save_results</code> writes it for you as
-    <code>config.toml</code>, beside the file you named.
+    was actually produced by. <code>save_config</code> writes it into a folder you name, as
+    <code>config.toml</code> &mdash; once per run rather than once per replicate, since every
+    replicate of one run came from the same document.
   </p>
 </div>
 
