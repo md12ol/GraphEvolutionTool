@@ -255,6 +255,59 @@ def signatures():
     return bad
 
 
+# A `git grep` the pages tell a reader to run, and the count its comment claims.
+# Only the `# N steps, M sites` shape is checked: a comment saying anything else
+# is prose, and inventing a reading for it would be guessing.
+GREP_LINE = re.compile(
+    r'git grep (?P<flags>-[a-zA-Z]+) "(?P<pattern>[^"]*)" (?P<paths>[^#\n]*?)\s*'
+    r'#[^#\n]*?(?P<steps>\d+) steps, (?P<sites>\d+) sites')
+
+
+def grep_counts():
+    """Every `git grep … # N steps, M sites` on a page must return M lines.
+
+    The command is the checklist a reader actually runs, so a stale count sends
+    them looking for sites that are not there — or, worse, tells them they have
+    seen the whole chain when the grep printed more. Nothing else here checks a
+    *command*: the reference and step-table checks read what a block cites, not
+    what running it would print.
+
+    The step count is checked too, and it is the one that catches a chain
+    growing a site: steps and sites differ whenever one step lives in two
+    places, which is normal, so only comparing both catches either moving.
+    """
+    import subprocess
+
+    checked = bad = 0
+    for page in sorted(glob.glob("documentation/guide/new-*.html")):
+        text = open(page, encoding="utf-8").read()
+        for found in GREP_LINE.finditer(text):
+            checked += 1
+            pattern = html.unescape(found.group("pattern"))
+            paths = found.group("paths").split()
+            flags = found.group("flags")
+            argv = ["git", "grep", "-h"]
+            if "E" in flags:
+                argv.append("-E")
+            argv += [pattern, "--"] + paths
+            lines = subprocess.run(
+                argv, capture_output=True, text=True).stdout.splitlines()
+            sites = len(lines)
+            # A step is (number, branch), not a number: MUTATION's eight are
+            # four steps on each of two branches, and counting numbers alone
+            # would call that four.
+            steps = len({(m.group(2), m.group(3))
+                         for m in (MARKER.search(l) for l in lines) if m})
+            want_steps = int(found.group("steps"))
+            want_sites = int(found.group("sites"))
+            if (steps, sites) != (want_steps, want_sites):
+                bad += 1
+                print(f"  {page}: `{pattern}` says {want_steps} steps, {want_sites} sites "
+                      f"but returns {steps} steps, {sites} sites")
+    print(f"{checked} grep commands, {bad} miscounted")
+    return bad
+
+
 def step_tables():
     """Each new-*.html's step table must match its chain's markers in the source."""
     bad = 0
@@ -365,8 +418,9 @@ def main(fix):
     print(f"{total} references, {wrong} wrong" + (f", {repaired} repaired" if fix else ""))
     bad_tables = step_tables()
     bad_sigs = signatures()
+    bad_counts = grep_counts()
     bad_structure = structure()
-    return 1 if (wrong and not fix) or bad_tables or bad_sigs or bad_structure else 0
+    return 1 if (wrong and not fix) or bad_tables or bad_sigs or bad_counts or bad_structure else 0
 
 
 if __name__ == "__main__":

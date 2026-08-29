@@ -33,7 +33,7 @@
   </p>
 <pre><code class="language-bash">git grep -nE "ADD A MUTATION STEP . \(for EdgeEdit\)" get/src config.example.toml   # 4 steps, 7 sites
 git grep -nE "ADD A MUTATION STEP . \(for SDA\)" get/src config.example.toml        # 4 steps, 7 sites
-git grep -n "ADD A MUTATION STEP" get/src config.example.toml       # both halves, 8 steps</code></pre>
+git grep -n "ADD A MUTATION STEP" get/src config.example.toml       # both halves: 8 steps, 14 sites</code></pre>
   <p>
     Unlike crossover, mutation is <b>per representation</b>: there is no shared
     <code>Mutation</code> enum and no compatibility match to extend. Adding an operator for one
