@@ -92,12 +92,12 @@ mutation    = { type = "my_mutation", some_param = 0.5 }</code></pre>
         <td>A variant on <code>enum EdgeEditMutation</code>, plus any parameters it reads.</td></tr>
     <tr><td>2</td><td><code>get/src/genomes/edge_edit.rs:235</code></td>
         <td>The arm in <code>EdgeEditGenome::mutate</code> that performs it.</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:188</code> and
+    <tr><td>3</td><td><code>get/src/config.rs:207</code> and
         <code>get/src/dispatch.rs:653</code></td>
         <td>The mirrored variant on <code>enum EdgeEditMutationConfig</code>, and the arm mapping it
             onto the engine enum.</td></tr>
     <tr><td>4</td><td><code>get/src/py_config.rs:723</code>, <code>:744</code> and
-        <code>config.example.toml:187</code></td>
+        <code>config.example.toml:192</code></td>
         <td><b>Optional.</b> The Python-side variant, its matching arm, and a
             <code>mutation</code> line in the example config.</td></tr>
   </tbody>
@@ -112,7 +112,7 @@ EdgeEditMutation::MyMutation { some_param } =&gt; {
     // exactly one change to `self.genes`
 }
 
-// step 3a — config.rs:188
+// step 3a — config.rs:207
 MyMutation { some_param: f64 },
 
 // step 3b — dispatch.rs:653
@@ -136,12 +136,12 @@ EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
         <td>A variant on <code>enum SdaMutation</code>, plus any parameters it reads.</td></tr>
     <tr><td>2</td><td><code>get/src/genomes/sda.rs:405</code></td>
         <td>The arm in <code>SdaGenome::mutate</code> that performs it.</td></tr>
-    <tr><td>3</td><td><code>get/src/config.rs:230</code> and
+    <tr><td>3</td><td><code>get/src/config.rs:249</code> and
         <code>get/src/dispatch.rs:667</code></td>
         <td>The mirrored variant on <code>enum SdaMutationConfig</code>, and the arm mapping it onto
             the engine enum.</td></tr>
     <tr><td>4</td><td><code>get/src/py_config.rs:760</code>, <code>:781</code> and
-        <code>config.example.toml:194</code></td>
+        <code>config.example.toml:199</code></td>
         <td><b>Optional.</b> The Python-side variant, its matching arm, and a
             <code>mutation</code> line in the example config.</td></tr>
   </tbody>
@@ -154,7 +154,7 @@ MyMutation { some_param: f64 },
 // step 2 — genomes/sda.rs:405
 SdaMutation::MyMutation { some_param } =&gt; self.my_mutation(context, rng),
 
-// step 3a — config.rs:230
+// step 3a — config.rs:249
 MyMutation { some_param: f64 },
 
 // step 3b — dispatch.rs:667

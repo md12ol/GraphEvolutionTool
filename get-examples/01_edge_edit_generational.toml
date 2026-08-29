@@ -1,0 +1,46 @@
+# 01 — edge editing, generational, maximize outbreak size
+#
+# The smallest complete document. Every later config adds to this shape rather
+# than replacing it, so read this one first.
+#
+#     python python_from_config.py 01_edge_edit_generational.toml
+#
+# The graph starts empty and the run edits it, looking for the topology that
+# spreads an epidemic to the most nodes.
+
+population_size       = 100
+network_size          = 100
+max_edge_multiplicity = 1     # 1 = unweighted; above 1 allows parallel edges
+
+crossover_rate = 0.9          # chance a selected pair recombines
+mutation_rate  = 0.2          # chance a child mutates at all
+
+[evolution]
+type            = "generational"
+num_generations = 150
+elite_count     = 1           # best individuals copied forward untouched
+
+[scope]
+# Which slice of the population one breeding event may draw from.
+type = "global"
+
+[selection]
+# Which of that slice becomes a parent. `tournament_size` sizes the tournament
+# only — the scope has its own `size`, which `global` does not take.
+type            = "tournament"
+tournament_size = 5
+
+[crossover]
+type = "two_point"
+
+[genome]
+type        = "edge_edit"
+gene_length = 256             # edit operations per individual
+
+[fitness]
+type           = "epi_spread"
+infection_rate = 0.5          # high on purpose: at 0.05 an outbreak on a sparse
+                              # 100-node graph dies before topology matters, so
+                              # every individual scores alike and selection has
+                              # nothing to act on
+num_epidemics  = 20           # outbreaks averaged per individual

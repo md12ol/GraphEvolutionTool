@@ -101,9 +101,10 @@ const SEED: u64 = 20260817;
 /// **Where this program writes its results. Change it to anywhere you like.**
 ///
 /// Each run lands in `OUTPUT_DIR/<timestamp>-<seed>/`, and each replicate below
-/// gets a `run_<index>/` of its own inside that — the same layout `get-run`
-/// produces, through the same `get::run_output_dir`, so output from the two
-/// routes can be compared without translating a path.
+/// gets a folder of its own inside that, counted from one and zero-padded to
+/// the width of `N_RUNS` — the same layout `get-run` produces, through the same
+/// `get::run_output_dir`, so output from the two routes can be compared without
+/// translating a path.
 const OUTPUT_DIR: &str = "./output";
 
 /// How many replicates to run from `SEED`.

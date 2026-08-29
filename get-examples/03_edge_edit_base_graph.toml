@@ -1,0 +1,87 @@
+# 03 — edit a graph you supply, with the full operation mix
+#
+#     python python_from_config.py 03_edge_edit_base_graph.toml
+#
+# 01 starts from nothing. This one starts from a graph on disk, which is what
+# makes five of the nine edit operations useful at all: `delete`, `swap`,
+# `hop` and both `local_*` operations need existing edges to work on, so on an
+# empty graph they do nothing until `add` or `toggle` has built something up.
+#
+# **Swap the base graph and rerun.** Three are supplied, all 100 nodes, and
+# comparing their results with everything else held fixed is the point of
+# having three:
+#
+#     base_graph_ring.csv       every node joined to its +-1 and +-2 neighbours
+#     base_graph_empty.csv      no edges — identical to omitting the key
+#     base_graph_powerlaw.csv   a few high-degree hubs, most nodes sparse
+
+population_size       = 100
+network_size          = 100   # must equal the base graph's `# nodes` header
+max_edge_multiplicity = 5     # above 1, so an edge can carry parallel copies
+                              # and `toggle`/`local_toggle` have a range to
+                              # move through rather than a flag to flip.
+                              # Parallel copies are separate transmission
+                              # chances, so a 5-copy edge transmits at
+                              # 1 - 0.7^5 = 83% where a single one is 30% —
+                              # the pairing this cap and the rate below were
+                              # chosen for together
+
+crossover_rate = 0.9
+mutation_rate  = 0.2
+max_mutations  = 3            # a mutating child takes 1..=3 mutations
+
+[evolution]
+type            = "generational"
+num_generations = 150
+elite_count     = 2
+
+[scope]
+type = "global"
+
+[selection]
+type            = "tournament"
+tournament_size = 5
+
+[crossover]
+type = "two_point"
+
+[genome]
+type        = "edge_edit"
+gene_length = 256
+
+# Resolved relative to THIS FILE's directory, not the working directory, so the
+# bundle runs from anywhere. Read as 0-indexed.
+base_graph  = "base_graph_ring.csv"
+
+mutation    = { type = "reroll_gene" }
+
+# Relative weights, not probabilities — they are normalized, so doubling all
+# nine changes nothing. Any omitted operation defaults to 1.0. At least one
+# must be positive.
+[genome.operation_weights]
+toggle       = 1.0   # flip an edge on or off, or step its weight
+hop          = 1.0   # move one end of an existing edge to another node
+add          = 2.0   # add an edge
+delete       = 1.0   # remove an edge
+swap         = 1.0   # exchange the endpoints of two existing edges
+local_toggle = 1.0   # as toggle, but confined to a node's neighbourhood
+local_add    = 1.0
+local_delete = 1.0
+null         = 0.5   # do nothing — a gene that holds its place, letting an
+                     # individual carry fewer than `gene_length` real edits
+
+[fitness]
+type                 = "epi_spread"
+infection_rate       = 0.3   # the rate this group's earlier multigraph work
+                             # used, kept so results here are comparable with
+                             # it. Lower than 01's 0.5 because the rate applies
+                             # per edge copy per timestep and a node's chances
+                             # from every infectious neighbour combine: a ring
+                             # node has degree 4, so at 0.5 it is infected with
+                             # probability 1 - 0.5^4 = 94% per step, which
+                             # reaches ~99 of 100 nodes before evolution starts
+num_epidemics        = 20
+patient_zero         = 0   # pinned, so every individual is scored from the
+                           # same starting node; omit for a fresh random one
+min_epidemic_length  = 3   # outbreaks shorter than this are re-rolled,
+max_epidemic_retries = 5   # up to this many times. Set length to 1 to disable.

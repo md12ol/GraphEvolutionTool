@@ -18,6 +18,50 @@
   diff and send to someone else.
 </p>
 
+<h2>Start Here: The Example Bundle</h2>
+
+<p>
+  <a href="../get-examples.zip"><b>Download get-examples.zip</b></a> &mdash; one Python script and
+  five complete configurations, laid out so every path inside resolves. It is the fastest way to see
+  this route working, and the rest of this page explains what the files in it do.
+</p>
+
+<pre><code class="language-bash">get-examples/
+  python_from_config.py     the only Python file, and the only one you edit
+  01_edge_edit_generational.toml
+  02_sda_steady_state.toml
+  03_edge_edit_base_graph.toml
+  04_sda_profile_match.toml
+  05_exercise_degree_match.toml
+  base_graph_ring.csv  base_graph_empty.csv  base_graph_powerlaw.csv
+  output/                   every run writes here</code></pre>
+
+<p>
+  Unpack it, install GET with the commands in the script's own header, then work through the
+  configurations in order. Each one adds to the shape of the one before it, so
+  <code>01</code> is the smallest complete document and <code>04</code> the richest:
+</p>
+
+<pre><code class="language-bash">python python_from_config.py 01_edge_edit_generational.toml
+python python_from_config.py 02_sda_steady_state.toml
+python python_from_config.py 03_edge_edit_base_graph.toml
+python python_from_config.py 04_sda_profile_match.toml</code></pre>
+
+<div class="tip">
+  <b><code>05</code> is an exercise, not a fifth run.</b> It selects
+  <code>[fitness] type = "python"</code>, which names a callable the configuration cannot supply, so
+  it stops and tells you so. Open <code>python_from_config.py</code>, uncomment the one commented-out
+  block in <code>register_objective</code>, and run it again. That block is the only commented-out
+  code in the bundle, and uncommenting it is the only edit needed.
+</div>
+
+<p>
+  Every file is also <a href="example-bundle.html">readable here without downloading it</a>. Results
+  land in <code>output/example_N/</code>, N counting up as you go, with one folder per replicate
+  inside &mdash; so a second run never overwrites the first, and each example folder holds enough
+  replicates to compare.
+</p>
+
 <h2>Install</h2>
 
 <p>
@@ -215,13 +259,16 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
 <h2>A Complete Example</h2>
 
 <p>
-  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/python_from_config.py"><code>python_from_config.py</code></a> is this route
-  end to end, taking the config path and seed as arguments. It is not shipped in the wheel, so
-  download it alongside
-  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/config.example.toml"><code>config.example.toml</code></a> and run:
+  The <a href="../get-examples.zip">example bundle</a> at the top of this page is this route end to
+  end: a script that takes a config path and a seed, and five configurations covering every option
+  described above. Every file in it is
+  <a href="example-bundle.html">readable here</a> without downloading.
 </p>
 
-<pre><code class="language-bash">python python_from_config.py config.example.toml 7</code></pre>
+<p>
+  For a single document showing every key at once rather than five that build up to it, see
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/config.example.toml"><code>config.example.toml</code></a>.
+</p>
 
 </main>
 <script src="../assets/site.js"></script>

@@ -257,13 +257,13 @@ impl Fitness for EdgeBudget {
   <tbody>
     <tr><td>1</td><td><code>get/src/fitness.rs:393</code></td>
         <td>implement the trait, and validate the objective's inputs in its constructor</td></tr>
-    <tr><td>2</td><td><code>get/src/config.rs:310</code>, <code>:328</code> and <code>:842</code></td>
+    <tr><td>2</td><td><code>get/src/config.rs:329</code>, <code>:347</code> and <code>:861</code></td>
         <td>the config variant, its type name, and its validation arm</td></tr>
     <tr><td>3</td><td><code>get/src/dispatch.rs:133</code></td>
         <td>the arm turning the variant into a boxed objective</td></tr>
     <tr><td>4</td><td><code>get/src/py_config.rs:326</code> and <code>:499</code></td>
         <td>the Python variant and its attribute paths — optional</td></tr>
-    <tr><td>5</td><td><code>config.example.toml:87</code></td>
+    <tr><td>5</td><td><code>config.example.toml:92</code></td>
         <td>an example block, if the objective ships</td></tr>
     <tr><td>6</td><td><code>get/src/dispatch.rs:868</code></td>
         <td>a helper returning the objective's <code>[fitness]</code> block — skippable, see
@@ -331,13 +331,13 @@ impl Fitness for MyObjective {
 
 <p>All in <code>get/src/config.rs</code>. The variant, its name, and its constraints:</p>
 
-<pre><code class="language-rust">// step 2a — config.rs:328   the variant a user selects
+<pre><code class="language-rust">// step 2a — config.rs:329   the variant a user selects
 MyObjective { threshold: f64 },
 
-// step 2b — config.rs:328   the string `[fitness] type` is written as
+// step 2b — config.rs:347   the string `[fitness] type` is written as
 FitnessConfig::MyObjective { .. } =&gt; "my_objective",
 
-// step 2c — config.rs:842  the validation arm, if anything can be wrong
+// step 2c — config.rs:861  the validation arm, if anything can be wrong
 FitnessConfig::MyObjective { threshold } =&gt; {
     if !threshold.is_finite() {
         return Err(invalid("threshold", "must be finite"));
@@ -409,7 +409,7 @@ MyObjective { threshold: f64 },
 </p>
 
 <p>
-  Step 5 is a commented-out block in <code>config.example.toml:87</code>. The example file is what a
+  Step 5 is a commented-out block in <code>config.example.toml:92</code>. The example file is what a
   user copies from, so an objective missing from it is one most people never find — and the test
   suite parses and validates that file, so a block that does not parse fails the build rather than a
   user's afternoon.

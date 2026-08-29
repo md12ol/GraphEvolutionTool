@@ -4,6 +4,56 @@ Nothing here is part of GET. These are standard-library Python scripts, run by
 hand, that prepare data for it or read what it produced. They are not a package,
 not an entry point in `pyproject.toml`, and not built into the wheel.
 
+## `make_base_graphs.py`
+
+Writes the three base graphs the example bundle feeds to edge editing — a
+double ring, an empty graph, and a power-law cluster graph.
+
+```bash
+python3 tools/make_base_graphs.py get-examples
+```
+
+One optional argument, the output directory, defaulting to the working
+directory. It overwrites the three files rather than merging into them.
+
+The three share a node count so one config can name any of them in turn and the
+results are comparable; they differ only in structure. The ring joins each node
+to its ±1 *and* ±2 neighbours, for a degree of 4 — a plain cycle leaves every
+node at degree 2, where most of edge-edit's operations have nothing to work on.
+
+Regenerating is byte-stable: the ring is deterministic by construction and the
+power-law graph is seeded, so a rerun that changes a file means this script
+changed. **Output is 0-indexed**, which is what `[genome] base_graph` reads.
+
+## `build_bundle.py`
+
+Builds the two things the website serves for the example bundle, both from
+`get-examples/` and both checked in:
+
+```bash
+python3 tools/build_bundle.py           # write them
+python3 tools/build_bundle.py --check   # compare against what is committed
+```
+
+Run it after changing anything under `get-examples/`. `--check` is a required CI
+step in both `ci.yml` and `pages.yml`, so a bundle that was edited without a
+rebuild fails the pull request rather than shipping a download one version
+behind the page describing it.
+
+Entry order is sorted and every timestamp is fixed, because `zipfile` otherwise
+stamps each entry with its file's mtime and a rebuild would show up as a diff
+for no reason. That is not enough to make the archive byte-stable across
+machines, and `--check` does not assume it is: DEFLATE output depends on the
+zlib build, so zlib-ng and stock zlib compress the same files to different
+bytes. The check compares the archive's **members and their contents** against
+`get-examples/` instead — a hash comparison fails on whichever machine did not
+build the committed zip, which is a red check that detects nothing. Two things
+are deliberately excluded —
+`__pycache__`, and everything under `output/` except the `.gitkeep` that carries
+the empty directory into the archive. That second one matters: this script is
+normally run by someone who has been running the examples, and without it the
+published zip would ship whoever built it last.
+
 ## `graph_to_png.py`
 
 Draws a GET edge file as a PNG — a run's `best_individual.txt`, a base graph, a

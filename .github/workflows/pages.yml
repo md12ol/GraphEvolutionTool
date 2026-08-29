@@ -45,6 +45,11 @@ jobs:
         # pull request ever gated.
         run: python3 documentation/check_refs.py
 
+      # The zip being published is a committed file, so a stale one would ship
+      # to readers rather than merely sitting in the tree.
+      - name: Check the example bundle is current before publishing it
+        run: python3 tools/build_bundle.py --check
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3

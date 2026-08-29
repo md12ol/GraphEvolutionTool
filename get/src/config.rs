@@ -175,6 +175,25 @@ pub struct EdgeEditGenomeConfig {
     /// Which mutation this representation applies.
     #[serde(default)]
     pub mutation: EdgeEditMutationConfig,
+    /// A file the run starts from, instead of the empty graph.
+    ///
+    /// Resolved relative to the config file's own directory, so a folder
+    /// holding a config and the graph it names runs from anywhere. The file
+    /// needs a `# nodes = N` header stating the count, and that count must be
+    /// `network_size`.
+    ///
+    /// Read as 0-indexed, and there is no key to say otherwise: this route
+    /// writes its output 0-indexed too, so a graph it produced reloads
+    /// unchanged. A file numbered from 1 goes through
+    /// `GraphEvolver::set_base_graph_from_file`, which takes a
+    /// `min_node_index`.
+    ///
+    /// Nested under `[genome]` because it is edge-edit's alone — SDA generates
+    /// its graph rather than editing one, and naming this under an SDA
+    /// `[genome]` is refused by `deny_unknown_fields` above rather than by any
+    /// check of ours.
+    #[serde(default)]
+    pub base_graph: Option<String>,
 }
 
 /// Which mutation an edge-edit genome applies. Mirrors

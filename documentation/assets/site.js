@@ -35,6 +35,7 @@
       items: [
         ["guide/route-python-objects.html",   "Python: Config Objects"],
         ["guide/route-python-toml.html",      "Python: TOML File"],
+        ["guide/example-bundle.html",         "The Example Bundle"],
         ["guide/route-rust-library.html",     "Rust: As a Library"],
         ["guide/route-rust-cli.html",         "Rust: The get-run CLI"],
         ["guide/configuration.html",          "Configuration Reference"]

@@ -1087,6 +1087,7 @@ mod tests {
                 gene_length,
                 operation_weights,
                 mutation,
+                base_graph,
             }) => {
                 assert_eq!(gene_length, 256);
                 // Omitted from the document, so serde's default supplies it.
@@ -1098,6 +1099,13 @@ mod tests {
                 // `a_config_naming_no_mutation_operator_gets_the_representations_default`
                 // covers the defaulting half.
                 assert_eq!(mutation, EdgeEditMutationConfig::RerollGene);
+                // `PyGenomeConfig::EdgeEdit` deliberately has no `base_graph`,
+                // so nothing here can emit one. The key is a path resolved
+                // against the config *file*, and a config assembled in Python
+                // has no file to resolve against; that route sets a base graph
+                // through `GraphEvolver::set_base_graph_from_file`, which also
+                // takes the `min_node_index` this key cannot express.
+                assert_eq!(base_graph, None);
             }
             other => panic!("expected edge_edit, got {other:?}"),
         }

@@ -75,6 +75,15 @@ jobs:
       - name: documentation references
         run: python3 documentation/check_refs.py
 
+      # The downloadable bundle and the page listing its files are both
+      # generated from `get-examples/` and both committed, so either can go a
+      # version behind the directory it was built from without anything saying
+      # so — and a download that is stale is worse than no download. A step
+      # here, rather than a job of its own, so the `main` ruleset's required
+      # check keeps the name it already has.
+      - name: example bundle is current
+        run: python3 tools/build_bundle.py --check
+
       # First of the Rust checks: it is the cheapest of them and needs no
       # build, so a formatting-only failure reports in seconds instead of
       # after a compile.

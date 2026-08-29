@@ -1,0 +1,59 @@
+# 02 — SDA genome, steady state, maximize outbreak duration
+#
+#     python python_from_config.py 02_sda_steady_state.toml
+#
+# Two changes from 01, and they are independent of each other:
+#
+#   * a different representation. An SDA does not store edits — it is a small
+#     automaton whose output string is read as the graph, so `gene_length` has
+#     no meaning here and every key under `[genome]` is a different one.
+#   * a different strategy. Steady state replaces two individuals per mating
+#     event instead of rebuilding the whole population per generation, so
+#     `num_mating_events` counts events, not generations, and is much larger.
+
+population_size       = 100
+network_size          = 100
+max_edge_multiplicity = 1
+
+crossover_rate = 0.9
+mutation_rate  = 0.2
+
+[evolution]
+type              = "steady_state"
+num_mating_events = 20000
+replacement       = { type = "worst" }   # the scope's least fit are overwritten,
+                                         # so its best always survives the event
+
+[scope]
+# Steady state needs at least 4: two parents and the two individuals they
+# replace must be distinct. This `size` is where selection pressure comes from
+# here, since `best` below applies no pressure of its own.
+type = "random_subset"
+size = 6
+
+[selection]
+# `random_subset` + `best` is what tournament selection decomposes into.
+type = "best"
+
+[crossover]
+type = "two_point"
+
+[genome]
+# The alphabet is derived as max_edge_multiplicity + 1, so there is no
+# `num_chars` key and no character is ever an illegal edge weight.
+type                        = "sda"
+num_states                  = 12
+max_resp_len                = 4
+init_state                  = 0    # must be < num_states
+init_char_mutation_rate     = 0.04 # chance a mutation redraws the first
+                                   # character rather than the transition table
+transition_vs_response_rate = 0.5  # given the above did not fire, chance of
+                                   # redrawing a target state over a response
+mutation                    = { type = "redraw_one" }
+
+[fitness]
+# Same simulation as 01, read differently: how long the outbreak lasts rather
+# than how many it reaches.
+type           = "epi_length"
+infection_rate = 0.5
+num_epidemics  = 20

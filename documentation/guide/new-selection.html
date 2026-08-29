@@ -119,7 +119,7 @@ pressure = 1.8</code></pre>
             change split across two files.</td></tr>
     <tr><td>5</td><td><code>get/src/py_config.rs:203</code> and <code>:689</code></td>
         <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
-    <tr><td>6</td><td><code>config.example.toml:168</code></td>
+    <tr><td>6</td><td><code>config.example.toml:173</code></td>
         <td><b>Optional.</b> A commented-out <code>[selection]</code> block naming your scheme —
             only the scheme's own parameters, since the scope sizes itself.</td></tr>
   </tbody>
@@ -186,7 +186,7 @@ SelectionConfig::Roulette { pressure } =&gt; {
   (<code>get/src/py_config.rs:203</code>) and its matching arm (<code>:689</code>). Write
   <b>your own parameters and no other block's</b> — the arm is building the
   <code>[selection]</code> table alone. Step 6 is a commented-out block in
-  <code>config.example.toml:168</code>.
+  <code>config.example.toml:173</code>.
 </p>
 
 <div class="callout">
