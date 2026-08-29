@@ -7,9 +7,9 @@
 # and a complicated config would put the difficulty in the wrong place.
 #
 # `type = "python"` only *selects* a registered callable. It does not say what
-# the callable is, and a run reaches this file with nothing registered and
-# stops. Open `python_from_config.py`, find the one commented-out block in it,
-# uncomment it, and run this file again.
+# the callable is, and a run with nothing registered stops rather than
+# guessing. So before you run this, open `python_from_config.py`, find the one
+# commented-out block in it, and uncomment it.
 #
 # The objective it scores: **how many nodes have exactly the target degree.**
 # Maximized. Nothing about that is special — it is small enough to read in one

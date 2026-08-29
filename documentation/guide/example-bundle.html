@@ -302,9 +302,9 @@ target_profile = [1, 3, 8, 17, 24, 19, 11, 5, 2, 1]
 # and a complicated config would put the difficulty in the wrong place.
 #
 # `type = &quot;python&quot;` only *selects* a registered callable. It does not say what
-# the callable is, and a run reaches this file with nothing registered and
-# stops. Open `python_from_config.py`, find the one commented-out block in it,
-# uncomment it, and run this file again.
+# the callable is, and a run with nothing registered stops rather than
+# guessing. So before you run this, open `python_from_config.py`, find the one
+# commented-out block in it, and uncomment it.
 #
 # The objective it scores: **how many nodes have exactly the target degree.**
 # Maximized. Nothing about that is special — it is small enough to read in one
@@ -1504,8 +1504,8 @@ Then run any of the configurations beside this file:
     python python_from_config.py 02_sda_steady_state.toml 42
 
 The optional second argument is the master seed. Run `01` through `04` as they
-are. `05` is the exercise: it stops with a message asking for an objective until
-you uncomment the one block in `register_objective` below.
+are. `05` is the exercise: uncomment the one block in `register_objective` below
+before you run it, or it stops with a message asking for an objective.
 
 Results are written to `output/example_N/`, N counting up from whatever is
 already there, so one run never overwrites another. Each example folder keeps a
@@ -1543,7 +1543,7 @@ OUTPUT_ROOT = os.path.join(HERE, &quot;output&quot;)
 def register_objective(evolver):
     &quot;&quot;&quot;Give `05` the objective its `[fitness] type = &quot;python&quot;` selects.
 
-    Uncomment every line of the block below, then run `05` again. Nothing else
+    Uncomment every line of the block below before running `05`. Nothing else
     in this file, and nothing in the configuration, needs to change.
 
     The objective counts how many nodes have exactly `TARGET_DEGREE`, and asks

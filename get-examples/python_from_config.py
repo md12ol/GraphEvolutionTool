@@ -25,8 +25,8 @@ Then run any of the configurations beside this file:
     python python_from_config.py 02_sda_steady_state.toml 42
 
 The optional second argument is the master seed. Run `01` through `04` as they
-are. `05` is the exercise: it stops with a message asking for an objective until
-you uncomment the one block in `register_objective` below.
+are. `05` is the exercise: uncomment the one block in `register_objective` below
+before you run it, or it stops with a message asking for an objective.
 
 Results are written to `output/example_N/`, N counting up from whatever is
 already there, so one run never overwrites another. Each example folder keeps a
@@ -64,7 +64,7 @@ OUTPUT_ROOT = os.path.join(HERE, "output")
 def register_objective(evolver):
     """Give `05` the objective its `[fitness] type = "python"` selects.
 
-    Uncomment every line of the block below, then run `05` again. Nothing else
+    Uncomment every line of the block below before running `05`. Nothing else
     in this file, and nothing in the configuration, needs to change.
 
     The objective counts how many nodes have exactly `TARGET_DEGREE`, and asks
