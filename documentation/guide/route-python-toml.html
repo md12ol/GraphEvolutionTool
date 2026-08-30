@@ -259,9 +259,12 @@ python analyze_output.py output/example_*</code></pre>
 
 <p>
   The network render colours nodes by degree and edges by multiplicity, so a hub and a doubled edge
-  are visible rather than inferred. Nodes with no edges at all are drawn in grey on a ring outside
-  the graph — a layout that solves for them puts them in the middle, which is the one place a
-  disconnected node should never appear.
+  are visible rather than inferred. Both codes carry a key, and the two are different shapes because
+  the numbers are: degree is open-ended and gets a colourbar, while a multiplicity capped at 5 or
+  fewer gets a legend naming each value outright. Nodes with no edges at all are drawn in grey on a
+  ring outside the graph — a layout that solves for them puts them in the middle, which is the one
+  place a disconnected node should never appear — and they get their own legend entry, because grey
+  is not a point on the degree scale.
 </p>
 
 <div class="callout">
