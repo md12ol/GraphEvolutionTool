@@ -13,13 +13,13 @@
 <p class="page-kicker">Advanced Extensions</p>
 <h1>Add a Crossover Operator</h1>
 <p class="lede">
-  Recombining two parents into two children. Six edits — and one of them is the step people miss:
+  Recombining two parents into two children. Six edits, and one of them is the step people miss:
   <code>[crossover]</code> is a <b>shared</b> section, so a new operator has to declare which
   genomes can honour it.
 </p>
 
 <div class="warn not-in-release">
-  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet — only
+  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet; only
   <a href="new-fitness.html">adding an objective</a> is ready to use today. This note is removed
   once the chain is finished and documented.
 </div>
@@ -28,7 +28,7 @@
 
 <p>
   <code>Crossover</code> is an enum in <code>get/src/evolver/common.rs</code>. By the time it is
-  called, the engine has already rolled <code>crossover_rate</code> and decided this pair breeds —
+  called, the engine has already rolled <code>crossover_rate</code> and decided this pair breeds,
   the operator only chooses <i>how</i>. It receives two genomes and an RNG, and modifies both in
   place; both children are kept.
 </p>
@@ -36,7 +36,7 @@
 <h2>What the User Ends Up Writing</h2>
 
 <p>
-  A GET run is configured by a <b>TOML document</b> — see the
+  A GET run is configured by a <b>TOML document</b>. See the
   <a href="route-python-toml.html">Python: TOML File</a> for its full shape, and
   <a href="route-python-objects.html">Python: Config Objects</a> for how to run one. Adding an operator called
   <code>MyCrossover</code> is what makes this valid:
@@ -69,7 +69,7 @@ some_param = 0.5</code></pre>
 
 <pre><code class="language-bash">git grep -n "ADD A CROSSOVER STEP" get/src config.example.toml    # 6 steps, 8 sites</code></pre>
 
-<p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
+<p>Each step is named at more than one site, because a marker points forward to the next; go by the step numbers rather than the number of lines the grep prints.</p>
 
 <div class="table-wrap">
 <table>
@@ -81,7 +81,7 @@ some_param = 0.5</code></pre>
     <tr><td>2</td><td><code>get/src/evolver/common.rs:52</code></td>
         <td>The arm in <code>Crossover::recombine</code> that performs it.</td></tr>
     <tr><td>3a</td><td><code>get/src/config.rs:131</code></td>
-        <td>The mirrored variant on <code>enum CrossoverConfig</code> — the one whose name becomes
+        <td>The mirrored variant on <code>enum CrossoverConfig</code>, the one whose name becomes
             <code>type = "my_crossover"</code>.</td></tr>
     <tr><td>3b</td><td><code>get/src/config.rs:692</code></td>
         <td><b>The one that gets forgotten.</b> One <code>(operator, genome)</code> pair per
@@ -97,12 +97,12 @@ some_param = 0.5</code></pre>
 </table>
 </div>
 
-<h2>Steps 1 and 2 — The Engine Side</h2>
+<h2>Steps 1 and 2: The Engine Side</h2>
 
-<pre><code class="language-rust">// step 1 — evolver/common.rs:27
+<pre><code class="language-rust">// step 1: evolver/common.rs:27
 MyCrossover { some_param: f64 },
 
-// step 2 — evolver/common.rs:52
+// step 2: evolver/common.rs:52
 Crossover::MyCrossover { some_param } =&gt; { /* recombine `first` and `second` */ }</code></pre>
 
 <div class="callout">
@@ -110,25 +110,25 @@ Crossover::MyCrossover { some_param } =&gt; { /* recombine `first` and `second` 
     <b>The shipped <code>TwoPoint</code> arm is not a template.</b> It is the trait call
     <code>first.crossover(second, rng)</code>, because two-point is what
     <code>Genome::crossover</code> already means for every representation. A second operator will
-    not be — and that is precisely the point at which <code>Genome</code> grows a second method.
+    not be, and that is precisely the point at which <code>Genome</code> grows a second method.
     <code>Genome::crossover</code> takes no context deliberately, so an operator needing
     per-representation behaviour adds a trait method rather than branching on the genome inside your
     arm.
   </p>
 </div>
 
-<h2>Step 3 — The Config Variant, and the Compatibility Pairs</h2>
+<h2>Step 3: The Config Variant, and the Compatibility Pairs</h2>
 
 <p>
   Two sites in one file, and the second is the one that gets forgotten.
   <code>[crossover]</code> names an operator for whichever genome is selected, and the two are
-  chosen independently — so nothing but this match can catch an illegal combination:
+  chosen independently, so nothing but this match can catch an illegal combination:
 </p>
 
-<pre><code class="language-rust">// step 3a — config.rs:131
+<pre><code class="language-rust">// step 3a: config.rs:131
 MyCrossover { some_param: f64 },
 
-// step 3b — config.rs:692
+// step 3b: config.rs:692
 (CrossoverConfig::MyCrossover { .. }, GenomeConfig::Sda(_)) =&gt; Ok(()),
 (CrossoverConfig::MyCrossover { .. }, GenomeConfig::EdgeEdit(_)) =&gt;
     Err(invalid("crossover", "edge-edit cannot honour my_crossover")),</code></pre>
@@ -136,15 +136,15 @@ MyCrossover { some_param: f64 },
 <div class="callout">
   <p>
     <b>You cannot forget 3b, by construction.</b> The match is written out in full rather than using
-    a catch-all — every pairing spelled out even though every pairing is currently legal — so adding
+    a catch-all: every pairing is spelled out even though every pairing is currently legal, so adding
     a variant <i>stops it compiling</i>. That forces whoever adds an operator to state which genomes
     can honour it, instead of a user discovering the answer part-way through a run.
   </p>
 </div>
 
-<h2>Step 4 — Dispatch</h2>
+<h2>Step 4: Dispatch</h2>
 
-<pre><code class="language-rust">// step 4 — dispatch.rs:640
+<pre><code class="language-rust">// step 4: dispatch.rs:640
 CrossoverConfig::MyCrossover { some_param } =&gt; {
     Crossover::MyCrossover { some_param: *some_param }
 }</code></pre>
@@ -153,7 +153,7 @@ CrossoverConfig::MyCrossover { some_param } =&gt; {
   Steps 3a and 4 are one change split across two files, the same shape the selection chain has.
 </p>
 
-<h2>Steps 5 and 6 — Python and the Example, Both Optional</h2>
+<h2>Steps 5 and 6: Python and the Example, Both Optional</h2>
 
 <p>
   Leaving step 5 out costs nothing elsewhere; the operator is then configurable from a TOML file but
@@ -164,7 +164,7 @@ CrossoverConfig::MyCrossover { some_param } =&gt; {
 <p>
   Step 6 is a commented-out <code>[crossover]</code> block in
   <code>config.example.toml:179</code>. <b>It is the step people skip</b>, and it costs nothing
-  mechanically — the example file is simply what a user copies from, so an operator missing from it
+  mechanically: the example file is simply what a user copies from, so an operator missing from it
   is one most people never find. The test suite parses and validates that file, so a block that does
   not parse fails the build rather than a user's afternoon.
 </p>
@@ -174,19 +174,19 @@ CrossoverConfig::MyCrossover { some_param } =&gt; {
 <p>
   Crossover is testable in isolation: build two known parents, recombine under a fixed seed, and
   assert the children are what the operator promises. The property worth pinning is whatever your
-  operator claims to preserve — two-point preserves everything outside the swapped band, on both
+  operator claims to preserve: two-point preserves everything outside the swapped band, on both
   sides.
 </p>
 
 <p>
   Then add the keys to <code>config.example.toml</code>, which the test suite parses and validates
-  — so a broken example fails the build.
+  so a broken example fails the build.
 </p>
 
 <h2>If You Wanted Mutation Instead</h2>
 
 <p>
-  Mutation is a separate chain and it <b>branches per genome</b> — see
+  Mutation is a separate chain and it <b>branches per genome</b>; see
   <a href="new-mutation.html">Add a Mutation Operator</a>. Grepping its markers without narrowing
   returns two interleaved chains, one marked <code>(for EdgeEdit)</code> and one
   <code>(for SDA)</code>.

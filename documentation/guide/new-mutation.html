@@ -13,13 +13,13 @@
 <p class="page-kicker">Advanced Extensions</p>
 <h1>Add a Mutation Operator</h1>
 <p class="lede">
-  Four edits — but this chain <b>exists twice</b>, once per genome, and the two halves share no
+  Four edits, but this chain <b>exists twice</b>, once per genome, and the two halves share no
   code. Find your half first; a step from the other one is a different enum in a different file and
   does nothing for your representation.
 </p>
 
 <div class="warn not-in-release">
-  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet — only
+  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet; only
   <a href="new-fitness.html">adding an objective</a> is ready to use today. This note is removed
   once the chain is finished and documented.
 </div>
@@ -27,8 +27,8 @@
 <div class="callout">
   <p>
     <b>Read this before you grep.</b> There are <b>four numbered steps for edge-edit and four for
-    SDA</b>, interleaved. The grep prints more lines than that — each step is also named where a
-    neighbouring marker points forward to it — so read the step numbers, not the line count. Every
+    SDA</b>, interleaved. The grep prints more lines than that, because each step is also named
+    where a neighbouring marker points forward to it, so read the step numbers, not the line count. Every
     marker names its half, so narrow the search to yours:
   </p>
 <pre><code class="language-bash">git grep -nE "ADD A MUTATION STEP . \(for EdgeEdit\)" get/src config.example.toml   # 4 steps, 7 sites
@@ -44,11 +44,11 @@ git grep -n "ADD A MUTATION STEP" get/src config.example.toml       # both halve
 <h2>What the User Ends Up Writing</h2>
 
 <p>
-  A GET run is configured by a <b>TOML document</b> — see the
+  A GET run is configured by a <b>TOML document</b>. See the
   <a href="route-python-toml.html">Python: TOML File</a> for its full shape, and
   <a href="route-python-objects.html">Python: Config Objects</a> for how to run one. Mutation is configured as
   an inline table <i>inside</i> the genome's own section, because the operator belongs to the
-  representation — SDA's goes under its <code>[genome]</code> the same way, alongside
+  representation; SDA's goes under its <code>[genome]</code> the same way, alongside
   <code>redraw_one</code>:
 </p>
 
@@ -75,14 +75,14 @@ mutation    = { type = "my_mutation", some_param = 0.5 }</code></pre>
 <div class="callout">
   <p>
     <b>Exactly one mutation per call.</b> The engine's <code>max_mutations</code> counts calls, not
-    changes — so a variant that applies several makes that setting meaningless for the
+    changes, so a variant that applies several makes that setting meaningless for the
     representation, and <b>nothing reports the disagreement</b>. The run completes, the numbers look
     plausible, and the mutation rate the user configured is not the one they got. This is the single
     most expensive thing to get wrong on this page.
   </p>
 </div>
 
-<h2 id="edge-edit">Edge-edit — The Four Steps</h2>
+<h2 id="edge-edit">Edge-edit: The Four Steps</h2>
 
 <div class="table-wrap">
 <table>
@@ -104,29 +104,29 @@ mutation    = { type = "my_mutation", some_param = 0.5 }</code></pre>
 </table>
 </div>
 
-<pre><code class="language-rust">// step 1 — genomes/genome.rs:108
+<pre><code class="language-rust">// step 1: genomes/genome.rs:108
 MyMutation { some_param: f64 },
 
-// step 2 — genomes/edge_edit.rs:235
+// step 2: genomes/edge_edit.rs:235
 EdgeEditMutation::MyMutation { some_param } =&gt; {
     // exactly one change to `self.genes`
 }
 
-// step 3a — config.rs:207
+// step 3a: config.rs:207
 MyMutation { some_param: f64 },
 
-// step 3b — dispatch.rs:653
+// step 3b: dispatch.rs:653
 EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
     EdgeEditMutation::MyMutation { some_param: *some_param }
 }</code></pre>
 
 <p>
-  The shipped variant is <code>RerollGene</code> — reroll one gene, its opcode drawn from the
+  The shipped variant is <code>RerollGene</code>: reroll one gene, its opcode drawn from the
   operation mix. That is what edge-edit did before the operator became selectable, which is why it
   is the default.
 </p>
 
-<h2 id="sda">SDA — The Four Steps</h2>
+<h2 id="sda">SDA: The Four Steps</h2>
 
 <div class="table-wrap">
 <table>
@@ -148,22 +148,22 @@ EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
 </table>
 </div>
 
-<pre><code class="language-rust">// step 1 — genomes/genome.rs:121
+<pre><code class="language-rust">// step 1: genomes/genome.rs:121
 MyMutation { some_param: f64 },
 
-// step 2 — genomes/sda.rs:405
+// step 2: genomes/sda.rs:405
 SdaMutation::MyMutation { some_param } =&gt; self.my_mutation(context, rng),
 
-// step 3a — config.rs:249
+// step 3a: config.rs:249
 MyMutation { some_param: f64 },
 
-// step 3b — dispatch.rs:667
+// step 3b: dispatch.rs:667
 SdaMutationConfig::MyMutation { some_param } =&gt; {
     SdaMutation::MyMutation { some_param: *some_param }
 }</code></pre>
 
 <p>
-  The shipped variant is <code>RedrawOne</code> — redraw one transition's target state, or that
+  The shipped variant is <code>RedrawOne</code>: redraw one transition's target state, or that
   transition's response, chosen by the two rates on <code>SdaContext</code>. As with edge-edit, it
   is what SDA did before the operator became selectable, and it is the default.
 </p>
@@ -180,7 +180,7 @@ SdaMutationConfig::MyMutation { some_param } =&gt; {
 
 <p>
   The two chains are deliberately independent. There is no shared enum to unify them, because what
-  counts as "one mutation" differs by representation — a gene for edge-edit, a transition for SDA —
+  counts as "one mutation" differs by representation (a gene for edge-edit, a transition for SDA),
   and a shared operator would have to branch on the genome to mean anything. If you want an operator
   available to both representations, you add it twice, once per chain, and the two arms will not
   look alike.
@@ -196,14 +196,14 @@ SdaMutationConfig::MyMutation { some_param } =&gt; {
 
 <p>
   Then add the keys to <code>config.example.toml</code>, which the test suite parses and validates
-  — so a broken example fails the build.
+  so a broken example fails the build.
 </p>
 
 <h2>If You Wanted Crossover Instead</h2>
 
 <p>
   Crossover is a single shared chain rather than one per genome, and it has a compatibility match
-  that mutation does not — see <a href="new-crossover.html">Add a Crossover Operator</a>.
+  that mutation does not; see <a href="new-crossover.html">Add a Crossover Operator</a>.
 </p>
 
 </main>
