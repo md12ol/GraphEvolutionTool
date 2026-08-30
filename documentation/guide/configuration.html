@@ -14,7 +14,7 @@
 <h1>Configuration Reference</h1>
 <p class="lede">
   Every key a GET configuration accepts: what it does, what else it can be, what rejects it. This is
-  the page to look something up in — the route pages show a whole document being written and run.
+  the page to look something up in. The route pages show a whole document being written and run.
 </p>
 
 <div class="note">
@@ -32,7 +32,7 @@
     <tr><td><code>population_size</code></td><td>integer</td><td>required</td>
         <td>Individuals in the population.</td></tr>
     <tr><td><code>network_size</code></td><td>integer</td><td>required</td>
-        <td>Nodes in every expressed graph. Fixed for the run — nothing adds or removes nodes.</td></tr>
+        <td>Nodes in every expressed graph. Fixed for the run; nothing adds or removes nodes.</td></tr>
     <tr><td><code>max_edge_multiplicity</code></td><td>integer</td><td><code>1</code></td>
         <td>Edge-weight cap. <code>1</code> is an unweighted simple graph; above 1 allows parallel
             edges. Must be 1–255. <b>Also sets the SDA alphabet</b>, which is derived as
@@ -40,7 +40,7 @@
     <tr><td><code>crossover_rate</code></td><td>float</td><td>required</td>
         <td>Probability a selected pair is recombined. Validated in <code>[0, 1]</code>.</td></tr>
     <tr><td><code>mutation_rate</code></td><td>float</td><td>required</td>
-        <td>Probability a child is mutated <i>at all</i> — not a per-gene rate. Validated in
+        <td>Probability a child is mutated <i>at all</i>, not a per-gene rate. Validated in
             <code>[0, 1]</code>.</td></tr>
     <tr><td><code>max_mutations</code></td><td>integer</td><td><code>1</code></td>
         <td>A mutating child takes a count drawn uniformly from <code>1..=max_mutations</code>. Must
@@ -63,7 +63,7 @@
         <td>Whole-population replacements to run.</td></tr>
     <tr><td><code>elite_count</code></td><td><code>1</code></td>
         <td>Best individuals carried forward untouched each generation. Must be
-            <b>less than</b> <code>population_size</code> — equal would mean nothing ever
+            <b>less than</b> <code>population_size</code>; equal would mean nothing ever
             changes.</td></tr>
     <tr><td rowspan="2"><code>"steady_state"</code></td>
         <td><code>num_mating_events</code></td><td>required</td>
@@ -80,7 +80,7 @@
 <div class="callout">
   <p>
     <b><code>replacement</code> lives inside <code>[evolution]</code> rather than in a section of its
-    own</b>, because it belongs to whichever strategy displaces individuals — the same way
+    own</b>, because it belongs to whichever strategy displaces individuals, the same way
     <code>elite_count</code> belongs to generational. Generational never asks who to overwrite.
   </p>
 </div>
@@ -96,11 +96,11 @@
 <table>
   <thead><tr><th><code>type</code></th><th>Key</th><th>What it does</th></tr></thead>
   <tbody>
-    <tr><td><code>"global"</code></td><td>—</td>
+    <tr><td><code>"global"</code></td><td>none</td>
         <td>Every individual is a candidate. Consumes no randomness.</td></tr>
     <tr><td><code>"random_subset"</code></td><td><code>size</code></td>
         <td><code>size</code> distinct individuals, drawn uniformly without replacement. At least 1
-            and at most <code>population_size</code> — and <b>at least 4 under steady-state</b>,
+            and at most <code>population_size</code>, and <b>at least 4 under steady-state</b>,
             which needs two parents and two distinct individuals for them to replace. Generational
             has no such floor.</td></tr>
   </tbody>
@@ -122,8 +122,8 @@
 <table>
   <thead><tr><th><code>type</code></th><th>Key</th><th>What it does</th></tr></thead>
   <tbody>
-    <tr><td><code>"best"</code></td><td>—</td>
-        <td>Takes the scope's fittest, in rank order. Consumes no randomness — the scope did the
+    <tr><td><code>"best"</code></td><td>none</td>
+        <td>Takes the scope's fittest, in rank order. Consumes no randomness; the scope did the
             drawing.</td></tr>
     <tr><td><code>"tournament"</code></td><td><code>tournament_size</code></td>
         <td>Draws <code>tournament_size</code> members of the scope <b>with</b> replacement and takes
@@ -136,7 +136,7 @@
 
 <p>
   Optional. Omitted means two-point, which is what every representation did before the operator
-  became selectable — so an existing configuration keeps its behaviour by leaving this out.
+  became selectable, so an existing configuration keeps its behaviour by leaving this out.
 </p>
 
 <div class="table-wrap">
@@ -151,7 +151,7 @@
 
 <p>
   Crossover is a <b>shared</b> section because both genomes' recombination is the same operation over
-  a linear genome. Mutation is not — see below.
+  a linear genome. Mutation is not; see below.
 </p>
 
 <h2><code>[genome]</code></h2>
@@ -190,7 +190,7 @@
 </p>
 
 <p>
-  They are weights, not probabilities — they are normalized, so they need not sum to anything. Each
+  They are weights, not probabilities: they are normalized, so they need not sum to anything. Each
   must be finite and non-negative, <b>at least one must be positive</b>, and <code>0.0</code>
   disables its operation outright. Omit the table entirely, or any field in it, and that operation
   weighs <code>1.0</code>. Like <code>[genome]</code> itself, this sub-table <b>rejects</b> a key it
@@ -233,7 +233,7 @@
   <p>
     <b>Mutation is per-genome; crossover is shared.</b> <code>mutation</code> sits inside each
     genome's own block rather than in a section of its own, because what counts as "one mutation"
-    differs entirely between a list of edit operations and an automaton — a shared enum would let a
+    differs entirely between a list of edit operations and an automaton, and a shared enum would let a
     configuration name an operator meaningless for the genome actually selected.
   </p>
 </div>
@@ -261,7 +261,7 @@
 </table>
 </div>
 
-<h3>The SIR block — the three <code>epi_*</code> objectives</h3>
+<h3>The SIR block: the three <code>epi_*</code> objectives</h3>
 
 <p>These keys sit directly under <code>[fitness]</code>, not in a sub-table.</p>
 
@@ -272,7 +272,7 @@
     <tr><td><code>infection_rate</code></td><td>required</td>
         <td>Per-contact transmission probability, in <code>[0, 1]</code>.</td></tr>
     <tr><td><code>num_epidemics</code></td><td>required</td>
-        <td>Epidemics averaged per evaluation. At least 1 — fitness is their mean.</td></tr>
+        <td>Epidemics averaged per evaluation. At least 1, since fitness is their mean.</td></tr>
     <tr><td><code>patient_zero</code></td><td>random each epidemic</td>
         <td>Fix the seed node instead. When set, it must be less than <code>network_size</code>.</td></tr>
     <tr><td><code>min_epidemic_length</code></td><td><code>3</code></td>
@@ -286,7 +286,7 @@
 <h3><code>epi_prof_match</code></h3>
 
 <p>
-  <code>target_profile</code> — required, a non-empty array of finite numbers. Comparison covers the
+  <code>target_profile</code> is required, a non-empty array of finite numbers. Comparison covers the
   target array's length: a shorter epidemic is padded with zeros, and a longer epidemic's tail is
   ignored. Nothing is prepended or rescaled. Supplying it under another objective is rejected.
 </p>
@@ -299,7 +299,7 @@
   <tbody>
     <tr><td><code>reference_folder</code></td><td>required</td>
         <td>Folder of reference graphs, one edge-list file each. <b>Not checked when the config is
-            parsed</b> — validation does no I/O, so a missing or empty folder is reported when the
+            parsed</b>: validation does no I/O, so a missing or empty folder is reported when the
             run starts.</td></tr>
     <tr><td><code>degree_bins</code> · <code>clustering_bins</code> · <code>spectral_bins</code></td>
         <td><code>50</code></td>
@@ -307,7 +307,7 @@
             reference graphs to fill them. Each bin count must be at least 1.</td></tr>
     <tr><td><code>degree_gamma</code> · <code>clustering_gamma</code> · <code>spectral_gamma</code></td>
         <td><code>1.0</code></td>
-        <td>RBF bandwidths. Must be finite and greater than zero — the kernel divides by them.</td></tr>
+        <td>RBF bandwidths. Must be finite and greater than zero, because the kernel divides by them.</td></tr>
     <tr><td><code>degree_weight</code> · <code>clustering_weight</code> · <code>spectral_weight</code></td>
         <td><code>1.0</code></td>
         <td>How much each family counts. Finite and non-negative; <b>they cannot all be zero</b>,
@@ -322,7 +322,7 @@
 <div class="warn">
   <b>Too large a gamma is the dangerous direction.</b> <code>exp(-gamma * d²)</code> collapses to
   zero for every candidate, the whole population scores about the same, and evolution stalls while
-  appearing to run normally. And a weight is only as live as the reference set makes it — rings and
+  appearing to run normally. And a weight is only as live as the reference set makes it: rings and
   paths have clustering coefficient 0 at every node, so a reference set drawn only from those leaves
   <code>clustering_weight</code> set and the family it weights inert, with nothing reporting it.
 </div>
@@ -341,7 +341,7 @@
     <tr><td>A base graph in <b>your own node numbering</b>, or one supplied
             <b>without a config file</b></td>
         <td><code>[genome] base_graph</code> covers the ordinary case, but it is 0-indexed and it
-            resolves against the config file — so a file numbered from 1, or a config assembled as
+            resolves against the config file, so a file numbered from 1, or a config assembled as
             objects in Python, still needs <code>set_base_graph_from_file</code> and its
             <code>min_node_index</code>. See
             <a href="route-python-objects.html">Python: Config Objects</a>.</td></tr>
@@ -363,7 +363,7 @@
 <div class="warn">
   <b><code>[fitness]</code> cannot reject typos, and this is structural rather than an oversight.</b>
   Its variants flatten the shared SIR block into themselves, and flattening consumes unrecognized
-  keys into the flattened field — so the check that rejects them cannot fire there. Two names are
+  keys into the flattened field, so the check that rejects them cannot fire there. Two names are
   caught explicitly, because both are mistakes a reader makes rather than typos:
   <code>seed</code>, which belongs to the run call, and <code>target_profile</code> under an
   objective that never reads one. Anything else misspelled under
@@ -382,8 +382,8 @@
 </p>
 
 <p>
-  Validation deliberately does not touch the filesystem. A path-valued setting—today only
-  <code>reference_folder</code>—is checked when the run starts; the folder must exist and contain at
+  Validation deliberately does not touch the filesystem. A path-valued setting, today only
+  <code>reference_folder</code>, is checked when the run starts; the folder must exist and contain at
   least one usable reference graph.
 </p>
 

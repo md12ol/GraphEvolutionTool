@@ -24,36 +24,36 @@
   <thead><tr><th>Add a…</th><th>Integration steps</th><th>Because</th></tr></thead>
   <tbody>
     <tr><td><b><a href="new-fitness.html">Objective</a></b></td>
-        <td>Seven steps, four required — but only <b>one dispatch arm</b>, which is what makes it the cheapest by a wide margin. In Python, no Rust at all.</td>
+        <td>Seven steps, four required, but only <b>one dispatch arm</b>, which is what makes it the cheapest by a wide margin. In Python, no Rust at all.</td>
         <td>The objective is erased to a trait object <i>before</i> dispatch, so it never enters
             the strategy × genome match.</td></tr>
     <tr><td><b><a href="new-genome.html">Genome</a></b></td>
-        <td>Seven steps, six required — one of them a dispatch arm.</td>
+        <td>Seven steps, six required, one of them a dispatch arm.</td>
         <td>The strategy match is generic over the genome, so evolvers are untouched.</td></tr>
     <tr><td><b><a href="new-evolver.html">Strategy</a></b></td>
-        <td>Seven steps, three required — one of them an arm in the strategy match.</td>
+        <td>Seven steps, three required, one of them an arm in the strategy match.</td>
         <td>The genome match is untouched, for the same reason in reverse.</td></tr>
     <tr><td><b><a href="new-selection.html">Selection Scheme</a></b></td>
         <td>Six steps, four required.</td>
         <td>Selection is already an enum for exactly this reason, and it answers only "who
             breeds", so no strategy or genome is touched.</td></tr>
     <tr><td><b><a href="new-crossover.html">Crossover Operator</a></b></td>
-        <td>Six steps, four required — one is a compatibility pair per genome.</td>
+        <td>Six steps, four required; one is a compatibility pair per genome.</td>
         <td><code>[crossover]</code> is a shared section, so the operator has to declare which
             representations can honour it. The match is exhaustive on purpose: adding a variant
             stops it compiling until you do.</td></tr>
     <tr><td><b><a href="new-mutation.html">Mutation Operator</a></b></td>
-        <td>Four steps, three required, <b>per genome</b> — the chain exists twice.</td>
+        <td>Four steps, three required, <b>per genome</b>: the chain exists twice.</td>
         <td>What counts as "one mutation" differs by representation, so there is no shared enum.
             Adding one for edge-edit does not touch SDA.</td></tr>
     <tr><td><b><a href="new-scope.html">Scope</a></b></td>
         <td>Six steps, four required.</td>
-        <td>Who is eligible for one breeding event. Its parameters are its own — that separation is
+        <td>Who is eligible for one breeding event. Its parameters are its own, and that separation is
             why any scheme now pairs with any strategy.</td></tr>
     <tr><td><b><a href="new-replacement.html">Replacement Policy</a></b></td>
-        <td>Three steps — the shortest chain here.</td>
+        <td>Three steps, the shortest chain here.</td>
         <td>Who gets overwritten, and steady-state's alone: generational rebuilds its population and
-            never asks. A policy may draw — <code>random</code> does — so it shares the run's seeded
+            never asks. A policy may draw (<code>random</code> does), so it shares the run's seeded
             stream.</td></tr>
   </tbody>
 </table>
@@ -73,7 +73,7 @@
 
     <rect x="270" y="24" width="220" height="60" rx="8" class="d-fill-good"/>
     <rect x="270" y="24" width="220" height="60" rx="8" class="d-stroke"/>
-    <text x="380" y="47" class="d-text" text-anchor="middle" font-weight="600">step 1 — erase the objective</text>
+    <text x="380" y="47" class="d-text" text-anchor="middle" font-weight="600">step 1: erase the objective</text>
     <text x="380" y="67" class="d-text-mono" text-anchor="middle" font-size="11">Box&lt;dyn Fitness&gt;</text>
     <text x="380" y="100" class="d-text-sm" text-anchor="middle">one arm per objective · touches nothing else</text>
 
@@ -81,10 +81,10 @@
 
     <rect x="270" y="130" width="220" height="60" rx="8" class="d-fill-acc"/>
     <rect x="270" y="130" width="220" height="60" rx="8" class="d-stroke"/>
-    <text x="380" y="153" class="d-text" text-anchor="middle" font-weight="600">step 2 — strategy × genome</text>
+    <text x="380" y="153" class="d-text" text-anchor="middle" font-weight="600">step 2: strategy × genome</text>
     <text x="380" y="173" class="d-text-sm" text-anchor="middle">2 genome arms + 2 strategy arms</text>
     <text x="380" y="206" class="d-text-sm" text-anchor="middle">a new genome or strategy adds one arm to one of the two</text>
-    <text x="380" y="226" class="d-text-sm" text-anchor="middle">— not one per combination, because the second match is generic</text>
+    <text x="380" y="226" class="d-text-sm" text-anchor="middle">not one per combination, because the second match is generic</text>
 
     <path d="M380 88 L380 126" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#ax)" style="color:var(--accent)"/>
 
@@ -96,7 +96,7 @@
   </g>
 </svg>
 <figcaption>Erasing the objective first is what collapses dispatch from strategy × genome ×
-objective down to strategy × genome — and it is why an objective is so much cheaper to add than
+objective down to strategy × genome, and it is why an objective is so much cheaper to add than
 anything else.</figcaption>
 </figure>
 
@@ -110,7 +110,7 @@ anything else.</figcaption>
 </p>
 
 <p>
-  <b>Fitness has none of those problems</b> — no generic methods, no <code>Self</code> in argument
+  <b>Fitness has none of those problems</b>: no generic methods, no <code>Self</code> in argument
   position, and it is thread-safe through its supertrait. So the objective is boxed before the
   evolver is built, and a new objective never touches dispatch at all.
 </p>
@@ -120,11 +120,11 @@ anything else.</figcaption>
   are working in this area rather than just adding an arm:
   <ul>
     <li>A forwarding implementation of <code>Fitness</code> for the boxed trait object, which must
-        live beside the trait — the orphan rule rejects it anywhere else.</li>
+        live beside the trait, because the orphan rule rejects it anywhere else.</li>
     <li><b>Every method forwarded, including the defaulted ones.</b> Omitting either compiles and
         is wrong: dropping <code>direction</code> makes a maximizing objective run backwards, and
         dropping <code>evaluate_batch</code> makes a Python objective fall back to a per-individual
-        fan-out — which is the exact thing the batched design exists to prevent.</li>
+        fan-out, which is the exact thing the batched design exists to prevent.</li>
     <li><b>A factory, not a value.</b> Replicates need per-run objective instances, so the erasing
         match is re-run once per replicate. One shared box handed to <code>n</code> concurrent runs
         is the shared-counter bug that destroys reproducibility under load.</li>
@@ -157,8 +157,8 @@ anything else.</figcaption>
 </p>
 
 <div class="note">
-  <b>A user-supplied objective deliberately never gets a config variant.</b> The alternative — a
-  string-keyed registry that config could name — would move validation out of the parser, which is
+  <b>A user-supplied objective deliberately never gets a config variant.</b> The alternative, a
+  string-keyed registry that config could name, would move validation out of the parser, which is
   exactly the failure the single-validator design exists to prevent. Keeping user objectives out of
   the schema means nothing user-supplied is ever deserialized, so there is nothing new to validate.
 </div>
@@ -179,7 +179,7 @@ anything else.</figcaption>
 
 <p>
   Assembling a population and contexts by hand is genuinely awkward today, and that is a real cost
-  of the library route — it may deserve a builder later. It is not a reason to route user
+  of the library route, and it may deserve a builder later. It is not a reason to route user
   objectives through the config enum instead.
 </p>
 
@@ -189,7 +189,7 @@ anything else.</figcaption>
   <b>Score through <code>express_and_score</code>.</b> The engine never calls
   <code>Fitness::evaluate</code> or <code>evaluate_batch</code> directly, anywhere. That single
   function is both the orientation point and the <code>NaN</code> gate, and a direct call bypasses
-  both — producing values that compare backwards under a maximizing objective, and letting a
+  both, producing values that compare backwards under a maximizing objective, and letting a
   <code>NaN</code> through that will take over the population. Neither failure announces itself.
   Any new evolution strategy scores its population through this function or it is wrong. Detail on
   <a href="fitness.html#gate">Fitness &amp; Output</a>.
@@ -203,7 +203,7 @@ anything else.</figcaption>
   shipped ones do not have can compile clean and still be incomplete.
   <p>
     The common case is a <b>parameter</b>. <code>Scope::RandomSubset { size }</code> needs
-    <code>size</code> checked at load, so <code>Config::validate_scope</code> has an arm for it — a
+    <code>size</code> checked at load, so <code>Config::validate_scope</code> has an arm for it: a
     scope with no parameters would never have sent you there. If your variant carries a number, look
     for the <code>Config::validate_*</code> function covering its section and add the constraint,
     whether or not a marker mentions one.
@@ -214,7 +214,7 @@ anything else.</figcaption>
 
 <ul>
   <li><b>Add the key to <code>config.example.toml</code>.</b> The shipped example is parsed
-      <i>and</i> validated by the test suite, so it can never silently rot — and a broken example
+      <i>and</i> validated by the test suite, so it can never silently rot, and a broken example
       fails the suite rather than a user's afternoon.</li>
   <li><b>Mirror any new config field on the Python side</b>, and add its attribute path to the
       error-mapping table, or the test that scrapes the validator for field names will fail.</li>
