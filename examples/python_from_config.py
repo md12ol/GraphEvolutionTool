@@ -14,10 +14,10 @@ Its counterpart, `python_inline.py`, writes the same parameters into the
 program itself. Between them they are the two Python routes; `config_builder.py`
 beside them builds configurations without running anything.
 
-**A base graph is not a config key**, on this route or any other — it is data,
-not configuration. Supply one with `set_base_graph_from_file` as shown below,
-and note that the numbering you declare there is the numbering results come
-back in.
+`[genome] base_graph` in the TOML file covers the ordinary case: a 0-indexed
+file, resolved beside the config. `BASE_GRAPH` below is the other case —
+setting one from Python, which is what a file numbered from anything but 0
+still needs, since `[genome] base_graph` has no key to say so.
 """
 
 import os
@@ -26,7 +26,7 @@ import warnings
 
 import get
 
-from _output_layout import run_output_dir, utc_stamp
+from _output_layout import experiment_output_dir, run_output_dir, utc_stamp
 
 # --- What you would change ---------------------------------------------------
 
@@ -99,6 +99,11 @@ def main():
         result.save_logs(f"{directory}/run_log.csv")
         result.save_results(f"{directory}/best_individual.txt")
         print(f"wrote {directory}")
+
+    # The config document this run was parsed from, written once for the whole
+    # invocation into the folder its replicates share — not once per replicate,
+    # since every one of them was produced by the same document.
+    result.save_config(experiment_output_dir(OUTPUT_DIR, stamp, seed))
 
 
 if __name__ == "__main__":

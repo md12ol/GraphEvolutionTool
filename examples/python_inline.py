@@ -23,7 +23,7 @@ can be read side by side.
 
 import get
 
-from _output_layout import run_output_dir, utc_stamp
+from _output_layout import experiment_output_dir, run_output_dir, utc_stamp
 
 # --- What you would change ---------------------------------------------------
 
@@ -104,14 +104,19 @@ def main():
 
         directory = run_output_dir(OUTPUT_DIR, stamp, SEED, run_index, N_RUNS)
 
-        # Three files: the convergence log, the winner as a loadable edge list,
-        # and the config document this run was built from. The last is what
-        # makes the run reproducible from a directory alone, which matters more
-        # on this route than on the other one — here the parameters live in a
-        # program someone will edit.
+        # The convergence log and the winner as a loadable edge list — one
+        # pair per replicate.
         result.save_logs(f"{directory}/run_log.csv")
         result.save_results(f"{directory}/best_individual.txt")
         print(f"wrote {directory}")
+
+    # The config document this run was built from, written once for the whole
+    # invocation rather than once per replicate — every replicate shares it.
+    # This is what makes the run reproducible from a directory alone, which
+    # matters more on this route than on the other one: here the parameters
+    # live in a program someone will edit, not a file that travels with the
+    # results on its own.
+    result.save_config(experiment_output_dir(OUTPUT_DIR, stamp, SEED))
 
 
 if __name__ == "__main__":

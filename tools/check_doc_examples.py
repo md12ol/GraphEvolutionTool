@@ -115,7 +115,7 @@ def check_python():
         open(path, "w", encoding="utf-8").write(probe)
         revealed = subprocess.run(
             [sys.executable, "-m", "mypy", "--ignore-missing-imports",
-             "--no-error-summary", path],
+             "--cache-dir", os.path.join(work, ".mypy_cache"), "--no-error-summary", path],
             capture_output=True, text=True).stdout
     if "Any" in revealed or "GraphEvolver" not in revealed:
         print("python examples: skipped, mypy cannot resolve `get` "
@@ -148,7 +148,7 @@ def check_python():
             checked += len(found)
             result = subprocess.run(
                 [sys.executable, "-m", "mypy", "--ignore-missing-imports",
-                 "--no-error-summary", path],
+                 "--cache-dir", os.path.join(work, ".mypy_cache"), "--no-error-summary", path],
                 capture_output=True, text=True)
             for problem in result.stdout.splitlines():
                 # A fragment continuing an earlier block, or eliding a call's
@@ -197,16 +197,44 @@ def check_toml():
             document = body if "population_size" in body else splice(body)
             path = os.path.join(work, "config.toml")
             open(path, "w", encoding="utf-8").write(document)
-            result = subprocess.run([binary, path, "7"], capture_output=True, text=True)
+            # `--out work`, not the bare tempdir: without it `get-run` still
+            # makes its own `<timestamp>-<seed>/` folder, and it makes it in
+            # `os.chdir(REPO)`'s cwd — the repository root — leaving one
+            # untracked directory behind per block checked.
+            result = subprocess.run([binary, path, "7", "--out", work],
+                                    capture_output=True, text=True)
             checked += 1
             combined = result.stdout + result.stderr
-            if "failed to load config" in combined or "could not parse" in combined:
-                bad += 1
-                # `get-run` echoes the path it was given before it fails, so
-                # the first line mentioning "config" is the echo, not the error.
-                message = next((l for l in combined.splitlines()
-                                if "failed to load config" in l or "could not parse" in l), "")
-                print(f"  {page}:{line}: {message.strip()}")
+
+            if result.returncode == 0:
+                continue
+
+            # A `run failed:` past this point means the document parsed and
+            # validated — this function's actual job — and only then hit a
+            # limit of the harness rather than of the block. Two are expected
+            # and not a doc defect: `type = "python"` correctly refuses to run
+            # without a registered callable, which the page itself explains;
+            # and a spliced `base_graph` fragment names a file this harness
+            # never had to copy alongside it.
+            expected_runtime_stop = (
+                "no fitness function has been registered" in combined
+                or "could not read" in combined and "base_graph" in body)
+            if "run failed:" in combined and expected_runtime_stop:
+                continue
+
+            bad += 1
+            # `get-run` echoes the path it was given before a parser failure,
+            # so the first line naming the failure is the error, not the echo.
+            # Anything unrecognised — a crash, a missing library, exit 127
+            # with no output at all — falls back to the last non-empty line,
+            # so a green result never hides behind a message shape this
+            # function does not know about.
+            message = next((l for l in combined.splitlines()
+                            if "failed to load config" in l or "could not parse" in l), None)
+            if message is None:
+                tail = [l for l in combined.splitlines() if l.strip()]
+                message = tail[-1] if tail else f"exit code {result.returncode}, no output"
+            print(f"  {page}:{line}: {message.strip()}")
     print(f"{checked} toml blocks loaded, {bad} rejected; "
           f"{illustrative} extension examples skipped")
     return bad

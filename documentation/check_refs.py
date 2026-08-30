@@ -158,8 +158,13 @@ def structure():
     # them. site.js reads `textContent`, so entities are decoded, not spelled
     # out — `&amp;` becomes `&` and is then stripped, never the word "and".
     def slug(text):
+        # `re.ASCII`: `site.js`'s `slugify` uses JavaScript's `\w`, which is
+        # ASCII-only, while Python's is Unicode-aware by default. Left
+        # unmatched, a non-ASCII heading would slug differently here than in
+        # the browser, and this check would validate an anchor nobody's page
+        # actually creates.
         text = html.unescape(re.sub(r"<[^>]+>", "", text))
-        return re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", text.lower()).strip())
+        return re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", text.lower(), flags=re.ASCII).strip())
 
     ids = {}
     for page in pages:
@@ -443,8 +448,13 @@ def heading_ids():
     rule below has to match `structure()`'s, which matches `site.js`.
     """
     def slug(text):
+        # `re.ASCII`: `site.js`'s `slugify` uses JavaScript's `\w`, which is
+        # ASCII-only, while Python's is Unicode-aware by default. Left
+        # unmatched, a non-ASCII heading would slug differently here than in
+        # the browser, and this check would validate an anchor nobody's page
+        # actually creates.
         text = html.unescape(re.sub(r"<[^>]+>", "", text))
-        return re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", text.lower()).strip())
+        return re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", text.lower(), flags=re.ASCII).strip())
 
     duplicated = 0
     for page in sorted(glob.glob(f"{SITE}/**/*.html", recursive=True)):

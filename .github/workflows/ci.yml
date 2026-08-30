@@ -129,10 +129,21 @@ jobs:
       # TOML blocks fed to the real loader. After `cargo test` because that is
       # what builds the `get-run` the TOML half needs — placed earlier it would
       # skip that half and report a green it had not earned.
-      - name: documentation examples run
+      # `cargo test` above does not produce an importable module: it builds
+      # pyo3 in its default configuration, not `extension-module`, which is
+      # the opposite of what `maturin develop` needs (see
+      # `.claude/reference/pyo3-maturin.md`). Without this the Python half of
+      # the next step could not resolve `get` and would report itself skipped
+      # rather than fail — which is exactly the silent gap PR #186 review
+      # comment #3 found: the step existed, but nothing in CI ever gave it a
+      # `get` to check against.
+      - name: install get for the documentation examples to import
         run: |
-          python3 -m pip install --quiet mypy
-          python3 tools/check_doc_examples.py
+          python3 -m pip install --quiet maturin mypy
+          maturin develop --release -m get/Cargo.toml
+
+      - name: documentation examples run
+        run: python3 tools/check_doc_examples.py
 
       # The examples are the only proof that the Rust-library route reaches
       # what it promises. Narrowing something only an external caller needs
