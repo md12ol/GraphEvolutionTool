@@ -7,22 +7,20 @@ On Linux or macOS:
     source .venv/bin/activate
     pip install graph-evolution-tool
 
-On Windows, in PowerShell. Nothing is activated: a stock machine refuses to run
-`Activate.ps1`, so every command names the environment's own interpreter, and
-that is the spelling used throughout the rest of this file:
+On Windows, in PowerShell, the same three lines with two changes: use `py` in
+place of `python3`, **skip the `activate` line entirely** — a stock machine
+refuses to run it — and write `.venv\Scripts\python.exe` wherever any command
+below says `python`. `pip` becomes `.venv\Scripts\python.exe -m pip`.
 
     py -m venv .venv
     .venv\Scripts\python.exe -m pip install graph-evolution-tool
+
+That substitution is the whole Windows route; nothing else in this file differs.
 
 Then run any of the configurations beside this file:
 
     python python_from_config.py 01_edge_edit_generational.toml
     python python_from_config.py 02_sda_steady_state.toml 42
-
-or, on Windows:
-
-    .venv\Scripts\python.exe python_from_config.py 01_edge_edit_generational.toml
-    .venv\Scripts\python.exe python_from_config.py 02_sda_steady_state.toml 42
 
 The optional second argument is the master seed. Run `01` through `04` as they
 are. `05` is the exercise: uncomment the one block in `register_objective` below

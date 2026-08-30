@@ -29,13 +29,21 @@ parts of the result. No graph theory or evolutionary-computing background is req
   <li>A supported 64-bit Linux, macOS, or Windows platform</li>
 </ul>
 
+<div class="note">
+  <b>On Windows, in PowerShell:</b> use <code>py</code> in place of <code>python3</code>,
+  <b>skip the <code>activate</code> line entirely</b> — a stock machine refuses to run it — and
+  write <code>.venv\Scripts\python.exe</code> wherever a command on this page says
+  <code>python</code> or <code>python3</code>. <code>pip</code> becomes
+  <code>.venv\Scripts\python.exe -m pip</code>. That substitution is the whole Windows route;
+  nothing else on this page differs. If you would rather have an activated shell, see
+  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">PowerShell refuses to run
+  <code>Activate.ps1</code></a>.
+</div>
+
 <p>You can confirm the tools are visible with:</p>
 
 <pre><code class="language-bash">python3 --version
 python3 -m pip --version</code></pre>
-
-<pre><code class="language-powershell">py --version
-py -m pip --version</code></pre>
 
 <h2>1. Install the Python Package</h2>
 
@@ -45,22 +53,7 @@ python -m pip install --upgrade pip
 python -m pip install graph-evolution-tool
 python -c "import get; print('GET imported')"</code></pre>
 
-<div class="note">
-  <b>On Windows,</b> create the environment with <code>py -m venv .venv</code>, then skip activation
-  entirely and call the environment's own interpreter — this works on a stock machine, where
-  PowerShell refuses to run <code>Activate.ps1</code> at all:
-  <pre><code class="language-powershell">py -m venv .venv
-.venv\Scripts\python.exe -m pip install --upgrade pip
-.venv\Scripts\python.exe -m pip install graph-evolution-tool
-.venv\Scripts\python.exe -c "import get; print('GET imported')"</code></pre>
-  If you would rather have an activated shell, allow local scripts once — no administrator needed,
-  and downloaded scripts still have to be signed:
-  <pre><code class="language-powershell">Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-.venv\Scripts\Activate.ps1</code></pre>
-  <code>activate.bat</code> is not a shortcut past this: PowerShell runs it in a separate
-  <code>cmd.exe</code> that exits and takes the activation with it. It works from <code>cmd</code>,
-  not from PowerShell.
-</div>
+
 
 <p>
   The project is named <code>graph-evolution-tool</code>, but Python imports it as <code>get</code>.
@@ -101,8 +94,6 @@ print("genome:", result.best_genome_repr)
 print("history rows:", len(result.history))</code></pre>
 
 <pre><code class="language-bash">python first_run.py</code></pre>
-
-<pre><code class="language-powershell">.venv\Scripts\python.exe first_run.py</code></pre>
 
 <p>
   The exact result is deterministic for this version and seed. You should see one score, an edge
