@@ -1624,11 +1624,23 @@ On Linux or macOS:
     source .venv/bin/activate
     pip install graph-evolution-tool
 
-On Windows, in PowerShell:
+On Windows, in PowerShell. A stock Windows install blocks `Activate.ps1`, so this
+uses the venv&#x27;s interpreter directly and never activates anything:
 
     py -m venv .venv
+    .venv\Scripts\python.exe -m pip install graph-evolution-tool
+
+and run the configurations below with `.venv\Scripts\python.exe` in place of
+`python`. To get an activated shell instead, allow local scripts once — this
+needs no administrator, and `RemoteSigned` still requires a signature on
+anything downloaded:
+
+    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
     .venv\Scripts\Activate.ps1
-    pip install graph-evolution-tool
+
+`.venv\Scripts\activate.bat` is not a way around the policy here: PowerShell runs
+a batch file in a separate `cmd.exe`, which exits and takes the activation with
+it. It works from `cmd`, not from PowerShell.
 
 Working from a source checkout instead of the published package? Replace that
 last line with the following, run from the repository root:

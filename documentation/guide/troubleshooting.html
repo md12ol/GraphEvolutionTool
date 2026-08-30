@@ -27,6 +27,43 @@ check, and the next action.</p>
   unsupported platform must use a source checkout because PyPI currently has no source archive.
 </p>
 
+<h3>PowerShell refuses to run <code>Activate.ps1</code></h3>
+
+<pre><code class="language-text">.venv\Scripts\Activate.ps1 : File ...\.venv\Scripts\Activate.ps1 cannot be loaded
+because running scripts is disabled on this system.</code></pre>
+
+<p>
+  Nothing is wrong with the environment. A stock Windows install sets the PowerShell execution
+  policy to <code>Restricted</code> in every scope, which blocks every <code>.ps1</code> file
+  including the one <code>venv</code> just generated. It is the default, not something you changed,
+  so it affects essentially every Windows user on their first run.
+</p>
+
+<p><b>The shortest way past it is not to activate at all.</b> Call the environment's interpreter
+directly and every command behaves the same:</p>
+
+<pre><code class="language-powershell">py -m venv .venv
+.venv\Scripts\python.exe -m pip install graph-evolution-tool
+.venv\Scripts\python.exe -c "import get; print('GET imported')"</code></pre>
+
+<p>
+  If you want an activated shell — a shorter prompt line, <code>python</code> without the path —
+  allow local scripts once. <code>CurrentUser</code> scope needs no administrator, and
+  <code>RemoteSigned</code> still requires a signature on anything downloaded, so it is the
+  conventional developer setting rather than turning the check off:
+</p>
+
+<pre><code class="language-powershell">Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+.venv\Scripts\Activate.ps1</code></pre>
+
+<div class="note">
+  <b><code>activate.bat</code> is not a way around this.</b> It is true that <code>.bat</code> files
+  are not governed by the execution policy, but PowerShell runs a batch file in a separate
+  <code>cmd.exe</code> process — which exits and takes the environment changes with it, leaving the
+  venv unactivated and no error to say so. It activates correctly from <code>cmd</code>, and only
+  from <code>cmd</code>.
+</div>
+
 <h3><code>ModuleNotFoundError: No module named 'get'</code></h3>
 
 <ol>
@@ -44,7 +81,14 @@ source .venv/bin/activate
 python -m pip install maturin
 maturin develop --release</code></pre>
 
-<p>On Windows, activate with <code>.venv\Scripts\activate</code>.</p>
+<p>
+  On Windows the equivalent is <code>py -m venv .venv</code> followed by
+  <code>.venv\Scripts\python.exe -m pip install maturin</code> — calling the interpreter directly
+  rather than activating, because a stock machine blocks <code>Activate.ps1</code>. See
+  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">below</a> if you want an
+  activated shell instead. Note <code>maturin develop</code> needs a real virtual environment: it
+  will not install into a bare system interpreter, however the <code>PATH</code> is arranged.
+</p>
 
 <h3>The Rust build fails before compiling GET</h3>
 

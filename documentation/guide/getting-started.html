@@ -43,8 +43,20 @@ python -m pip install graph-evolution-tool
 python -c "import get; print('GET imported')"</code></pre>
 
 <div class="note">
-  <b>Windows activation:</b> after creating the environment, use
-  <code>.venv\Scripts\activate</code>. The remaining commands are the same.
+  <b>On Windows,</b> create the environment with <code>py -m venv .venv</code>, then skip activation
+  entirely and call the environment's own interpreter — this works on a stock machine, where
+  PowerShell refuses to run <code>Activate.ps1</code> at all:
+  <pre><code class="language-powershell">py -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install graph-evolution-tool
+.venv\Scripts\python.exe -c "import get; print('GET imported')"</code></pre>
+  If you would rather have an activated shell, allow local scripts once — no administrator needed,
+  and downloaded scripts still have to be signed:
+  <pre><code class="language-powershell">Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+.venv\Scripts\Activate.ps1</code></pre>
+  <code>activate.bat</code> is not a shortcut past this: PowerShell runs it in a separate
+  <code>cmd.exe</code> that exits and takes the activation with it. It works from <code>cmd</code>,
+  not from PowerShell.
 </div>
 
 <p>

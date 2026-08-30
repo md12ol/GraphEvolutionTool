@@ -79,6 +79,15 @@ python -m pip install graph-evolution-tool
 python -c "import get; print(get.__name__)"</code></pre>
 
 <div class="note">
+  <b>On Windows,</b> use <code>py -m venv .venv</code> and call the environment's interpreter
+  directly — <code>.venv\Scripts\python.exe</code> wherever the block says <code>python</code>. A
+  stock machine blocks <code>Activate.ps1</code>, so this is the path that works without changing
+  anything; see
+  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">the troubleshooting note</a>
+  if you want an activated shell instead.
+</div>
+
+<div class="note">
   <b>Pin recorded work.</b> Use <code>graph-evolution-tool==0.9.0a1</code> when an experiment must
   resolve the same package later.
   A Rust toolchain is needed only when building a development checkout from source.
