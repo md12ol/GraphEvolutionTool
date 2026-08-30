@@ -7,45 +7,36 @@ On Linux or macOS:
     source .venv/bin/activate
     pip install graph-evolution-tool
 
-On Windows, in PowerShell. A stock Windows install blocks `Activate.ps1`, so this
-uses the venv's interpreter directly and never activates anything:
+On Windows, in PowerShell. Nothing is activated: a stock machine refuses to run
+`Activate.ps1`, so every command names the environment's own interpreter, and
+that is the spelling used throughout the rest of this file:
 
     py -m venv .venv
     .venv\Scripts\python.exe -m pip install graph-evolution-tool
 
-and run the configurations below with `.venv\Scripts\python.exe` in place of
-`python`. To get an activated shell instead, allow local scripts once — this
-needs no administrator, and `RemoteSigned` still requires a signature on
-anything downloaded:
-
-    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-    .venv\Scripts\Activate.ps1
-
-`.venv\Scripts\activate.bat` is not a way around the policy here: PowerShell runs
-a batch file in a separate `cmd.exe`, which exits and takes the activation with
-it. It works from `cmd`, not from PowerShell.
-
-Working from a source checkout instead of the published package? Replace that
-last line with the following, run from the repository root:
+Working from a source checkout instead of the published package? Replace the
+install line above with the following, run from the repository root:
 
     pip install maturin
     maturin develop --release -m get/Cargo.toml
 
-On Windows this is the one step the un-activated route above cannot do:
-`maturin` refuses to run unless it can see an activated environment, and it
-reads the `VIRTUAL_ENV` variable rather than the interpreter you invoke it with.
-Set it yourself and no execution-policy change is needed:
+or, on Windows — `maturin` is the one command the line above cannot cover,
+because it reads the `VIRTUAL_ENV` variable rather than the interpreter it was
+started with:
 
     .venv\Scripts\python.exe -m pip install maturin
     $env:VIRTUAL_ENV = "$PWD\.venv"
     .venv\Scripts\maturin.exe develop --release -m get/Cargo.toml
 
-The variable lasts only for that PowerShell session.
-
 Then run any of the configurations beside this file:
 
     python python_from_config.py 01_edge_edit_generational.toml
     python python_from_config.py 02_sda_steady_state.toml 42
+
+or, on Windows:
+
+    .venv\Scripts\python.exe python_from_config.py 01_edge_edit_generational.toml
+    .venv\Scripts\python.exe python_from_config.py 02_sda_steady_state.toml 42
 
 The optional second argument is the master seed. Run `01` through `04` as they
 are. `05` is the exercise: uncomment the one block in `register_objective` below
