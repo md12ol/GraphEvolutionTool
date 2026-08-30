@@ -15,16 +15,15 @@ struct Args {
 
 const USAGE: &str = "usage: get-run <config.toml> [seed] [--runs N] [--out DIR]
 
-Writes run_log.csv and best_individual.txt into the working directory,
-or into DIR/<timestamp>-<seed>/ with --out, where each replicate of a multi-run
-invocation gets its own run_<index>/ sub-directory.
+Writes run_log.csv, best_individual.txt and config.toml into a
+<timestamp>-<seed>/ folder, made in the working directory or under DIR with
+--out. Each replicate of a multi-run invocation gets its own run_<n>/ inside it.
 
   seed        master seed; random if omitted. Replicate `i` is reproduced by
               re-running with the same master seed and reading run_<i>.
-  --runs N    number of replicates from that master seed (default 1). More
-              than one requires --out, which is what keeps them apart.
-  --out DIR   write into DIR/<timestamp>-<seed>/ instead of the working
-              directory, so nothing is overwritten between invocations.";
+  --runs N    number of replicates from that master seed (default 1).
+  --out DIR   make the timestamped folder under DIR instead of here. Either way
+              nothing is overwritten between invocations.";
 
 /// Parse the command line, or say what was wrong with it.
 fn parse_args(argv: &[String]) -> Result<Args, String> {
@@ -62,13 +61,6 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
 
     if positional.is_empty() || positional.len() > 2 {
         return Err("expected a config file and an optional seed".to_string());
-    }
-
-    if n_runs > 1 && out_dir.is_none() {
-        return Err(format!(
-            "--runs {n_runs} needs --out DIR; without it every replicate would \
-             overwrite the last in the working directory"
-        ));
     }
 
     let seed = match positional.get(1) {
@@ -204,13 +196,15 @@ mod tests {
     }
 
     #[test]
-    fn several_replicates_without_out_is_rejected() {
-        // `unwrap_err` would need `Args: Debug`; matching keeps the test's
-        // needs out of the type the binary actually uses.
-        match parse_args(&args(&["c.toml", "7", "--runs", "3"])) {
-            Ok(_) => panic!("--runs 3 without --out should be rejected"),
-            Err(err) => assert!(err.contains("--out"), "error should name --out: {err}"),
-        }
+    fn several_replicates_need_no_output_directory() {
+        // Rejected until 2026-08-30, because every replicate would have landed
+        // on the last in the working directory. The timestamped folder is now
+        // made with or without `--out`, so there is nothing left to collide and
+        // the guard that said so has gone.
+        let parsed = parse_args(&args(&["c.toml", "7", "--runs", "3"]))
+            .expect("--runs without --out is accepted");
+        assert_eq!(parsed.n_runs, 3);
+        assert_eq!(parsed.out_dir, None);
     }
 
     #[test]

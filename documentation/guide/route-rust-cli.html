@@ -86,8 +86,8 @@ cargo build --release -p graph-evolution-tool --features cli --bin get-run
   <tbody>
     <tr><td><code>&lt;config.toml&gt;</code></td><td>Required. The run's configuration.</td></tr>
     <tr><td><code>[seed]</code></td><td>Master seed. Random if omitted.</td></tr>
-    <tr><td><code>--runs N</code></td><td>Replicates from that master seed. Above 1 requires <code>--out</code>.</td></tr>
-    <tr><td><code>--out DIR</code></td><td>Write into <code>DIR/&lt;timestamp&gt;-&lt;seed&gt;/</code> instead of the working directory.</td></tr>
+    <tr><td><code>--runs N</code></td><td>Replicates from that master seed. Each gets its own <code>run_&lt;n&gt;/</code>.</td></tr>
+    <tr><td><code>--out DIR</code></td><td>Put the timestamped folder under <code>DIR</code> instead of here. It chooses the root, nothing else.</td></tr>
     <tr><td><code>--help</code></td><td>Print the usage above and exit. <code>-h</code> works too.</td></tr>
   </tbody>
 </table>
@@ -145,16 +145,20 @@ num_epidemics  = 30</code></pre>
 
 <h2>Where the Files Go</h2>
 
-<p>With no <code>--out</code>, three files land in the working directory:</p>
+<p>
+  Every invocation makes a <code>&lt;timestamp&gt;-&lt;seed&gt;/</code> folder and writes three files
+  into it. With no <code>--out</code> that folder is made where you are standing:
+</p>
 
 <pre><code class="language-bash">$ get-run config.toml 7
-run_log.csv                 # one row per logged iteration
-best_individual.txt         # the winner as a loadable edge list
-config.toml                 # the exact config this run used</code></pre>
+20260821-141233-7/run_log.csv           # one row per logged iteration
+20260821-141233-7/best_individual.txt   # the winner as a loadable edge list
+20260821-141233-7/config.toml           # the exact config this run used</code></pre>
 
 <p>
-  A second invocation overwrites them. With <code>--out</code>, each invocation gets its own
-  timestamped directory and nothing is ever overwritten:
+  <code>--out</code> chooses where that folder is made and changes nothing else. Either way a second
+  invocation gets a folder of its own, so nothing is ever overwritten &mdash; and the config you
+  passed in is never written over, because the run's copy is one level down.
 </p>
 
 <pre><code class="language-bash">$ get-run config.toml 7 --out output
@@ -164,19 +168,20 @@ output/20260821-141233-7/config.toml</code></pre>
 
 <h2>Several Replicates</h2>
 
-<pre><code class="language-bash">get-run config.toml 7 --runs 4 --out output</code></pre>
+<pre><code class="language-bash">get-run config.toml 7 --runs 4</code></pre>
 
-<pre><code class="language-bash">output/20260821-141233-7/config.toml          # once, shared by all four
-output/20260821-141233-7/run_1/run_log.csv
-output/20260821-141233-7/run_2/run_log.csv
-output/20260821-141233-7/run_3/run_log.csv
-output/20260821-141233-7/run_4/run_log.csv</code></pre>
+<pre><code class="language-bash">20260821-141233-7/config.toml          # once, shared by all four
+20260821-141233-7/run_1/run_log.csv
+20260821-141233-7/run_2/run_log.csv
+20260821-141233-7/run_3/run_log.csv
+20260821-141233-7/run_4/run_log.csv</code></pre>
 
 <div class="callout">
   <p>
-    <b><code>--runs</code> above 1 requires <code>--out</code>, and the command refuses without it.</b>
-    Every replicate writes the same three fixed names, so without a directory to separate them all
-    but the last would be silently lost.
+    <b><code>--runs</code> needs nothing else.</b> It required <code>--out</code> until
+    2026-08-30, because every replicate wrote the same three fixed names straight into the working
+    directory and all but the last was silently lost. The timestamped folder is now made either way,
+    so there is nothing left to collide and the command no longer refuses.
   </p>
   <p>
     One master seed goes in and GET derives one seed per replicate. Reproduce a replicate by
@@ -207,7 +212,7 @@ done</code></pre>
   <b>Configurations are portable; the command line is not.</b> A config document this accepts is one
   every other route accepts, because all of them converge on the same parser and the same validator
   before anything is constructed. The binary's own surface — argument order, the names of the three
-  files, that they land in the working directory — may change between versions. Pin a commit if you
+  files, the shape of the folder they land in — may change between versions. Pin a commit if you
   are depending on it, which is what this route is for.
 </p>
 

@@ -809,7 +809,7 @@ pub fn run_output_dir(
     n_runs: usize,
 ) -> PathBuf {
     let mut path = experiment_output_dir(out_dir, stamp, seed);
-    if out_dir.is_some() && n_runs > 1 {
+    if n_runs > 1 {
         let width = n_runs.to_string().len();
         path = path.join(format!("run_{:0width$}", run_index + 1, width = width));
     }
@@ -822,11 +822,14 @@ pub fn run_output_dir(
 /// same directory when there is one. This is where anything belonging to the
 /// invocation rather than to a single replicate goes — `config.toml`, which
 /// every replicate shares because they were all produced by it.
+///
+/// **Always timestamped, `--out` or not.** Without one the stamp folder is made
+/// in the working directory rather than the working directory being used
+/// directly, so two invocations never overwrite each other and a run cannot
+/// write over the config it was given. `--out` chooses the root and nothing
+/// else.
 pub fn experiment_output_dir(out_dir: Option<&str>, stamp: &str, seed: u64) -> PathBuf {
-    let Some(root) = out_dir else {
-        return PathBuf::from(".");
-    };
-    Path::new(root).join(format!("{stamp}-{seed}"))
+    Path::new(out_dir.unwrap_or(".")).join(format!("{stamp}-{seed}"))
 }
 
 /// Rust-native entry point: run a `config.toml` with no Python interpreter.
@@ -994,13 +997,21 @@ mod tests {
     }
 
     #[test]
-    fn without_an_output_directory_every_replicate_shares_the_working_directory() {
-        // Why `get-run` rejects `--runs N` above 1 without `--out`: the paths
-        // collide rather than being distinguished by the run index.
+    fn without_an_output_directory_the_stamp_folder_is_made_in_the_working_one() {
+        // `--out` chooses the root and nothing else: the timestamped folder is
+        // made either way, so replicates are distinguished without it and two
+        // invocations cannot overwrite each other.
         let first = run_output_dir(None, "20260828-071233", 7, 0, 5);
         let second = run_output_dir(None, "20260828-071233", 7, 1, 5);
-        assert_eq!(first, PathBuf::from("."));
-        assert_eq!(first, second);
+        // The `./` is kept rather than trimmed: it is what `get-run` already
+        // prints in its `wrote ...` lines, so the path a reader is told about
+        // and the path on disk are spelled the same way.
+        assert_eq!(first, PathBuf::from("./20260828-071233-7/run_1"));
+        assert_eq!(second, PathBuf::from("./20260828-071233-7/run_2"));
+
+        // One replicate still lands directly in the stamp folder.
+        let alone = run_output_dir(None, "20260828-071233", 7, 0, 1);
+        assert_eq!(alone, PathBuf::from("./20260828-071233-7"));
     }
 
     #[test]
