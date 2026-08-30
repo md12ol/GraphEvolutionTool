@@ -28,6 +28,15 @@ handoff_edge_multiplicity_cap_simplification.md
 # keeps it out of every clone, every release branch and the built wheel.
 .claude/
 
+# .codex/ is the same arrangement for Codex - md12ol/GET-Codex, cloned as this directory, with
+# AGENTS.md at the root a symlink into it. Added 2026-08-30. The argument is the one above and it
+# does not depend on which tool it is: these files must sit in the checked-out tree to be read at
+# all, so on any tracked scheme they reach every clone, every contributor and the built wheel.
+# AGENTS.md is ignored rather than tracked the way CLAUDE.md is - CLAUDE.md warns both owners, and
+# only one of them uses Codex, so a second root file would be carried by everyone for one person.
+.codex/
+AGENTS.md
+
 # Output of the get-run dev CLI (see get/src/bin/run.rs). Since 2026-08-30 each run
 # makes its own <timestamp>-<seed>/ folder rather than writing these three names into
 # whatever directory it was run from, so the folder is what needs ignoring — the bare
