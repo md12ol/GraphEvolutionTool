@@ -31,7 +31,7 @@ applies, so a file this page hands you loads.</p>
     <section class="cb-block">
       <h2>The run <span class="tbl">top level</span></h2>
       <p class="cb-note">Size and rates that apply whatever else you choose. Later
-      sections read these back — the elite count and the scope size are both bounded by
+      sections read these back: the elite count and the scope size are both bounded by
       the population.</p>
 
       <div class="cb-fields">
@@ -62,7 +62,7 @@ applies, so a file this page hands you loads.</p>
         </div>
 
         <details class="cb-adv">
-          <summary>Edge weights and mutation count <span class="sum-note">— both default, omitted unless changed</span></summary>
+          <summary>Edge weights and mutation count <span class="sum-note">both default, omitted unless changed</span></summary>
           <div class="cb-adv-body">
             <div class="cb-grid2">
               <div class="cb-field" data-unless-fitness="struct_match">
@@ -166,7 +166,7 @@ applies, so a file this page hands you loads.</p>
     <section class="cb-block">
       <h2>Representation <span class="tbl">[genome]</span></h2>
       <p class="cb-note">How an individual encodes a graph. This decides which keys
-      the section takes — they do not overlap.</p>
+      the section takes; they do not overlap.</p>
 
       <div class="cb-fields">
         <div>
@@ -184,14 +184,14 @@ applies, so a file this page hands you loads.</p>
 
           <div class="cb-field">
             <label class="cb-label" for="base_graph">Base graph <span class="key">base_graph</span></label>
-            <input type="text" id="base_graph" placeholder="left out — every individual edits the empty graph">
+            <input type="text" id="base_graph" placeholder="left out: every individual edits the empty graph">
             <p class="cb-hint" data-hint="base_graph">A file the run starts from, resolved relative to the
             config file's own directory. Needs a <code># nodes = N</code> header, and that count must be
             <code>network_size</code>. Read as 0-indexed.</p>
           </div>
 
           <details class="cb-adv">
-            <summary>Operation weights <span class="sum-note">— all 1.0 by default; at least one must be positive</span></summary>
+            <summary>Operation weights <span class="sum-note">all 1.0 by default; at least one must be positive</span></summary>
             <div class="cb-adv-body">
               <p class="cb-hint" style="margin:0">Relative probability of drawing each edit. Leave every
               one at 1.0 and the table is omitted entirely. On an empty base graph, five of
@@ -220,7 +220,7 @@ applies, so a file this page hands you loads.</p>
           is a legal edge weight.</p>
 
           <details class="cb-adv">
-            <summary>Start state and mutation rates <span class="sum-note">— all default, omitted unless changed</span></summary>
+            <summary>Start state and mutation rates <span class="sum-note">all default, omitted unless changed</span></summary>
             <div class="cb-adv-body">
               <div class="cb-grid2">
                 <div class="cb-field">
@@ -273,11 +273,11 @@ applies, so a file this page hands you loads.</p>
           </div>
 
           <details class="cb-adv">
-            <summary>Patient zero and short-outbreak re-rolls <span class="sum-note">— all default, omitted unless changed</span></summary>
+            <summary>Patient zero and short-outbreak re-rolls <span class="sum-note">all default, omitted unless changed</span></summary>
             <div class="cb-adv-body">
               <div class="cb-field" style="max-width:20rem">
                 <label class="cb-label" for="patient_zero">Pinned patient zero <span class="key">patient_zero</span></label>
-                <input type="number" id="patient_zero" min="0" step="1" placeholder="left out — fresh random node each epidemic">
+                <input type="number" id="patient_zero" min="0" step="1" placeholder="left out: fresh random node each epidemic">
                 <p class="cb-hint" data-hint="patient_zero">A node index, so below <code>network_size</code>. Leave blank to draw fresh.</p>
               </div>
               <div class="cb-grid2">
@@ -300,7 +300,7 @@ applies, so a file this page hands you loads.</p>
         <div data-when-fitness="epi_prof_match" class="cb-field">
           <label class="cb-label" for="target_profile">Target profile <span class="key">target_profile</span><span class="cb-req">required</span></label>
           <input type="text" id="target_profile" placeholder="1, 3, 8, 17, 24, 19, 11, 5, 2, 1">
-          <p class="cb-hint" data-hint="target_profile">Newly-infected per timestep, compared verbatim — nothing is
+          <p class="cb-hint" data-hint="target_profile">Newly-infected per timestep, compared verbatim: nothing is
           prepended for patient zero and nothing is rescaled, so give it at the size of network you are building.</p>
         </div>
 
@@ -309,15 +309,15 @@ applies, so a file this page hands you loads.</p>
           <div class="cb-field">
             <label class="cb-label" for="reference_folder">Reference graph folder <span class="key">reference_folder</span><span class="cb-req">required</span></label>
             <input type="text" id="reference_folder" placeholder="reference_graphs/">
-            <p class="cb-hint" data-hint="reference_folder">One edge list per graph — <code>start,end,weight</code> per line,
+            <p class="cb-hint" data-hint="reference_folder">One edge list per graph: <code>start,end,weight</code> per line,
             and a <code># nodes = N</code> header on every file. Not opened until the objective is built, so a
             wrong path fails at run rather than here.</p>
           </div>
 
           <details class="cb-adv">
-            <summary>Bins, bandwidths and family weights <span class="sum-note">— all default, omitted unless changed</span></summary>
+            <summary>Bins, bandwidths and family weights <span class="sum-note">all default, omitted unless changed</span></summary>
             <div class="cb-adv-body">
-              <p class="cb-hint" style="margin:0">Three statistic families — degree, clustering, spectral —
+              <p class="cb-hint" style="margin:0">Three statistic families (degree, clustering, spectral),
               each binned, each with an RBF bandwidth, each weighted. A weight of 0 switches its family
               off; they cannot all be 0. Bandwidths that are too large collapse every score to zero,
               which looks like a healthy run searching nothing.</p>
@@ -336,7 +336,7 @@ applies, so a file this page hands you loads.</p>
           <div class="note">
             <b>Nothing else goes in the file.</b> The objective's parameters belong to your
             callable. Register it before the run with
-            <code>evolver.set_fitness_function(callable, direction)</code> — it takes a batch of graphs and
+            <code>evolver.set_fitness_function(callable, direction)</code>. It takes a batch of graphs and
             returns one float per graph.
           </div>
         </div>
@@ -390,7 +390,7 @@ that exists. A base graph numbered from 1 rather than 0 has no key here: it goes
       { v: "steady_state", d: "one pair bred and reinserted at a time" }
     ],
     replacement: [
-      { v: "worst",  d: "least fit of the scope — self-elitist" },
+      { v: "worst",  d: "least fit of the scope, self-elitist" },
       { v: "random", d: "uniform; the scope's best can be lost" }
     ],
     scope: [
@@ -409,10 +409,10 @@ that exists. A base graph numbered from 1 rather than 0 has no key here: it goes
       { v: "sda",       d: "an automaton that emits the graph" }
     ],
     fitness: [
-      { v: "epi_spread",     d: "total ever-infected — maximized" },
-      { v: "epi_length",     d: "timesteps to burn out — maximized" },
-      { v: "epi_prof_match", d: "RMSE against a curve — minimized" },
-      { v: "struct_match",   d: "match real reference graphs — minimized" },
+      { v: "epi_spread",     d: "total ever-infected, maximized" },
+      { v: "epi_length",     d: "timesteps to burn out, maximized" },
+      { v: "epi_prof_match", d: "RMSE against a curve, minimized" },
+      { v: "struct_match",   d: "match real reference graphs, minimized" },
       { v: "python",         d: "your own callable, registered in code" }
     ]
   };
@@ -423,7 +423,7 @@ that exists. A base graph numbered from 1 rather than 0 has no key here: it goes
   var STRUCT_FAMILIES = ["degree", "clustering", "spectral"];
 
   /* Defaults, from the `#[serde(default = ...)]` functions. A field left equal to
-     its default is omitted from the output — the file says only what you chose. */
+     its default is omitted from the output; the file says only what you chose. */
   var DEFAULTS = {
     max_edge_multiplicity: 1, max_mutations: 1, elite_count: 1,
     replacement: "worst", crossover: "two_point",
@@ -548,7 +548,7 @@ that exists. A base graph numbered from 1 rather than 0 has no key here: it goes
   /* ---------------- TOML rendering helpers ---------------- */
 
   /* Every key the struct declares as f64. The parser accepts a bare `1` for these
-     — measured, it coerces — but writing `1.0` matches config.example.toml and
+     (measured, it coerces) but writing `1.0` matches config.example.toml and
      keeps a rate visibly a rate. */
   var FLOAT_KEYS = {
     crossover_rate: 1, mutation_rate: 1,
@@ -847,7 +847,7 @@ that exists. A base graph numbered from 1 rather than 0 has no key here: it goes
 
      Four fields are bounded by the value of another field, and one more by the
      strategy, so the bound is not a constant and cannot sit in the markup. Each
-     render re-derives it and writes it onto the input as `min`/`max` — which is
+     render re-derives it and writes it onto the input as `min`/`max`, which is
      both what the browser's own spinner obeys and what `clamp` below reads. */
 
   var boundMsg = {};
@@ -877,7 +877,7 @@ that exists. A base graph numbered from 1 rather than 0 has no key here: it goes
     // Elites are carried rather than bred from, so the last one must leave
     // somebody to breed.
     limit("elite_count", 0, pop === null ? null : pop - 1,
-          pop === null ? "" : "At most " + (pop - 1) + " — one below the population.");
+          pop === null ? "" : "At most " + (pop - 1) + ", one below the population.");
 
     // The scope is drawn without replacement. Steady-state also overwrites two
     // members of the scope it bred from, and those must not be the parents.
@@ -887,13 +887,13 @@ that exists. A base graph numbered from 1 rather than 0 has no key here: it goes
           (floor === 4 ? " Steady-state needs 2 parents and 2 distinct individuals to replace." : ""));
 
     limit("init_state", 0, states === null ? null : states - 1,
-          states === null ? "" : "At most " + (states - 1) + " — one below num_states.");
+          states === null ? "" : "At most " + (states - 1) + ", one below num_states.");
 
     limit("patient_zero", 0, net === null ? null : net - 1,
           net === null ? "" : "A node index, so at most " + (net - 1) + ".");
 
     // The SDA alphabet is derived, never configured, so show what the current
-    // cap makes it — including the 1 that struct_match pins the cap to.
+    // cap makes it, including the 1 that struct_match pins the cap to.
     var mem = state.fitness === "struct_match" ? 1 : intOf("max_edge_multiplicity");
     $("alphabet-note").textContent = mem === null ? "" : " = " + (mem + 1) + " here";
   }
@@ -901,7 +901,7 @@ that exists. A base graph numbered from 1 rather than 0 has no key here: it goes
   /**
    * Pull a value back inside the bound its field currently carries.
    *
-   * On `change` — a blur or a spinner click — and never on `input`: clamping
+   * On `change` (a blur or a spinner click) and never on `input`: clamping
    * mid-keystroke rewrites the 1 of a 100 someone is still typing.
    */
   function clamp(el) {
@@ -957,14 +957,14 @@ that exists. A base graph numbered from 1 rather than 0 has no key here: it goes
 
     $("out").innerHTML = highlight(toml);
 
-    // The gate. Choices still to make come first — they are what unlocks the rest.
+    // The gate. Choices still to make come first; they are what unlocks the rest.
     var todo = $("todo");
     todo.innerHTML = "";
     problems.slice().sort(function (a, b) { return (a.err ? 1 : 0) - (b.err ? 1 : 0); })
       .forEach(function (p) {
         var li = document.createElement("li");
         if (p.err) { li.className = "err"; }
-        li.innerHTML = '<span><span class="where">' + esc(String(p.where)) + "</span> — " +
+        li.innerHTML = '<span><span class="where">' + esc(String(p.where)) + "</span>: " +
                        esc(p.msg) + "</span>";
         todo.appendChild(li);
       });
@@ -995,7 +995,7 @@ that exists. A base graph numbered from 1 rather than 0 has no key here: it goes
     navigator.clipboard.writeText(toml).then(function () {
       setNote("Copied. Paste it into config.toml beside your run.", "ok");
     }, function () {
-      setNote("Could not reach the clipboard — select the text above instead.", "bad");
+      setNote("Could not reach the clipboard; select the text above instead.", "bad");
     });
   });
 
@@ -1013,7 +1013,7 @@ that exists. A base graph numbered from 1 rather than 0 has no key here: it goes
       setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
       setNote("Saved as config.toml.", "ok");
     } catch (err) {
-      setNote("Saving is unavailable here — use Copy instead.", "bad");
+      setNote("Saving is unavailable here; use Copy instead.", "bad");
     }
     btn.disabled = false;
   });
