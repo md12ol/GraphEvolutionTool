@@ -421,7 +421,7 @@ def figure_labels():
     `href="data:image/svg+xml,..."` attribute rather than in the document, and a
     decorative one marked `aria-hidden` is a deliberate choice rather than a gap.
     """
-    unlabelled = 0
+    unlabelled = examined = 0
     for page in sorted(glob.glob(f"{SITE}/**/*.html", recursive=True)):
         body = open(page, encoding="utf-8").read()
         # Drop the favicon link before looking, so its inline SVG is not read
@@ -431,10 +431,15 @@ def figure_labels():
             tag = found.group(0)
             if 'aria-hidden="true"' in tag:
                 continue
+            examined += 1
             if 'role="img"' not in tag or not re.search(r"aria-label(?:ledby)?=", tag):
                 unlabelled += 1
                 print(f"  {page}: an <svg> with no accessible name: {tag[:70]}")
-    print(f"{unlabelled} unlabelled figures")
+    # The subject count is printed, not just the failures: a run that examined
+    # no figures at all would otherwise be indistinguishable from a clean one,
+    # which is how this file's `heading_ids` shipped reading attributes that do
+    # not exist in the source and reporting zero problems.
+    print(f"{examined} content figures, {unlabelled} unlabelled")
     return unlabelled
 
 
@@ -456,7 +461,7 @@ def heading_ids():
         text = html.unescape(re.sub(r"<[^>]+>", "", text))
         return re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", text.lower(), flags=re.ASCII).strip())
 
-    duplicated = 0
+    duplicated = examined = 0
     for page in sorted(glob.glob(f"{SITE}/**/*.html", recursive=True)):
         body = open(page, encoding="utf-8").read()
         headings = re.findall(r"<(h[23])[^>]*>(.*?)</\1>", CARD.sub("", body), re.S)
@@ -468,10 +473,12 @@ def heading_ids():
             if anchor in seen:
                 repeated.add(anchor)
             seen.add(anchor)
+        examined += 1
         if repeated:
             duplicated += 1
             print(f"  {page}: two headings both become #{', #'.join(sorted(repeated))}")
-    print(f"{duplicated} pages with a colliding heading id")
+    print(f"{examined} pages with a contents panel, "
+          f"{duplicated} with a colliding heading id")
     return duplicated
 
 
