@@ -77,14 +77,28 @@ jobs:
           # Fixed seed so a failure is reproducible from the log.
           "$GITHUB_WORKSPACE/target/release/get-run" config.example.toml 7
 
-          for f in run_log.csv best_individual.txt best_individual.txt.toml; do
+          # Every run makes its own <timestamp>-<seed>/ folder, so the job has to
+          # find it rather than assume the working directory. Exactly one should
+          # exist: a second would mean the stamp is not unique per invocation,
+          # which is the property the folder is for.
+          shopt -s nullglob
+          stamped=( [0-9]*-7/ )
+          test "${#stamped[@]}" -eq 1 \
+            || { echo "::error::expected one <timestamp>-7/ folder, found ${#stamped[@]}"; exit 1; }
+          cd "${stamped[0]}"
+          echo "run wrote into ${stamped[0]}"
+
+          # `config.toml`, not `best_individual.txt.toml`: the provenance copy
+          # belongs to the invocation rather than to one replicate, so
+          # `save_config` writes it once into the folder the replicates share.
+          for f in run_log.csv best_individual.txt config.toml; do
             test -s "$f" || { echo "::error::$f missing or empty"; exit 1; }
           done
           # A run of N generations logs iterations 0..N, plus the CSV header.
           # Derived from the config rather than hardcoded, so editing the
           # example's generation count does not fail this job with a stale
           # number and no clue why.
-          gens="$(grep -oE '^num_generations[[:space:]]*=[[:space:]]*[0-9]+' config.example.toml | grep -oE '[0-9]+$')"
+          gens="$(grep -oE '^num_generations[[:space:]]*=[[:space:]]*[0-9]+' ../config.example.toml | grep -oE '[0-9]+$')"
           test -n "$gens" || { echo "::error::could not read num_generations from the example"; exit 1; }
           expected=$(( gens + 2 ))
           rows="$(wc -l < run_log.csv)"

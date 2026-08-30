@@ -10,7 +10,7 @@
 <body data-page="guide/new-selection.html">
 <main>
 
-<p class="page-kicker">Extending GET</p>
+<p class="page-kicker">Advanced Extensions</p>
 <h1>Add a Selection Scheme</h1>
 <p class="lede">
   Choosing which members of a scope become parents. Six edits across five files, and no strategy
@@ -98,7 +98,7 @@ pressure = 1.8</code></pre>
   marker is the anchor that has not.
 </p>
 
-<pre><code class="language-bash">git grep -n "ADD A SELECTION STEP" get/src config.example.toml    # the six steps, in one list</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A SELECTION STEP" get/src config.example.toml    # 6 steps, 7 sites</code></pre>
 
 <p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
 
@@ -220,8 +220,8 @@ SelectionConfig::Roulette { pressure } =&gt; {
   sections and their own marker families:
 </p>
 
-<pre><code class="language-bash">git grep -n "ADD A SCOPE STEP" get/src config.example.toml          # six steps
-git grep -n "ADD A REPLACEMENT STEP" get/src    # three steps</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A SCOPE STEP" get/src config.example.toml          # 6 steps, 7 sites
+git grep -n "ADD A REPLACEMENT STEP" get/src    # 3 steps, 6 sites</code></pre>
 
 <p>
   See <a href="new-scope.html">Add a Scope</a> and

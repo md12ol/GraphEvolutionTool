@@ -87,6 +87,45 @@ jobs:
       - name: documentation references
         run: python3 documentation/check_refs.py
 
+      # The site's accessibility work is static — a skip link, `aria-current`, an
+      # inert closed sidebar, focus-visible controls — and nothing verified it.
+      # pa11y drives a real browser against the four page shapes: the landing
+      # page, a guide page, the reference table and an extension chain. It cannot
+      # certify WCAG on its own, which is why the manual keyboard pass stays a
+      # human job, but it catches a regression in what has already been fixed.
+      #
+      # `continue-on-error` deliberately: this is the first run of a tool nobody
+      # here has tuned, and a documentation edit should not be blocked by a rule
+      # we have not yet decided we accept. Tighten it once its output is trusted.
+      #
+      # The exit codes are the reason this loop is not a one-liner. pa11y exits 2
+      # when it found accessibility issues and 1 when it could not run at all —
+      # and the first version of this step swallowed both with `|| true`, so four
+      # pages that never opened reported green for a day. Chromium needs
+      # `--no-sandbox` on the runner, which pa11y takes only from a config file;
+      # a launch failure is now a hard `exit 1` that `continue-on-error` reports
+      # without blocking, while findings stay advisory until we accept the rule.
+      - name: accessibility
+        continue-on-error: true
+        run: |
+          npm install --no-save pa11y@8
+          python3 -m http.server 8123 --directory documentation &
+          sleep 3
+          broken=0
+          for page in index.html guide/getting-started.html \
+                      guide/configuration.html guide/new-genome.html; do
+            echo "::group::pa11y ${page}"
+            status=0
+            npx pa11y --config documentation/pa11y.json \
+                      --standard WCAG2AA "http://localhost:8123/${page}" || status=$?
+            echo "::endgroup::"
+            if [ "$status" -eq 1 ]; then
+              echo "::error::pa11y could not run against ${page}"
+              broken=1
+            fi
+          done
+          [ "$broken" -eq 0 ] || exit 1
+
       # The downloadable bundle and the page listing its files are both
       # generated from `get-examples/` and both committed, so either can go a
       # version behind the directory it was built from without anything saying
@@ -95,6 +134,7 @@ jobs:
       # check keeps the name it already has.
       - name: example bundle is current
         run: python3 tools/build_bundle.py --check
+
 
       # First of the Rust checks: it is the cheapest of them and needs no
       # build, so a formatting-only failure reports in seconds instead of
@@ -111,6 +151,58 @@ jobs:
 
       - name: cargo test
         run: cargo test -p graph-evolution-tool --features cli
+
+      # `check_refs.py` proves a block points where it says; this proves the
+      # code in it works: Python blocks type-checked against the shipped stub,
+      # TOML blocks fed to the real loader.
+      #
+      # This step used to say `cargo test` above already built the `get-run` the
+      # TOML half needs. It does not, and the claim went unchecked for as long as
+      # it stood: every CI run reported `toml examples: skipped, no get-run
+      # binary` and passed, so six blocks were verified on developer machines and
+      # never here. Build it explicitly rather than inferring it from another
+      # step's side effects — and note the checker's skips are now annotations,
+      # so the next one of these is visible on the run rather than buried.
+      # `--release` is not tidiness. The checker prefers a release binary and
+      # falls back to a debug one, so a debug build still passes — it just runs
+      # the site's configs through an unoptimised evolutionary algorithm, which
+      # took this step from 9 seconds locally to 12 minutes on the runner,
+      # against a 15-minute job cap. Same six blocks, same result, 80x the wall
+      # clock.
+      - name: build get-run for the documentation examples
+        run: cargo build --release -p graph-evolution-tool --bin get-run --features cli
+
+      # `cargo test` above does not produce an importable module: it builds
+      # pyo3 in its default configuration, not `extension-module`, which is
+      # the opposite of what `maturin develop` needs (see
+      # `.claude/reference/pyo3-maturin.md`). Without this the Python half of
+      # the next step could not resolve `get` and would report itself skipped
+      # rather than fail — which is exactly the silent gap PR #186 review
+      # comment #3 found: the step existed, but nothing in CI ever gave it a
+      # `get` to check against.
+      # `maturin develop` refuses to run without an active virtualenv — the
+      # runner's `setup-python` interpreter is not one, and installing straight
+      # into it is exactly what failed here the first time this step was
+      # written: `maturin` reported "Couldn't find a virtualenv or conda
+      # environment" and the whole job failed rather than the check quietly
+      # skipping itself. `GITHUB_PATH`/`GITHUB_ENV` make the venv the one every
+      # later step sees, including `documentation examples run` below.
+      - name: install get for the documentation examples to import
+        run: |
+          python3 -m venv .venv-docs
+          # `GITHUB_ENV` takes effect in *later* steps, never the one writing
+          # it — so `maturin` in this same step still saw no virtualenv and
+          # failed. Export it here for this step, and write it to GITHUB_ENV
+          # for the next one.
+          export VIRTUAL_ENV="$PWD/.venv-docs"
+          export PATH="$PWD/.venv-docs/bin:$PATH"
+          echo "VIRTUAL_ENV=$PWD/.venv-docs" >> "$GITHUB_ENV"
+          echo "$PWD/.venv-docs/bin" >> "$GITHUB_PATH"
+          pip install --quiet maturin mypy
+          maturin develop --release -m get/Cargo.toml
+
+      - name: documentation examples run
+        run: python3 tools/check_doc_examples.py
 
       # The examples are the only proof that the Rust-library route reaches
       # what it promises. Narrowing something only an external caller needs

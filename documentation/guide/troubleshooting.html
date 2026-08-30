@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Fix common Graph Evolution Tool installation, configuration, runtime, and output problems.">
+<title>Troubleshooting · GET Docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/troubleshooting.html">
+<main>
+
+<p class="page-kicker">Start Here</p>
+<h1>Troubleshooting</h1>
+<p class="lede">Start with the symptom you see. Each entry gives the likely cause, the shortest
+check, and the next action.</p>
+
+<h2>Installation and Import</h2>
+
+<h3><code>pip</code> says no matching distribution was found</h3>
+
+<p>
+  Version 0.9.0a1 is published as pre-release wheels for 64-bit Linux, macOS, and Windows. Upgrade pip first,
+  then confirm Python is at least 3.8. <code>pip index versions graph-evolution-tool</code>
+  lists the available release. An
+  unsupported platform must use a source checkout because PyPI currently has no source archive.
+</p>
+
+<h3><code>ModuleNotFoundError: No module named 'get'</code></h3>
+
+<ol>
+  <li>Activate the same virtual environment in which you ran <code>pip install graph-evolution-tool</code>.</li>
+  <li>Check the interpreter with <code>python -c "import sys; print(sys.executable)"</code>.</li>
+  <li>Run <code>python -m pip install graph-evolution-tool</code> again with that interpreter.</li>
+</ol>
+
+<p>The install/project name is <code>graph-evolution-tool</code>; the import name is <code>get</code>.</p>
+
+<h3>A source build says <code>maturin develop</code> cannot find a virtual environment</h3>
+
+<pre><code class="language-bash">python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install maturin
+maturin develop --release</code></pre>
+
+<p>On Windows, activate with <code>.venv\Scripts\activate</code>.</p>
+
+<h3>The Rust build fails before compiling GET</h3>
+
+<p>
+  Confirm that <code>rustc --version</code> and <code>cargo --version</code> work. If Rust came from
+  an operating-system package and is old, install or update the stable toolchain with rustup.
+</p>
+
+<h2>Configuration</h2>
+
+<h3>A top-level key is reported missing even though it is in the file</h3>
+
+<p>
+  TOML keys after a section header belong to that section. Put keys such as
+  <code>population_size</code> and <code>network_size</code> before the first
+  <code>[evolution]</code>-style header.
+</p>
+
+<h3>A misspelled fitness key did not raise an error</h3>
+
+<p>
+  Unknown-key checking is not uniformly strict. Only <code>[genome]</code> and
+  <code>[genome.operation_weights]</code> reject every unknown key; typos in other sections can be
+  ignored and leave defaults in use. Compare the whole document against the
+  <a href="configuration.html">Configuration Reference</a> by eye.
+</p>
+
+<h3>The error names a config path when I used Python objects</h3>
+
+<p>
+  Both interfaces use the same schema. Python objects serialize to TOML before the Rust parser
+  validates them. The path points to the equivalent config field; the
+  <a href="configuration.html">Configuration Reference</a> covers both spellings.
+</p>
+
+<h2>Runs and Results</h2>
+
+<h3>The run makes no visible progress</h3>
+
+<ul>
+  <li>Try the small <a href="getting-started.html#2-run-a-small-evolution">Getting Started run</a> to separate environment problems from experiment size.</li>
+  <li>Reduce population size, generations, replicates, or expensive objective simulations while testing.</li>
+  <li>Set <code>max_cores</code> when running replicates on a shared or memory-limited machine.</li>
+</ul>
+
+<h3>The scores do not improve</h3>
+
+<p>
+  First check that your objective produces meaningful differences between candidates. For epidemic
+  objectives, parameters can make almost every outbreak die immediately; every graph then receives
+  a similar score and selection has no useful gradient. Also check the declared maximize/minimize
+  direction and plot <code>best_fitness</code> and <code>mean_fitness</code> from the history.
+</p>
+
+<h3>A Python objective stops with <code>PanicException</code></h3>
+
+<p>
+  Check that it returns exactly one numeric value per graph and never returns <code>NaN</code>.
+  <code>NaN</code> is treated as a bug and stops the run. Guard zero denominators explicitly.
+</p>
+
+<h3>Saving a result raises <code>OSError</code></h3>
+
+<p>
+  <code>save_logs</code>, <code>save_results</code>, and <code>save_config</code> do not create their parent directories.
+  Create the directory first:
+</p>
+
+<pre><code class="language-python">from pathlib import Path
+
+Path("output/run_0").mkdir(parents=True, exist_ok=True)
+result.save_logs("output/run_0/run_log.csv")</code></pre>
+
+<h3>A TOML <code>base_graph</code> cannot be opened</h3>
+
+<p>
+  A relative <code>[genome] base_graph</code> path is resolved beside the TOML file, not from the
+  directory where you started Python. The file is read as 0-indexed and its
+  <code># nodes = N</code> header must exactly match <code>network_size</code>. Use the Python loader
+  with <code>min_node_index=1</code> when the source data is 1-indexed.
+</p>
+
+<h3>The same seed did not reproduce a replicate</h3>
+
+<p>
+  Preserve the exact GET commit, run code, full configuration, master seed, replicate index, input
+  graphs/reference data, custom objective code, and relevant environment. Repeat a replicate's
+  random stream with the same master seed and index—not by passing the derived seed back to GET.
+</p>
+
+<h2>Rust CLI</h2>
+
+<h3><code>get-run</code> builds but fails to start with a libpython error</h3>
+
+<p>
+  The CLI feature links Python support even though the command itself does not run Python code. Make
+  the same interpreter's library visible to the dynamic loader. On Linux, add its library directory
+  to <code>LD_LIBRARY_PATH</code>; on macOS use <code>DYLD_LIBRARY_PATH</code>. The
+  <a href="route-rust-cli.html#build-it">CLI guide</a> shows a command that derives the directory.
+</p>
+
+<h2>Before Reporting a Problem</h2>
+
+<p>Include:</p>
+
+<ul>
+  <li>the commit or GET version;</li>
+  <li>operating system, Python version, and Rust version;</li>
+  <li>the smallest configuration or code that reproduces the problem;</li>
+  <li>the full error text; and</li>
+  <li>whether the <a href="getting-started.html">Getting Started</a> example works.</li>
+</ul>
+
+<p>Then open an issue in the <a href="https://github.com/md12ol/GraphEvolutionTool/issues">GitHub issue tracker</a>.</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

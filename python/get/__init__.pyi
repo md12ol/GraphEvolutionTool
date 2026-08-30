@@ -599,8 +599,8 @@ class RunResult:
         ...
     @property
     def config_toml(self) -> str:
-        """The TOML document this run's config was parsed from. `save_results`
-        writes it beside the best individual, so the run can be reproduced.
+        """The TOML document this run's config was parsed from. `save_config`
+        writes it into a folder, so the run can be reproduced.
         """
         ...
     @property
@@ -617,6 +617,14 @@ class RunResult:
         reproduces this exact run.
         """
         ...
+    def save_config(self, directory: str) -> None:
+        """Write the run's config TOML into `directory` as `config.toml`.
+
+        Called once per invocation rather than once per replicate: every
+        replicate of one invocation was produced by the same document, and a
+        copy beside each would be the same bytes N times.
+        """
+        ...
     def save_logs(self, filename: str) -> None:
         """Write the convergence log to `filename` as CSV.
 
@@ -625,10 +633,13 @@ class RunResult:
         """
         ...
     def save_results(self, filename: str) -> None:
-        """Write the best individual to `filename`, and the run's config TOML
-        alongside it at `{filename}.toml`.
+        """Write the best individual to `filename`.
 
         **The file is a loadable edge list**, which GET reads back unedited.
+
+        The config that produced it is not written here — it belongs to the
+        whole invocation rather than to one replicate, so `save_config` writes
+        it once into the folder the replicates share.
         """
         ...
     @property

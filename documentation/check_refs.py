@@ -8,8 +8,8 @@ step it names. Chain alone is not enough, because one file can carry several of
 a chain's markers and landing on a neighbour's sends the reader to the wrong
 edit. Run from the repository root.
 
-    python3 documentation/check_refs.py          # report
-    python3 documentation/check_refs.py --fix    # snap each reference to its marker
+    python3 documentation-audit/check_refs.py          # report
+    python3 documentation-audit/check_refs.py --fix    # snap each reference to its marker
 
 Also checks that each new-*.html's step table matches its chain's markers, and
 that every `fn` signature shown on the site appears verbatim in get/src. Each
@@ -24,10 +24,16 @@ import html
 import os
 import re
 import sys
+import time
+
+SITE_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SITE_DIR)
+os.chdir(REPO_ROOT)
+SITE = os.path.relpath(SITE_DIR, REPO_ROOT).replace(os.sep, "/")
 
 MOD = {
-    "documentation/guide/new-genome.html": "get/src/genomes.rs",
-    "documentation/guide/new-evolver.html": "get/src/evolver.rs",
+    f"{SITE}/guide/new-genome.html": "get/src/genomes.rs",
+    f"{SITE}/guide/new-evolver.html": "get/src/evolver.rs",
 }
 CHAIN = {
     "new-fitness": "OBJECTIVE", "new-genome": "GENOME", "new-evolver": "STRATEGY",
@@ -142,22 +148,27 @@ def structure():
     """data-page, NAV membership, internal links and anchors, across every page."""
     # Posix separators: these are compared against `data-page` and NAV, which
     # use forward slashes on every platform.
-    pages = [os.path.relpath(os.path.join(d, f), "documentation").replace(os.sep, "/")
-             for d, _, fs in os.walk("documentation") for f in fs if f.endswith(".html")]
+    pages = [os.path.relpath(os.path.join(d, f), SITE).replace(os.sep, "/")
+             for d, _, fs in os.walk(SITE) for f in fs if f.endswith(".html")]
     nav = set(re.findall(r'\["([^"]+\.html)",',
-                         open("documentation/assets/site.js", encoding="utf-8").read()))
+                         open(f"{SITE}/assets/site.js", encoding="utf-8").read()))
 
     # Must match `slugify` in assets/site.js character for character: these are
     # the ids a browser will actually create, and an anchor is checked against
     # them. site.js reads `textContent`, so entities are decoded, not spelled
     # out — `&amp;` becomes `&` and is then stripped, never the word "and".
     def slug(text):
+        # `re.ASCII`: `site.js`'s `slugify` uses JavaScript's `\w`, which is
+        # ASCII-only, while Python's is Unicode-aware by default. Left
+        # unmatched, a non-ASCII heading would slug differently here than in
+        # the browser, and this check would validate an anchor nobody's page
+        # actually creates.
         text = html.unescape(re.sub(r"<[^>]+>", "", text))
-        return re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", text.lower()).strip())
+        return re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", text.lower(), flags=re.ASCII).strip())
 
     ids = {}
     for page in pages:
-        body = open(os.path.join("documentation", page), encoding="utf-8").read()
+        body = open(os.path.join(SITE, page), encoding="utf-8").read()
         # site.js only assigns ids as a side effect of building the contents
         # panel, and that is skipped for card headings and for any page with
         # fewer than three of them. Synthesizing ids the browser never creates
@@ -168,13 +179,13 @@ def structure():
 
     bad = 0
     for entry in sorted(nav):
-        if not os.path.exists(os.path.join("documentation", entry)):
+        if not os.path.exists(os.path.join(SITE, entry)):
             print(f"  NAV entry with no file: {entry}")
             bad += 1
     for page in sorted(pages):
         if page == "_template.html":
             continue
-        body = open(os.path.join("documentation", page), encoding="utf-8").read()
+        body = open(os.path.join(SITE, page), encoding="utf-8").read()
         declared = re.search(r'data-page="([^"]+)"', body)
         if not declared or declared.group(1) != page:
             print(f"  bad data-page: {page}")
@@ -194,7 +205,7 @@ def structure():
             target, _, fragment = href.partition("#")
             full = (os.path.normpath(os.path.join(os.path.dirname(page), target)).replace(os.sep, "/")
                     if target else page)
-            if target and not os.path.exists(os.path.join("documentation", full)):
+            if target and not os.path.exists(os.path.join(SITE, full)):
                 print(f"  broken link: {page} -> {href}")
                 bad += 1
             elif fragment and full in ids and fragment not in ids[full]:
@@ -226,7 +237,7 @@ def signatures():
 
     flat_source = flat(source)
     checked = bad = 0
-    for page in sorted(glob.glob("documentation/**/*.html", recursive=True)):
+    for page in sorted(glob.glob(f"{SITE}/**/*.html", recursive=True)):
         if "_template" in page:
             continue
         # `data-example` marks a block that illustrates code the reader is
@@ -255,11 +266,386 @@ def signatures():
     return bad
 
 
+# A `git grep` the pages tell a reader to run, and the count its comment claims.
+# Only the `# N steps, M sites` shape is checked: a comment saying anything else
+# is prose, and inventing a reading for it would be guessing.
+GREP_LINE = re.compile(
+    r'git grep (?P<flags>-[a-zA-Z]+) "(?P<pattern>[^"]*)" (?P<paths>[^#\n]*?)\s*'
+    r'#[^#\n]*?(?P<steps>\d+) steps, (?P<sites>\d+) sites')
+
+
+def grep_counts():
+    """Every `git grep … # N steps, M sites` on a page must return M lines.
+
+    The command is the checklist a reader actually runs, so a stale count sends
+    them looking for sites that are not there — or, worse, tells them they have
+    seen the whole chain when the grep printed more. Nothing else here checks a
+    *command*: the reference and step-table checks read what a block cites, not
+    what running it would print.
+
+    The step count is checked too, and it is the one that catches a chain
+    growing a site: steps and sites differ whenever one step lives in two
+    places, which is normal, so only comparing both catches either moving.
+    """
+    import subprocess
+
+    checked = bad = 0
+    for page in sorted(glob.glob(f"{SITE}/guide/new-*.html")):
+        text = open(page, encoding="utf-8").read()
+        for found in GREP_LINE.finditer(text):
+            checked += 1
+            pattern = html.unescape(found.group("pattern"))
+            paths = found.group("paths").split()
+            flags = found.group("flags")
+            argv = ["git", "grep", "-h"]
+            if "E" in flags:
+                argv.append("-E")
+            argv += [pattern, "--"] + paths
+            lines = subprocess.run(
+                argv, capture_output=True, text=True).stdout.splitlines()
+            sites = len(lines)
+            # A step is (number, branch), not a number: MUTATION's eight are
+            # four steps on each of two branches, and counting numbers alone
+            # would call that four.
+            steps = len({(m.group(2), m.group(3))
+                         for m in (MARKER.search(l) for l in lines) if m})
+            want_steps = int(found.group("steps"))
+            want_sites = int(found.group("sites"))
+            if (steps, sites) != (want_steps, want_sites):
+                bad += 1
+                print(f"  {page}: `{pattern}` says {want_steps} steps, {want_sites} sites "
+                      f"but returns {steps} steps, {sites} sites")
+    print(f"{checked} grep commands, {bad} miscounted")
+    return bad
+
+
+# `#[serde(default)]` or `#[serde(default = "fn")]` immediately above a field.
+SERDE_DEFAULT = re.compile(
+    r'#\[serde\(default(?:\s*=\s*"(?P<fn>[^"]+)")?\)\]\s*'
+    r'(?:///[^\n]*\n\s*)*(?:pub )?(?P<name>[a-z_][a-z_0-9]*)\s*:\s*(?P<ty>[^,\n]+)')
+# What a bare `#[serde(default)]` yields, for the types where that is a value
+# rather than a variant. This is the half that matters: `init_state` was
+# documented as required for months on exactly this shape.
+TYPE_DEFAULT = {"usize": "0", "u32": "0", "u64": "0", "f64": "0.0", "bool": "false"}
+# A field with no serde attribute on it at all — required, and the reference
+# says so in words rather than with a value.
+FIELD = re.compile(r'^\s*(?:pub )?(?P<name>[a-z_][a-z_0-9]*)\s*:\s*(?P<ty>[^,\n]+),\s*$', re.M)
+DEFAULT_FN = re.compile(
+    r'^fn (?P<name>default_[a-z_0-9]+)\(\) -> [^{]+\{\s*(?P<value>[^\n}]+?)\s*\}', re.M | re.S)
+CONSTANT = re.compile(r'^pub const (?P<name>[A-Z_0-9]+): [^=]+= (?P<value>[^;]+);', re.M)
+
+
+def source_defaults():
+    """Every `[key] -> default` the Rust actually implements, where it is a literal.
+
+    Only literals: a field defaulting to an enum variant or a sub-table has no
+    single value to compare a cell against, and inventing a rendering for one
+    would make this check argue with prose rather than with the code.
+    """
+    config = open("get/src/config.rs", encoding="utf-8").read()
+
+    # `fn default_x() -> T { 1 }`, and the constants some of them return.
+    constants = {}
+    for path in sources():
+        if path.endswith(".rs"):
+            for const in CONSTANT.finditer(open(path, encoding="utf-8").read()):
+                constants[const.group("name")] = const.group("value").strip()
+
+    literal = {}
+    for fn in DEFAULT_FN.finditer(config):
+        value = fn.group("value").strip()
+        literal[fn.group("name")] = constants.get(value.rsplit("::", 1)[-1], value)
+
+    defaults = {}
+    for field in SERDE_DEFAULT.finditer(config):
+        name, fn = field.group("name"), field.group("fn")
+        if fn is None:
+            # The type's own default. A primitive has one worth checking; an
+            # enum or sub-table does not, and is left alone.
+            plain = TYPE_DEFAULT.get(field.group("ty").strip().rstrip(","))
+            if plain is not None:
+                defaults[name] = plain
+        elif fn in literal:
+            defaults[name] = literal[fn]
+    return defaults
+
+
+def required_fields():
+    """Fields carrying no `#[serde(default)]`, which the reference calls required."""
+    config = open("get/src/config.rs", encoding="utf-8").read()
+    defaulted = {m.group("name") for m in SERDE_DEFAULT.finditer(config)}
+    out = set()
+    for field in FIELD.finditer(config):
+        name = field.group("name")
+        if name not in defaulted and not field.group("ty").startswith("//"):
+            out.add(name)
+    return out
+
+
+def page_defaults():
+    """Every `key -> Default cell` in configuration.html, whatever the table shape.
+
+    The page uses two column layouts — some tables lead with the variant's
+    `type` — so each table's own header decides which cell is which rather than
+    a fixed position.
+    """
+    text = open("documentation/guide/configuration.html", encoding="utf-8").read()
+    flat = lambda cell: re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", cell)).strip()
+
+    out = {}
+    for table in re.finditer(r"<table>(.*?)</table>", text, re.S):
+        head = re.search(r"<thead>(.*?)</thead>", table.group(1), re.S)
+        if not head:
+            continue
+        columns = [flat(h) for h in re.findall(r"<th[^>]*>(.*?)</th>", head.group(1), re.S)]
+        if "Key" not in columns or "Default" not in columns:
+            continue
+        key_at, default_at = columns.index("Key"), columns.index("Default")
+        for row in re.finditer(r"<tr>(.*?)</tr>", table.group(1), re.S):
+            cells = re.findall(r"<td[^>]*>(.*?)</td>", row.group(1), re.S)
+            # A `rowspan` cell in the row above shifts this row left by one.
+            offset = 0 if len(cells) == len(columns) else len(columns) - len(cells)
+            if key_at - offset < 0 or default_at - offset >= len(cells):
+                continue
+            key = flat(cells[key_at - offset])
+            if re.fullmatch(r"[a-z_][a-z_0-9]*", key):
+                out.setdefault(key, flat(cells[default_at - offset]))
+    return out
+
+
+def figure_labels():
+    """Every instructional inline SVG needs `role="img"` and an accessible name.
+
+    A diagram that carries meaning and no label is invisible to a screen reader,
+    and the site leans on diagrams heavily. Favicons are excluded: they live in a
+    `href="data:image/svg+xml,..."` attribute rather than in the document, and a
+    decorative one marked `aria-hidden` is a deliberate choice rather than a gap.
+    """
+    unlabelled = examined = 0
+    for page in sorted(glob.glob(f"{SITE}/**/*.html", recursive=True)):
+        body = open(page, encoding="utf-8").read()
+        # Drop the favicon link before looking, so its inline SVG is not read
+        # as a figure the page displays.
+        body = re.sub(r'<link[^>]*rel="icon"[^>]*>', "", body)
+        for found in re.finditer(r"<svg\b[^>]*>", body):
+            tag = found.group(0)
+            if 'aria-hidden="true"' in tag:
+                continue
+            examined += 1
+            if 'role="img"' not in tag or not re.search(r"aria-label(?:ledby)?=", tag):
+                unlabelled += 1
+                print(f"  {page}: an <svg> with no accessible name: {tag[:70]}")
+    # The subject count is printed, not just the failures: a run that examined
+    # no figures at all would otherwise be indistinguishable from a clean one,
+    # which is how this file's `heading_ids` shipped reading attributes that do
+    # not exist in the source and reporting zero problems.
+    print(f"{examined} content figures, {unlabelled} unlabelled")
+    return unlabelled
+
+
+def heading_ids():
+    """No page may generate the same heading id twice.
+
+    The ids are not in the source: `site.js` derives them from heading text when
+    it builds the contents panel, so two headings worded alike collide and the
+    browser jumps to whichever came first. A contents entry or a cross-page
+    anchor then points at the wrong section and nothing reports it. The slug
+    rule below has to match `structure()`'s, which matches `site.js`.
+    """
+    def slug(text):
+        # `re.ASCII`: `site.js`'s `slugify` uses JavaScript's `\w`, which is
+        # ASCII-only, while Python's is Unicode-aware by default. Left
+        # unmatched, a non-ASCII heading would slug differently here than in
+        # the browser, and this check would validate an anchor nobody's page
+        # actually creates.
+        text = html.unescape(re.sub(r"<[^>]+>", "", text))
+        return re.sub(r"\s+", "-", re.sub(r"[^\w\s-]", "", text.lower(), flags=re.ASCII).strip())
+
+    duplicated = examined = 0
+    for page in sorted(glob.glob(f"{SITE}/**/*.html", recursive=True)):
+        body = open(page, encoding="utf-8").read()
+        headings = re.findall(r"<(h[23])[^>]*>(.*?)</\1>", CARD.sub("", body), re.S)
+        if len(headings) < 3:
+            continue          # site.js builds no contents panel, so no ids
+        seen, repeated = set(), set()
+        for _, text in headings:
+            anchor = slug(text)
+            if anchor in seen:
+                repeated.add(anchor)
+            seen.add(anchor)
+        examined += 1
+        if repeated:
+            duplicated += 1
+            print(f"  {page}: two headings both become #{', #'.join(sorted(repeated))}")
+    print(f"{examined} pages with a contents panel, "
+          f"{duplicated} with a colliding heading id")
+    return duplicated
+
+
+def external_links():
+    """Every outward link must still resolve.
+
+    Eleven of them, ten to github.com — so this is really one host, and a failure
+    is far more likely to mean GitHub is briefly unreachable than that the site is
+    wrong. Hence the retries: each URL gets three attempts with a growing pause
+    before it is called broken, and a network that is down entirely reports as
+    skipped rather than failing, because a documentation edit must not go red for
+    someone else's outage.
+
+    HEAD first, then GET: some hosts answer HEAD with 405 while serving the page
+    perfectly well.
+    """
+    import urllib.error
+    import urllib.request
+
+    urls = {}
+    for page in sorted(glob.glob(f"{SITE}/**/*.html", recursive=True)):
+        text = open(page, encoding="utf-8").read()
+        for found in re.finditer(r'href="(https?://[^"#]+)', text):
+            urls.setdefault(found.group(1), page)
+
+    if not urls:
+        print("0 external links")
+        return 0
+
+    def reach(url):
+        """`None` if it resolves, an error string if it does not, `"offline"` if
+        nothing resolves at all."""
+        last = None
+        for attempt in range(3):
+            for method in ("HEAD", "GET"):
+                request = urllib.request.Request(
+                    url, method=method,
+                    headers={"User-Agent": "GET-docs-link-check"})
+                try:
+                    with urllib.request.urlopen(request, timeout=15) as answer:
+                        if answer.status < 400:
+                            return None
+                        last = f"HTTP {answer.status}"
+                except urllib.error.HTTPError as err:
+                    if err.code == 405 and method == "HEAD":
+                        continue
+                    last = f"HTTP {err.code}"
+                except urllib.error.URLError as err:
+                    last = f"unreachable: {err.reason}"
+                except OSError as err:
+                    last = f"unreachable: {err}"
+            time.sleep(2 * (attempt + 1))
+        return last
+
+    results = {url: reach(url) for url in sorted(urls)}
+    unreachable = [u for u, why in results.items() if why and why.startswith("unreachable")]
+    if len(unreachable) == len(results):
+        # A skip is a pass that checked nothing, and "skipped" printed into a log
+        # nobody opens is how the mypy probe and the pa11y step both went green
+        # for a day. Staying advisory is right — an outage must not redden a
+        # documentation edit — so the visibility is what has to improve: an
+        # annotation surfaces on the run without anyone reading raw output.
+        message = f"{len(results)} external links were not checked: no network"
+        print(f"{len(results)} external links, skipped: no network")
+        if os.environ.get("GITHUB_ACTIONS"):
+            print(f"::warning title=External links unchecked::{message}")
+            summary = os.environ.get("GITHUB_STEP_SUMMARY")
+            if summary:
+                with open(summary, "a", encoding="utf-8") as out:
+                    out.write(f"- :warning: {message}\n")
+        return 0
+
+    bad = 0
+    for url, why in sorted(results.items()):
+        if why:
+            bad += 1
+            print(f"  {urls[url]}: {url} -> {why}")
+    print(f"{len(results)} external links, {bad} broken")
+    return bad
+
+
+def config_defaults():
+    """The reference's Default column must say what `config.rs` implements.
+
+    This is the one check here that reads a *value* rather than a location. It
+    exists because `init_state` was documented as required for months while the
+    code defaulted it to 0: no reference, table or signature check could see
+    that, since every line it cited was correct.
+    """
+    source = source_defaults()
+    required = required_fields()
+    page = page_defaults()
+
+    checked = bad = 0
+    for key, cell in sorted(page.items()):
+        if key in source:
+            checked += 1
+            # The cell is prose around a value often enough that a substring
+            # test is the honest comparison: `1`, `all 1.0`, `0.04`.
+            if source[key] not in cell:
+                bad += 1
+                print(f"  configuration.html: {key} defaults to {source[key]} "
+                      f"in config.rs but the page says {cell!r}")
+        elif key in required:
+            checked += 1
+            if "required" not in cell.lower():
+                bad += 1
+                print(f"  configuration.html: {key} has no serde default, so it is "
+                      f"required, but the page says {cell!r}")
+    print(f"{checked} documented defaults, {bad} disagreeing with config.rs")
+    return bad
+
+
+# A version string as the site writes it: `0.9.0a1`, `v0.9.0a1`, `==0.9.0a1`.
+SITE_VERSION = re.compile(r"v?(?P<version>\d+\.\d+\.\d+(?:[abrc]+\d+)?)")
+
+
+def released_version():
+    """The version `pyproject.toml` declares, which is what PyPI will carry."""
+    text = open("pyproject.toml", encoding="utf-8").read()
+    found = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
+    return found.group(1) if found else None
+
+
+def site_versions():
+    """Every version the site states must be the one the package declares.
+
+    The version is written in eleven places across the pages and the sidebar
+    badge, which is exactly the shape that drifts: the redesign this site came
+    from announced a stable `0.9.0` while `pyproject.toml` said `0.9.0a1`, so a
+    reader was told to install a release that does not exist. Rather than
+    introduce a build step to inject it, this asserts the copies agree.
+    """
+    declared = released_version()
+    if declared is None:
+        print("  pyproject.toml states no version")
+        return 1
+
+    # Only where the page is talking about GET's own version: a bare number in
+    # prose is usually a parameter, and a dependency line names other crates.
+    contexts = re.compile(
+        r"(?:graph-evolution-tool==|tag = \"v|<span class=\"tag\">v?|"
+        # `version <code>0.9.0a1</code>` is the shape that slipped through a
+        # hand pass, so the markup between the word and the number is optional
+        # rather than absent.
+        r"[Vv]ersion (?:<code>)?)(?P<text>[0-9][^<\"\s,.]*(?:\.[^<\"\s,]*)*)")
+
+    checked = bad = 0
+    for path in sorted(glob.glob(f"{SITE}/**/*.html", recursive=True)) + [f"{SITE}/assets/site.js"]:
+        for hit in contexts.finditer(open(path, encoding="utf-8").read()):
+            found = SITE_VERSION.fullmatch(hit.group("text").rstrip(".").rstrip('"'))
+            if not found:
+                continue
+            checked += 1
+            if found.group("version") != declared:
+                bad += 1
+                print(f"  {path}: states version {found.group('version')}, "
+                      f"but pyproject.toml declares {declared}")
+    print(f"{checked} stated versions, {bad} disagreeing with pyproject.toml")
+    return bad
+
+
 def step_tables():
     """Each new-*.html's step table must match its chain's markers in the source."""
     bad = 0
     for page, chain in sorted(CHAIN.items()):
-        path = f"documentation/guide/{page}.html"
+        path = f"{SITE}/guide/{page}.html"
         rows = {n.rstrip("ab") for n, _ in re.findall(
             r"<tr><td>(\d+[ab]?)</td>(.*?)</tr>", open(path, encoding="utf-8").read(), re.S)}
         marks = set()
@@ -278,7 +664,7 @@ def step_tables():
 
 def main(fix):
     pages = []
-    for root, _, files in os.walk("documentation"):
+    for root, _, files in os.walk(SITE):
         # Posix separators, because these paths are also MOD's keys.
         pages += [os.path.join(root, f).replace(os.sep, "/") for f in files
                   if f.endswith(".html") and "_template" not in f]
@@ -365,8 +751,14 @@ def main(fix):
     print(f"{total} references, {wrong} wrong" + (f", {repaired} repaired" if fix else ""))
     bad_tables = step_tables()
     bad_sigs = signatures()
+    bad_counts = grep_counts()
+    bad_defaults = config_defaults()
+    bad_versions = site_versions()
+    bad_ids = heading_ids()
+    bad_figures = figure_labels()
+    bad_links = external_links()
     bad_structure = structure()
-    return 1 if (wrong and not fix) or bad_tables or bad_sigs or bad_structure else 0
+    return 1 if (wrong and not fix) or bad_tables or bad_sigs or bad_counts or bad_defaults or bad_versions or bad_ids or bad_figures or bad_links or bad_structure else 0
 
 
 if __name__ == "__main__":

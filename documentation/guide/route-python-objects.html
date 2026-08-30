@@ -10,7 +10,7 @@
 <body data-page="guide/route-python-objects.html">
 <main>
 
-<p class="page-kicker">Using GET</p>
+<p class="page-kicker">Use Python</p>
 <h1>Python: Config Objects</h1>
 <p class="lede">
   Build a run out of typed objects, hand it to <code>GraphEvolver</code>, and read the results back
@@ -20,34 +20,27 @@
 <h2>Install</h2>
 
 <p>
-  GET is a compiled module, so it installs rather than being copied in. The distribution is called
-  <code>graph-evolution-tool</code> and it imports as <code>get</code>: the short name was already
-  taken on PyPI and on crates.io and cannot be reclaimed, so the published name differs from the
-  import — the same arrangement as <code>pip install scikit-learn</code> giving you
-  <code>import sklearn</code>.
+  Version 0.9.0a1 is published on PyPI as a pre-release, as platform wheels. Install the distribution into a virtual
+  environment; Python imports it as <code>get</code>:
 </p>
 
 <pre><code class="language-bash">python3 -m venv .venv
 source .venv/bin/activate
-pip install graph-evolution-tool
+python -m pip install --upgrade pip
+python -m pip install graph-evolution-tool
 python -c "import get; print(get.__name__)"</code></pre>
 
-
+<div class="note">
+  <b>Why the names differ.</b> The project/distribution name is
+  <code>graph-evolution-tool</code>, while Python imports <code>get</code>. Pin
+  <code>graph-evolution-tool==0.9.0a1</code> for an archived environment.
+</div>
 
 <div class="tip">
-  <b>Building from a checkout instead.</b> If you want the working copy rather than the published
-  package — or the package is not on PyPI yet — build the extension module with
-  <a href="https://www.maturin.rs">maturin</a>. It compiles the Rust and installs it into the
-  active virtual environment under the import name <code>get</code>:
-  <pre><code class="language-bash">git clone https://github.com/md12ol/GraphEvolutionTool
-cd GraphEvolutionTool
-python3 -m venv .venv &amp;&amp; source .venv/bin/activate
-python3 -m ensurepip --upgrade      # only if this Python has no pip
-pip install maturin
-maturin develop --release</code></pre>
-  A Rust toolchain is needed for this and not for <code>pip install</code>; get one from
-  <a href="https://rustup.rs">rustup.rs</a>. Re-run <code>maturin develop</code> after every change
-  to the Rust — the installed module does not track the source.
+  <b>Your editor is the API reference.</b> The wheel ships <code>py.typed</code> and a complete type
+  stub, so an editor or language server shows every signature, argument type and docstring for
+  <code>Config</code>, <code>GraphEvolver</code> and <code>RunResult</code> as you type — offline,
+  and always matching the version you installed. <code>mypy</code> checks your calls against it too.
 </div>
 
 <h2>The Smallest Complete Run</h2>
@@ -100,14 +93,17 @@ last  = best.history[-1]
 print(f"{first:.3f} -> {last.best_fitness:.3f} over {last.iteration} generations")
 
 best.save_logs("run_log.csv")
-best.save_results("best_individual.txt")   # also writes best_individual.txt.toml</code></pre>
+best.save_results("best_individual.txt")
+best.save_config(".")                       # writes config.toml</code></pre>
 
 <div class="callout">
   <p>
     <b>Write <code>config_toml</code> out with your results.</b> On this route the parameters live
     in a program someone will edit, so the file is the only record of what a given set of numbers
-    was actually produced by. <code>save_results</code> writes it for you as
-    <code>&lt;name&gt;.toml</code>.
+    was actually produced by. Write one <code>config.toml</code> per experiment invocation rather
+    than one per replicate, since every replicate in that invocation came from the same document.
+    <code>save_results</code> writes only the network. <code>save_config(directory)</code> writes one
+    shared <code>config.toml</code> for the experiment.
   </p>
 </div>
 
@@ -129,8 +125,9 @@ for run_index, result in enumerate(results):
     result.save_logs(f"output/run_{run_index}/run_log.csv")</code></pre>
 
 <div class="warn">
-  <b><code>save_logs</code> and <code>save_results</code> do not create directories.</b> They write
-  the file you name and raise <code>OSError</code> if its folder is missing, so make the folder
+  <b>The save methods do not create directories.</b> <code>save_logs</code>,
+  <code>save_results</code>, and <code>save_config</code> write into a folder that must already
+  exist. They raise <code>OSError</code> if it is missing, so make the folder
   first. The <code>get-run</code> CLI is different — <code>--out</code> builds the whole tree for
   you.
 </div>
@@ -205,7 +202,8 @@ evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre
         wrote was stored verbatim rather than treated as an error.</li>
     <li><b>An empty file</b> loads an empty base graph.</li>
   </ul>
-  Each raises a Python <code>UserWarning</code> naming the file and the line, so
+  The file loader raises a Python <code>UserWarning</code> naming the file and line; the in-memory
+  loader identifies the affected edge without a file location. In either case,
   <code>warnings.simplefilter("error")</code> turns them into failures if you would rather find out
   loudly.
   <p>
@@ -225,7 +223,7 @@ evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre
 <h2>A Complete Example</h2>
 
 <p>
-  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/python_inline.py"><code>python_inline.py</code></a> is this route end to end:
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0a1/examples/python_inline.py"><code>python_inline.py</code></a> is this route end to end:
   several replicates, an output directory per run, and all three files written per replicate. It
   is not shipped in the wheel — the package carries the module and nothing else — so download it
   and run <code>python python_inline.py</code>.

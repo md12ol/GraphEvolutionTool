@@ -10,7 +10,7 @@
 <body data-page="guide/configuration.html">
 <main>
 
-<p class="page-kicker">Using GET</p>
+<p class="page-kicker">Reference</p>
 <h1>Configuration Reference</h1>
 <p class="lede">
   Every key a GET configuration accepts: what it does, what else it can be, what rejects it. This is
@@ -108,11 +108,10 @@
 </div>
 
 <div class="warn">
-  <b><code>size</code> lives here, not under <code>[selection]</code>.</b> If you are migrating a
-  configuration that sized a steady-state scope with <code>tournament_size</code>, that number moves
-  into this block and <code>[selection]</code> keeps only the tournament. A tournament may now exceed
-  the population; the floor that used to be checked against <code>tournament_size</code> is checked
-  against <code>size</code> instead.
+  <b><code>size</code> lives here, not under <code>[selection]</code>.</b> It is the scope's own
+  number; <code>[selection]</code> carries only the tournament's. A tournament may exceed the
+  population, because it samples with replacement, and the steady-state floor of four applies to
+  <code>size</code> rather than to <code>tournament_size</code>.
 </div>
 
 <h2><code>[selection]</code></h2>
@@ -167,6 +166,11 @@
   <tbody>
     <tr><td><code>gene_length</code></td><td>required</td>
         <td>Number of edit operations in the genome. The graph is what replaying them produces.</td></tr>
+    <tr><td><code>base_graph</code></td><td>the empty graph</td>
+        <td>An edge-list file the edits are applied to. A <b>relative path from the location of the
+            <code>.toml</code> file</b>, not from your working directory. The file's
+            <code># nodes = N</code> header must equal <code>network_size</code>. Read as
+            0-indexed.</td></tr>
     <tr><td><code>mutation</code></td><td><code>{ type = "reroll_gene" }</code></td>
         <td>Which mutation operator applies. See <a href="new-mutation.html">Add a Mutation
             Operator</a>.</td></tr>
@@ -200,12 +204,12 @@
   <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
   <tbody>
     <tr><td><code>num_states</code></td><td>required</td>
-        <td>States in the automaton.</td></tr>
+        <td>States in the automaton. Must be in <code>1..=65536</code>.</td></tr>
     <tr><td><code>max_resp_len</code></td><td>required</td>
-        <td>Longest response string a transition may emit. Responses are drawn from
+        <td>Longest response string a transition may emit; must be at least 1. Responses are drawn from
             <code>1..=max_resp_len</code>, never empty, which is what guarantees the automaton
             terminates.</td></tr>
-    <tr><td><code>init_state</code></td><td>required</td>
+    <tr><td><code>init_state</code></td><td><code>0</code></td>
         <td>State the automaton starts in. Must be <b>less than</b> <code>num_states</code>.</td></tr>
     <tr><td><code>init_char_mutation_rate</code></td><td><code>0.04</code></td>
         <td>Chance a mutation targets the initial character rather than the tables. In
@@ -270,7 +274,7 @@
     <tr><td><code>num_epidemics</code></td><td>required</td>
         <td>Epidemics averaged per evaluation. At least 1 — fitness is their mean.</td></tr>
     <tr><td><code>patient_zero</code></td><td>random each epidemic</td>
-        <td>Fix the seed node instead.</td></tr>
+        <td>Fix the seed node instead. When set, it must be less than <code>network_size</code>.</td></tr>
     <tr><td><code>min_epidemic_length</code></td><td><code>3</code></td>
         <td>Outbreaks shorter than this are re-simulated. Set to 1 to disable the re-roll.</td></tr>
     <tr><td><code>max_epidemic_retries</code></td><td><code>5</code></td>
@@ -282,9 +286,9 @@
 <h3><code>epi_prof_match</code></h3>
 
 <p>
-  <code>target_profile</code> — required, an array of numbers, at least one element. Compared
-  verbatim at the size of the network being built: nothing is prepended and nothing is rescaled.
-  Supplying it under any other objective is rejected by name.
+  <code>target_profile</code> — required, a non-empty array of finite numbers. Comparison covers the
+  target array's length: a shorter epidemic is padded with zeros, and a longer epidemic's tail is
+  ignored. Nothing is prepended or rescaled. Supplying it under another objective is rejected.
 </p>
 
 <h3><code>struct_match</code></h3>
@@ -300,7 +304,7 @@
     <tr><td><code>degree_bins</code> · <code>clustering_bins</code> · <code>spectral_bins</code></td>
         <td><code>50</code></td>
         <td>Histogram bins per statistic family. More bins resolve finer differences and need more
-            reference graphs to fill them.</td></tr>
+            reference graphs to fill them. Each bin count must be at least 1.</td></tr>
     <tr><td><code>degree_gamma</code> · <code>clustering_gamma</code> · <code>spectral_gamma</code></td>
         <td><code>1.0</code></td>
         <td>RBF bandwidths. Must be finite and greater than zero — the kernel divides by them.</td></tr>
@@ -309,8 +313,8 @@
         <td>How much each family counts. Finite and non-negative; <b>they cannot all be zero</b>,
             which would score every candidate identically.</td></tr>
     <tr><td><code>density_weight</code></td><td><code>1.0</code></td>
-        <td>How much distance from the reference set's mean density counts. Zero switches the penalty
-            off.</td></tr>
+        <td>How much distance from the reference set's mean density counts. Must be finite and
+            non-negative; zero switches the penalty off.</td></tr>
   </tbody>
 </table>
 </div>
@@ -331,10 +335,15 @@
   <tbody>
     <tr><td>The <b>seed</b></td>
         <td>One master seed is passed to the run call; the population, evolution, epidemics and
-            replicates all derive from it. Writing <code>seed</code> under <code>[fitness]</code> is
-            rejected by name, because it used to live there.</td></tr>
-    <tr><td>A <b>base graph</b></td>
-        <td>Set on the evolver before running — no key names one. See
+            replicates all derive from it. Writing <code>seed</code> under <code>[fitness]</code>
+            is rejected by name rather than ignored, so a document carrying one fails loudly instead
+            of running with a seed nobody supplied.</td></tr>
+    <tr><td>A base graph in <b>your own node numbering</b>, or one supplied
+            <b>without a config file</b></td>
+        <td><code>[genome] base_graph</code> covers the ordinary case, but it is 0-indexed and it
+            resolves against the config file — so a file numbered from 1, or a config assembled as
+            objects in Python, still needs <code>set_base_graph_from_file</code> and its
+            <code>min_node_index</code>. See
             <a href="route-python-objects.html">Python: Config Objects</a>.</td></tr>
     <tr><td>Replicate count, output folder</td>
         <td>Arguments to the run, not the configuration. See the route pages.</td></tr>
@@ -355,24 +364,27 @@
   <b><code>[fitness]</code> cannot reject typos, and this is structural rather than an oversight.</b>
   Its variants flatten the shared SIR block into themselves, and flattening consumes unrecognized
   keys into the flattened field — so the check that rejects them cannot fire there. Two names are
-  caught explicitly because they are known migration hazards: <code>seed</code>, and
-  <code>target_profile</code> under an objective that never reads one. Anything else misspelled under
+  caught explicitly, because both are mistakes a reader makes rather than typos:
+  <code>seed</code>, which belongs to the run call, and <code>target_profile</code> under an
+  objective that never reads one. Anything else misspelled under
   <code>[fitness]</code> is silently ignored, and your run uses the default.
 </div>
 
 <h2>When a Value Is Rejected</h2>
 
 <p>
-  Validation runs <b>once, up front</b> — every check above happens before any individual is created,
-  so a bad configuration fails in milliseconds rather than mid-run. The error names the field and the
+  Most validation runs <b>once, up front</b>, so common bad configurations fail before evolution.
+  Some SDA dimension constraints and filesystem-dependent checks are reached only when a run
+  starts rather than when the file loads &mdash; <code>max_resp_len = 0</code> is one. The error names the field and the
   constraint. From Python it arrives as a <code>ValueError</code> naming the <i>attribute path</i>
   you would have written (<code>config.scope.size</code>), not the TOML key, so the message matches
   the code in front of you.
 </p>
 
 <p>
-  The one thing validation deliberately does not do is touch the filesystem. A path-valued setting —
-  today only <code>reference_folder</code> — is checked when the run starts instead.
+  Validation deliberately does not touch the filesystem. A path-valued setting—today only
+  <code>reference_folder</code>—is checked when the run starts; the folder must exist and contain at
+  least one usable reference graph.
 </p>
 
 </main>

@@ -10,7 +10,7 @@
 <body data-page="guide/new-scope.html">
 <main>
 
-<p class="page-kicker">Extending GET</p>
+<p class="page-kicker">Advanced Extensions</p>
 <h1>Add a Scope</h1>
 <p class="lede">
   Choosing which slice of the population a single breeding event may touch. Six edits across five
@@ -47,9 +47,9 @@
 <div class="callout">
   <p>
     <b>A variant's parameters are its own.</b> <code>size</code> belongs to <code>[scope]</code> and
-    nothing else reads it. That is the whole reason this axis exists as its own enum: steady-state
-    used to take its scope size from <code>[selection]</code>'s <code>tournament_size</code>, which
-    left a scheme with no tournament unable to say how large a scope it wanted.
+    nothing else reads it. That is the whole reason this axis exists as its own enum: a scheme with no
+    tournament — <code>best</code>, say — still has to be able to say how large a scope it wants, and
+    it cannot if that number lives under <code>[selection]</code>.
   </p>
 </div>
 
@@ -78,7 +78,7 @@ radius = 3</code></pre>
 
 <p>Every step is marked at its own site. One command lists the chain:</p>
 
-<pre><code class="language-bash">git grep -n "ADD A SCOPE STEP" get/src config.example.toml</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A SCOPE STEP" get/src config.example.toml    # 6 steps, 7 sites</code></pre>
 
 <div class="table-wrap">
 <table>
@@ -261,8 +261,8 @@ fn neighbourhood_stays_in_range_and_is_reproducible() {
   chains:
 </p>
 
-<pre><code class="language-bash">git grep -n "ADD A SELECTION STEP" get/src config.example.toml      # six steps
-git grep -n "ADD A REPLACEMENT STEP" get/src    # three steps</code></pre>
+<pre><code class="language-bash">git grep -n "ADD A SELECTION STEP" get/src config.example.toml      # 6 steps, 7 sites
+git grep -n "ADD A REPLACEMENT STEP" get/src    # 3 steps, 6 sites</code></pre>
 
 <p>
   See <a href="new-selection.html">Add a Selection Scheme</a> and

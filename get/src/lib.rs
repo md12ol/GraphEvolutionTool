@@ -663,7 +663,7 @@ pub struct RunSummary {
     /// `seed`.
     run_index: usize,
     /// The TOML document this run's config was parsed from. Private:
-    /// `save_results` writes it to `{filename}.toml`.
+    /// `save_config` writes it into the invocation's folder as `config.toml`.
     config_toml: String,
 }
 
@@ -697,8 +697,11 @@ impl RunSummary {
         Ok(())
     }
 
-    /// Write the best individual to `filename`, and the run's config TOML
-    /// alongside it at `{filename}.toml`.
+    /// Write the best individual to `filename`.
+    ///
+    /// The config that produced it is not written here — it belongs to the
+    /// invocation rather than to one replicate, so `save_config` writes it once
+    /// into the folder the replicates share.
     pub fn save_results(&self, filename: &str) -> std::io::Result<()> {
         use std::io::Write;
 
@@ -718,8 +721,17 @@ impl RunSummary {
             writeln!(file, "{u},{v},{weight}")?;
         }
 
-        std::fs::write(format!("{filename}.toml"), &self.config_toml)?;
         Ok(())
+    }
+
+    /// Write the run's config TOML into `directory` as `config.toml`.
+    ///
+    /// Called once per invocation, on the folder from
+    /// [`experiment_output_dir`], rather than once per replicate: every
+    /// replicate of one invocation was produced by the same document, and
+    /// writing a copy beside each would be the same bytes N times.
+    pub fn save_config(&self, directory: &Path) -> std::io::Result<()> {
+        std::fs::write(directory.join("config.toml"), &self.config_toml)
     }
 }
 
@@ -775,9 +787,10 @@ pub fn utc_stamp() -> String {
 /// Where one replicate's files belong. Returns a path and creates nothing —
 /// every caller runs `create_dir_all` on the result itself.
 ///
-/// `None` for `out_dir` means the working directory under fixed names. It
-/// ignores `run_index`, so it is only correct for a single replicate — `get-run`
-/// rejects `--runs N` above 1 without `--out` for that reason.
+/// `None` for `out_dir` puts the timestamped folder in the working directory
+/// rather than writing into it; `Some` chooses a different root and changes
+/// nothing else. Either way `run_index` is honoured, so replicates never
+/// collide.
 ///
 /// `stamp` is passed in rather than read here: every replicate of one invocation
 /// belongs in the same timestamped directory, and reading the clock per
@@ -796,16 +809,28 @@ pub fn run_output_dir(
     run_index: usize,
     n_runs: usize,
 ) -> PathBuf {
-    let Some(root) = out_dir else {
-        return PathBuf::from(".");
-    };
-
-    let mut path = Path::new(root).join(format!("{stamp}-{seed}"));
+    let mut path = experiment_output_dir(out_dir, stamp, seed);
     if n_runs > 1 {
         let width = n_runs.to_string().len();
         path = path.join(format!("run_{:0width$}", run_index + 1, width = width));
     }
     path
+}
+
+/// The folder one invocation's replicates all land inside.
+///
+/// `run_output_dir`'s parent when there is more than one replicate, and the
+/// same directory when there is one. This is where anything belonging to the
+/// invocation rather than to a single replicate goes — `config.toml`, which
+/// every replicate shares because they were all produced by it.
+///
+/// **Always timestamped, `--out` or not.** Without one the stamp folder is made
+/// in the working directory rather than the working directory being used
+/// directly, so two invocations never overwrite each other and a run cannot
+/// write over the config it was given. `--out` chooses the root and nothing
+/// else.
+pub fn experiment_output_dir(out_dir: Option<&str>, stamp: &str, seed: u64) -> PathBuf {
+    Path::new(out_dir.unwrap_or(".")).join(format!("{stamp}-{seed}"))
 }
 
 /// Rust-native entry point: run a `config.toml` with no Python interpreter.
@@ -973,13 +998,69 @@ mod tests {
     }
 
     #[test]
-    fn without_an_output_directory_every_replicate_shares_the_working_directory() {
-        // Why `get-run` rejects `--runs N` above 1 without `--out`: the paths
-        // collide rather than being distinguished by the run index.
+    fn without_an_output_directory_the_stamp_folder_is_made_in_the_working_one() {
+        // `--out` chooses the root and nothing else: the timestamped folder is
+        // made either way, so replicates are distinguished without it and two
+        // invocations cannot overwrite each other.
         let first = run_output_dir(None, "20260828-071233", 7, 0, 5);
         let second = run_output_dir(None, "20260828-071233", 7, 1, 5);
-        assert_eq!(first, PathBuf::from("."));
-        assert_eq!(first, second);
+        // The `./` is kept rather than trimmed: it is what `get-run` already
+        // prints in its `wrote ...` lines, so the path a reader is told about
+        // and the path on disk are spelled the same way.
+        assert_eq!(first, PathBuf::from("./20260828-071233-7/run_1"));
+        assert_eq!(second, PathBuf::from("./20260828-071233-7/run_2"));
+
+        // One replicate still lands directly in the stamp folder.
+        let alone = run_output_dir(None, "20260828-071233", 7, 0, 1);
+        assert_eq!(alone, PathBuf::from("./20260828-071233-7"));
+    }
+
+    #[test]
+    fn every_replicate_of_one_invocation_shares_one_experiment_folder() {
+        // What makes a single `config.toml` correct: the replicates differ
+        // below this directory, never in it.
+        let experiment = experiment_output_dir(Some("out"), "20260829-071233", 7);
+        for run_index in 0..4 {
+            let run = run_output_dir(Some("out"), "20260829-071233", 7, run_index, 4);
+            assert_eq!(run.parent().expect("a run folder has a parent"), experiment);
+        }
+    }
+
+    #[test]
+    fn one_replicate_writes_its_config_beside_its_results() {
+        // With nothing to disambiguate, the run folder *is* the experiment
+        // folder, so the config still lands next to `best_individual.txt`.
+        let experiment = experiment_output_dir(Some("out"), "20260829-071233", 7);
+        let run = run_output_dir(Some("out"), "20260829-071233", 7, 0, 1);
+        assert_eq!(run, experiment);
+    }
+
+    #[test]
+    fn save_config_writes_the_document_the_run_was_parsed_from() {
+        let directory =
+            std::env::temp_dir().join(format!("get_save_config_test_{}", std::process::id()));
+        std::fs::create_dir_all(&directory).expect("the fixture directory is made");
+
+        let config_toml = "population_size = 10\n";
+        let summary = RunSummary {
+            best_fitness: 0.0,
+            best_genome_repr: String::new(),
+            best_edges: Vec::new(),
+            num_nodes: 0,
+            history: Vec::new(),
+            seed: 7,
+            run_index: 0,
+            config_toml: config_toml.to_string(),
+        };
+
+        summary
+            .save_config(&directory)
+            .expect("save_config writes successfully");
+        let written = std::fs::read_to_string(directory.join("config.toml"))
+            .expect("the config was written under a fixed name");
+        assert_eq!(written, config_toml);
+
+        std::fs::remove_dir_all(&directory).expect("the fixture cleans up");
     }
 
     /// A config whose `[fitness]` block is exactly `fitness_block`, with the

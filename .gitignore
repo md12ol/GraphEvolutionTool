@@ -37,13 +37,19 @@ handoff_edge_multiplicity_cap_simplification.md
 .codex/
 AGENTS.md
 
-# Output of the get-run dev CLI (see get/src/bin/run.rs), written into whatever directory it
-# is run from. Generated per run, never shared.
-run_log.csv
-best_individual.txt
-best_individual.txt.toml
+# Output of the get-run dev CLI (see get/src/bin/run.rs). Since 2026-08-30 each run
+# makes its own <timestamp>-<seed>/ folder rather than writing these three names into
+# whatever directory it was run from, so the folder is what needs ignoring — the bare
+# names are kept for output written before that change, and by anything driving the
+# library directly. Generated per run, never shared.
+/[0-9]*-[0-9]*/
+/run_log.csv
+/best_individual.txt
+/config.toml
 
 # `maturin develop` writes the built module into the package source directory.
 # The wheel gets its copy from the build, never from here.
 python/get/*.so
 python/get/*.pyd
+
+documentation-audit/

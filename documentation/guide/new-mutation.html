@@ -10,7 +10,7 @@
 <body data-page="guide/new-mutation.html">
 <main>
 
-<p class="page-kicker">Extending GET</p>
+<p class="page-kicker">Advanced Extensions</p>
 <h1>Add a Mutation Operator</h1>
 <p class="lede">
   Four edits — but this chain <b>exists twice</b>, once per genome, and the two halves share no
@@ -31,9 +31,9 @@
     neighbouring marker points forward to it — so read the step numbers, not the line count. Every
     marker names its half, so narrow the search to yours:
   </p>
-<pre><code class="language-bash">git grep -nE "ADD A MUTATION STEP . \(for EdgeEdit\)"   # edge-edit's four
-git grep -nE "ADD A MUTATION STEP . \(for SDA\)"        # SDA's four
-git grep -n "ADD A MUTATION STEP"                      # both halves at once</code></pre>
+<pre><code class="language-bash">git grep -nE "ADD A MUTATION STEP . \(for EdgeEdit\)" get/src config.example.toml   # 4 steps, 7 sites
+git grep -nE "ADD A MUTATION STEP . \(for SDA\)" get/src config.example.toml        # 4 steps, 7 sites
+git grep -n "ADD A MUTATION STEP" get/src config.example.toml       # both halves: 8 steps, 14 sites</code></pre>
   <p>
     Unlike crossover, mutation is <b>per representation</b>: there is no shared
     <code>Mutation</code> enum and no compatibility match to extend. Adding an operator for one

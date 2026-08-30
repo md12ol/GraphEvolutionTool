@@ -10,7 +10,7 @@
 <body data-page="guide/fitness.html">
 <main>
 
-<p class="page-kicker">How it works</p>
+<p class="page-kicker">Learn</p>
 <h1>Fitness &amp; Output</h1>
 <p class="lede">
   A fitness function turns a graph into one number. This page is that number's life: which
@@ -159,12 +159,12 @@ impossible rather than merely unlikely.</figcaption>
 <div class="tip">
   <b>Where a reference set comes from.</b> The repository carries two standard-library scripts that
   are not part of the package and are not in the wheel:
-  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/tools/tudataset_to_get.py"><code>tools/tudataset_to_get.py</code></a>
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0a1/tools/tudataset_to_get.py"><code>tools/tudataset_to_get.py</code></a>
   converts a <a href="https://chrsmrrs.github.io/datasets/">TUDataset</a> collection into the folder
   of edge files <code>load_reference_graphs</code> reads, and
-  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/tools/graph_to_png.py"><code>tools/graph_to_png.py</code></a>
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0a1/tools/graph_to_png.py"><code>tools/graph_to_png.py</code></a>
   draws any GET edge file as a PNG. Both are documented in
-  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/main/tools/README.md"><code>tools/README.md</code></a>.
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0a1/tools/README.md"><code>tools/README.md</code></a>.
 </div>
 
 <div class="note">
@@ -373,11 +373,12 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
 </p>
 
 <p>
-  The seed alone does not reproduce an experiment — you also need the exact config, which is what
-  <code>config.to_toml()</code> is for. Store the pair and the record is complete. Two things that
-  do <b>not</b> break reproducibility: a different machine, and a different core count. Two that
-  do: changing any config value, and a Python objective that is itself random, which GET cannot
-  seed for you.
+  The seed repeats GET's random stream for fixed code and inputs; it is not a complete experiment
+  record. Preserve the exact commit/version, config, master seed and replicate index, base and
+  reference graphs, custom objective and run code, dependency versions, and relevant environment.
+  A Python objective with its own randomness needs its own recorded seeding policy. Different core
+  counts are intended to preserve GET's stream, but record hardware and software context rather
+  than promising machine-independent identity.
 </p>
 
 <h2 id="output">Logs &amp; Results</h2>
@@ -485,11 +486,13 @@ best = max(results, key=lambda r: r.best_fitness)   # epi_spread maximizes
 print(best.best_fitness, best.best_edges, best.best_genome_repr)
 
 best.save_logs("convergence.csv")     # the seven columns above
-best.save_results("results.txt")      # best individual, with the run's config TOML alongside</code></pre>
+best.save_results("results.txt")      # the best individual, as a loadable edge file
+best.save_config(".")                 # writes one shared config.toml</code></pre>
 
 <p>
-  The config TOML written beside the results is the <b>provenance record of what produced
-  them</b>. With the seed on every log row, that pair re-runs the experiment exactly.
+  The config TOML and logged seed are two parts of provenance, not the whole record. Also preserve
+  the exact commit/version, run and objective code, base/reference graphs, identifier mapping,
+  dependencies, and relevant environment.
 </p>
 
 <div class="tip">
@@ -499,6 +502,23 @@ best.save_results("results.txt")      # best individual, with the run's config T
   winner of one run feeds straight into the next as a base graph, which is what makes
   <a href="pipeline.html#genomes">stacking SDA into edge-edit</a> a two-line operation.
 </div>
+
+<h2>Interpreting Runs Scientifically</h2>
+
+<p>The <code>max(...)</code> example above is useful when you need one candidate network. It is not
+the right summary of evidence across replicates: reporting only the most favorable run introduces
+selection bias.</p>
+
+<ul>
+  <li>Report the distribution across independent replicates, not only the winner.</li>
+  <li>Compare against a declared baseline or null procedure using the same evaluation budget.</li>
+  <li>For stochastic objectives, re-evaluate selected networks on fresh or held-out random draws;
+      the simulation samples used during evolution are training evidence.</li>
+  <li>Treat a flattening convergence curve as a search diagnostic, not proof of mathematical or
+      biological convergence.</li>
+  <li>Separate “GET optimized the stated objective” from any claim that the evolved network is
+      biologically plausible or scientifically explanatory.</li>
+</ul>
 
 <h2>Writing Your Own Objective</h2>
 

@@ -96,8 +96,8 @@ pub struct PyRunResult {
     /// reproduces this exact run.
     #[pyo3(get)]
     pub run_index: usize,
-    /// The TOML document this run's config was parsed from. `save_results`
-    /// writes it beside the best individual, so the run can be reproduced.
+    /// The TOML document this run's config was parsed from. `save_config`
+    /// writes it into a folder, so the run can be reproduced.
     #[pyo3(get)]
     pub config_toml: String,
 }
@@ -145,10 +145,13 @@ impl PyRunResult {
         Ok(())
     }
 
-    /// Write the best individual to `filename`, and the run's config TOML
-    /// alongside it at `{filename}.toml`.
+    /// Write the best individual to `filename`.
     ///
     /// **The file is a loadable edge list**, which GET reads back unedited.
+    ///
+    /// The config that produced it is not written here — it belongs to the
+    /// whole invocation rather than to one replicate, so `save_config` writes
+    /// it once into the folder the replicates share.
     pub fn save_results(&self, filename: &str) -> PyResult<()> {
         let mut file = File::create(filename)
             .map_err(|err| PyIOError::new_err(format!("could not create {filename}: {err}")))?;
@@ -169,12 +172,22 @@ impl PyRunResult {
             })?;
         }
 
-        let config_path = format!("{filename}.toml");
-        std::fs::write(&config_path, &self.config_toml).map_err(|err| {
-            PyIOError::new_err(format!("could not write to {config_path}: {err}"))
-        })?;
-
         Ok(())
+    }
+
+    /// Write the run's config TOML into `directory` as `config.toml`.
+    ///
+    /// Called once per invocation rather than once per replicate: every
+    /// replicate of one invocation was produced by the same document, and a
+    /// copy beside each would be the same bytes N times.
+    pub fn save_config(&self, directory: &str) -> PyResult<()> {
+        let config_path = std::path::Path::new(directory).join("config.toml");
+        std::fs::write(&config_path, &self.config_toml).map_err(|err| {
+            PyIOError::new_err(format!(
+                "could not write to {}: {err}",
+                config_path.display()
+            ))
+        })
     }
 }
 
@@ -277,9 +290,13 @@ mod tests {
         assert_eq!(loaded.edges, vec![(0, 1, 2), (1, 3, 1)]);
         assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
 
-        // The provenance TOML is written beside it, under a derived name.
-        let config = std::fs::read_to_string(folder.join("best.csv.toml"))
-            .expect("the config should be written alongside");
+        // The provenance TOML is written by `save_config`, into a folder of
+        // its own choosing rather than derived from the results file's name.
+        result
+            .save_config(folder.to_str().expect("temp path is valid UTF-8"))
+            .expect("save_config writes successfully");
+        let config = std::fs::read_to_string(folder.join("config.toml"))
+            .expect("the config should be written into the folder");
         assert_eq!(config, "population_size = 10\n");
 
         std::fs::remove_dir_all(&folder).expect("cleanup");

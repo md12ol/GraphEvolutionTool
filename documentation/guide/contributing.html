@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Set up the Graph Evolution Tool repository, run its checks, and find the right extension guide.">
+<title>Contributor Guide · GET Docs</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧬</text></svg>">
+</head>
+<body data-page="guide/contributing.html">
+<main>
+
+<p class="page-kicker">Contribute</p>
+<h1>Contributor Guide</h1>
+<p class="lede">Set up a development checkout, run the core checks for your change, and choose the
+smallest extension chain that matches your change.</p>
+
+<h2>Set Up the Repository</h2>
+
+<pre><code class="language-bash">git clone https://github.com/md12ol/GraphEvolutionTool.git
+cd GraphEvolutionTool
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip maturin
+maturin develop --release</code></pre>
+
+<p>
+  You need a current stable Rust toolchain, Python 3.8 or newer, and Git. The build installs the
+  Python module into the active virtual environment. The Rust crate is the workspace member in
+  <code>get/</code>.
+</p>
+
+<h2>Run the Core Checks</h2>
+
+<pre><code class="language-bash">cargo fmt -p graph-evolution-tool --check
+cargo clippy -p graph-evolution-tool --all-targets --features cli -- -D warnings
+cargo test -p graph-evolution-tool --features cli
+cargo run -p graph-evolution-tool --example library_route
+python tools/test_stubs.py
+python tools/build_bundle.py --check
+python3 documentation/check_refs.py</code></pre>
+
+<p>
+  CI also runs every Rust example and conditional Python/tool tests; run the commands relevant to
+  the files you changed. Run the documentation checker from the repository root. It checks source references, extension
+  step tables, displayed function signatures, navigation membership, internal links, and anchors.
+  The bundle check confirms that <code>documentation/get-examples.zip</code> and its readable HTML
+  page still match the source files under <code>get-examples/</code>.
+</p>
+
+<h2>Find the Code</h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Area</th><th>Start in</th></tr></thead>
+  <tbody>
+    <tr><td>Graph storage and edge behavior</td><td><code>get/src/graph.rs</code> and <code>graph_io.rs</code></td></tr>
+    <tr><td>Genome interface and implementations</td><td><code>get/src/genomes/</code></td></tr>
+    <tr><td>Evolution loops</td><td><code>get/src/evolver/</code></td></tr>
+    <tr><td>Objectives and epidemic simulation</td><td><code>get/src/fitness.rs</code> and <code>sir.rs</code></td></tr>
+    <tr><td>Config schema and validation</td><td><code>get/src/config.rs</code></td></tr>
+    <tr><td>Concrete route assembly</td><td><code>get/src/dispatch.rs</code></td></tr>
+    <tr><td>Python config and results</td><td><code>get/src/py_config.rs</code>, <code>py_result.rs</code>, and <code>lib.rs</code></td></tr>
+    <tr><td>Command-line route</td><td><code>get/src/bin/run.rs</code></td></tr>
+    <tr><td>Runnable examples</td><td><code>examples/</code> and <code>get/examples/</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Choose the Extension Point</h2>
+
+<p>
+  Begin with the <a href="extending.html">Extension Map</a>. It compares the cost and dispatch
+  impact of every axis. Adding an objective is the supported extension path in 0.9.0a1:
+</p>
+
+<ul>
+  <li><a href="new-fitness.html#python-route">Register a Python objective</a> without changing GET.</li>
+  <li><a href="new-fitness.html#rust-route">Implement a Rust objective in another crate</a> while working from source.</li>
+  <li><a href="new-fitness.html#in-crate-route">Add a built-in objective</a> inside GET.</li>
+</ul>
+
+<div class="warn">
+  <b>The advanced extension pages are implementation maps, not all release-ready workflows.</b>
+  Genome, strategy, selection, scope, replacement, crossover, and mutation pages currently carry
+  explicit 0.9 warnings. Read the warning at the top of the relevant page before treating its steps
+  as a supported public extension path.
+</div>
+
+<h2>Keep Interfaces in Sync</h2>
+
+<p>
+  A config-visible feature usually crosses several boundaries: Rust config, validation, dispatch,
+  Python config objects, examples, and documentation. The extension pages list these sites as
+  numbered chains. Follow the chain for your axis instead of copying the shape of a different one.
+</p>
+
+<h2>Documentation Changes</h2>
+
+<ul>
+  <li>Write what the current code does, not what a design proposes.</li>
+  <li>Add the page to <code>NAV</code> in <code>documentation/assets/site.js</code>.</li>
+  <li>Set the page's <code>data-page</code> path exactly.</li>
+  <li>Keep tables inside <code>&lt;div class="table-wrap"&gt;</code>.</li>
+  <li>Run <code>python3 documentation/check_refs.py</code>, then inspect a narrow browser window.</li>
+</ul>
+
+<h2>Submit the Change</h2>
+
+<ol>
+  <li>Create a focused branch.</li>
+  <li>Make the smallest coherent change and add tests that would fail without it.</li>
+  <li>Run the relevant checks above.</li>
+  <li>Open a pull request that explains the behavior change, evidence, and documentation impact.</li>
+</ol>
+
+<p>
+  Search the <a href="https://github.com/md12ol/GraphEvolutionTool/issues">issue tracker</a> before
+  starting a large extension so work and design constraints are visible early.
+</p>
+
+</main>
+<script src="../assets/site.js"></script>
+</body>
+</html>

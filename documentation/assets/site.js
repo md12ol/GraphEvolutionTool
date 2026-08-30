@@ -19,40 +19,67 @@
     {
       title: null,
       items: [
-        ["index.html",                        "Overview"]
+        ["index.html",                        "Overview", "what is get graph evolution tool"]
       ]
     },
     {
-      title: "How It Works",
+      title: "Start Here",
       items: [
-        ["guide/pipeline.html",               "The Pipeline"],
-        ["guide/variation.html",              "Variation & Selection"],
-        ["guide/fitness.html",                "Fitness & Output"]
+        ["guide/getting-started.html",        "Getting Started", "install quickstart first run"],
+        ["guide/choosing-a-route.html",       "Choose a Route", "python toml rust cli library"],
+        ["guide/concepts.html",               "Concepts & Vocabulary", "graph genome fitness objective evolution glossary"],
+        ["guide/troubleshooting.html",        "Troubleshooting", "error install import config slow output"]
       ]
     },
     {
-      title: "Using GET",
+      title: "Learn",
       items: [
-        ["guide/route-python-objects.html",   "Python: Config Objects"],
-        ["guide/route-python-toml.html",      "Python: TOML File"],
-        ["guide/example-bundle.html",         "The Example Bundle"],
-        ["guide/route-rust-library.html",     "Rust: As a Library"],
-        ["guide/route-rust-cli.html",         "Rust: The get-run CLI"],
-        ["guide/configuration.html",          "Configuration Reference"]
+        ["guide/pipeline.html",               "The Pipeline", "loop graph genome expression"],
+        ["guide/variation.html",              "Variation & Selection", "crossover mutation breeding replacement"],
+        ["guide/fitness.html",                "Fitness & Output", "objective sir seed result log reproducibility"]
       ]
     },
     {
-      title: "Extending GET",
+      title: "Use Python",
       items: [
-        ["guide/extending.html",              "Extension Points"],
-        ["guide/new-fitness.html",            "Add an Objective"],
-        ["guide/new-genome.html",             "Add a Genome"],
-        ["guide/new-evolver.html",            "Add a Strategy"],
-        ["guide/new-selection.html",          "Add a Selection Scheme"],
-        ["guide/new-scope.html",              "Add a Scope"],
-        ["guide/new-replacement.html",        "Add a Replacement Policy"],
-        ["guide/new-crossover.html",          "Add a Crossover Operator"],
-        ["guide/new-mutation.html",           "Add a Mutation Operator"]
+        ["guide/route-python-objects.html",   "Config Objects", "python typed objects graphevolver"],
+        ["guide/route-python-toml.html",      "TOML File", "python configuration file"],
+        ["guide/example-bundle.html",         "Example Bundle", "download examples plots analysis configs"],
+        ["guide/config-builder.html",         "Config Builder", "build generate config toml form interactive"]
+      ]
+    },
+    {
+      title: "Use Rust",
+      items: [
+        ["guide/route-rust-library.html",     "As a Library", "crate native objective embedded", "source only"],
+        ["guide/route-rust-cli.html",         "get-run CLI", "command line config output", "source only"]
+      ]
+    },
+    {
+      title: "Reference",
+      items: [
+        ["guide/data-and-inputs.html",        "Data & Inputs", "edge file graph biological gene protein identifiers mapping limits"],
+        ["guide/configuration.html",          "Configuration Reference", "keys fields defaults validation toml rust cli"]
+      ]
+    },
+    {
+      title: "Contribute",
+      items: [
+        ["guide/contributing.html",           "Contributor Guide", "clone test docs pull request source map"],
+        ["guide/extending.html",              "Extension Map", "add feature cost dispatch"],
+        ["guide/new-fitness.html",            "Add an Objective", "python callable rust fitness"]
+      ]
+    },
+    {
+      title: "Advanced Extensions",
+      items: [
+        ["guide/new-genome.html",             "Add a Genome", "representation graph"],
+        ["guide/new-evolver.html",            "Add a Strategy", "evolution algorithm"],
+        ["guide/new-selection.html",          "Add a Selection Scheme", "parents"],
+        ["guide/new-scope.html",              "Add a Scope", "population slice"],
+        ["guide/new-replacement.html",        "Add a Replacement Policy", "overwrite children"],
+        ["guide/new-crossover.html",          "Add a Crossover Operator", "recombination"],
+        ["guide/new-mutation.html",           "Add a Mutation Operator", "variation"]
       ]
     },
     {
@@ -70,6 +97,16 @@
   var root = depth === 0 ? "" : new Array(depth + 1).join("../");
 
   function href(target) { return root + target; }
+
+  function setTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem("get-docs-theme", theme); } catch (e) { /* file:// may deny storage */ }
+  }
+
+  function initialTheme() {
+    try { return localStorage.getItem("get-docs-theme") || "light"; }
+    catch (e) { return "light"; }
+  }
 
   /* ---------- sidebar --------------------------------------------------- */
 
@@ -89,7 +126,7 @@
       '<circle cx="16" cy="8" r="3"/><circle cx="8" cy="22" r="3"/><circle cx="24" cy="22" r="3"/>' +
       '</g></svg>' +
       '<a href="' + href("index.html") + '">GET Docs</a>' +
-      '<span class="tag">v0.9</span>';
+      '<span class="tag">v0.9.0a1</span>';
     aside.appendChild(brand);
 
     /* The repository, once, in the site chrome -- so every page can reach the
@@ -101,26 +138,67 @@
     repo.textContent = "Source on GitHub \u2197";
     aside.appendChild(repo);
 
+    var tools = document.createElement("div");
+    tools.className = "sidebar-tools";
+    var label = document.createElement("label");
+    label.className = "sr-only";
+    label.setAttribute("for", "page-search");
+    label.textContent = "Find a documentation page";
+    var search = document.createElement("input");
+    search.id = "page-search";
+    search.type = "search";
+    search.placeholder = "Find a page…";
+    search.setAttribute("autocomplete", "off");
+    tools.appendChild(label);
+    tools.appendChild(search);
+    var searchStatus = document.createElement("span");
+    searchStatus.className = "sr-only";
+    searchStatus.setAttribute("aria-live", "polite");
+    tools.appendChild(searchStatus);
+
+    var theme = document.createElement("button");
+    theme.className = "theme-toggle";
+    theme.type = "button";
+    function updateThemeLabel() {
+      var dark = document.documentElement.getAttribute("data-theme") === "dark";
+      theme.textContent = dark ? "Use light theme" : "Use dark theme";
+      theme.setAttribute("aria-label", theme.textContent);
+    }
+    updateThemeLabel();
+    theme.addEventListener("click", function () {
+      setTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+      updateThemeLabel();
+    });
+    tools.appendChild(theme);
+    aside.appendChild(tools);
+
     /* One section open at a time: the one holding the current page. A title is
        a link to its own first page, so following it lands you there and the
        next page load opens that section and closes this one -- the accordion
        needs no state of its own, and a shared link always arrives showing the
        same thing. */
     var nav = document.createElement("nav");
+    nav.setAttribute("aria-label", "Documentation");
     NAV.forEach(function (group) {
       var holdsPage = group.items.some(function (i) { return i[0] === page; });
 
       var g = document.createElement("div");
       // A titleless group has nothing to collapse, so it is always open.
-      g.className = "nav-group" + (holdsPage || !group.title ? " open" : "");
+      var startsOpen = holdsPage || !group.title || (page === "index.html" && group.title === "Start Here");
+      g.className = "nav-group" + (startsOpen ? " open" : "");
+      g.setAttribute("data-default-open", startsOpen ? "true" : "false");
 
       if (group.title) {
-        var t = document.createElement("a");
+        var t = document.createElement("button");
         t.className = "nav-title";
-        t.href = href(group.items[0][0]);
+        t.type = "button";
         t.textContent = group.title;
-        /* Deliberately NOT aria-expanded: this is a link to the section's first
-           page, not a control that expands anything on the current page. */
+        t.setAttribute("aria-expanded", startsOpen ? "true" : "false");
+        t.addEventListener("click", function () {
+          var open = !g.classList.contains("open");
+          g.classList.toggle("open", open);
+          t.setAttribute("aria-expanded", open ? "true" : "false");
+        });
         g.appendChild(t);
       }
 
@@ -131,12 +209,41 @@
         a.className = "nav-link" + (item[0] === page ? " active" : "");
         a.href = href(item[0]);
         a.textContent = item[1];
+        a.setAttribute("data-search", (item[1] + " " + (item[2] || "")).toLowerCase());
+        if (item[0] === page) a.setAttribute("aria-current", "page");
+        if (item[3]) {
+          var status = document.createElement("span");
+          status.className = "nav-status";
+          status.textContent = item[3];
+          a.appendChild(status);
+        }
         list.appendChild(a);
       });
       g.appendChild(list);
       nav.appendChild(g);
     });
     aside.appendChild(nav);
+
+    search.addEventListener("input", function () {
+      var query = search.value.trim().toLowerCase();
+      var matches = 0;
+      Array.prototype.forEach.call(nav.querySelectorAll(".nav-group"), function (group) {
+        var links = group.querySelectorAll(".nav-link");
+        var any = false;
+        Array.prototype.forEach.call(links, function (link) {
+          var match = !query || link.getAttribute("data-search").indexOf(query) !== -1;
+          link.hidden = !match;
+          any = any || match;
+          if (match && query) matches += 1;
+        });
+        group.hidden = !any;
+        if (query && any) group.classList.add("open");
+        if (!query) group.classList.toggle("open", group.getAttribute("data-default-open") === "true");
+        var title = group.querySelector(".nav-title");
+        if (title) title.setAttribute("aria-expanded", group.classList.contains("open") ? "true" : "false");
+      });
+      searchStatus.textContent = query ? (matches + (matches === 1 ? " page found" : " pages found")) : "Page filter cleared";
+    });
     return aside;
   }
 
@@ -151,16 +258,21 @@
        table of contents with links that duplicate the sidebar. */
     var heads = [];
     Array.prototype.forEach.call(main.querySelectorAll("h2, h3"), function (h) {
-      if (!h.closest(".card")) heads.push(h);
+      if (!h.closest(".card") && !h.closest(".path-card")) heads.push(h);
     });
     if (heads.length < 3) return null;
 
     var toc = document.createElement("nav");
     toc.className = "toc";
-    var title = document.createElement("div");
-    title.className = "toc-title";
-    title.textContent = "On This Page";
+    toc.setAttribute("aria-label", "On this page");
+    var title = document.createElement("button");
+    title.className = "toc-toggle";
+    title.type = "button";
+    title.textContent = "On this page";
     toc.appendChild(title);
+    var list = document.createElement("div");
+    list.className = "toc-links";
+    toc.appendChild(list);
 
     Array.prototype.forEach.call(heads, function (h) {
       if (!h.id) h.id = slugify(h.textContent);
@@ -168,14 +280,26 @@
       a.href = "#" + h.id;
       a.textContent = h.textContent.replace(/\s*#\s*$/, "");
       a.className = h.tagName === "H3" ? "lvl-3" : "lvl-2";
-      toc.appendChild(a);
+      list.appendChild(a);
 
       var link = document.createElement("a");
       link.className = "anchor";
       link.href = "#" + h.id;
       link.textContent = "#";
-      link.setAttribute("aria-hidden", "true");
+      link.setAttribute("aria-label", "Permalink to " + h.textContent.replace(/\s*#\s*$/, ""));
       h.appendChild(link);
+    });
+    function setTocOpen(open) {
+      list.hidden = !open;
+      title.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    var wideToc = window.matchMedia("(min-width: 1101px)");
+    setTocOpen(wideToc.matches);
+    var syncToc = function (event) { setTocOpen(event.matches); };
+    if (wideToc.addEventListener) wideToc.addEventListener("change", syncToc);
+    else wideToc.addListener(syncToc);
+    title.addEventListener("click", function () {
+      setTocOpen(title.getAttribute("aria-expanded") !== "true");
     });
     return toc;
   }
@@ -351,15 +475,29 @@
       btn.className = "copy-btn";
       btn.type = "button";
       btn.textContent = "copy";
+      var copyKind = lang || "text";
+      var copyLabel = "Copy " + copyKind + " code block";
+      btn.setAttribute("aria-label", copyLabel);
       /* The label is the status, so it has to be announced -- a silent failure
          looks identical to a success to anyone not watching the button. */
       btn.setAttribute("aria-live", "polite");
       btn.addEventListener("click", function () {
         var reset = function () {
-          setTimeout(function () { btn.textContent = "copy"; }, 1200);
+          setTimeout(function () {
+            btn.textContent = "copy";
+            btn.setAttribute("aria-label", copyLabel);
+          }, 1200);
         };
-        var done = function () { btn.textContent = "copied"; reset(); };
-        var failed = function () { btn.textContent = "copy failed"; reset(); };
+        var done = function () {
+          btn.textContent = "copied";
+          btn.setAttribute("aria-label", "Copied " + copyKind + " code block");
+          reset();
+        };
+        var failed = function () {
+          btn.textContent = "copy failed";
+          btn.setAttribute("aria-label", "Could not copy " + copyKind + " code block");
+          reset();
+        };
         if (navigator.clipboard) {
           navigator.clipboard.writeText(raw).then(done, failed);
         } else {
@@ -379,36 +517,70 @@
 
   /* ---------- mobile nav ------------------------------------------------ */
 
-  function initNavToggle() {
+  function initNavToggle(sidebar, beforeNode) {
     var btn = document.createElement("button");
     btn.className = "nav-toggle";
     btn.type = "button";
     btn.setAttribute("aria-label", "Toggle navigation");
     btn.setAttribute("aria-controls", "sidebar");
     btn.setAttribute("aria-expanded", "false");
-    btn.textContent = "☰";
+    var mobileNav = window.matchMedia("(max-width: 820px)");
 
     /* One place that sets the class and the attribute together, so the two
        cannot disagree about whether the menu is open. */
-    function setOpen(open) {
+    function setOpen(open, moveFocus) {
+      open = mobileNav.matches && open;
       document.body.classList.toggle("nav-open", open);
       btn.setAttribute("aria-expanded", open ? "true" : "false");
+      btn.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
+      btn.textContent = open ? "× Close" : "☰ Menu";
+      if (mobileNav.matches) {
+        sidebar.inert = !open;
+        sidebar.setAttribute("aria-hidden", open ? "false" : "true");
+      } else {
+        sidebar.inert = false;
+        sidebar.removeAttribute("aria-hidden");
+      }
+      if (moveFocus && open) {
+        var first = sidebar.querySelector("input, button, a[href]");
+        if (first) first.focus();
+      } else if (moveFocus && !open) {
+        btn.focus();
+      }
     }
 
     btn.addEventListener("click", function () {
-      setOpen(!document.body.classList.contains("nav-open"));
+      setOpen(!document.body.classList.contains("nav-open"), true);
     });
-    document.body.appendChild(btn);
+    Array.prototype.forEach.call(document.querySelectorAll(".sidebar a"), function (link) {
+      link.addEventListener("click", function () { setOpen(false); });
+    });
+    document.body.insertBefore(btn, beforeNode);
+    setOpen(false, false);
+    var syncNav = function () { setOpen(false, false); };
+    if (mobileNav.addEventListener) mobileNav.addEventListener("change", syncNav);
+    else mobileNav.addListener(syncNav);
     document.addEventListener("click", function (e) {
       if (!document.body.classList.contains("nav-open")) return;
       if (e.target.closest && (e.target.closest(".sidebar") || e.target.closest(".nav-toggle"))) return;
-      setOpen(false);
+      setOpen(false, true);
     });
     document.addEventListener("keydown", function (e) {
-      if (e.key !== "Escape") return;
       if (!document.body.classList.contains("nav-open")) return;
-      setOpen(false);
-      btn.focus();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false, true);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      var focusable = [btn].concat(Array.prototype.slice.call(
+        sidebar.querySelectorAll('a[href]:not([hidden]), button:not([disabled]), input:not([disabled])')
+      )).filter(function (el) { return !el.hidden && el.offsetParent !== null; });
+      if (!focusable.length) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
   }
 
@@ -418,6 +590,15 @@
     var main = document.querySelector("main");
     if (!main) return;
 
+    setTheme(initialTheme());
+    main.id = "main-content";
+    main.setAttribute("tabindex", "-1");
+    var skip = document.createElement("a");
+    skip.className = "skip-link";
+    skip.href = "#main-content";
+    skip.textContent = "Skip to main content";
+    document.body.insertBefore(skip, document.body.firstChild);
+
     var content = document.createElement("div");
     content.className = "content";
     main.parentNode.insertBefore(content, main);
@@ -426,18 +607,22 @@
     var layout = document.createElement("div");
     layout.className = "layout";
     content.parentNode.insertBefore(layout, content);
-    layout.appendChild(buildSidebar());
+    var sidebar = buildSidebar();
+    layout.appendChild(sidebar);
     layout.appendChild(content);
 
+    /* Navigation is essential on small screens, so initialize its toggle before
+       optional page enhancements such as the TOC, pager, and code decoration. */
+    initNavToggle(sidebar, layout);
+
     var toc = buildToc(main);
-    if (toc) { content.appendChild(toc); trackToc(toc, main); }
+    if (toc) { content.insertBefore(toc, main); trackToc(toc, main); }
     else { content.classList.add("no-toc"); }
 
     var pager = buildPager();
     if (pager) main.appendChild(pager);
 
     decorateCode();
-    initNavToggle();
   }
 
   if (document.readyState === "loading") {
