@@ -529,7 +529,19 @@ def external_links():
     results = {url: reach(url) for url in sorted(urls)}
     unreachable = [u for u, why in results.items() if why and why.startswith("unreachable")]
     if len(unreachable) == len(results):
+        # A skip is a pass that checked nothing, and "skipped" printed into a log
+        # nobody opens is how the mypy probe and the pa11y step both went green
+        # for a day. Staying advisory is right — an outage must not redden a
+        # documentation edit — so the visibility is what has to improve: an
+        # annotation surfaces on the run without anyone reading raw output.
+        message = f"{len(results)} external links were not checked: no network"
         print(f"{len(results)} external links, skipped: no network")
+        if os.environ.get("GITHUB_ACTIONS"):
+            print(f"::warning title=External links unchecked::{message}")
+            summary = os.environ.get("GITHUB_STEP_SUMMARY")
+            if summary:
+                with open(summary, "a", encoding="utf-8") as out:
+                    out.write(f"- :warning: {message}\n")
         return 0
 
     bad = 0

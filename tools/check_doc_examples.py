@@ -16,7 +16,8 @@ an infection rate at which nothing evolves.
 not turn a documentation edit into a red build on a machine with no toolchain:
 
 - Python blocks need `mypy` and the built `get` module;
-- TOML blocks need a `get-run` binary built with the `cli` feature.
+- TOML blocks need a `get-run` binary built with the `cli` feature;
+- the config builder needs `node` and puppeteer, which pa11y installs.
 
 Rust blocks are covered only through their `use get::…` lines, which are compiled
 against the crate. The bodies are not: most are extension examples of types that do
@@ -33,6 +34,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(REPO)
@@ -75,6 +77,24 @@ num_epidemics = 1
 """
 
 
+def skip(message):
+    """Report a check that did not run, and make it visible where it matters.
+
+    A skip is a pass that checked nothing. Printing the word into a log nobody
+    opens is how the mypy probe, the pa11y step and this file's own TOML half all
+    went green while testing nothing — the last of those for as long as CI has
+    had no `get-run` binary. Under Actions a skip becomes an annotation on the run.
+    """
+    print(message)
+    if os.environ.get("GITHUB_ACTIONS"):
+        print(f"::warning title=Documentation check skipped::{message}")
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a", encoding="utf-8") as out:
+                out.write(f"- :warning: {message}\n")
+    return 0
+
+
 def blocks(language):
     """`(page, line, text)` for every block on the site in `language`."""
     out = []
@@ -102,8 +122,7 @@ def check_python():
     if shutil.which("mypy") is None and subprocess.run(
             [sys.executable, "-m", "mypy", "--version"],
             capture_output=True).returncode != 0:
-        print("python examples: skipped, mypy is not installed")
-        return 0
+        return skip("python examples: skipped, mypy is not installed")
 
     # `--ignore-missing-imports` is needed for numpy, which the objective
     # examples use and which nothing here requires. The cost is that an absent
@@ -118,9 +137,8 @@ def check_python():
              "--cache-dir", os.path.join(work, ".mypy_cache"), "--no-error-summary", path],
             capture_output=True, text=True).stdout
     if "Any" in revealed or "GraphEvolver" not in revealed:
-        print("python examples: skipped, mypy cannot resolve `get` "
-              "(maturin develop, or pip install the wheel)")
-        return 0
+        return skip("python examples: skipped, mypy cannot resolve `get` "
+                    "(maturin develop, or pip install the wheel)")
 
     by_page = {}
     for page, line, body in blocks("python"):
@@ -177,9 +195,8 @@ def check_toml():
     if not os.path.exists(binary):
         binary = os.path.join("target", "debug", "get-run")
     if not os.path.exists(binary):
-        print("toml examples: skipped, no get-run binary "
-              "(cargo build --release --bin get-run --features cli)")
-        return 0
+        return skip("toml examples: skipped, no get-run binary "
+                    "(cargo build --release --bin get-run --features cli)")
 
     bad = illustrative = checked = 0
     with tempfile.TemporaryDirectory() as work:
@@ -274,8 +291,7 @@ def check_rust_paths():
     way an external caller does.
     """
     if shutil.which("cargo") is None:
-        print("rust paths: skipped, cargo is not installed")
-        return 0
+        return skip("rust paths: skipped, cargo is not installed")
 
     lines = set()
     for _, _, body in blocks("rust"):
@@ -312,8 +328,90 @@ def check_rust_paths():
     return bad
 
 
+# A representative combination, not a matrix. The exhaustive version is deferred
+# as `config-builder-output-untested`; this covers the path a reader most likely
+# takes and, more importantly, proves the generator produces something the real
+# loader accepts at all.
+BUILDER_COMBINATIONS = [
+    # `scope` and `selection` are asked on both routes and both start unset, so
+    # a combination that omits either never leaves the gate — which is the
+    # check working, not a defect, and is why they are spelled out here.
+    "evolution=generational,scope=global,selection=best,"
+    "genome=edge_edit,fitness=epi_spread",
+    # The other route, and the two branches that reveal extra fields:
+    # steady_state shows `replacement`, tournament shows `tournament_size`.
+    "evolution=steady_state,replacement=worst,scope=random_subset,"
+    "selection=tournament,genome=sda,fitness=epi_length",
+]
+
+
+def check_config_builder():
+    """Drive the config builder in a browser and load what it generates.
+
+    The builder is the one place on the site whose output is generated rather
+    than written, so nothing that reads the page's own text can check it. The
+    generator is inline script with no export, which leaves driving the real
+    controls as the only honest option — and Chromium is already here for the
+    accessibility step.
+    """
+    driver = os.path.join("tools", "config_builder_smoke.js")
+    if shutil.which("node") is None:
+        return skip("config builder: skipped, node is not installed")
+    if not os.path.exists(os.path.join("node_modules", "puppeteer")):
+        return skip("config builder: skipped, puppeteer is not installed "
+                    "(npm install --no-save pa11y@8)")
+
+    binary = os.path.join("target", "release", "get-run")
+    if not os.path.exists(binary):
+        binary = os.path.join("target", "debug", "get-run")
+    if not os.path.exists(binary):
+        return skip("config builder: skipped, no get-run binary")
+
+    bad = 0
+    with tempfile.TemporaryDirectory() as work:
+        server = subprocess.Popen(
+            [sys.executable, "-m", "http.server", "8137", "--directory", "documentation"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            # The server is a subprocess, not a promise — give it a moment or the
+            # first navigation races it and fails for a reason that is not ours.
+            time.sleep(2)
+            for combination in BUILDER_COMBINATIONS:
+                generated = subprocess.run(
+                    ["node", driver, "http://localhost:8137", combination],
+                    capture_output=True, text=True)
+                if generated.returncode != 0:
+                    bad += 1
+                    print(f"  {combination}: {generated.stderr.strip()}")
+                    continue
+
+                path = os.path.join(work, "config.toml")
+                open(path, "w", encoding="utf-8").write(generated.stdout)
+                loaded = subprocess.run([binary, path, "7", "--out", work],
+                                        capture_output=True, text=True)
+                if loaded.returncode == 0:
+                    continue
+
+                bad += 1
+                combined = loaded.stdout + loaded.stderr
+                message = next((l for l in combined.splitlines()
+                                if "failed to load config" in l
+                                or "could not parse" in l), None)
+                if message is None:
+                    tail = [l for l in combined.splitlines() if l.strip()]
+                    message = tail[-1] if tail else f"exit code {loaded.returncode}"
+                print(f"  {combination}: generated TOML rejected: {message.strip()}")
+        finally:
+            server.terminate()
+            server.wait(timeout=10)
+
+    print(f"{len(BUILDER_COMBINATIONS)} builder combinations, {bad} rejected")
+    return bad
+
+
 def main():
-    failures = check_python() + check_toml() + check_rust_paths()
+    failures = (check_python() + check_toml() + check_rust_paths()
+                + check_config_builder())
     return 1 if failures else 0
 
 

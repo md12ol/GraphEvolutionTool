@@ -142,9 +142,18 @@ jobs:
 
       # `check_refs.py` proves a block points where it says; this proves the
       # code in it works: Python blocks type-checked against the shipped stub,
-      # TOML blocks fed to the real loader. After `cargo test` because that is
-      # what builds the `get-run` the TOML half needs — placed earlier it would
-      # skip that half and report a green it had not earned.
+      # TOML blocks fed to the real loader.
+      #
+      # This step used to say `cargo test` above already built the `get-run` the
+      # TOML half needs. It does not, and the claim went unchecked for as long as
+      # it stood: every CI run reported `toml examples: skipped, no get-run
+      # binary` and passed, so six blocks were verified on developer machines and
+      # never here. Build it explicitly rather than inferring it from another
+      # step's side effects — and note the checker's skips are now annotations,
+      # so the next one of these is visible on the run rather than buried.
+      - name: build get-run for the documentation examples
+        run: cargo build -p graph-evolution-tool --bin get-run --features cli
+
       # `cargo test` above does not produce an importable module: it builds
       # pyo3 in its default configuration, not `extension-module`, which is
       # the opposite of what `maturin develop` needs (see
