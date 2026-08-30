@@ -31,6 +31,17 @@ last line with the following, run from the repository root:
     pip install maturin
     maturin develop --release -m get/Cargo.toml
 
+On Windows this is the one step the un-activated route above cannot do:
+`maturin` refuses to run unless it can see an activated environment, and it
+reads the `VIRTUAL_ENV` variable rather than the interpreter you invoke it with.
+Set it yourself and no execution-policy change is needed:
+
+    .venv\Scripts\python.exe -m pip install maturin
+    $env:VIRTUAL_ENV = "$PWD\.venv"
+    .venv\Scripts\maturin.exe develop --release -m get/Cargo.toml
+
+The variable lasts only for that PowerShell session.
+
 Then run any of the configurations beside this file:
 
     python python_from_config.py 01_edge_edit_generational.toml

@@ -82,12 +82,23 @@ python -m pip install maturin
 maturin develop --release</code></pre>
 
 <p>
-  On Windows the equivalent is <code>py -m venv .venv</code> followed by
-  <code>.venv\Scripts\python.exe -m pip install maturin</code> — calling the interpreter directly
-  rather than activating, because a stock machine blocks <code>Activate.ps1</code>. See
-  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">below</a> if you want an
-  activated shell instead. Note <code>maturin develop</code> needs a real virtual environment: it
-  will not install into a bare system interpreter, however the <code>PATH</code> is arranged.
+  This is the one step the un-activated Windows route cannot do. <code>maturin</code> looks for the
+  <code>VIRTUAL_ENV</code> variable, not for the interpreter you invoked it with, so calling
+  <code>.venv\Scripts\maturin.exe</code> directly still reports that it cannot find an environment.
+  Set the variable yourself and no execution-policy change is needed:
+</p>
+
+<pre><code class="language-powershell">py -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip maturin
+$env:VIRTUAL_ENV = "$PWD\.venv"
+.venv\Scripts\maturin.exe develop --release</code></pre>
+
+<p>
+  It lasts for that PowerShell session only. Activating properly works too — see
+  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">PowerShell refuses to run
+  <code>Activate.ps1</code></a>. On any platform, note that a bare system interpreter is not a
+  virtual environment: <code>maturin</code> will not install into one however the <code>PATH</code>
+  is arranged, which is the same reason this fails in CI without an explicit venv.
 </p>
 
 <h3>The Rust build fails before compiling GET</h3>

@@ -26,12 +26,18 @@ python -m pip install --upgrade pip maturin
 maturin develop --release</code></pre>
 
 <div class="note">
-  <b>On Windows,</b> use <code>py -m venv .venv</code> and call the environment's interpreter
-  directly — <code>.venv\Scripts\python.exe</code> wherever the block says <code>python</code>. A
-  stock machine blocks <code>Activate.ps1</code>, so this is the path that works without changing
-  anything; see
-  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">the troubleshooting note</a>
-  if you want an activated shell instead.
+  <b>On Windows,</b> a stock machine blocks <code>Activate.ps1</code>, and
+  <code>maturin develop</code> refuses to run unless it can see an activated environment. Setting
+  <code>VIRTUAL_ENV</code> yourself satisfies it without changing the execution policy:
+  <pre><code class="language-powershell">py -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip maturin
+$env:VIRTUAL_ENV = "$PWD\.venv"
+.venv\Scripts\maturin.exe develop --release</code></pre>
+  The variable only lasts for that PowerShell session, so set it again in a new window. Allowing
+  scripts once and using <code>Activate.ps1</code> is the alternative — see
+  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">the troubleshooting note</a>.
+  Calling <code>.venv\Scripts\python.exe</code> directly is enough for everything except
+  <code>maturin</code>, which reads the variable rather than the interpreter path.
 </div>
 
 <p>
