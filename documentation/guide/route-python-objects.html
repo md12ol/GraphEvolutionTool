@@ -20,7 +20,7 @@
 <h2>Install</h2>
 
 <p>
-  Version 0.9.0a1 is published on PyPI as a pre-release, as platform wheels. Install the distribution into a virtual
+  Version 0.9.0 is published on PyPI as platform wheels. Install the distribution into a virtual
   environment; Python imports it as <code>get</code>:
 </p>
 
@@ -31,9 +31,20 @@ python -m pip install graph-evolution-tool
 python -c "import get; print(get.__name__)"</code></pre>
 
 <div class="note">
+  <b>On Windows, in PowerShell:</b> create the environment with <code>py -m venv .venv</code>,
+  <b>skip the <code>activate</code> line entirely</b> — a stock machine refuses to run it — and
+  write <code>.venv\Scripts\python.exe</code> wherever a command on this page says
+  <code>python</code> or <code>python3</code>. <code>pip</code> becomes
+  <code>.venv\Scripts\python.exe -m pip</code>. That substitution is the whole Windows route;
+  nothing else on this page differs. If you would rather have an activated shell, see
+  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">PowerShell refuses to run
+  <code>Activate.ps1</code></a>.
+</div>
+
+<div class="note">
   <b>Why the names differ.</b> The project/distribution name is
   <code>graph-evolution-tool</code>, while Python imports <code>get</code>. Pin
-  <code>graph-evolution-tool==0.9.0a1</code> for an archived environment.
+  <code>graph-evolution-tool==0.9.0</code> for an archived environment.
 </div>
 
 <div class="tip">

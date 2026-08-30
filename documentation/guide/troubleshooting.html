@@ -21,11 +21,48 @@ check, and the next action.</p>
 <h3><code>pip</code> says no matching distribution was found</h3>
 
 <p>
-  Version 0.9.0a1 is published as pre-release wheels for 64-bit Linux, macOS, and Windows. Upgrade pip first,
+  Version 0.9.0 is published as wheels for 64-bit Linux, macOS, and Windows. Upgrade pip first,
   then confirm Python is at least 3.8. <code>pip index versions graph-evolution-tool</code>
   lists the available release. An
   unsupported platform must use a source checkout because PyPI currently has no source archive.
 </p>
+
+<h3>PowerShell refuses to run <code>Activate.ps1</code></h3>
+
+<pre><code class="language-text">.venv\Scripts\Activate.ps1 : File ...\.venv\Scripts\Activate.ps1 cannot be loaded
+because running scripts is disabled on this system.</code></pre>
+
+<p>
+  Nothing is wrong with the environment. A stock Windows install sets the PowerShell execution
+  policy to <code>Restricted</code> in every scope, which blocks every <code>.ps1</code> file
+  including the one <code>venv</code> just generated. It is the default, not something you changed,
+  so it affects essentially every Windows user on their first run.
+</p>
+
+<p><b>The shortest way past it is not to activate at all.</b> Call the environment's interpreter
+directly and every command behaves the same:</p>
+
+<pre><code class="language-powershell">py -m venv .venv
+.venv\Scripts\python.exe -m pip install graph-evolution-tool
+.venv\Scripts\python.exe -c "import get; print('GET imported')"</code></pre>
+
+<p>
+  If you want an activated shell — a shorter prompt line, <code>python</code> without the path —
+  allow local scripts once. <code>CurrentUser</code> scope needs no administrator, and
+  <code>RemoteSigned</code> still requires a signature on anything downloaded, so it is the
+  conventional developer setting rather than turning the check off:
+</p>
+
+<pre><code class="language-powershell">Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+.venv\Scripts\Activate.ps1</code></pre>
+
+<div class="note">
+  <b><code>activate.bat</code> is not a way around this.</b> It is true that <code>.bat</code> files
+  are not governed by the execution policy, but PowerShell runs a batch file in a separate
+  <code>cmd.exe</code> process — which exits and takes the environment changes with it, leaving the
+  venv unactivated and no error to say so. It activates correctly from <code>cmd</code>, and only
+  from <code>cmd</code>.
+</div>
 
 <h3><code>ModuleNotFoundError: No module named 'get'</code></h3>
 
@@ -44,7 +81,25 @@ source .venv/bin/activate
 python -m pip install maturin
 maturin develop --release</code></pre>
 
-<p>On Windows, activate with <code>.venv\Scripts\activate</code>.</p>
+<p>
+  This is the one step the un-activated Windows route cannot do. <code>maturin</code> looks for the
+  <code>VIRTUAL_ENV</code> variable, not for the interpreter you invoked it with, so calling
+  <code>.venv\Scripts\maturin.exe</code> directly still reports that it cannot find an environment.
+  Set the variable yourself and no execution-policy change is needed:
+</p>
+
+<pre><code class="language-powershell">py -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip maturin
+$env:VIRTUAL_ENV = "$PWD\.venv"
+.venv\Scripts\maturin.exe develop --release</code></pre>
+
+<p>
+  It lasts for that PowerShell session only. Activating properly works too — see
+  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">PowerShell refuses to run
+  <code>Activate.ps1</code></a>. On any platform, note that a bare system interpreter is not a
+  virtual environment: <code>maturin</code> will not install into one however the <code>PATH</code>
+  is arranged, which is the same reason this fails in CI without an explicit venv.
+</p>
 
 <h3>The Rust build fails before compiling GET</h3>
 

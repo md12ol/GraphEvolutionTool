@@ -7,17 +7,15 @@ On Linux or macOS:
     source .venv/bin/activate
     pip install graph-evolution-tool
 
-On Windows, in PowerShell:
+On Windows, in PowerShell, the same three lines with two changes: use `py` in
+place of `python3`, **skip the `activate` line entirely** — a stock machine
+refuses to run it — and write `.venv\Scripts\python.exe` wherever any command
+below says `python`. `pip` becomes `.venv\Scripts\python.exe -m pip`.
 
     py -m venv .venv
-    .venv\Scripts\Activate.ps1
-    pip install graph-evolution-tool
+    .venv\Scripts\python.exe -m pip install graph-evolution-tool
 
-Working from a source checkout instead of the published package? Replace that
-last line with the following, run from the repository root:
-
-    pip install maturin
-    maturin develop --release -m get/Cargo.toml
+That substitution is the whole Windows route; nothing else in this file differs.
 
 Then run any of the configurations beside this file:
 

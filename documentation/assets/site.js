@@ -126,7 +126,7 @@
       '<circle cx="16" cy="8" r="3"/><circle cx="8" cy="22" r="3"/><circle cx="24" cy="22" r="3"/>' +
       '</g></svg>' +
       '<a href="' + href("index.html") + '">GET Docs</a>' +
-      '<span class="tag">v0.9.0a1</span>';
+      '<span class="tag">v0.9.0</span>';
     aside.appendChild(brand);
 
     /* The repository, once, in the site chrome -- so every page can reach the

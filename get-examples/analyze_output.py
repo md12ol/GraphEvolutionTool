@@ -7,6 +7,12 @@ Point it at one or more of the `output/example_N/` folders that
     python analyze_output.py output/example_1 output/example_2
     python analyze_output.py output/example_*
 
+On Windows, write `.venv\Scripts\python.exe` in place of `python` throughout
+this file, and `.venv\Scripts\python.exe -m pip` in place of `pip`. Nothing
+else changes — the last form above still works, because PowerShell does not
+expand `output/example_*` itself, so it arrives here as a literal pattern and is
+expanded below rather than by the shell.
+
 With no `--out`, each generated file lands beside the folders it was drawn
 from, named after the set that produced it, so analysing two different
 comparisons into the same `output/` does not overwrite either.

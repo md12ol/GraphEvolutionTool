@@ -356,6 +356,12 @@ Point it at one or more of the `output/example_N/` folders that
     python analyze_output.py output/example_1 output/example_2
     python analyze_output.py output/example_*
 
+On Windows, write `.venv\Scripts\python.exe` in place of `python` throughout
+this file, and `.venv\Scripts\python.exe -m pip` in place of `pip`. Nothing
+else changes — the last form above still works, because PowerShell does not
+expand `output/example_*` itself, so it arrives here as a literal pattern and is
+expanded below rather than by the shell.
+
 With no `--out`, each generated file lands beside the folders it was drawn
 from, named after the set that produced it, so analysing two different
 comparisons into the same `output/` does not overwrite either.
@@ -1624,17 +1630,15 @@ On Linux or macOS:
     source .venv/bin/activate
     pip install graph-evolution-tool
 
-On Windows, in PowerShell:
+On Windows, in PowerShell, the same three lines with two changes: use `py` in
+place of `python3`, **skip the `activate` line entirely** — a stock machine
+refuses to run it — and write `.venv\Scripts\python.exe` wherever any command
+below says `python`. `pip` becomes `.venv\Scripts\python.exe -m pip`.
 
     py -m venv .venv
-    .venv\Scripts\Activate.ps1
-    pip install graph-evolution-tool
+    .venv\Scripts\python.exe -m pip install graph-evolution-tool
 
-Working from a source checkout instead of the published package? Replace that
-last line with the following, run from the repository root:
-
-    pip install maturin
-    maturin develop --release -m get/Cargo.toml
+That substitution is the whole Windows route; nothing else in this file differs.
 
 Then run any of the configurations beside this file:
 

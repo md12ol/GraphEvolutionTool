@@ -25,6 +25,24 @@ source .venv/bin/activate
 python -m pip install --upgrade pip maturin
 maturin develop --release</code></pre>
 
+<div class="note">
+  <b>On Windows, in PowerShell:</b> use <code>py</code> in place of <code>python3</code>,
+  <b>skip the <code>activate</code> line entirely</b> — a stock machine refuses to run it — and
+  write <code>.venv\Scripts\python.exe</code> wherever a command on this page says
+  <code>python</code> or <code>python3</code>. <code>cargo</code> and <code>git</code> lines are
+  unchanged.
+  <p><b>One exception, and it is the last line above.</b> <code>maturin</code> reads the
+  <code>VIRTUAL_ENV</code> variable rather than the interpreter it was started with, so the
+  substitution alone is not enough — set the variable yourself and no execution-policy change is
+  needed:</p>
+  <pre><code class="language-powershell">$env:VIRTUAL_ENV = "$PWD\.venv"
+.venv\Scripts\maturin.exe develop --release</code></pre>
+  It lasts for that PowerShell session only, so set it again in a new window. Allowing scripts once
+  and activating properly is the alternative — see
+  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">PowerShell refuses to run
+  <code>Activate.ps1</code></a>.
+</div>
+
 <p>
   You need a current stable Rust toolchain, Python 3.8 or newer, and Git. The build installs the
   Python module into the active virtual environment. The Rust crate is the workspace member in
@@ -72,7 +90,7 @@ python3 documentation/check_refs.py</code></pre>
 
 <p>
   Begin with the <a href="extending.html">Extension Map</a>. It compares the cost and dispatch
-  impact of every axis. Adding an objective is the supported extension path in 0.9.0a1:
+  impact of every axis. Adding an objective is the supported extension path in 0.9.0:
 </p>
 
 <ul>
