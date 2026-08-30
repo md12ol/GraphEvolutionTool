@@ -14,7 +14,7 @@
 <h1>Python: Config Objects</h1>
 <p class="lede">
   Build a run out of typed objects, hand it to <code>GraphEvolver</code>, and read the results back
-  as Python values. Nothing to look up in another file — the whole run reads top to bottom.
+  as Python values. Nothing to look up in another file: the whole run reads top to bottom.
 </p>
 
 <h2>Install</h2>
@@ -32,7 +32,7 @@ python -c "import get; print(get.__name__)"</code></pre>
 
 <div class="note">
   <b>On Windows, in PowerShell:</b> create the environment with <code>py -m venv .venv</code>,
-  <b>skip the <code>activate</code> line entirely</b> — a stock machine refuses to run it — and
+  <b>skip the <code>activate</code> line entirely</b>, because a stock machine refuses to run it, and
   write <code>.venv\Scripts\python.exe</code> wherever a command on this page says
   <code>python</code> or <code>python3</code>. <code>pip</code> becomes
   <code>.venv\Scripts\python.exe -m pip</code>. That substitution is the whole Windows route;
@@ -50,7 +50,7 @@ python -c "import get; print(get.__name__)"</code></pre>
 <div class="tip">
   <b>Your editor is the API reference.</b> The wheel ships <code>py.typed</code> and a complete type
   stub, so an editor or language server shows every signature, argument type and docstring for
-  <code>Config</code>, <code>GraphEvolver</code> and <code>RunResult</code> as you type — offline,
+  <code>Config</code>, <code>GraphEvolver</code> and <code>RunResult</code> as you type, offline,
   and always matching the version you installed. <code>mypy</code> checks your calls against it too.
 </div>
 
@@ -123,7 +123,7 @@ best.save_config(".")                       # writes config.toml</code></pre>
 <p>
   One master seed goes in; GET derives a seed per replicate from it. Asking for more replicates does
   not change the ones you already had, and a replicate is reproduced by re-running with the same
-  master seed and reading the same index — not by feeding its derived seed back in.
+  master seed and reading the same index, not by feeding its derived seed back in.
 </p>
 
 <pre><code class="language-python">import os
@@ -139,7 +139,7 @@ for run_index, result in enumerate(results):
   <b>The save methods do not create directories.</b> <code>save_logs</code>,
   <code>save_results</code>, and <code>save_config</code> write into a folder that must already
   exist. They raise <code>OSError</code> if it is missing, so make the folder
-  first. The <code>get-run</code> CLI is different — <code>--out</code> builds the whole tree for
+  first. The <code>get-run</code> CLI is different: <code>--out</code> builds the whole tree for
   you.
 </div>
 
@@ -172,8 +172,8 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
 <div class="callout">
   <p><b>Three things the contract requires:</b></p>
   <ul>
-    <li><b>It takes the whole population at once</b> — a list of
-        <code>(num_nodes, edge_list)</code> pairs — and returns one number per input,
+    <li><b>It takes the whole population at once</b>, a list of
+        <code>(num_nodes, edge_list)</code> pairs, and returns one number per input,
         <b>in the same order</b>. A per-individual function is not just slower here; it is
         dramatically slower, because every call pays the interpreter round trip.</li>
     <li><b>Direction is declared, never inferred.</b> <code>"minimize"</code> or
@@ -182,7 +182,7 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
         <code>+inf</code> under <code>"minimize"</code> and <code>-inf</code> under
         <code>"maximize"</code> that mean "invalid, never select this". The opposite infinity is
         the <i>best</i> possible score, so it wins every tournament it enters. Watch for a zero
-        denominator and <code>0.0/0.0</code> — an empty graph puts both within reach.</li>
+        denominator and <code>0.0/0.0</code>: an empty graph puts both within reach.</li>
   </ul>
 </div>
 
@@ -190,7 +190,7 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
 
 <pre><code class="language-python">evolver = get.GraphEvolver.from_config(config)
 
-# Call ONE of these, not both — a second loader that disagrees about the
+# Call ONE of these, not both. A second loader that disagrees about the
 # numbering raises, and one run has one numbering.
 
 # from memory: (u, v, multiplicity), in your own node numbering
@@ -203,11 +203,11 @@ evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre
   <b>These loaders warn rather than raise on three things</b>, so a run can start from data you did
   not mean to supply and nothing will stop it.
   <ul>
-    <li><b>A repeated edge</b> — canonical, so <code>2,5</code> and <code>5,2</code> are the same
-        edge — takes the <b>last</b> occurrence's weight. Earlier rows for that pair are
+    <li><b>A repeated edge</b>, canonical, so <code>2,5</code> and <code>5,2</code> are the same
+        edge, takes the <b>last</b> occurrence's weight. Earlier rows for that pair are
         overwritten, not added to.</li>
     <li><b>A zero-weight row is accepted and adds no edge.</b> Weight 0 <i>is</i> the absence of an
-        edge, so the row is read, counted as valid, and leaves the pair unconnected — it is not an
+        edge, so the row is read, counted as valid, and leaves the pair unconnected. It is not an
         edge with weight zero sitting in the graph, and it will not appear in
         <code>best_edges</code>. The warning's phrase is "kept as given", which means the number you
         wrote was stored verbatim rather than treated as an error.</li>
@@ -227,7 +227,7 @@ evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre
   <p>
     <b>The first loader you call fixes the run's node numbering, and results come back in it.</b>
     Load 1-indexed data and <code>best_edges</code> is 1-indexed too. A second loader that disagrees
-    is rejected rather than quietly mixed in — one run has one numbering.
+    is rejected rather than quietly mixed in: one run has one numbering.
   </p>
 </div>
 
@@ -236,7 +236,7 @@ evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre
 <p>
   <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0/examples/python_inline.py"><code>python_inline.py</code></a> is this route end to end:
   several replicates, an output directory per run, and all three files written per replicate. It
-  is not shipped in the wheel — the package carries the module and nothing else — so download it
+  is not shipped in the wheel (the package carries the module and nothing else), so download it
   and run <code>python python_inline.py</code>.
 </p>
 
@@ -244,7 +244,7 @@ evolver.set_base_graph_from_file("base_graph.csv", min_node_index=1)</code></pre
 
 <p>
   If you would rather keep the parameters in a document you can archive, diff and hand to someone
-  else, write them as TOML instead — see <a href="route-python-toml.html">Python: TOML File</a>. The
+  else, write them as TOML instead. See <a href="route-python-toml.html">Python: TOML File</a>. The
   two routes accept exactly the same configurations; only where the parameters live differs.
 </p>
 

@@ -14,7 +14,7 @@
 <h1>Rust: As a Library</h1>
 <p class="lede">
   Depend on the crate, write your objective as a Rust type, and drive an evolver directly. No config
-  file and no Python anywhere in the loop — you assemble the run yourself, which is what makes a
+  file and no Python anywhere in the loop. You assemble the run yourself, which is what makes a
   native objective fast and an embedded GET possible.
 </p>
 
@@ -55,7 +55,7 @@ graph-evolution-tool = { git = "https://github.com/md12ol/GraphEvolutionTool", t
 <h2>Your Objective Is a Type</h2>
 
 <p>
-  Implement <code>Fitness</code>. Score the graph in your own units and in the natural direction —
+  Implement <code>Fitness</code>. Score the graph in your own units and in the natural direction:
   the engine converts, so do not pre-negate for a maximizing objective.
 </p>
 
@@ -149,13 +149,13 @@ let outcome = evolver.run(&amp;fitness, seed);</code></pre>
     <tr><td><b>Evolver</b></td><td><code>GenerationalEvolver</code></td><td><code>SteadyStateEvolver</code></td></tr>
     <tr><td><b>Context</b></td><td><code>GenerationalContext</code></td><td><code>SteadyStateContext</code></td></tr>
     <tr><td><b>Stops after</b></td><td><code>num_generations</code></td><td><code>num_mating_events</code></td></tr>
-    <tr><td><b>Its own knob</b></td><td><code>elite_count</code> — how many survive intact</td><td><code>replacement</code> — who the children overwrite</td></tr>
+    <tr><td><b>Its own knob</b></td><td><code>elite_count</code>, how many survive intact</td><td><code>replacement</code>, who the children overwrite</td></tr>
   </tbody>
 </table>
 </div>
 
 <p>
-  Both take the same <code>SharedEvolutionContext</code>, and both are generic over the genome — so
+  Both take the same <code>SharedEvolutionContext</code>, and both are generic over the genome, so
   swapping <code>SdaGenome</code> for <code>EdgeEditGenome</code> changes the population and the
   context you build, and nothing else.
 </p>
@@ -163,7 +163,7 @@ let outcome = evolver.run(&amp;fitness, seed);</code></pre>
 <h2>Reading the Outcome</h2>
 
 <pre><code class="language-rust">// `best_fitness_engine` is lower-is-better, whatever your objective computed.
-// `direction` is how you undo that — and the negation is its own inverse.
+// `direction` is how you undo that, and the negation is its own inverse.
 let best = outcome.direction.orient(outcome.best_fitness_engine);
 
 println!("best fitness  = {best}");
@@ -182,7 +182,7 @@ for row in &amp;outcome.history {
 <div class="warn">
   <p>
     <b>This is the one route that hands you lower-is-better numbers.</b> The outward conversion
-    lives in the dispatch layer, and driving an <code>Evolver</code> yourself goes underneath it —
+    lives in the dispatch layer, and driving an <code>Evolver</code> yourself goes underneath it,
     so <code>best_fitness_engine</code> and every <code>history</code> row are lower-is-better here,
     even for a <code>Maximize</code> objective. The field is named <code>_engine</code> precisely so
     this is not something you discover from a wrong plot.
@@ -190,7 +190,7 @@ for row in &amp;outcome.history {
   <p>
     The two Python routes and the <a href="route-rust-cli.html"><code>get-run</code> CLI</a> all go
     through dispatch and convert for you. <code>std_dev</code> and <code>ci_95</code> are never
-    converted on any route — a spread is identical under negation.
+    converted on any route: a spread is identical under negation.
   </p>
 </div>
 
@@ -217,7 +217,7 @@ for run_index in 0..n_runs {
 
 <p>
   That is the same policy GET's own dispatch uses for <code>run</code>'s replicates: one generator
-  seeded from the master, drawn once per run — so a run's seed does not depend on how many runs you
+  seeded from the master, drawn once per run, so a run's seed does not depend on how many runs you
   asked for. Deriving from <code>master + i</code> or a hash would do as well;
   <code>master ^ i</code> would not, because nearby masters collide across run indices.
 </p>
@@ -247,8 +247,8 @@ for run_index in 0..n_runs {
 
 <p>
   Everything above uses GET from outside. If you want a new genome, strategy, selection scheme or
-  variation operator <i>inside</i> the crate — selectable by name from a config file, and available
-  to every route — that is a different job with its own guides: see
+  variation operator <i>inside</i> the crate, selectable by name from a config file and available
+  to every route, that is a different job with its own guides: see
   <a href="extending.html">Extension Points</a>.
 </p>
 

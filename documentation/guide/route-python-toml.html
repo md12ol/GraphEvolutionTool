@@ -21,7 +21,7 @@
 <h2>Start Here: The Example Bundle</h2>
 
 <p>
-  <a href="../get-examples.zip"><b>Download get-examples.zip</b></a> — a script that runs the
+  <a href="../get-examples.zip"><b>Download get-examples.zip</b></a>: a script that runs the
   examples, a script that plots what they produced, and five complete configurations, laid out so
   every path inside resolves. It is the fastest way to see this route working, and the rest of this
   page explains what the files in it do.
@@ -61,7 +61,7 @@ python python_from_config.py 04_sda_profile_match.toml</code></pre>
 <p>
   Every file is also <a href="example-bundle.html">readable here without downloading it</a>. Results
   land in <code>output/example_N/</code>, N counting up as you go, with one folder per replicate
-  inside — so a second run never overwrites the first, and each example folder holds enough
+  inside, so a second run never overwrites the first, and each example folder holds enough
   replicates to compare.
 </p>
 
@@ -80,7 +80,7 @@ python -c "import get; print(get.__name__)"</code></pre>
 
 <div class="note">
   <b>On Windows, in PowerShell:</b> create the environment with <code>py -m venv .venv</code>,
-  <b>skip the <code>activate</code> line entirely</b> — a stock machine refuses to run it — and
+  <b>skip the <code>activate</code> line entirely</b>, because a stock machine refuses to run it, and
   write <code>.venv\Scripts\python.exe</code> wherever a command on this page says
   <code>python</code> or <code>python3</code>. <code>pip</code> becomes
   <code>.venv\Scripts\python.exe -m pip</code>. That substitution is the whole Windows route;
@@ -133,7 +133,7 @@ num_epidemics  = 30</code></pre>
 <div class="warn">
   <b>The ordering rule that bites everyone once.</b> Top-level keys must appear <i>before</i> the
   first <code>[section]</code> header. Once a table header opens, every following key belongs to
-  that table — so a <code>population_size</code> written below <code>[evolution]</code> becomes
+  that table, so a <code>population_size</code> written below <code>[evolution]</code> becomes
   <code>evolution.population_size</code>, and the error you get is a <i>missing</i>
   <code>population_size</code>.
 </div>
@@ -156,7 +156,7 @@ best.save_logs("run_log.csv")
 best.save_results("best_individual.txt")</code></pre>
 
 <p>
-  <code>run</code> always returns a list, one result per replicate, even for a single run — so code
+  <code>run</code> always returns a list, one result per replicate, even for a single run, so code
   written for one does not need rewriting for twenty.
 </p>
 
@@ -227,7 +227,7 @@ for run_index, result in enumerate(results):
 
 <p>
   One master seed in, one derived seed per replicate. Asking for more replicates never changes the
-  ones you already had. Reproduce a replicate with the same master seed and the same index — its
+  ones you already had. Reproduce a replicate with the same master seed and the same index. Its
   derived seed is not a handle you can pass back in.
 </p>
 
@@ -247,7 +247,7 @@ python analyze_output.py output/example_*</code></pre>
   Give it two or more <code>example_N/</code> folders and it writes three things beside them: a
   <b>boxplot</b> of final fitness with one box per folder, a <b>convergence plot</b> with every
   replicate in grey and one average per folder, and one <b>rendered PNG</b> of each folder's
-  best network. Give it a single folder and the boxplot is skipped with a note — one box compares
+  best network. Give it a single folder and the boxplot is skipped with a note, since one box compares
   nothing.
 </p>
 
@@ -269,8 +269,8 @@ python analyze_output.py output/example_*</code></pre>
   are visible rather than inferred. Both codes carry a key, and the two are different shapes because
   the numbers are: degree is open-ended and gets a colourbar, while a multiplicity capped at 5 or
   fewer gets a legend naming each value outright. Nodes with no edges at all are drawn in grey on a
-  ring outside the graph — a layout that solves for them puts them in the middle, which is the one
-  place a disconnected node should never appear — and they get their own legend entry, because grey
+  ring outside the graph. A layout that solves for them puts them in the middle, which is the one
+  place a disconnected node should never appear, and they get their own legend entry, because grey
   is not a point on the degree scale.
 
 </p>
@@ -287,7 +287,7 @@ python analyze_output.py output/example_*</code></pre>
 
 <p>
   Set <code>type = "python"</code> in the document and register the callable before running. The
-  section names no objective of its own — it says "one will be registered", and a run that reaches
+  section names no objective of its own. It says "one will be registered", and a run that reaches
   scoring without one is rejected rather than silently scoring nothing.
 </p>
 
@@ -306,7 +306,7 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
     The function takes the <b>whole population at once</b> and returns one number per individual in
     the same order. Direction is declared here, never inferred. <code>NaN</code> stops the run.
     Infinity is allowed, but which one means "invalid" follows the direction: <code>+inf</code>
-    under minimize, <code>-inf</code> under maximize — the opposite one is the best possible score.
+    under minimize, <code>-inf</code> under maximize; the opposite one is the best possible score.
   </p>
 </div>
 
@@ -314,7 +314,7 @@ results = evolver.run(seed=7, n_runs=1)</code></pre>
 
 <p>
   If you would rather generate configurations than hand-write them, the same typed objects the other
-  Python route uses will serialize to this format — useful for sweeping a parameter across many
+  Python route uses will serialize to this format, which is useful for sweeping a parameter across many
   files. See <a href="route-python-objects.html">Python: Config Objects</a>, and
   <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0/examples/config_builder.py"><code>config_builder.py</code></a>, which builds configurations
   without running anything.

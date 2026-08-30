@@ -47,7 +47,7 @@ directly and every command behaves the same:</p>
 .venv\Scripts\python.exe -c "import get; print('GET imported')"</code></pre>
 
 <p>
-  If you want an activated shell — a shorter prompt line, <code>python</code> without the path —
+  If you want an activated shell (a shorter prompt line, <code>python</code> without the path),
   allow local scripts once. <code>CurrentUser</code> scope needs no administrator, and
   <code>RemoteSigned</code> still requires a signature on anything downloaded, so it is the
   conventional developer setting rather than turning the check off:
@@ -59,7 +59,7 @@ directly and every command behaves the same:</p>
 <div class="note">
   <b><code>activate.bat</code> is not a way around this.</b> It is true that <code>.bat</code> files
   are not governed by the execution policy, but PowerShell runs a batch file in a separate
-  <code>cmd.exe</code> process — which exits and takes the environment changes with it, leaving the
+  <code>cmd.exe</code> process, which exits and takes the environment changes with it, leaving the
   venv unactivated and no error to say so. It activates correctly from <code>cmd</code>, and only
   from <code>cmd</code>.
 </div>
@@ -94,7 +94,7 @@ $env:VIRTUAL_ENV = "$PWD\.venv"
 .venv\Scripts\maturin.exe develop --release</code></pre>
 
 <p>
-  It lasts for that PowerShell session only. Activating properly works too — see
+  It lasts for that PowerShell session only. Activating properly works too. See
   <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">PowerShell refuses to run
   <code>Activate.ps1</code></a>. On any platform, note that a bare system interpreter is not a
   virtual environment: <code>maturin</code> will not install into one however the <code>PATH</code>
@@ -187,7 +187,7 @@ result.save_logs("output/run_0/run_log.csv")</code></pre>
 <p>
   Preserve the exact GET commit, run code, full configuration, master seed, replicate index, input
   graphs/reference data, custom objective code, and relevant environment. Repeat a replicate's
-  random stream with the same master seed and index—not by passing the derived seed back to GET.
+  random stream with the same master seed and index, not by passing the derived seed back to GET.
 </p>
 
 <h2>Rust CLI</h2>
