@@ -147,10 +147,16 @@ jobs:
       - name: install get for the documentation examples to import
         run: |
           python3 -m venv .venv-docs
+          # `GITHUB_ENV` takes effect in *later* steps, never the one writing
+          # it — so `maturin` in this same step still saw no virtualenv and
+          # failed. Export it here for this step, and write it to GITHUB_ENV
+          # for the next one.
+          export VIRTUAL_ENV="$PWD/.venv-docs"
+          export PATH="$PWD/.venv-docs/bin:$PATH"
           echo "VIRTUAL_ENV=$PWD/.venv-docs" >> "$GITHUB_ENV"
           echo "$PWD/.venv-docs/bin" >> "$GITHUB_PATH"
-          .venv-docs/bin/pip install --quiet maturin mypy
-          .venv-docs/bin/maturin develop --release -m get/Cargo.toml
+          pip install --quiet maturin mypy
+          maturin develop --release -m get/Cargo.toml
 
       - name: documentation examples run
         run: python3 tools/check_doc_examples.py
