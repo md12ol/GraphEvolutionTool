@@ -21,6 +21,18 @@ on:
 permissions:
   contents: read
 
+# One run per branch at a time. Without this every push starts a full duplicate
+# set and the superseded runs continue to completion — six pushes to a branch in
+# an afternoon meant five complete runs whose results nobody would ever read.
+#
+# `cancel-in-progress` is deliberately conditional rather than `true`. A
+# superseded pull-request run is waste and is cancelled; a run on `main` or on a
+# `v*` tag is not, because that is the one that publishes, and cancelling a
+# release mid-flight is a far worse failure than paying for a duplicate.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: ${{ matrix.os }} ${{ matrix.target }}
