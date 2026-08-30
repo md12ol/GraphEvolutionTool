@@ -85,18 +85,34 @@ jobs:
       # `continue-on-error` deliberately: this is the first run of a tool nobody
       # here has tuned, and a documentation edit should not be blocked by a rule
       # we have not yet decided we accept. Tighten it once its output is trusted.
+      #
+      # The exit codes are the reason this loop is not a one-liner. pa11y exits 2
+      # when it found accessibility issues and 1 when it could not run at all —
+      # and the first version of this step swallowed both with `|| true`, so four
+      # pages that never opened reported green for a day. Chromium needs
+      # `--no-sandbox` on the runner, which pa11y takes only from a config file;
+      # a launch failure is now a hard `exit 1` that `continue-on-error` reports
+      # without blocking, while findings stay advisory until we accept the rule.
       - name: accessibility
         continue-on-error: true
         run: |
           npm install --no-save pa11y@8
           python3 -m http.server 8123 --directory documentation &
           sleep 3
+          broken=0
           for page in index.html guide/getting-started.html \
                       guide/configuration.html guide/new-genome.html; do
             echo "::group::pa11y ${page}"
-            npx pa11y --standard WCAG2AA "http://localhost:8123/${page}" || true
+            status=0
+            npx pa11y --config documentation/pa11y.json \
+                      --standard WCAG2AA "http://localhost:8123/${page}" || status=$?
             echo "::endgroup::"
+            if [ "$status" -eq 1 ]; then
+              echo "::error::pa11y could not run against ${page}"
+              broken=1
+            fi
           done
+          [ "$broken" -eq 0 ] || exit 1
 
       # The downloadable bundle and the page listing its files are both
       # generated from `get-examples/` and both committed, so either can go a
