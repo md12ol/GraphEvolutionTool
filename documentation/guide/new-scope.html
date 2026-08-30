@@ -170,7 +170,7 @@ ScopeConfig::Neighbourhood { radius } =&gt; {
 </p>
 
 <p>
-  If your variant has parameters that can be wrong (a radius that must be at least one) constrain
+  If your variant has parameters that can be wrong (a radius that must be at least one), constrain
   them in <code>Config::validate_scope</code>, in <code>get/src/config.rs</code>. <b>Only your
   own</b>: <code>size</code> belongs to <code>RandomSubset</code> and nothing else reads it, which is
   the separation this axis exists for.
