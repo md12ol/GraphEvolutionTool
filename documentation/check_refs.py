@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Check — and with --fix, repair — the site's `path:line` references.
+"""Check, and with --fix repair, the site's `path:line` references.
 
 Every `file.rs:NNN` on the site points at the `ADD A ... STEP n` marker for
-*that* step — the exact line where the reader makes the edit the page is
+*that* step: the exact line where the reader makes the edit the page is
 describing. Both halves are checked: the chain the page belongs to, and the
 step it names. Chain alone is not enough, because one file can carry several of
 a chain's markers and landing on a neighbour's sends the reader to the wrong
@@ -45,18 +45,18 @@ REF = re.compile(r"([a-z_]+\.rs|config\.example\.toml):(\d+)|<code>:(\d+)</code>
 # contents panel, so they never receive a generated id.
 CARD = re.compile(r'<a[^>]*\bclass="[^"]*\bcard\b[^"]*"[^>]*>.*?</a>', re.S)
 # A *declaration* marker: the name, an optional branch qualifier, then an em
-# dash introducing what to do. A cross-reference — `search `ADD A ... STEP 4``
-# — is wrapped in backticks and carries no dash, and must not count: a
+# dash introducing what to do. A cross-reference, `search `ADD A ... STEP 4``,
+# is wrapped in backticks and carries no dash, and must not count: a
 # reference that snapped to one would point at prose about a different step.
-# The qualifier's first word is the branch — `(for SteadyState, Python half)`
-# is SteadyState — and where a chain forks it is a third thing to match on:
+# The qualifier's first word is the branch, so `(for SteadyState, Python half)`
+# is SteadyState, and where a chain forks it is a third thing to match on:
 # py_config.rs carries MUTATION step 4 for EdgeEdit *and* for SDA.
 MARKER = re.compile(
     r"ADD AN? ([A-Z]+) STEP (\d+)(?: \((?:for )?([^),]+)[^)]*\))? \u2014")
 # The step a reference belongs to, from whatever names it last before the
-# reference itself: a step table's first cell, a code block's `// step n —`, or
+# reference itself: a step table's first cell, a code block's `// step n:`, or
 # prose saying `Step n is ...`. A letter suffix is part of the page's numbering,
-# not the marker's — 3a and 3b are both STEP 3. `Steps 4 and 5` is deliberately
+# not the marker's: 3a and 3b are both STEP 3. `Steps 4 and 5` is deliberately
 # not a cue: the code block under that heading carries its own.
 STEP_CUE = re.compile(r"<td>(\d+)[a-z]?</td>|[Ss]tep (\d+)[a-z]?\b")
 # The branch a reference belongs to, from the last <h2> above it: on a forked
@@ -97,7 +97,7 @@ def cued_branch(text, before, names):
 
     The cue is the heading it sits under: on a forked page each branch has its
     own <h2> and its own table. Prose elsewhere names both branches freely, so
-    only headings count, and a heading naming none of them — or more than one —
+    only headings count, and a heading naming none of them (or more than one)
     yields None and leaves the reference unnarrowed.
     """
     def flat(text):
@@ -128,8 +128,8 @@ def markers(path, chain, step=None, branch=None):
     """Line numbers in `path` carrying a marker for `chain`, 1-based.
 
     With `step` and `branch`, only that step's, on that side of a fork. One
-    file can hold several markers even after both — `py_config.rs` carries
-    REPLACEMENT step 3 twice — so this narrows the candidates rather than
+    file can hold several markers even after both, since `py_config.rs` carries
+    REPLACEMENT step 3 twice, so this narrows the candidates rather than
     picking among them.
     """
     out = []
@@ -156,7 +156,7 @@ def structure():
     # Must match `slugify` in assets/site.js character for character: these are
     # the ids a browser will actually create, and an anchor is checked against
     # them. site.js reads `textContent`, so entities are decoded, not spelled
-    # out — `&amp;` becomes `&` and is then stripped, never the word "and".
+    # out: `&amp;` becomes `&` and is then stripped, never the word "and".
     def slug(text):
         # `re.ASCII`: `site.js`'s `slugify` uses JavaScript's `\w`, which is
         # ASCII-only, while Python's is Unicode-aware by default. Left
@@ -278,7 +278,7 @@ def grep_counts():
     """Every `git grep … # N steps, M sites` on a page must return M lines.
 
     The command is the checklist a reader actually runs, so a stale count sends
-    them looking for sites that are not there — or, worse, tells them they have
+    them looking for sites that are not there, or, worse, tells them they have
     seen the whole chain when the grep printed more. Nothing else here checks a
     *command*: the reference and step-table checks read what a block cites, not
     what running it would print.
@@ -327,7 +327,7 @@ SERDE_DEFAULT = re.compile(
 # rather than a variant. This is the half that matters: `init_state` was
 # documented as required for months on exactly this shape.
 TYPE_DEFAULT = {"usize": "0", "u32": "0", "u64": "0", "f64": "0.0", "bool": "false"}
-# A field with no serde attribute on it at all — required, and the reference
+# A field with no serde attribute on it at all: required, and the reference
 # says so in words rather than with a value.
 FIELD = re.compile(r'^\s*(?:pub )?(?P<name>[a-z_][a-z_0-9]*)\s*:\s*(?P<ty>[^,\n]+),\s*$', re.M)
 DEFAULT_FN = re.compile(
@@ -385,8 +385,8 @@ def required_fields():
 def page_defaults():
     """Every `key -> Default cell` in configuration.html, whatever the table shape.
 
-    The page uses two column layouts — some tables lead with the variant's
-    `type` — so each table's own header decides which cell is which rather than
+    The page uses two column layouts: some tables lead with the variant's
+    `type`, so each table's own header decides which cell is which rather than
     a fixed position.
     """
     text = open("documentation/guide/configuration.html", encoding="utf-8").read()
@@ -485,7 +485,7 @@ def heading_ids():
 def external_links():
     """Every outward link must still resolve.
 
-    Eleven of them, ten to github.com — so this is really one host, and a failure
+    Eleven of them, ten to github.com, so this is really one host, and a failure
     is far more likely to mean GitHub is briefly unreachable than that the site is
     wrong. Hence the retries: each URL gets three attempts with a growing pause
     before it is called broken, and a network that is down entirely reports as
@@ -538,8 +538,8 @@ def external_links():
     if len(unreachable) == len(results):
         # A skip is a pass that checked nothing, and "skipped" printed into a log
         # nobody opens is how the mypy probe and the pa11y step both went green
-        # for a day. Staying advisory is right — an outage must not redden a
-        # documentation edit — so the visibility is what has to improve: an
+        # for a day. Staying advisory is right, since an outage must not redden a
+        # documentation edit, so the visibility is what has to improve: an
         # annotation surfaces on the run without anyone reading raw output.
         message = f"{len(results)} external links were not checked: no network"
         print(f"{len(results)} external links, skipped: no network")
@@ -715,7 +715,7 @@ def main(fix):
             wrong += 1
             # Snap to the nearest marker for this page's chain, step *and*
             # branch. Those narrow first, so a whole-file nearest match cannot
-            # pull a reference onto its neighbour's marker — or, on a forked
+            # pull a reference onto its neighbour's marker, or, on a forked
             # chain, onto the same step of the other representation.
             # `chain` is None on any page outside CHAIN. Those pages may still
             # carry a reference, and this is the reporting path for a stale
@@ -727,7 +727,7 @@ def main(fix):
                 wanted += f" (for {branch})"
             candidates = markers(source, chain, step, branch)
             if not candidates:
-                # Usually the wrong file rather than the wrong line — the page
+                # Usually the wrong file rather than the wrong line: the page
                 # names a source that carries no such marker at all. Report and
                 # leave it: a repair here could only snap to some other step's
                 # or branch's marker, which is a write that fails the very

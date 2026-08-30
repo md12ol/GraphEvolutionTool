@@ -13,7 +13,7 @@
 <p class="page-kicker">Project</p>
 <h1>Design Notes</h1>
 <p class="lede">
-  Why GET is shaped the way it is — the alternatives that were rejected, and what each would have
+  Why GET is shaped the way it is: the alternatives that were rejected, and what each would have
   failed at. The mechanisms are on the How It Works pages; this page is the reasoning, and the
   non-goals.
 </p>
@@ -22,7 +22,7 @@
 
 <p>
   An evolutionary run that is subtly wrong looks exactly like one that is merely not converging.
-  No crash, no stack trace, no obviously bad number — just a curve that flattens out somewhere it
+  No crash, no stack trace, no obviously bad number, just a curve that flattens out somewhere it
   should not have. Nearly every structural decision in GET converts a silent failure into either an
   impossibility or a loud one.
 </p>
@@ -49,7 +49,7 @@
         <td>A silent, dense graph: out-of-range edits are no-ops evolution routes around, so
             expression cannot fail. <a href="guide/pipeline.html#graph">→</a></td></tr>
     <tr><td>Two config values disagreeing</td>
-        <td>One source of truth for each — population size is the population's length, graph size
+        <td>One source of truth for each: population size is the population's length, graph size
             belongs to the genome context.</td></tr>
   </tbody>
 </table>
@@ -77,7 +77,7 @@
 
 <p>
   Objectives return values in their own units and sign; the engine only ever minimizes. The common
-  reconciliation — a <b>direction-aware comparator</b> — is rejected, because it needs the direction
+  reconciliation, a <b>direction-aware comparator</b>, is rejected, because it needs the direction
   at every comparison site: tournament ordering, the generational argmin, the steady-state best. A
   missed one fails silently. Converting in the batch scorer instead puts it in the only place the
   whole population is scored, which is the only place "exactly once" can be guaranteed rather than
@@ -90,14 +90,14 @@
 <p>
   An earlier design converted <i>back</i> inside the statistics and the outcome, so a number flipped
   twice on a short trip and every internal type had to know the direction. Now nothing in the middle
-  converts, and three things fall out — the third being the real prize:
+  converts, and three things fall out, the third being the real prize:
 </p>
 
 <ol>
   <li>Two conversions per run instead of one per statistics row.</li>
   <li>The statistics function loses its direction parameter entirely.</li>
   <li><b>The standard-deviation special case disappears.</b> Deviation is invariant under negation,
-      so a converting statistics function had to deliberately <i>not</i> convert it — an asymmetry
+      so a converting statistics function had to deliberately <i>not</i> convert it, an asymmetry
       that looked like a missed case and had to be defended by a test. When nothing converts
       internally, there is nothing to except.</li>
 </ol>
@@ -120,8 +120,8 @@
 <p>
   <b>Steady-state carries stale fitnesses.</b> Incremental scoring plus a stochastic objective means
   the population's recorded fitnesses were computed under different dice than the children being
-  compared against them. The alternatives — rescoring periodically, or freezing the seed across a
-  generation equivalent — each trade it for a different distortion rather than removing it. So it is
+  compared against them. The alternatives, rescoring periodically or freezing the seed across a
+  generation equivalent, each trade it for a different distortion rather than removing it. So it is
   accepted and documented, with the guidance to prefer generational when the comparison needs to be
   fair. <a href="guide/variation.html#steady-state">→</a>
 </p>
@@ -139,12 +139,12 @@
   <tbody>
     <tr><td>Validation is a function, not a parse side effect</td>
         <td>The Python front end bypasses the parser entirely. Without one shared validator it
-            would silently accept what a file rejects — and Python is the path users take.</td></tr>
+            would silently accept what a file rejects, and Python is the path users take.</td></tr>
     <tr><td>Validation returns an error, never panics</td>
         <td>A bad config is a user mistake. A panic crossing the FFI reaches the user as an opaque
             exception they cannot act on.</td></tr>
     <tr><td>A user objective gets no config variant</td>
-        <td>A string-keyed registry would move validation out of the parser — the exact failure the
+        <td>A string-keyed registry would move validation out of the parser: the exact failure the
             single-validator design prevents. Nothing user-supplied is ever deserialized, so there
             is nothing new to validate.</td></tr>
     <tr><td>The engine chooses the replicate mode, not the user</td>
@@ -152,10 +152,10 @@
             a way to choose wrong.</td></tr>
     <tr><td>Thread pool built per call, not globally</td>
         <td>A global pool configures once per process, and this is an extension module imported once
-            per session — so the core cap would belong to whichever call happened first.</td></tr>
+            per session, so the core cap would belong to whichever call happened first.</td></tr>
     <tr><td>A Python objective must be batched</td>
         <td>Per-individual callbacks serialize behind the interpreter lock, losing all the
-            parallelism the expression stage just bought — orders of magnitude, not
+            parallelism the expression stage just bought: orders of magnitude, not
             percentages.</td></tr>
   </tbody>
 </table>
@@ -171,7 +171,7 @@
   <tbody>
     <tr><td><b>Multi-objective optimisation</b></td>
         <td>One <code>f64</code> per individual. The pymoo-shaped interface is about the batched
-            call signature, not about optimising several objectives — there is no Pareto front, no
+            call signature, not about optimising several objectives. There is no Pareto front, no
             non-dominated sorting, no crowding distance.</td></tr>
     <tr><td><b>Fixed-length runs</b></td>
         <td>A run ends after its configured generations or mating events. No convergence detection,
@@ -193,7 +193,7 @@
   <b>Operator selection is built, and it is deliberately asymmetric.</b> Crossover is chosen once
   under <code>[crossover]</code> and applies to whichever representation is running, because both
   genomes ship the same two-point operator through one helper. Mutation is chosen <i>per genome</i>,
-  under <code>[genome]</code>, because the two representations' mutations share no shape — a single
+  under <code>[genome]</code>, because the two representations' mutations share no shape: a single
   shared enum would carry variants that are dead for one genome from its first release, and a
   config would accept them.
 </p>

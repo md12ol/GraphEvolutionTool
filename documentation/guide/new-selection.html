@@ -14,12 +14,12 @@
 <h1>Add a Selection Scheme</h1>
 <p class="lede">
   Choosing which members of a scope become parents. Six edits across five files, and no strategy
-  or genome is touched — selection is one of three independent axes, and it answers only this
+  or genome is touched: selection is one of three independent axes, and it answers only this
   question.
 </p>
 
 <div class="warn not-in-release">
-  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet — only
+  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet; only
   <a href="new-fitness.html">adding an objective</a> is ready to use today. This note is removed
   once the chain is finished and documented.
 </div>
@@ -27,7 +27,7 @@
 <h2>The One Question a Scheme Answers</h2>
 
 <p>
-  Selection takes a <b>scope</b> — a list of population indices someone else chose — and returns
+  Selection takes a <b>scope</b>, a list of population indices someone else chose, and returns
   <code>count</code> parent indices drawn from it. It does not decide who is eligible
   (<code>[scope]</code> does that) and it does not decide who dies
   (<code>[replacement]</code> does that). That separation is why every scheme works with every
@@ -51,7 +51,7 @@
         build.</li>
   </ul>
   <p>
-    Drawing <b>with replacement is allowed</b> — the tournament does it, so the same individual can
+    Drawing <b>with replacement is allowed</b>: the tournament does it, so the same individual can
     be both parents. That is deliberate, not an oversight to correct in a new scheme.
   </p>
 </div>
@@ -59,14 +59,14 @@
 <div class="note">
   <b>Selection is an enum, not a trait, so it cannot be extended from outside the crate.</b> Unlike
   an objective, a genome or a strategy, a program that merely depends on GET gets the schemes GET
-  ships and no others — adding one means editing your own copy. The steps below assume that is what
+  ships and no others; adding one means editing your own copy. The steps below assume that is what
   you are doing.
 </div>
 
 <h2>What the User Ends Up Writing</h2>
 
 <p>
-  A GET run is configured by a <b>TOML document</b> — see the
+  A GET run is configured by a <b>TOML document</b>. See the
   <a href="route-python-toml.html">Python: TOML File</a> for its full shape, and
   <a href="route-python-objects.html">Python: Config Objects</a> for how to run one. Selection is one section
   of it. Adding a scheme called <code>Roulette</code> is what makes this valid:
@@ -79,7 +79,7 @@ pressure = 1.8</code></pre>
 <div class="callout">
   <p>
     <b>You never write the string <code>"roulette"</code> anywhere in the code.</b> It is derived
-    from your variant's name, converted to snake_case — <code>Roulette</code> becomes
+    from your variant's name, converted to snake_case, so <code>Roulette</code> becomes
     <code>roulette</code>, <code>MyScheme</code> becomes <code>my_scheme</code>. Name the variant
     and the config name follows; the keys under it are your struct's field names, the same way.
   </p>
@@ -100,7 +100,7 @@ pressure = 1.8</code></pre>
 
 <pre><code class="language-bash">git grep -n "ADD A SELECTION STEP" get/src config.example.toml    # 6 steps, 7 sites</code></pre>
 
-<p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
+<p>Each step is named at more than one site, because a marker points forward to the next; go by the step numbers rather than the number of lines the grep prints.</p>
 
 <div class="table-wrap">
 <table>
@@ -112,7 +112,7 @@ pressure = 1.8</code></pre>
     <tr><td>2</td><td><code>get/src/evolver/common.rs:159</code></td>
         <td>The arm in <code>Selection::pick</code> that actually chooses parents.</td></tr>
     <tr><td>3</td><td><code>get/src/config.rs:112</code></td>
-        <td>The mirrored variant on <code>enum SelectionConfig</code> — this is the one whose name
+        <td>The mirrored variant on <code>enum SelectionConfig</code>. This is the one whose name
             becomes <code>type = "roulette"</code>.</td></tr>
     <tr><td>4</td><td><code>get/src/dispatch.rs:711</code></td>
         <td>The arm mapping your config variant onto the engine variant. Steps 3 and 4 are one
@@ -120,23 +120,23 @@ pressure = 1.8</code></pre>
     <tr><td>5</td><td><code>get/src/py_config.rs:203</code> and <code>:689</code></td>
         <td><b>Optional.</b> The Python-side variant, and its matching arm.</td></tr>
     <tr><td>6</td><td><code>config.example.toml:173</code></td>
-        <td><b>Optional.</b> A commented-out <code>[selection]</code> block naming your scheme —
+        <td><b>Optional.</b> A commented-out <code>[selection]</code> block naming your scheme:
             only the scheme's own parameters, since the scope sizes itself.</td></tr>
   </tbody>
 </table>
 </div>
 
-<h2>Steps 1 and 2 — The Engine Side</h2>
+<h2>Steps 1 and 2: The Engine Side</h2>
 
 <p>
   Both are in <code>get/src/evolver/common.rs</code>. Add the variant, then the arm that performs
   it:
 </p>
 
-<pre><code class="language-rust">// step 1 — evolver/common.rs:75
+<pre><code class="language-rust">// step 1: evolver/common.rs:75
 Roulette { pressure: f64 },
 
-// step 2 — evolver/common.rs:159
+// step 2: evolver/common.rs:159
 Selection::Roulette { pressure } =&gt; {
     let mut parents = Vec::with_capacity(count);
     for _ in 0..count {
@@ -159,32 +159,32 @@ Selection::Roulette { pressure } =&gt; {
   </ul>
 </div>
 
-<h2>Steps 3 and 4 — The Config Side</h2>
+<h2>Steps 3 and 4: The Config Side</h2>
 
 <p>One change, two files. The config variant, and the arm that maps it onto the engine variant:</p>
 
-<pre><code class="language-rust">// step 3 — config.rs:112
+<pre><code class="language-rust">// step 3: config.rs:112
 Roulette { pressure: f64 },
 
-// step 4 — dispatch.rs:711
+// step 4: dispatch.rs:711
 SelectionConfig::Roulette { pressure } =&gt; {
     Selection::Roulette { pressure: *pressure }
 }</code></pre>
 
 <p>
-  If your scheme has parameters that can be wrong — a pressure that must be positive, a size that
-  must be at least one — constrain them in <code>validate_evolution_and_selection</code>, in
+  If your scheme has parameters that can be wrong (a pressure that must be positive, a size that
+  must be at least one) constrain them in <code>validate_evolution_and_selection</code>, in
   <code>get/src/config.rs</code>. Only your own parameters: there is no scheme-by-strategy check to
   extend there.
 </p>
 
-<h2>Steps 5 and 6 — Python, and Optional</h2>
+<h2>Steps 5 and 6: Python, and Optional</h2>
 
 <p>
   Leaving these out costs nothing elsewhere; the scheme is then configurable from a TOML file but
   absent from the Python API. Step 5 is the mirrored variant on <code>PySelectionConfig</code>
   (<code>get/src/py_config.rs:203</code>) and its matching arm (<code>:689</code>). Write
-  <b>your own parameters and no other block's</b> — the arm is building the
+  <b>your own parameters and no other block's</b>: the arm is building the
   <code>[selection]</code> table alone. Step 6 is a commented-out block in
   <code>config.example.toml:173</code>.
 </p>
@@ -192,7 +192,7 @@ SelectionConfig::Roulette { pressure } =&gt; {
 <div class="callout">
   <p>
     <b>Step 5 is the one nothing checks.</b> A scheme missing its Python mirror does not fail to
-    compile and does not fail a test — it is simply absent from the Python API, and the first
+    compile and does not fail a test; it is simply absent from the Python API, and the first
     person to notice is a user who cannot find it.
   </p>
 </div>
@@ -216,7 +216,7 @@ SelectionConfig::Roulette { pressure } =&gt; {
 
 <p>
   If what you actually want is to change <i>who is eligible</i> or <i>who gets overwritten</i>, you
-  want a different chain — <code>[scope]</code> and <code>[replacement]</code> are their own
+  want a different chain: <code>[scope]</code> and <code>[replacement]</code> are their own
   sections and their own marker families:
 </p>
 

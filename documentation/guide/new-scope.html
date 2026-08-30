@@ -14,12 +14,12 @@
 <h1>Add a Scope</h1>
 <p class="lede">
   Choosing which slice of the population a single breeding event may touch. Six edits across five
-  files, and no strategy, genome or selection scheme is touched — scope is one of three independent
+  files, and no strategy, genome or selection scheme is touched: scope is one of three independent
   axes, and it answers only this question.
 </p>
 
 <div class="warn not-in-release">
-  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet — only
+  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet; only
   <a href="new-fitness.html">adding an objective</a> is ready to use today. This note is removed
   once the chain is finished and documented.
 </div>
@@ -29,7 +29,7 @@
 <p>
   A scope produces a list of population indices. Everything downstream works inside that list:
   <code>[selection]</code> picks parents from it, <code>[replacement]</code> picks who the children
-  overwrite in it. The scope itself has no opinion about fitness — <code>Global</code> does not even
+  overwrite in it. The scope itself has no opinion about fitness; <code>Global</code> does not even
   read it.
 </p>
 
@@ -48,7 +48,7 @@
   <p>
     <b>A variant's parameters are its own.</b> <code>size</code> belongs to <code>[scope]</code> and
     nothing else reads it. That is the whole reason this axis exists as its own enum: a scheme with no
-    tournament — <code>best</code>, say — still has to be able to say how large a scope it wants, and
+    tournament (<code>best</code>, say) still has to be able to say how large a scope it wants, and
     it cannot if that number lives under <code>[selection]</code>.
   </p>
 </div>
@@ -62,7 +62,7 @@ type   = "neighbourhood"
 radius = 3</code></pre>
 
 <p>
-  You never write the string <code>"neighbourhood"</code> anywhere in the code — it is derived from
+  You never write the string <code>"neighbourhood"</code> anywhere in the code; it is derived from
   the variant name, converted to snake_case, and the keys under it are your struct's field names.
   Every config carries a <code>[scope]</code> block, generational included
   (<code>type = "global"</code>).
@@ -93,23 +93,23 @@ radius = 3</code></pre>
     <tr><td>4</td><td><code>get/src/dispatch.rs:681</code></td>
         <td>the arm mapping that config variant onto the engine one</td></tr>
     <tr><td>5</td><td><code>get/src/py_config.rs:186</code> and <code>:665</code></td>
-        <td>the Python mirror — optional</td></tr>
+        <td>the Python mirror, optional</td></tr>
     <tr><td>6</td><td><code>config.example.toml:167</code></td>
-        <td>a commented-out block naming your variant — optional, and the step people skip</td></tr>
+        <td>a commented-out block naming your variant: optional, and the step people skip</td></tr>
   </tbody>
 </table>
 </div>
 
-<h2>Steps 1 and 2 — The Engine Side</h2>
+<h2>Steps 1 and 2: The Engine Side</h2>
 
 <p>
   Both are in <code>get/src/evolver/scope.rs</code>. Add the variant, then the arm that draws it:
 </p>
 
-<pre><code class="language-rust">// step 1 — evolver/scope.rs:12
+<pre><code class="language-rust">// step 1: evolver/scope.rs:12
 Neighbourhood { radius: usize },
 
-// step 2 — evolver/scope.rs:52
+// step 2: evolver/scope.rs:52
 Scope::Neighbourhood { radius } =&gt; {
     let centre = rng.random_range(0..population_len);
     for offset in 0..=(radius * 2) {
@@ -121,7 +121,7 @@ Scope::Neighbourhood { radius } =&gt; {
   <code>draw_into</code> writes into the caller's buffer rather than returning a <code>Vec</code>,
   because generational draws a scope per breeding pair and an allocation per pair is a cost this
   abstraction has no reason to add. <b><code>out</code> is already cleared for you</b>, once, before
-  the match — do not clear it again in your arm.
+  the match; do not clear it again in your arm.
 </p>
 
 <div class="warn">
@@ -133,7 +133,7 @@ Scope::Neighbourhood { radius } =&gt; {
     <li><b>Keep them distinct if any replacement policy is to name positions.</b>
         <code>RandomSubset</code> draws without replacement precisely so that "the worst two members"
         means something; over a multiset it does not. The wrapping example above can repeat an index
-        when <code>radius * 2 + 1</code> exceeds the population — which is exactly the kind of thing
+        when <code>radius * 2 + 1</code> exceeds the population, which is exactly the kind of thing
         to decide deliberately rather than discover.</li>
     <li><b>Take every random value from <code>rng</code>.</b> Any other source breaks seeded
         reproducibility in the way hardest to notice: the run still works, it just cannot be
@@ -151,14 +151,14 @@ Scope::Neighbourhood { radius } =&gt; {
   engine; everything below exists to let a config file name it.
 </div>
 
-<h2>Steps 3 and 4 — The Config Side</h2>
+<h2>Steps 3 and 4: The Config Side</h2>
 
 <p>One change, two files. The config variant, and the arm mapping it onto the engine variant:</p>
 
-<pre><code class="language-rust">// step 3 — config.rs:77
+<pre><code class="language-rust">// step 3: config.rs:77
 Neighbourhood { radius: usize },
 
-// step 4 — dispatch.rs:681
+// step 4: dispatch.rs:681
 ScopeConfig::Neighbourhood { radius } =&gt; {
     Scope::Neighbourhood { radius: *radius }
 }</code></pre>
@@ -170,7 +170,7 @@ ScopeConfig::Neighbourhood { radius } =&gt; {
 </p>
 
 <p>
-  If your variant has parameters that can be wrong — a radius that must be at least one — constrain
+  If your variant has parameters that can be wrong (a radius that must be at least one) constrain
   them in <code>Config::validate_scope</code>, in <code>get/src/config.rs</code>. <b>Only your
   own</b>: <code>size</code> belongs to <code>RandomSubset</code> and nothing else reads it, which is
   the separation this axis exists for.
@@ -180,11 +180,11 @@ ScopeConfig::Neighbourhood { radius } =&gt; {
   <b>A field you validate also needs a line in <code>python_attribute_path</code></b>
   (<code>get/src/py_config.rs</code>), or a Python caller who trips your check sees an error naming a
   TOML field they never wrote. The test
-  <code>every_validation_field_maps_to_a_python_attribute</code> is what catches a missing one — but
+  <code>every_validation_field_maps_to_a_python_attribute</code> is what catches a missing one, but
   only for fields that reach validation.
 </div>
 
-<h2>Steps 5 and 6 — Python, and Optional</h2>
+<h2>Steps 5 and 6: Python, and Optional</h2>
 
 <p>
   Skipping these makes the scope TOML-only: it still runs from a config file and from the Rust
@@ -193,18 +193,18 @@ ScopeConfig::Neighbourhood { radius } =&gt; {
   that writes the <code>[scope]</code> table (<code>:665</code>):
 </p>
 
-<pre><code class="language-rust">// step 5 — py_config.rs:186
+<pre><code class="language-rust">// step 5: py_config.rs:186
 #[pyo3(constructor = (radius))]
 Neighbourhood { radius: usize },
 
-// step 5 — py_config.rs:665
+// step 5: py_config.rs:665
 PyScopeConfig::Neighbourhood { radius } =&gt; {
     table.insert("type".to_string(), Value::String("neighbourhood".to_string()));
     table.insert("radius".to_string(), integer("radius", *radius)?);
 }</code></pre>
 
 <p>
-  Write <b>your own parameters and no other block's</b> — the arm is building the
+  Write <b>your own parameters and no other block's</b>: the arm is building the
   <code>[scope]</code> table alone. Step 6 is a commented-out block in
   <code>config.example.toml:167</code>.
 </p>
@@ -243,14 +243,14 @@ fn neighbourhood_stays_in_range_and_is_reproducible() {
 
 <p>
   Read the two tests already in that module first. <code>a_global_scope_is_every_index_and_
-  consumes_no_randomness</code> shows how to assert that a scope leaves the RNG stream untouched —
+  consumes_no_randomness</code> shows how to assert that a scope leaves the RNG stream untouched,
   worth copying if yours is deterministic, because a scope that quietly draws is what makes two runs
   with the same seed diverge. <code>a_random_subset_is_distinct_and_the_size_asked_for</code> is the
   distinctness assertion: collect into a <code>HashSet</code> and check the length is unchanged.
 </p>
 
 <p>
-  Then add the keys to <code>config.example.toml</code>, which the test suite parses and validates —
+  Then add the keys to <code>config.example.toml</code>, which the test suite parses and validates,
   a block that does not parse fails the suite rather than a user's afternoon.
 </p>
 
