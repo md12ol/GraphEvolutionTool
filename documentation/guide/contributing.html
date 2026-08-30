@@ -57,6 +57,15 @@ python tools/build_bundle.py --check
 python3 documentation/check_refs.py</code></pre>
 
 <p>
+  The <code>cargo</code> lines are the same on Windows. The three Python ones are not, since the
+  setup above never activates the environment:
+</p>
+
+<pre><code class="language-powershell">.venv\Scripts\python.exe tools\test_stubs.py
+.venv\Scripts\python.exe tools\build_bundle.py --check
+.venv\Scripts\python.exe documentation\check_refs.py</code></pre>
+
+<p>
   CI also runs every Rust example and conditional Python/tool tests; run the commands relevant to
   the files you changed. Run the documentation checker from the repository root. It checks source references, extension
   step tables, displayed function signatures, navigation membership, internal links, and anchors.

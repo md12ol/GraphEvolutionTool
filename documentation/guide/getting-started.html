@@ -34,6 +34,9 @@ parts of the result. No graph theory or evolutionary-computing background is req
 <pre><code class="language-bash">python3 --version
 python3 -m pip --version</code></pre>
 
+<pre><code class="language-powershell">py --version
+py -m pip --version</code></pre>
+
 <h2>1. Install the Python Package</h2>
 
 <pre><code class="language-bash">python3 -m venv .venv
@@ -98,6 +101,8 @@ print("genome:", result.best_genome_repr)
 print("history rows:", len(result.history))</code></pre>
 
 <pre><code class="language-bash">python first_run.py</code></pre>
+
+<pre><code class="language-powershell">.venv\Scripts\python.exe first_run.py</code></pre>
 
 <p>
   The exact result is deterministic for this version and seed. You should see one score, an edge
