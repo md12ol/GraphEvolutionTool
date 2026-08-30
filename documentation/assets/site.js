@@ -1,4 +1,4 @@
-/* GET documentation site — shared behaviour.
+/* GET documentation site: shared behaviour.
    Everything is inlined here so the site works from `file://` as well as from a
    local HTTP server: no fetch, no external libraries, no build step.
 
@@ -254,7 +254,7 @@
   }
 
   function buildToc(main) {
-    /* Card headings are navigation, not sections — they would otherwise fill the
+    /* Card headings are navigation, not sections. They would otherwise fill the
        table of contents with links that duplicate the sidebar. */
     var heads = [];
     Array.prototype.forEach.call(main.querySelectorAll("h2, h3"), function (h) {

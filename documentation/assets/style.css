@@ -1,4 +1,4 @@
-/* GET documentation site — shared stylesheet.
+/* GET documentation site: shared stylesheet.
    One file for the whole site. Tokens first, then layout, then components. */
 
 /* ---------- tokens ---------------------------------------------------- */
@@ -172,7 +172,7 @@ pre code { background: none; border: 0; padding: 0; font-size: 1em; }
 .copy-btn:hover { color: var(--text); border-color: var(--accent); }
 .copy-btn:focus-visible { opacity: 1; }
 
-/* syntax tinting — applied by site.js, deliberately minimal */
+/* syntax tinting, applied by site.js, deliberately minimal */
 .tok-com { color: var(--text-faint); font-style: italic; }
 .tok-str { color: var(--good); }
 .tok-key { color: var(--accent); }
@@ -684,7 +684,7 @@ a.path-card:hover { border-color: var(--accent); text-decoration: none; box-shad
 .cb-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr)); gap: .9rem; }
 .cb-field { min-width: 0; }
 
-/* `[hidden]` is a user-agent `display: none`, so any author `display` beats it —
+/* `[hidden]` is a user-agent `display: none`, so any author `display` beats it,
    and every conditional block here carries one, through .cb-fields or .cb-grid2. */
 [hidden] { display: none !important; }
 

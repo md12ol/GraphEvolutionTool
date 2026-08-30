@@ -8,8 +8,8 @@ On Linux or macOS:
     pip install graph-evolution-tool
 
 On Windows, in PowerShell, the same three lines with two changes: use `py` in
-place of `python3`, **skip the `activate` line entirely** — a stock machine
-refuses to run it — and write `.venv\Scripts\python.exe` wherever any command
+place of `python3`, **skip the `activate` line entirely**, because a stock
+machine refuses to run it, and write `.venv\Scripts\python.exe` wherever any command
 below says `python`. `pip` becomes `.venv\Scripts\python.exe -m pip`.
 
     py -m venv .venv
@@ -31,9 +31,9 @@ already there, so one run never overwrites another. Each example folder keeps a
 copy of the configuration that produced it, so the folder says what it is
 without opening anything inside it, and holds one `run_M/` per replicate. Each
 replicate writes its convergence log and the winning network as an edge list GET
-can read back — so one run's result can be the next run's base graph.
+can read back, so one run's result can be the next run's base graph.
 
-Every parameter lives in the TOML, the base graph included — `03` names its
+Every parameter lives in the TOML, the base graph included. `03` names its
 starting network with a `base_graph` key, resolved beside the configuration
 file rather than beside whatever directory you ran from.
 """
@@ -71,8 +71,8 @@ def register_objective(evolver):
     so there is nothing for the configuration to describe, and nothing can
     infer whether your function wants its value large or small.
 
-    A callable is handed the whole population at once — a list of
-    `(num_nodes, edges)`, each edge a `(start, end, weight)` triple — and
+    A callable is handed the whole population at once: a list of
+    `(num_nodes, edges)`, each edge a `(start, end, weight)` triple. It
     returns one score per graph, in the same order.
 
     Degree here sums edge weights, so a doubled edge counts twice. It makes no

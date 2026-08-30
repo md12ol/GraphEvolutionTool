@@ -8,7 +8,7 @@ One required argument, the graph file. With a second, that is where the image
 goes; without one it is the input path with its extension replaced by `.png`.
 
 **Standard library only, like everything else in `tools/`.** No matplotlib, no
-networkx, no install step — the PNG is encoded here with `zlib` and the layout
+networkx, no install step. The PNG is encoded here with `zlib` and the layout
 is a plain force-directed one, so this runs on the same bare interpreter that
 runs the converter beside it. The cost is that it draws a readable diagram
 rather than a publication figure; if you want the latter, read the edge list
@@ -54,7 +54,7 @@ def read_graph(path):
 
     The format is the one GET both reads and writes: `#` starts a comment, one
     of which must be `# nodes = N`, and every other line is `u,v,weight`. The
-    header is required here for the same reason GET requires it — a node with
+    header is required here for the same reason GET requires it: a node with
     no edges is invisible to the edge rows, so a count taken from them is short
     by exactly the nodes hardest to notice.
     """
@@ -112,7 +112,7 @@ def layout(num_nodes, edges):
     Fruchterman-Reingold: every pair repels, every edge attracts, and the
     maximum displacement per step decays to zero so the thing settles. Started
     from an evenly spaced circle rather than random positions, which is what
-    makes the result reproducible without a seed — and which also gives a
+    makes the result reproducible without a seed, and which also gives a
     graph with no edges at all a sensible picture instead of a heap.
     """
     positions = []
@@ -169,7 +169,7 @@ def layout(num_nodes, edges):
     # Measured over the nodes that have an edge, not over every node. An
     # isolated node feels repulsion and no attraction, so it drifts to the rim
     # and stops; a span taken over all of them is set by those strays, and
-    # dividing by it shrinks the connected part — the part worth looking at —
+    # dividing by it shrinks the connected part, the part worth looking at,
     # to a dot. That is the very outcome this rescale exists to avoid, and an
     # evolved graph almost always has a few isolated nodes.
     connected = set()
@@ -232,7 +232,7 @@ class Canvas:
                 self.set(x, y, colour)
 
     def downsample(self, factor):
-        """Box-filter to 1/`factor` of each dimension — the anti-aliasing."""
+        """Box-filter to 1/`factor` of each dimension, the anti-aliasing."""
         out_size = self.size // factor
         out = bytearray(out_size * out_size * 3)
         area = factor * factor
@@ -299,7 +299,7 @@ def draw(num_nodes, edges, positions):
             continue
         x0, y0 = to_pixels(positions[u])
         x1, y1 = to_pixels(positions[v])
-        # Weight is a multiplicity, so thickness scales with it — a parallel
+        # Weight is a multiplicity, so thickness scales with it: a parallel
         # edge should look like more than one edge.
         width = SUPERSAMPLE * (1 + 2 * weight // heaviest)
         canvas.line(x0, y0, x1, y1, EDGE_COLOUR, width)

@@ -1,4 +1,4 @@
-# 04 — match an epidemic curve, with non-elitist replacement
+# 04: match an epidemic curve, with non-elitist replacement
 #
 #     python python_from_config.py 04_sda_profile_match.toml
 #
@@ -7,7 +7,7 @@
 #
 # It is also the only one that is not self-elitist. 02 replaces the scope's
 # *worst*, so the best individual in a scope can never be overwritten. Here
-# replacement is uniform, so it can be — and the best fitness of the run may
+# replacement is uniform, so it can be, and the best fitness of the run may
 # fall between events rather than only improving. That is deliberate: it trades
 # guaranteed progress for a population that escapes local optima more easily.
 
@@ -47,8 +47,8 @@ mutation                    = { type = "redraw_one" }
 
 [fitness]
 # Compared verbatim against each simulated outbreak: nothing is prepended for
-# patient zero and nothing is rescaled. One entry per timestep — how many nodes
-# are newly infected at that step — so the length of this list is the length of
+# patient zero and nothing is rescaled. One entry per timestep, how many nodes
+# are newly infected at that step, so the length of this list is the length of
 # the epidemic you are asking for.
 #
 # The comparison is asymmetric. An outbreak that ends early is penalized for

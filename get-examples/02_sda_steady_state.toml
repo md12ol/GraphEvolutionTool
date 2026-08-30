@@ -1,10 +1,10 @@
-# 02 — SDA genome, steady state, maximize outbreak duration
+# 02: SDA genome, steady state, maximize outbreak duration
 #
 #     python python_from_config.py 02_sda_steady_state.toml
 #
 # Two changes from 01, and they are independent of each other:
 #
-#   * a different representation. An SDA does not store edits — it is a small
+#   * a different representation. An SDA does not store edits. It is a small
 #     automaton whose output string is read as the graph, so `gene_length` has
 #     no meaning here and every key under `[genome]` is a different one.
 #   * a different strategy. Steady state replaces two individuals per mating

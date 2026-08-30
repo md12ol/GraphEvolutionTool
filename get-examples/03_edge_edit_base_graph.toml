@@ -1,4 +1,4 @@
-# 03 — edit a graph you supply, with the full operation mix
+# 03: edit a graph you supply, with the full operation mix
 #
 #     python python_from_config.py 03_edge_edit_base_graph.toml
 #
@@ -12,7 +12,7 @@
 # having three:
 #
 #     base_graph_ring.csv       every node joined to its +-1 and +-2 neighbours
-#     base_graph_empty.csv      no edges — identical to omitting the key
+#     base_graph_empty.csv      no edges, identical to omitting the key
 #     base_graph_powerlaw.csv   a few high-degree hubs, most nodes sparse
 
 population_size       = 100
@@ -22,8 +22,8 @@ max_edge_multiplicity = 5     # above 1, so an edge can carry parallel copies
                               # move through rather than a flag to flip.
                               # Parallel copies are separate transmission
                               # chances, so a 5-copy edge transmits at
-                              # 1 - 0.7^5 = 83% where a single one is 30% —
-                              # the pairing this cap and the rate below were
+                              # 1 - 0.7^5 = 83% where a single one is 30%.
+                              # The pairing this cap and the rate below were
                               # chosen for together
 
 crossover_rate = 0.9
@@ -55,7 +55,7 @@ base_graph  = "base_graph_ring.csv"
 
 mutation    = { type = "reroll_gene" }
 
-# Relative weights, not probabilities — they are normalized, so doubling all
+# Relative weights, not probabilities: they are normalized, so doubling all
 # nine changes nothing. Any omitted operation defaults to 1.0. At least one
 # must be positive.
 [genome.operation_weights]
@@ -67,7 +67,7 @@ swap         = 1.0   # exchange the endpoints of two existing edges
 local_toggle = 1.0   # as toggle, but confined to a node's neighbourhood
 local_add    = 1.0
 local_delete = 1.0
-null         = 0.5   # do nothing — a gene that holds its place, letting an
+null         = 0.5   # do nothing: a gene that holds its place, letting an
                      # individual carry fewer than `gene_length` real edits
 
 [fitness]

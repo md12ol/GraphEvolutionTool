@@ -1,9 +1,9 @@
-# 05 — the exercise: an objective you write yourself
+# 05: the exercise, an objective you write yourself
 #
 #     python python_from_config.py 05_exercise_degree_match.toml
 #
 # **This one does not run until you edit the Python.** Everything above
-# `[fitness]` is 01 again, deliberately — the exercise is the Python change,
+# `[fitness]` is 01 again, deliberately: the exercise is the Python change,
 # and a complicated config would put the difficulty in the wrong place.
 #
 # `type = "python"` only *selects* a registered callable. It does not say what
@@ -12,7 +12,7 @@
 # commented-out block in it, and uncomment it.
 #
 # The objective it scores: **how many nodes have exactly the target degree.**
-# Maximized. Nothing about that is special — it is small enough to read in one
+# Maximized. Nothing about that is special. It is small enough to read in one
 # sitting and it rewards a shape the epidemic objectives never ask for.
 
 population_size       = 100
@@ -42,7 +42,7 @@ type        = "edge_edit"
 gene_length = 256
 
 [fitness]
-# No parameters here, and none are possible — this is the one objective that
+# No parameters here, and none are possible: this is the one objective that
 # takes none. Both the target degree and the direction to optimize in live in
 # `python_from_config.py`, beside the callable: a registered function can read
 # whatever it likes, so there is nothing for the config to describe, and

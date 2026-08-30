@@ -29,7 +29,7 @@
 </div>
 
 <h2 id="01_edge_edit_generational-toml">01_edge_edit_generational.toml</h2>
-<pre><code class="language-toml"># 01 — edge editing, generational, maximize outbreak size
+<pre><code class="language-toml"># 01: edge editing, generational, maximize outbreak size
 #
 # The smallest complete document. Every later config adds to this shape rather
 # than replacing it, so read this one first.
@@ -57,7 +57,7 @@ type = &quot;global&quot;
 
 [selection]
 # Which of that slice becomes a parent. `tournament_size` sizes the tournament
-# only — the scope has its own `size`, which `global` does not take.
+# only. The scope has its own `size`, which `global` does not take.
 type            = &quot;tournament&quot;
 tournament_size = 5
 
@@ -78,13 +78,13 @@ num_epidemics  = 20           # outbreaks averaged per individual
 </code></pre>
 
 <h2 id="02_sda_steady_state-toml">02_sda_steady_state.toml</h2>
-<pre><code class="language-toml"># 02 — SDA genome, steady state, maximize outbreak duration
+<pre><code class="language-toml"># 02: SDA genome, steady state, maximize outbreak duration
 #
 #     python python_from_config.py 02_sda_steady_state.toml
 #
 # Two changes from 01, and they are independent of each other:
 #
-#   * a different representation. An SDA does not store edits — it is a small
+#   * a different representation. An SDA does not store edits. It is a small
 #     automaton whose output string is read as the graph, so `gene_length` has
 #     no meaning here and every key under `[genome]` is a different one.
 #   * a different strategy. Steady state replaces two individuals per mating
@@ -140,7 +140,7 @@ num_epidemics  = 20
 </code></pre>
 
 <h2 id="03_edge_edit_base_graph-toml">03_edge_edit_base_graph.toml</h2>
-<pre><code class="language-toml"># 03 — edit a graph you supply, with the full operation mix
+<pre><code class="language-toml"># 03: edit a graph you supply, with the full operation mix
 #
 #     python python_from_config.py 03_edge_edit_base_graph.toml
 #
@@ -154,7 +154,7 @@ num_epidemics  = 20
 # having three:
 #
 #     base_graph_ring.csv       every node joined to its +-1 and +-2 neighbours
-#     base_graph_empty.csv      no edges — identical to omitting the key
+#     base_graph_empty.csv      no edges, identical to omitting the key
 #     base_graph_powerlaw.csv   a few high-degree hubs, most nodes sparse
 
 population_size       = 100
@@ -164,8 +164,8 @@ max_edge_multiplicity = 5     # above 1, so an edge can carry parallel copies
                               # move through rather than a flag to flip.
                               # Parallel copies are separate transmission
                               # chances, so a 5-copy edge transmits at
-                              # 1 - 0.7^5 = 83% where a single one is 30% —
-                              # the pairing this cap and the rate below were
+                              # 1 - 0.7^5 = 83% where a single one is 30%.
+                              # The pairing this cap and the rate below were
                               # chosen for together
 
 crossover_rate = 0.9
@@ -197,7 +197,7 @@ base_graph  = &quot;base_graph_ring.csv&quot;
 
 mutation    = { type = &quot;reroll_gene&quot; }
 
-# Relative weights, not probabilities — they are normalized, so doubling all
+# Relative weights, not probabilities: they are normalized, so doubling all
 # nine changes nothing. Any omitted operation defaults to 1.0. At least one
 # must be positive.
 [genome.operation_weights]
@@ -209,7 +209,7 @@ swap         = 1.0   # exchange the endpoints of two existing edges
 local_toggle = 1.0   # as toggle, but confined to a node&#x27;s neighbourhood
 local_add    = 1.0
 local_delete = 1.0
-null         = 0.5   # do nothing — a gene that holds its place, letting an
+null         = 0.5   # do nothing: a gene that holds its place, letting an
                      # individual carry fewer than `gene_length` real edits
 
 [fitness]
@@ -230,7 +230,7 @@ max_epidemic_retries = 5   # up to this many times. Set length to 1 to disable.
 </code></pre>
 
 <h2 id="04_sda_profile_match-toml">04_sda_profile_match.toml</h2>
-<pre><code class="language-toml"># 04 — match an epidemic curve, with non-elitist replacement
+<pre><code class="language-toml"># 04: match an epidemic curve, with non-elitist replacement
 #
 #     python python_from_config.py 04_sda_profile_match.toml
 #
@@ -239,7 +239,7 @@ max_epidemic_retries = 5   # up to this many times. Set length to 1 to disable.
 #
 # It is also the only one that is not self-elitist. 02 replaces the scope&#x27;s
 # *worst*, so the best individual in a scope can never be overwritten. Here
-# replacement is uniform, so it can be — and the best fitness of the run may
+# replacement is uniform, so it can be, and the best fitness of the run may
 # fall between events rather than only improving. That is deliberate: it trades
 # guaranteed progress for a population that escapes local optima more easily.
 
@@ -279,8 +279,8 @@ mutation                    = { type = &quot;redraw_one&quot; }
 
 [fitness]
 # Compared verbatim against each simulated outbreak: nothing is prepended for
-# patient zero and nothing is rescaled. One entry per timestep — how many nodes
-# are newly infected at that step — so the length of this list is the length of
+# patient zero and nothing is rescaled. One entry per timestep, how many nodes
+# are newly infected at that step, so the length of this list is the length of
 # the epidemic you are asking for.
 #
 # The comparison is asymmetric. An outbreak that ends early is penalized for
@@ -293,12 +293,12 @@ target_profile = [1, 3, 8, 17, 24, 19, 11, 5, 2, 1]
 </code></pre>
 
 <h2 id="05_exercise_degree_match-toml">05_exercise_degree_match.toml</h2>
-<pre><code class="language-toml"># 05 — the exercise: an objective you write yourself
+<pre><code class="language-toml"># 05: the exercise, an objective you write yourself
 #
 #     python python_from_config.py 05_exercise_degree_match.toml
 #
 # **This one does not run until you edit the Python.** Everything above
-# `[fitness]` is 01 again, deliberately — the exercise is the Python change,
+# `[fitness]` is 01 again, deliberately: the exercise is the Python change,
 # and a complicated config would put the difficulty in the wrong place.
 #
 # `type = &quot;python&quot;` only *selects* a registered callable. It does not say what
@@ -307,7 +307,7 @@ target_profile = [1, 3, 8, 17, 24, 19, 11, 5, 2, 1]
 # commented-out block in it, and uncomment it.
 #
 # The objective it scores: **how many nodes have exactly the target degree.**
-# Maximized. Nothing about that is special — it is small enough to read in one
+# Maximized. Nothing about that is special. It is small enough to read in one
 # sitting and it rewards a shape the epidemic objectives never ask for.
 
 population_size       = 100
@@ -337,7 +337,7 @@ type        = &quot;edge_edit&quot;
 gene_length = 256
 
 [fitness]
-# No parameters here, and none are possible — this is the one objective that
+# No parameters here, and none are possible: this is the one objective that
 # takes none. Both the target degree and the direction to optimize in live in
 # `python_from_config.py`, beside the callable: a registered function can read
 # whatever it likes, so there is nothing for the config to describe, and
@@ -358,7 +358,7 @@ Point it at one or more of the `output/example_N/` folders that
 
 On Windows, write `.venv\Scripts\python.exe` in place of `python` throughout
 this file, and `.venv\Scripts\python.exe -m pip` in place of `pip`. Nothing
-else changes — the last form above still works, because PowerShell does not
+else changes. The last form above still works, because PowerShell does not
 expand `output/example_*` itself, so it arrives here as a literal pattern and is
 expanded below rather than by the shell.
 
@@ -385,7 +385,7 @@ result into a PNG using nothing but the standard library:
 It is the fallback rather than the main path. Its layout starts from a circle,
 which makes it reproducible without a seed but means a ring-shaped picture can
 be the starting condition rather than the graph, and it shows neither node
-degree nor edge multiplicity — the two things this script colours for.
+degree nor edge multiplicity, the two things this script colours for.
 &quot;&quot;&quot;
 
 import argparse
@@ -410,7 +410,7 @@ NAME_DIGEST_LENGTH = 8
 GROUP_GAP = 1
 
 # Where isolated nodes are ringed, in the coordinates Kamada-Kawai returns for
-# the connected part — outside it, so they read as detached rather than central.
+# the connected part, outside it, so they read as detached rather than central.
 STRAY_RADIUS = 1.35
 
 # Up to this multiplicity the edge scale is a legend with one swatch per value;
@@ -421,7 +421,7 @@ STRAY_RADIUS = 1.35
 MAX_LEGEND_MULTIPLICITY = 5
 
 # Which part of a colour ramp is used. Both ends of `plasma` are extreme enough
-# to lose against white — dark navy below, pale yellow above — and an edge is one
+# to lose against white (dark navy below, pale yellow above), and an edge is one
 # pixel wide, so the whole edge scale is taken from the middle of the range. The
 # swatches and the colourbar sample the same trimmed ramp, so a legend and a bar
 # drawn from the same data agree.
@@ -556,7 +556,7 @@ def expand(paths):
     &quot;&quot;&quot;Every example folder named by the arguments, de-duplicated, in order.
 
     A shell normally expands `output/example_*` before this sees it, but an
-    unexpanded pattern is passed through too — on Windows PowerShell it arrives
+    unexpanded pattern is passed through too, since on Windows PowerShell it arrives
     here verbatim.
     &quot;&quot;&quot;
     found = []
@@ -575,7 +575,7 @@ def pyplot():
     &quot;&quot;&quot;matplotlib&#x27;s pyplot, with the message this script owes a reader without it.
 
     Imported here rather than at the top so that reading and summarising work on
-    an interpreter that has only GET installed — the plots are the one part of
+    an interpreter that has only GET installed. The plots are the one part of
     the bundle with a dependency, and it should fail where it is used.
     &quot;&quot;&quot;
     try:
@@ -653,7 +653,7 @@ def draw_boxplot(examples, out_dir):
     boxplot of a single folder says nothing its final fitness does not.
 
     The y-axis is shared, and two configs optimising different objectives do
-    not share a scale — the colour and the legend name the config for exactly
+    not share a scale. The colour and the legend name the config for exactly
     that reason, so a reader can see when they are looking at two units rather
     than one.
     &quot;&quot;&quot;
@@ -759,13 +759,13 @@ def draw_convergence(examples, out_dir):
     Two decisions shape this plot, and both come from the same fact: folders
     produced by different configurations optimise different objectives.
 
-    The average is **per folder**, never one line for the whole comparison —
+    The average is **per folder**, never one line for the whole comparison:
     averaging two objectives together gives a number in no unit at all. With one
     folder given, that collapses to exactly one average over its replicates.
 
     Each configuration gets its **own panel**, rather than a shared pair of
     axes. Iteration counts differ by orders of magnitude between configurations
-    — 150 against 20000 among the shipped examples — so a shared x-axis crushes
+    (150 against 20000 among the shipped examples), so a shared x-axis crushes
     the shorter run into the left edge and hides the convergence it was drawn to
     show. Panels keep every curve readable at its own scale, which is the whole
     point of plotting it.
@@ -844,7 +844,7 @@ def best_individual_path(run):
 def infer_direction(example):
     &quot;&quot;&quot;Whether a larger fitness is better in `example`, judged from its runs.
 
-    GET does not tell Python which way an objective points — `RunResult` has no
+    GET does not tell Python which way an objective points. `RunResult` has no
     orientation, and a callable registered through `set_fitness_function` gets
     its direction at registration, where nothing downstream can see it. So the
     direction is read from the runs themselves: evolution improves, so whichever
@@ -852,14 +852,14 @@ def infer_direction(example):
     the direction that counts as better.
 
     **One folder at a time, never pooled.** The objective is a property of the
-    configuration, so two folders can point opposite ways — `epi_prof_match`
-    minimizes an RMSE while `epi_spread` maximizes a node count — and the
+    configuration, so two folders can point opposite ways (`epi_prof_match`
+    minimizes an RMSE while `epi_spread` maximizes a node count), and the
     shipped examples do exactly that. Judging them together lets whichever
     objective has the larger numbers decide for the other, which silently draws
     the *worst* replicate of the folder that lost the vote.
 
     Every replicate of this one folder is counted, which is what makes it safe
-    on a single unlucky run. Pass `--maximize` or `--minimize` to override it —
+    on a single unlucky run. Pass `--maximize` or `--minimize` to override it:
     an objective already near its optimum at iteration zero can drift the wrong
     way and fool this.
     &quot;&quot;&quot;
@@ -894,7 +894,7 @@ def read_edge_file(path):
     &quot;&quot;&quot;`(num_nodes, edges)` from a GET edge file.
 
     Parsed by `graph_to_png.py`, which ships beside this script and already
-    reads the format `save_results` writes — including the `# nodes = N` header,
+    reads the format `save_results` writes, including the `# nodes = N` header,
     without which a node that has no edges is invisible and the count comes up
     short by exactly the nodes hardest to notice.
     &quot;&quot;&quot;
@@ -927,7 +927,7 @@ def network_positions(graph, nx):
 
     Isolated nodes are placed rather than solved for. Kamada-Kawai works from
     shortest-path distances, which are undefined between disconnected nodes, and
-    it settles them in a tight knot at the **centre** — where a reader reads
+    it settles them in a tight knot at the **centre**, where a reader reads
     &quot;central, therefore important&quot; about the one kind of node that is connected
     to nothing. Putting them on a ring outside the graph says what they are.
     &quot;&quot;&quot;
@@ -1001,8 +1001,8 @@ def ramp_swatches(ramp, values):
 def add_integer_bar(figure, axes, drawn, label, values):
     &quot;&quot;&quot;A colourbar beside `axes`, ticked at the integers `values` can hold.
 
-    Both scales this draws are counts — a degree and a multiplicity are both
-    numbers of edge copies — so a tick at 1.4 labels a value nothing in the
+    Both scales this draws are counts (a degree and a multiplicity are both
+    numbers of edge copies), so a tick at 1.4 labels a value nothing in the
     graph can be. Only forced over a narrow span: over a wide one matplotlib
     already picks integers, and one tick per value would be an unreadable stack.
     &quot;&quot;&quot;
@@ -1025,7 +1025,7 @@ def draw_best_networks(examples, out_dir, directions):
 
     Both codes are given a key, and the two get different ones because they are
     different kinds of number. Degree is open-ended and takes a colourbar.
-    Multiplicity is a small count — `max_edge_multiplicity` is usually 1 to 5 —
+    Multiplicity is a small count (`max_edge_multiplicity` is usually 1 to 5),
     so up to `MAX_LEGEND_MULTIPLICITY` it takes a legend naming each value, and
     only a graph that goes past that falls back to a bar. Nothing about the
     edges is drawn at all when every edge is a single copy: under
@@ -1109,8 +1109,8 @@ def draw_best_networks(examples, out_dir, directions):
                 linewidths=0.6,
             )
 
-        # Degree is genuinely open-ended — a hub in a 100-node graph can reach
-        # any degree at all — so it takes a bar. Without one the node colours are
+        # Degree is genuinely open-ended (a hub in a 100-node graph can reach
+        # any degree at all), so it takes a bar. Without one the node colours are
         # a code with no key, which defeats the point of colouring by degree.
         if drawn_nodes is not None:
             degrees = [graph.degree(node) for node in core]
@@ -1124,7 +1124,7 @@ def draw_best_networks(examples, out_dir, directions):
             add_integer_bar(figure, axes, drawn_edges, &quot;edge multiplicity&quot;, weights)
 
         # What the two bars cannot say. Isolated nodes need their own entry
-        # because grey-with-a-ring is not a point on the degree scale — it is
+        # because grey-with-a-ring is not a point on the degree scale. It is
         # what a node off the scale looks like.
         keys = []
         for weight in present if by_swatch else []:
@@ -1213,7 +1213,7 @@ def main():
 
     # One direction per folder. The flag, when given, is deliberately global:
     # it is the answer for a comparison of folders sharing an objective, and on
-    # a mixed set there is no single right value to pass — which is why the
+    # a mixed set there is no single right value to pass, which is why the
     # inferred case is the one that has to be per folder.
     directions = {}
     for example in examples:
@@ -1290,7 +1290,7 @@ One required argument, the graph file. With a second, that is where the image
 goes; without one it is the input path with its extension replaced by `.png`.
 
 **Standard library only, like everything else in `tools/`.** No matplotlib, no
-networkx, no install step — the PNG is encoded here with `zlib` and the layout
+networkx, no install step. The PNG is encoded here with `zlib` and the layout
 is a plain force-directed one, so this runs on the same bare interpreter that
 runs the converter beside it. The cost is that it draws a readable diagram
 rather than a publication figure; if you want the latter, read the edge list
@@ -1336,7 +1336,7 @@ def read_graph(path):
 
     The format is the one GET both reads and writes: `#` starts a comment, one
     of which must be `# nodes = N`, and every other line is `u,v,weight`. The
-    header is required here for the same reason GET requires it — a node with
+    header is required here for the same reason GET requires it: a node with
     no edges is invisible to the edge rows, so a count taken from them is short
     by exactly the nodes hardest to notice.
     &quot;&quot;&quot;
@@ -1394,7 +1394,7 @@ def layout(num_nodes, edges):
     Fruchterman-Reingold: every pair repels, every edge attracts, and the
     maximum displacement per step decays to zero so the thing settles. Started
     from an evenly spaced circle rather than random positions, which is what
-    makes the result reproducible without a seed — and which also gives a
+    makes the result reproducible without a seed, and which also gives a
     graph with no edges at all a sensible picture instead of a heap.
     &quot;&quot;&quot;
     positions = []
@@ -1451,7 +1451,7 @@ def layout(num_nodes, edges):
     # Measured over the nodes that have an edge, not over every node. An
     # isolated node feels repulsion and no attraction, so it drifts to the rim
     # and stops; a span taken over all of them is set by those strays, and
-    # dividing by it shrinks the connected part — the part worth looking at —
+    # dividing by it shrinks the connected part, the part worth looking at,
     # to a dot. That is the very outcome this rescale exists to avoid, and an
     # evolved graph almost always has a few isolated nodes.
     connected = set()
@@ -1514,7 +1514,7 @@ class Canvas:
                 self.set(x, y, colour)
 
     def downsample(self, factor):
-        &quot;&quot;&quot;Box-filter to 1/`factor` of each dimension — the anti-aliasing.&quot;&quot;&quot;
+        &quot;&quot;&quot;Box-filter to 1/`factor` of each dimension, the anti-aliasing.&quot;&quot;&quot;
         out_size = self.size // factor
         out = bytearray(out_size * out_size * 3)
         area = factor * factor
@@ -1581,7 +1581,7 @@ def draw(num_nodes, edges, positions):
             continue
         x0, y0 = to_pixels(positions[u])
         x1, y1 = to_pixels(positions[v])
-        # Weight is a multiplicity, so thickness scales with it — a parallel
+        # Weight is a multiplicity, so thickness scales with it: a parallel
         # edge should look like more than one edge.
         width = SUPERSAMPLE * (1 + 2 * weight // heaviest)
         canvas.line(x0, y0, x1, y1, EDGE_COLOUR, width)
@@ -1631,8 +1631,8 @@ On Linux or macOS:
     pip install graph-evolution-tool
 
 On Windows, in PowerShell, the same three lines with two changes: use `py` in
-place of `python3`, **skip the `activate` line entirely** — a stock machine
-refuses to run it — and write `.venv\Scripts\python.exe` wherever any command
+place of `python3`, **skip the `activate` line entirely**, because a stock
+machine refuses to run it, and write `.venv\Scripts\python.exe` wherever any command
 below says `python`. `pip` becomes `.venv\Scripts\python.exe -m pip`.
 
     py -m venv .venv
@@ -1654,9 +1654,9 @@ already there, so one run never overwrites another. Each example folder keeps a
 copy of the configuration that produced it, so the folder says what it is
 without opening anything inside it, and holds one `run_M/` per replicate. Each
 replicate writes its convergence log and the winning network as an edge list GET
-can read back — so one run&#x27;s result can be the next run&#x27;s base graph.
+can read back, so one run&#x27;s result can be the next run&#x27;s base graph.
 
-Every parameter lives in the TOML, the base graph included — `03` names its
+Every parameter lives in the TOML, the base graph included. `03` names its
 starting network with a `base_graph` key, resolved beside the configuration
 file rather than beside whatever directory you ran from.
 &quot;&quot;&quot;
@@ -1694,8 +1694,8 @@ def register_objective(evolver):
     so there is nothing for the configuration to describe, and nothing can
     infer whether your function wants its value large or small.
 
-    A callable is handed the whole population at once — a list of
-    `(num_nodes, edges)`, each edge a `(start, end, weight)` triple — and
+    A callable is handed the whole population at once: a list of
+    `(num_nodes, edges)`, each edge a `(start, end, weight)` triple. It
     returns one score per graph, in the same order.
 
     Degree here sums edge weights, so a doubled edge counts twice. It makes no
