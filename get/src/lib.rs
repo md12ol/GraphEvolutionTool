@@ -787,9 +787,10 @@ pub fn utc_stamp() -> String {
 /// Where one replicate's files belong. Returns a path and creates nothing —
 /// every caller runs `create_dir_all` on the result itself.
 ///
-/// `None` for `out_dir` means the working directory under fixed names. It
-/// ignores `run_index`, so it is only correct for a single replicate — `get-run`
-/// rejects `--runs N` above 1 without `--out` for that reason.
+/// `None` for `out_dir` puts the timestamped folder in the working directory
+/// rather than writing into it; `Some` chooses a different root and changes
+/// nothing else. Either way `run_index` is honoured, so replicates never
+/// collide.
 ///
 /// `stamp` is passed in rather than read here: every replicate of one invocation
 /// belongs in the same timestamped directory, and reading the clock per
