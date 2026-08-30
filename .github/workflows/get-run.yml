@@ -65,7 +65,10 @@ jobs:
           # Fixed seed so a failure is reproducible from the log.
           "$GITHUB_WORKSPACE/target/release/get-run" config.example.toml 7
 
-          for f in run_log.csv best_individual.txt best_individual.txt.toml; do
+          # `config.toml`, not `best_individual.txt.toml`: the provenance copy
+          # belongs to the invocation rather than to one replicate, so
+          # `save_config` writes it once into the folder the replicates share.
+          for f in run_log.csv best_individual.txt config.toml; do
             test -s "$f" || { echo "::error::$f missing or empty"; exit 1; }
           done
           # A run of N generations logs iterations 0..N, plus the CSV header.
