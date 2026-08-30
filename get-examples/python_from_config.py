@@ -14,20 +14,6 @@ that is the spelling used throughout the rest of this file:
     py -m venv .venv
     .venv\Scripts\python.exe -m pip install graph-evolution-tool
 
-Working from a source checkout instead of the published package? Replace the
-install line above with the following, run from the repository root:
-
-    pip install maturin
-    maturin develop --release -m get/Cargo.toml
-
-or, on Windows — `maturin` is the one command the line above cannot cover,
-because it reads the `VIRTUAL_ENV` variable rather than the interpreter it was
-started with:
-
-    .venv\Scripts\python.exe -m pip install maturin
-    $env:VIRTUAL_ENV = "$PWD\.venv"
-    .venv\Scripts\maturin.exe develop --release -m get/Cargo.toml
-
 Then run any of the configurations beside this file:
 
     python python_from_config.py 01_edge_edit_generational.toml

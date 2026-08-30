@@ -30,14 +30,21 @@ python -m pip install --upgrade pip
 python -m pip install graph-evolution-tool
 python -c "import get; print(get.__name__)"</code></pre>
 
-<div class="note">
-  <b>On Windows,</b> use <code>py -m venv .venv</code> and call the environment's interpreter
-  directly — <code>.venv\Scripts\python.exe</code> wherever the block says <code>python</code>. A
-  stock machine blocks <code>Activate.ps1</code>, so this is the path that works without changing
-  anything; see
-  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">the troubleshooting note</a>
-  if you want an activated shell instead.
-</div>
+<p>On Windows, in PowerShell — nothing is activated, so every line names the environment's own
+interpreter:</p>
+
+<pre><code class="language-powershell">py -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install graph-evolution-tool
+.venv\Scripts\python.exe -c "import get; print(get.__name__)"</code></pre>
+
+<p>
+  A stock machine refuses to run <code>Activate.ps1</code>, which is why these spell the path out
+  rather than activating first. Keep using <code>.venv\Scripts\python.exe</code> for every command
+  on this page. If you would rather have an activated shell, see
+  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">PowerShell refuses to run
+  <code>Activate.ps1</code></a>.
+</p>
 
 <div class="note">
   <b>Why the names differ.</b> The project/distribution name is

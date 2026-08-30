@@ -50,6 +50,13 @@ python python_from_config.py 02_sda_steady_state.toml
 python python_from_config.py 03_edge_edit_base_graph.toml
 python python_from_config.py 04_sda_profile_match.toml</code></pre>
 
+<p>On Windows, the same four with the environment's interpreter:</p>
+
+<pre><code class="language-powershell">.venv\Scripts\python.exe python_from_config.py 01_edge_edit_generational.toml
+.venv\Scripts\python.exe python_from_config.py 02_sda_steady_state.toml
+.venv\Scripts\python.exe python_from_config.py 03_edge_edit_base_graph.toml
+.venv\Scripts\python.exe python_from_config.py 04_sda_profile_match.toml</code></pre>
+
 <div class="tip">
   <b><code>05</code> is an exercise, not a fifth run.</b> It selects
   <code>[fitness] type = "python"</code>, which names a callable the configuration cannot supply, so
@@ -78,14 +85,21 @@ python -m pip install --upgrade pip
 python -m pip install graph-evolution-tool
 python -c "import get; print(get.__name__)"</code></pre>
 
-<div class="note">
-  <b>On Windows,</b> use <code>py -m venv .venv</code> and call the environment's interpreter
-  directly — <code>.venv\Scripts\python.exe</code> wherever the block says <code>python</code>. A
-  stock machine blocks <code>Activate.ps1</code>, so this is the path that works without changing
-  anything; see
-  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">the troubleshooting note</a>
-  if you want an activated shell instead.
-</div>
+<p>On Windows, in PowerShell — nothing is activated, so every line names the environment's own
+interpreter:</p>
+
+<pre><code class="language-powershell">py -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install graph-evolution-tool
+.venv\Scripts\python.exe -c "import get; print(get.__name__)"</code></pre>
+
+<p>
+  A stock machine refuses to run <code>Activate.ps1</code>, which is why these spell the path out
+  rather than activating first. Keep using <code>.venv\Scripts\python.exe</code> for every command
+  on this page. If you would rather have an activated shell, see
+  <a href="troubleshooting.html#powershell-refuses-to-run-activateps1">PowerShell refuses to run
+  <code>Activate.ps1</code></a>.
+</p>
 
 <div class="note">
   <b>Pin recorded work.</b> Use <code>graph-evolution-tool==0.9.0</code> when an experiment must
@@ -240,6 +254,18 @@ for run_index, result in enumerate(results):
 
 python analyze_output.py output/example_1 output/example_2
 python analyze_output.py output/example_*</code></pre>
+
+<p>On Windows:</p>
+
+<pre><code class="language-powershell">.venv\Scripts\python.exe -m pip install matplotlib networkx scipy
+
+.venv\Scripts\python.exe analyze_output.py output/example_1 output/example_2
+.venv\Scripts\python.exe analyze_output.py output/example_*</code></pre>
+
+<p>
+  PowerShell does not expand <code>output/example_*</code>, so the last form reaches the script as a
+  literal pattern; it expands the pattern itself, which is why the same line works on both.
+</p>
 
 <p>
   Give it two or more <code>example_N/</code> folders and it writes three things beside them: a
