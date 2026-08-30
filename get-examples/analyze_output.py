@@ -58,6 +58,28 @@ GROUP_GAP = 1
 # the connected part — outside it, so they read as detached rather than central.
 STRAY_RADIUS = 1.35
 
+# Up to this multiplicity the edge scale is a legend with one swatch per value;
+# above it, a colourbar. A multiplicity is a count of parallel copies, so a run
+# capped at 5 or fewer produces a handful of distinct integers, and naming each
+# one reads faster than a continuous bar the eye has to measure a colour against.
+# Past that the swatches stop fitting and a bar is the honest instrument.
+MAX_LEGEND_MULTIPLICITY = 5
+
+# Which part of a colour ramp is used. Both ends of `plasma` are extreme enough
+# to lose against white — dark navy below, pale yellow above — and an edge is one
+# pixel wide, so the whole edge scale is taken from the middle of the range. The
+# swatches and the colourbar sample the same trimmed ramp, so a legend and a bar
+# drawn from the same data agree.
+RAMP_SPAN = (0.15, 0.85)
+
+# How finely the trimmed ramp is resampled. Enough that a colourbar over it is
+# smooth rather than banded.
+RAMP_SAMPLES = 64
+
+# Over a wider span than this a colourbar keeps matplotlib's own ticks. They are
+# already integers by then, and one per value would be an unreadable stack.
+MAX_INTEGER_TICKS = 12
+
 NO_CONFIG = "(no config copied in)"
 
 # The columns `RunResult.save_logs` writes. Read by name rather than by
@@ -578,6 +600,64 @@ def network_positions(graph, nx):
     return positions, core, strays
 
 
+def trimmed_ramp(name, plt):
+    """`name`, restricted to `RAMP_SPAN` and rebuilt as a colormap of its own.
+
+    Returned as a colormap rather than a list of colours so that the same ramp
+    can colour a set of swatches and a continuous colourbar. Both paths are used
+    below, and a reader comparing two graphs should not find the same
+    multiplicity in two different colours.
+    """
+    from matplotlib.colors import LinearSegmentedColormap
+
+    ramp = plt.get_cmap(name)
+    low, high = RAMP_SPAN
+    samples = []
+    for index in range(RAMP_SAMPLES):
+        samples.append(ramp(low + (high - low) * index / (RAMP_SAMPLES - 1)))
+    return LinearSegmentedColormap.from_list(f"{name}-trimmed", samples)
+
+
+def ramp_swatches(ramp, values):
+    """One colour per value, evenly spaced along `ramp`: `{value: rgba}`.
+
+    Spacing is by position in the sorted list rather than by the values
+    themselves, which keeps two adjacent swatches apart whether the values run
+    1, 2, 3 or 1, 2, 9.
+
+    The point of returning the mapping, rather than letting matplotlib colour
+    the edges from a cmap, is that the legend and the edges are then coloured
+    from the same dictionary and cannot drift apart.
+    """
+    ordered = sorted(set(values))
+
+    swatches = {}
+    for index, value in enumerate(ordered):
+        # A single value has no span to sit in, so it takes the middle of the
+        # ramp rather than dividing by zero to reach the bottom of it.
+        if len(ordered) == 1:
+            position = 0.5
+        else:
+            position = index / (len(ordered) - 1)
+        swatches[value] = ramp(position)
+    return swatches
+
+
+def add_integer_bar(figure, axes, drawn, label, values):
+    """A colourbar beside `axes`, ticked at the integers `values` can hold.
+
+    Both scales this draws are counts — a degree and a multiplicity are both
+    numbers of edge copies — so a tick at 1.4 labels a value nothing in the
+    graph can be. Only forced over a narrow span: over a wide one matplotlib
+    already picks integers, and one tick per value would be an unreadable stack.
+    """
+    bar = figure.colorbar(drawn, ax=axes, shrink=0.6, label=label)
+    span = range(min(values), max(values) + 1)
+    if len(span) <= MAX_INTEGER_TICKS:
+        bar.set_ticks(list(span))
+    return bar
+
+
 def draw_best_networks(examples, out_dir, directions):
     """Render each folder's best replicate, one PNG per `example_N`.
 
@@ -586,13 +666,21 @@ def draw_best_networks(examples, out_dir, directions):
 
     Node colour is degree and edge colour is multiplicity, because those are the
     two things a picture can show that a fitness number cannot: which nodes
-    became hubs, and where the run spent its parallel edges. The multiplicity
-    scale appears only when some edge actually carries more than one copy —
-    under `max_edge_multiplicity = 1` every edge is a 1 and a colourbar saying
-    so is furniture.
+    became hubs, and where the run spent its parallel edges.
+
+    Both codes are given a key, and the two get different ones because they are
+    different kinds of number. Degree is open-ended and takes a colourbar.
+    Multiplicity is a small count — `max_edge_multiplicity` is usually 1 to 5 —
+    so up to `MAX_LEGEND_MULTIPLICITY` it takes a legend naming each value, and
+    only a graph that goes past that falls back to a bar. Nothing about the
+    edges is drawn at all when every edge is a single copy: under
+    `max_edge_multiplicity = 1` a scale saying so is furniture.
     """
     plt = pyplot()
     nx = networkx()
+    # One ramp for every graph drawn in this call, so the same multiplicity is
+    # the same colour across a comparison rather than only within one picture.
+    ramp = trimmed_ramp("plasma", plt)
 
     written = []
     for example in examples:
@@ -612,20 +700,36 @@ def draw_best_networks(examples, out_dir, directions):
         weights = []
         for start, end in graph.edges:
             weights.append(graph[start][end]["weight"])
+        present = sorted(set(weights))
         multigraph = max(weights, default=1) > 1
+        # A legend can name a handful of values; past that the swatches stop
+        # fitting and the scale goes back to being a bar.
+        by_swatch = multigraph and max(weights) <= MAX_LEGEND_MULTIPLICITY
 
         figure, axes = plt.subplots(figsize=(8.5, 8.5))
+
+        swatches = ramp_swatches(ramp, present) if by_swatch else {}
+        if by_swatch:
+            edge_colour = [swatches[weight] for weight in weights]
+        elif multigraph:
+            edge_colour = weights
+        else:
+            edge_colour = "0.55"
+
         drawn_edges = nx.draw_networkx_edges(
             graph,
             positions,
             ax=axes,
             width=1.0,
             alpha=0.75,
-            edge_color=weights if multigraph else "0.55",
-            edge_cmap=plt.get_cmap("plasma") if multigraph else None,
+            edge_color=edge_colour,
+            # Only when the edges are handed raw multiplicities to scale. Given
+            # colours already, a cmap would be ignored anyway.
+            edge_cmap=ramp if multigraph and not by_swatch else None,
         )
+        drawn_nodes = None
         if core:
-            nx.draw_networkx_nodes(
+            drawn_nodes = nx.draw_networkx_nodes(
                 graph,
                 positions,
                 ax=axes,
@@ -633,6 +737,10 @@ def draw_best_networks(examples, out_dir, directions):
                 node_size=60,
                 node_color=[graph.degree(node) for node in core],
                 cmap="viridis",
+                # The bright end of `viridis` is a yellow that all but vanishes
+                # on white, and it lands on exactly the hubs worth seeing.
+                edgecolors="0.35",
+                linewidths=0.4,
             )
         if strays:
             nx.draw_networkx_nodes(
@@ -645,12 +753,42 @@ def draw_best_networks(examples, out_dir, directions):
                 edgecolors="0.45",
                 linewidths=0.6,
             )
-        if multigraph:
-            bar = figure.colorbar(drawn_edges, ax=axes, shrink=0.6, label="edge multiplicity")
-            # A multiplicity is a count of parallel copies, so the scale is
-            # labelled with the integers it can actually take: "1.4 edges" is
-            # not a thing the graph can contain.
-            bar.set_ticks(list(range(min(weights), max(weights) + 1)))
+
+        # Degree is genuinely open-ended — a hub in a 100-node graph can reach
+        # any degree at all — so it takes a bar. Without one the node colours are
+        # a code with no key, which defeats the point of colouring by degree.
+        if drawn_nodes is not None:
+            degrees = [graph.degree(node) for node in core]
+            add_integer_bar(figure, axes, drawn_nodes, "node degree", degrees)
+
+        # A multiplicity past the legend's reach gets a bar of its own rather
+        # than a sentence describing one. Two bars stack on the same side, which
+        # is cheaper than asking a reader to hold "dark to light" in their head
+        # while looking at a colour.
+        if multigraph and not by_swatch:
+            add_integer_bar(figure, axes, drawn_edges, "edge multiplicity", weights)
+
+        # What the two bars cannot say. Isolated nodes need their own entry
+        # because grey-with-a-ring is not a point on the degree scale — it is
+        # what a node off the scale looks like.
+        keys = []
+        for weight in present if by_swatch else []:
+            keys.append(
+                plt.Line2D(
+                    [], [], color=swatches[weight], linewidth=2.0,
+                    label=f"{weight} parallel edge" + ("s" if weight > 1 else ""),
+                )
+            )
+        if strays:
+            keys.append(
+                plt.Line2D(
+                    [], [], linestyle="none", marker="o", markersize=6,
+                    markerfacecolor="0.75", markeredgecolor="0.45",
+                    label="isolated (degree 0), on the outer ring",
+                )
+            )
+        if keys:
+            axes.legend(handles=keys, loc="upper left", fontsize="small", framealpha=0.9)
 
         stray_note = f", {len(strays)} isolated on the outer ring" if strays else ""
         axes.set_title(

@@ -53,9 +53,9 @@ python python_from_config.py 04_sda_profile_match.toml</code></pre>
 <div class="tip">
   <b><code>05</code> is an exercise, not a fifth run.</b> It selects
   <code>[fitness] type = "python"</code>, which names a callable the configuration cannot supply, so
-  it stops and tells you so. Open <code>python_from_config.py</code>, uncomment the one commented-out
-  block in <code>register_objective</code>, and run it again. That block is the only commented-out
-  code in the bundle, and uncommenting it is the only edit needed.
+  a run with nothing registered stops and tells you so. Open <code>python_from_config.py</code> and
+  uncomment the one commented-out block in <code>register_objective</code> before you run it. That
+  block is the only commented-out code in the bundle, and uncommenting it is the only edit needed.
 </div>
 
 <p>
@@ -254,9 +254,14 @@ python analyze_output.py output/example_*</code></pre>
 </p>
 
 <p>
-  The network render colours nodes by degree and edges by multiplicity. Isolated nodes are drawn in
-  grey on a ring outside the graph, where they cannot be mistaken for highly connected central
-  nodes.
+  The network render colours nodes by degree and edges by multiplicity, so a hub and a doubled edge
+  are visible rather than inferred. Both codes carry a key, and the two are different shapes because
+  the numbers are: degree is open-ended and gets a colourbar, while a multiplicity capped at 5 or
+  fewer gets a legend naming each value outright. Nodes with no edges at all are drawn in grey on a
+  ring outside the graph — a layout that solves for them puts them in the middle, which is the one
+  place a disconnected node should never appear — and they get their own legend entry, because grey
+  is not a point on the degree scale.
+
 </p>
 
 <div class="callout">
