@@ -137,10 +137,20 @@ jobs:
       # rather than fail — which is exactly the silent gap PR #186 review
       # comment #3 found: the step existed, but nothing in CI ever gave it a
       # `get` to check against.
+      # `maturin develop` refuses to run without an active virtualenv — the
+      # runner's `setup-python` interpreter is not one, and installing straight
+      # into it is exactly what failed here the first time this step was
+      # written: `maturin` reported "Couldn't find a virtualenv or conda
+      # environment" and the whole job failed rather than the check quietly
+      # skipping itself. `GITHUB_PATH`/`GITHUB_ENV` make the venv the one every
+      # later step sees, including `documentation examples run` below.
       - name: install get for the documentation examples to import
         run: |
-          python3 -m pip install --quiet maturin mypy
-          maturin develop --release -m get/Cargo.toml
+          python3 -m venv .venv-docs
+          echo "VIRTUAL_ENV=$PWD/.venv-docs" >> "$GITHUB_ENV"
+          echo "$PWD/.venv-docs/bin" >> "$GITHUB_PATH"
+          .venv-docs/bin/pip install --quiet maturin mypy
+          .venv-docs/bin/maturin develop --release -m get/Cargo.toml
 
       - name: documentation examples run
         run: python3 tools/check_doc_examples.py
