@@ -47,9 +47,9 @@
 <div class="callout">
   <p>
     <b>A variant's parameters are its own.</b> <code>size</code> belongs to <code>[scope]</code> and
-    nothing else reads it. That is the whole reason this axis exists as its own enum: steady-state
-    used to take its scope size from <code>[selection]</code>'s <code>tournament_size</code>, which
-    left a scheme with no tournament unable to say how large a scope it wanted.
+    nothing else reads it. That is the whole reason this axis exists as its own enum: a scheme with no
+    tournament — <code>best</code>, say — still has to be able to say how large a scope it wants, and
+    it cannot if that number lives under <code>[selection]</code>.
   </p>
 </div>
 

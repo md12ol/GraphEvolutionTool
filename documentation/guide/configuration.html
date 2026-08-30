@@ -108,11 +108,10 @@
 </div>
 
 <div class="warn">
-  <b><code>size</code> lives here, not under <code>[selection]</code>.</b> If you are migrating a
-  configuration that sized a steady-state scope with <code>tournament_size</code>, that number moves
-  into this block and <code>[selection]</code> keeps only the tournament. A tournament may now exceed
-  the population; the floor that used to be checked against <code>tournament_size</code> is checked
-  against <code>size</code> instead.
+  <b><code>size</code> lives here, not under <code>[selection]</code>.</b> It is the scope's own
+  number; <code>[selection]</code> carries only the tournament's. A tournament may exceed the
+  population, because it samples with replacement, and the steady-state floor of four applies to
+  <code>size</code> rather than to <code>tournament_size</code>.
 </div>
 
 <h2><code>[selection]</code></h2>
@@ -336,8 +335,9 @@
   <tbody>
     <tr><td>The <b>seed</b></td>
         <td>One master seed is passed to the run call; the population, evolution, epidemics and
-            replicates all derive from it. Writing <code>seed</code> under <code>[fitness]</code> is
-            rejected by name, because it used to live there.</td></tr>
+            replicates all derive from it. Writing <code>seed</code> under <code>[fitness]</code>
+            is rejected by name rather than ignored, so a document carrying one fails loudly instead
+            of running with a seed nobody supplied.</td></tr>
     <tr><td>A base graph in <b>your own node numbering</b>, or one supplied
             <b>without a config file</b></td>
         <td><code>[genome] base_graph</code> covers the ordinary case, but it is 0-indexed and it
@@ -364,8 +364,9 @@
   <b><code>[fitness]</code> cannot reject typos, and this is structural rather than an oversight.</b>
   Its variants flatten the shared SIR block into themselves, and flattening consumes unrecognized
   keys into the flattened field — so the check that rejects them cannot fire there. Two names are
-  caught explicitly because they are known migration hazards: <code>seed</code>, and
-  <code>target_profile</code> under an objective that never reads one. Anything else misspelled under
+  caught explicitly, because both are mistakes a reader makes rather than typos:
+  <code>seed</code>, which belongs to the run call, and <code>target_profile</code> under an
+  objective that never reads one. Anything else misspelled under
   <code>[fitness]</code> is silently ignored, and your run uses the default.
 </div>
 

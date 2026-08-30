@@ -178,10 +178,9 @@ output/20260821-141233-7/config.toml</code></pre>
 
 <div class="callout">
   <p>
-    <b><code>--runs</code> needs nothing else.</b> It required <code>--out</code> until
-    2026-08-30, because every replicate wrote the same three fixed names straight into the working
-    directory and all but the last was silently lost. The timestamped folder is now made either way,
-    so there is nothing left to collide and the command no longer refuses.
+    <b><code>--runs</code> needs nothing else.</b> Each replicate gets its own
+    <code>run_&lt;n&gt;/</code> inside the timestamped folder, so they cannot overwrite one another
+    and <code>--out</code> is a choice about where to put the folder rather than a requirement.
   </p>
   <p>
     One master seed goes in and GET derives one seed per replicate. Reproduce a replicate by
