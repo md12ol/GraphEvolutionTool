@@ -24,6 +24,7 @@ import html
 import os
 import re
 import sys
+import time
 
 SITE_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SITE_DIR)
@@ -464,6 +465,72 @@ def heading_ids():
     return duplicated
 
 
+def external_links():
+    """Every outward link must still resolve.
+
+    Eleven of them, ten to github.com — so this is really one host, and a failure
+    is far more likely to mean GitHub is briefly unreachable than that the site is
+    wrong. Hence the retries: each URL gets three attempts with a growing pause
+    before it is called broken, and a network that is down entirely reports as
+    skipped rather than failing, because a documentation edit must not go red for
+    someone else's outage.
+
+    HEAD first, then GET: some hosts answer HEAD with 405 while serving the page
+    perfectly well.
+    """
+    import urllib.error
+    import urllib.request
+
+    urls = {}
+    for page in sorted(glob.glob(f"{SITE}/**/*.html", recursive=True)):
+        text = open(page, encoding="utf-8").read()
+        for found in re.finditer(r'href="(https?://[^"#]+)', text):
+            urls.setdefault(found.group(1), page)
+
+    if not urls:
+        print("0 external links")
+        return 0
+
+    def reach(url):
+        """`None` if it resolves, an error string if it does not, `"offline"` if
+        nothing resolves at all."""
+        last = None
+        for attempt in range(3):
+            for method in ("HEAD", "GET"):
+                request = urllib.request.Request(
+                    url, method=method,
+                    headers={"User-Agent": "GET-docs-link-check"})
+                try:
+                    with urllib.request.urlopen(request, timeout=15) as answer:
+                        if answer.status < 400:
+                            return None
+                        last = f"HTTP {answer.status}"
+                except urllib.error.HTTPError as err:
+                    if err.code == 405 and method == "HEAD":
+                        continue
+                    last = f"HTTP {err.code}"
+                except urllib.error.URLError as err:
+                    last = f"unreachable: {err.reason}"
+                except OSError as err:
+                    last = f"unreachable: {err}"
+            time.sleep(2 * (attempt + 1))
+        return last
+
+    results = {url: reach(url) for url in sorted(urls)}
+    unreachable = [u for u, why in results.items() if why and why.startswith("unreachable")]
+    if len(unreachable) == len(results):
+        print(f"{len(results)} external links, skipped: no network")
+        return 0
+
+    bad = 0
+    for url, why in sorted(results.items()):
+        if why:
+            bad += 1
+            print(f"  {urls[url]}: {url} -> {why}")
+    print(f"{len(results)} external links, {bad} broken")
+    return bad
+
+
 def config_defaults():
     """The reference's Default column must say what `config.rs` implements.
 
@@ -660,8 +727,9 @@ def main(fix):
     bad_versions = site_versions()
     bad_ids = heading_ids()
     bad_figures = figure_labels()
+    bad_links = external_links()
     bad_structure = structure()
-    return 1 if (wrong and not fix) or bad_tables or bad_sigs or bad_counts or bad_defaults or bad_versions or bad_ids or bad_figures or bad_structure else 0
+    return 1 if (wrong and not fix) or bad_tables or bad_sigs or bad_counts or bad_defaults or bad_versions or bad_ids or bad_figures or bad_links or bad_structure else 0
 
 
 if __name__ == "__main__":

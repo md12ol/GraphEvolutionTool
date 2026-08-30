@@ -75,6 +75,29 @@ jobs:
       - name: documentation references
         run: python3 documentation/check_refs.py
 
+      # The site's accessibility work is static — a skip link, `aria-current`, an
+      # inert closed sidebar, focus-visible controls — and nothing verified it.
+      # pa11y drives a real browser against the four page shapes: the landing
+      # page, a guide page, the reference table and an extension chain. It cannot
+      # certify WCAG on its own, which is why the manual keyboard pass stays a
+      # human job, but it catches a regression in what has already been fixed.
+      #
+      # `continue-on-error` deliberately: this is the first run of a tool nobody
+      # here has tuned, and a documentation edit should not be blocked by a rule
+      # we have not yet decided we accept. Tighten it once its output is trusted.
+      - name: accessibility
+        continue-on-error: true
+        run: |
+          npm install --no-save pa11y@8
+          python3 -m http.server 8123 --directory documentation &
+          sleep 3
+          for page in index.html guide/getting-started.html \
+                      guide/configuration.html guide/new-genome.html; do
+            echo "::group::pa11y ${page}"
+            npx pa11y --standard WCAG2AA "http://localhost:8123/${page}" || true
+            echo "::endgroup::"
+          done
+
       # The downloadable bundle and the page listing its files are both
       # generated from `get-examples/` and both committed, so either can go a
       # version behind the directory it was built from without anything saying
