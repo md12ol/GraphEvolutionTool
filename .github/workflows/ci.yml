@@ -151,8 +151,14 @@ jobs:
       # never here. Build it explicitly rather than inferring it from another
       # step's side effects — and note the checker's skips are now annotations,
       # so the next one of these is visible on the run rather than buried.
+      # `--release` is not tidiness. The checker prefers a release binary and
+      # falls back to a debug one, so a debug build still passes — it just runs
+      # the site's configs through an unoptimised evolutionary algorithm, which
+      # took this step from 9 seconds locally to 12 minutes on the runner,
+      # against a 15-minute job cap. Same six blocks, same result, 80x the wall
+      # clock.
       - name: build get-run for the documentation examples
-        run: cargo build -p graph-evolution-tool --bin get-run --features cli
+        run: cargo build --release -p graph-evolution-tool --bin get-run --features cli
 
       # `cargo test` above does not produce an importable module: it builds
       # pyo3 in its default configuration, not `extension-module`, which is

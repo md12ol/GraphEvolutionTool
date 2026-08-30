@@ -61,13 +61,30 @@ const choices = combination.split(",").map(function (pair) {
       throw new Error("Download was enabled before any choice was made");
     }
 
+    // A pair is either a choice button or a numeric field, and the caller does
+    // not have to say which: the builder's numbers carry no defaults, so a
+    // combination naming only the buttons leaves the gate closed on eight
+    // outstanding values. Try the button first, fall back to the input of that
+    // id, and fail on a name that is neither rather than silently skipping it.
     for (const choice of choices) {
       const selector = `.cb-choice[data-group="${choice.group}"][data-value="${choice.value}"]`;
       const button = await page.$(selector);
-      if (!button) {
-        throw new Error(`no such choice: ${choice.group}=${choice.value}`);
+      if (button) {
+        await button.click();
+        continue;
       }
-      await button.click();
+
+      const field = await page.$(`#${choice.group}`);
+      if (!field) {
+        throw new Error(`neither a choice nor a field: ${choice.group}=${choice.value}`);
+      }
+      // The page re-renders on `input` and clamps on `change`, so both are
+      // dispatched — setting `.value` alone changes the DOM and nothing else.
+      await page.$eval("#" + choice.group, (el, v) => {
+        el.value = v;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      }, choice.value);
     }
 
     const enabled = await page.$eval("#download", (b) => !b.disabled);

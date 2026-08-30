@@ -332,16 +332,29 @@ def check_rust_paths():
 # as `config-builder-output-untested`; this covers the path a reader most likely
 # takes and, more importantly, proves the generator produces something the real
 # loader accepts at all.
+# Every choice *and* every number, because the builder ships no numeric defaults
+# — a combination naming only the buttons leaves eight values outstanding and
+# never opens the gate. Found by running it: the first version named the buttons
+# alone and the page listed exactly what it was still missing.
+#
+# `infection_rate` is 0.5, not the 0.05 the site used to print. At 0.05 on a
+# 20-node graph the outbreak dies before topology matters, which is the
+# pathology `config.example.toml` warns about and which this sweep already fixed
+# on two pages.
 BUILDER_COMBINATIONS = [
-    # `scope` and `selection` are asked on both routes and both start unset, so
-    # a combination that omits either never leaves the gate — which is the
-    # check working, not a defect, and is why they are spelled out here.
+    # `scope` and `selection` are asked on both routes and both start unset.
     "evolution=generational,scope=global,selection=best,"
-    "genome=edge_edit,fitness=epi_spread",
-    # The other route, and the two branches that reveal extra fields:
-    # steady_state shows `replacement`, tournament shows `tournament_size`.
+    "genome=edge_edit,fitness=epi_spread,"
+    "population_size=12,network_size=20,crossover_rate=0.9,mutation_rate=0.2,"
+    "num_generations=2,gene_length=8,infection_rate=0.5,num_epidemics=2",
+    # The other route, and the branches that reveal extra fields: steady_state
+    # shows `replacement`, random_subset shows `scope_size`, tournament shows
+    # `tournament_size`, and sda replaces `gene_length` with its automaton size.
     "evolution=steady_state,replacement=worst,scope=random_subset,"
-    "selection=tournament,genome=sda,fitness=epi_length",
+    "selection=tournament,genome=sda,fitness=epi_length,"
+    "population_size=12,network_size=20,crossover_rate=0.9,mutation_rate=0.2,"
+    "num_mating_events=10,scope_size=6,tournament_size=3,"
+    "num_states=4,max_resp_len=3,infection_rate=0.5,num_epidemics=2",
 ]
 
 
