@@ -999,46 +999,23 @@ that exists. A base graph numbered from 1 rather than 0 has no key here: it goes
     });
   });
 
-  /* Two homes, two save routes. Inside the Claude viewer the frame cannot start a
-     download itself, so the `downloads` capability asks the viewer instead — and its
-     allowlist has no `.toml`, hence the `.txt` and the rename line. Served as an
-     ordinary page, the blob link is the better answer and keeps the real name. */
   $("download").addEventListener("click", function () {
     var btn = $("download");
     btn.disabled = true;
-    setNote("Saving…", "");
-
-    var viewer = (window.claude && typeof window.claude.use === "function")
-      ? window.claude.use("downloads") : Promise.resolve(null);
-
-    viewer.then(function (downloads) {
-      if (!downloads) {
-        var url = URL.createObjectURL(new Blob([toml], { type: "text/plain" }));
-        var a = document.createElement("a");
-        a.href = url;
-        a.download = "config.toml";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-        setNote("Saved as config.toml.", "ok");
-        btn.disabled = false;
-        return;
-      }
-      return downloads.save({ filename: "config.txt", data: toml }).then(function () {
-        setNote("Saved as config.txt — rename it to config.toml.", "ok");
-        btn.disabled = false;
-      }, function (err) {
-        var code = err && err.code;
-        if (code === "declined") { setNote("Save cancelled.", ""); }
-        else if (code === "rate_limited") { setNote("A save prompt is already open.", "bad"); }
-        else { setNote("Saving is unavailable here — use Copy instead.", "bad"); }
-        btn.disabled = false;
-      });
-    }).catch(function () {
+    try {
+      var url = URL.createObjectURL(new Blob([toml], { type: "text/plain" }));
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "config.toml";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      setNote("Saved as config.toml.", "ok");
+    } catch (err) {
       setNote("Saving is unavailable here — use Copy instead.", "bad");
-      btn.disabled = false;
-    });
+    }
+    btn.disabled = false;
   });
 
   document.addEventListener("input", function (e) {
