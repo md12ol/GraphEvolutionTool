@@ -41,7 +41,7 @@ FIXED_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 # Files the bundle ships that do not live under `get-examples/`, as
 # {name in the bundle: path on disk}. `analyze_output.py` imports
 # `graph_to_png.py` to draw the winning network, so a reader who only ever
-# unpacks the zip needs a copy of it — while the repository keeps exactly one,
+# unpacks the zip needs a copy of it, while the repository keeps exactly one,
 # in `tools/`. A second copy under `get-examples/` would ship just as well and
 # then drift from the original.
 IMPORTED = {"graph_to_png.py": os.path.join(REPO, "tools", "graph_to_png.py")}
@@ -57,7 +57,7 @@ def is_shipped(relative):
     """Whether a path under `get-examples/` belongs in the download.
 
     `output/` is where a reader's own runs land, and this script is normally run
-    by someone who has been running the examples — so everything under it is
+    by someone who has been running the examples, so everything under it is
     excluded except the `.gitkeep` that carries the empty directory into the
     archive. Without that, the published zip would ship whoever built it last.
     """
@@ -106,7 +106,7 @@ def build_zip(files):
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for relative in files:
             info = zipfile.ZipInfo(f"get-examples/{relative}", FIXED_TIMESTAMP)
-            # 0o644, and the high half marks it a regular file — without this
+            # 0o644, and the high half marks it a regular file; without this
             # entries unpack with whatever mode the running umask implies.
             info.external_attr = (0o100644 & 0xFFFF) << 16
             info.compress_type = zipfile.ZIP_DEFLATED
@@ -207,7 +207,7 @@ def build_page(files):
 <h1>The Example Bundle</h1>
 <p class="lede">
   Every file in the download, readable here without unpacking it. These are the
-  files themselves, not a description of them &mdash; the page is generated from
+  files themselves, not a description of them. The page is generated from
   the same directory the archive is built from.
 </p>
 
