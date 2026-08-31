@@ -54,3 +54,12 @@ beside your results and the run reproduces verbatim.
 
 Building the extension module needs [maturin](https://www.maturin.rs):
 `maturin develop` for a working copy, or `pip install .`.
+
+## Contact
+
+Questions, bug reports and feature requests are welcome as
+[issues](https://github.com/md12ol/GraphEvolutionTool/issues). If you would rather write
+to us directly, or you have a network problem you would like to point GET at:
+
+- Michael Dubé, <michael.dube@ovgu.de>
+- James Sargant, <js17sy@brocku.ca>
