@@ -1127,9 +1127,11 @@ def draw_convergence(examples, out_dir, directions):
         # bottom right, so the free corner is the other one. `loc=&quot;best&quot;`
         # solves for the least overlap and lands somewhere different per panel,
         # which makes a set of panels harder to read, not easier.
-        maximizing = True
-        for example in members:
-            maximizing = directions.get(example.name, True)
+        # A panel&#x27;s members share one config (`group_by_config`), so they share
+        # one objective and should agree on its direction; the first is read
+        # rather than the last so one disagreeing member cannot flip the corner
+        # for the rest.
+        maximizing = directions.get(members[0].name, True)
         keys = [
             plt.Line2D([], [], color=RUN_LINE, linewidth=1.4, label=&quot;One Run&quot;),
             plt.Line2D([], [], color=colour, linewidth=2.0, label=&quot;Average&quot;),
@@ -1502,7 +1504,10 @@ def draw_best_networks(examples, out_dir, directions):
         # because grey-with-a-ring is not a point on the degree scale. It is
         # what a node off the scale looks like.
         keys = []
-        for weight in present if by_swatch else []:
+        # Weight 1 is never on this legend: it is drawn black by rule, not by
+        # the swatch mapping, and `present` includes it whenever any single
+        # edge exists at all.
+        for weight in (w for w in present if w &gt; 1) if by_swatch else []:
             keys.append(
                 plt.Line2D(
                     [], [], color=swatches[weight], linewidth=EDGE_WIDTH,
