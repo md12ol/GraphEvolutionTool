@@ -375,7 +375,7 @@
 <p>
   Most validation runs <b>once, up front</b>, so common bad configurations fail before evolution.
   Some SDA dimension constraints and filesystem-dependent checks are reached only when a run
-  starts rather than when the file loads &mdash; <code>max_resp_len = 0</code> is one. The error names the field and the
+  starts rather than when the file loads: <code>max_resp_len = 0</code> is one. The error names the field and the
   constraint. From Python it arrives as a <code>ValueError</code> naming the <i>attribute path</i>
   you would have written (<code>config.scope.size</code>), not the TOML key, so the message matches
   the code in front of you.
