@@ -32,7 +32,7 @@ STUB = os.path.join(REPO, "python", "get", "__init__.pyi")
 try:
     import get
 except ImportError:  # pragma: no cover - the skip path
-    get = None
+    get = None  # type: ignore[assignment]
 
 
 def stub_tree():
