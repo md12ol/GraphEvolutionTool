@@ -198,11 +198,32 @@ jobs:
           export PATH="$PWD/.venv-docs/bin:$PATH"
           echo "VIRTUAL_ENV=$PWD/.venv-docs" >> "$GITHUB_ENV"
           echo "$PWD/.venv-docs/bin" >> "$GITHUB_PATH"
-          pip install --quiet maturin mypy
+          # matplotlib and networkx are here for the type check below, not for
+          # the documentation examples. Absent, mypy makes every plotting call
+          # `Any` and passes without reading the 1,100 lines that draw the
+          # figures, which is the half of `analyze_output.py` most worth checking.
+          pip install --quiet maturin mypy matplotlib networkx
           maturin develop --release -m get/Cargo.toml
 
       - name: documentation examples run
         run: python3 tools/check_doc_examples.py
+
+      # The step above checks the snippets the site prints. Nothing checked the
+      # repository's own Python until this one: that job was being done by a
+      # Pylance setting in one owner's editor, on one machine, which is not a
+      # check at all. It caught a real defect the first time it ran here,
+      # `test_stubs.py:35`.
+      #
+      # `--scripts-are-modules` because every file in these three directories is
+      # a script rather than a package member. Without it mypy calls each one
+      # `__main__` and refuses the second one it meets, reporting a duplicate
+      # module instead of any type error.
+      #
+      # `--ignore-missing-imports` covers the imports the scripts already guard
+      # themselves, `get` included: `test_stubs.py` runs with it absent by
+      # design. `get` is installed by the step above, so it is checked for real.
+      - name: python type check
+        run: mypy --ignore-missing-imports --scripts-are-modules tools get-examples python
 
       # The examples are the only proof that the Rust-library route reaches
       # what it promises. Narrowing something only an external caller needs
