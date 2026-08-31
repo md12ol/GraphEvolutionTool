@@ -99,13 +99,20 @@ def bundle_files():
 
 
 def build_zip(files):
-    """The archive's bytes, unpacking to a `get-examples/` directory."""
+    """The archive's bytes, unpacking flat into wherever it is extracted.
+
+    Members carry no directory prefix of their own. The archive used to write
+    every member under `get-examples/`, which every graphical extractor turned
+    into `get-examples/get-examples/...`: those tools already create a folder
+    named after the archive, so a prefix inside it nests a second one. Flat
+    members put the files exactly where the extractor was pointed.
+    """
     import io
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for relative in files:
-            info = zipfile.ZipInfo(f"get-examples/{relative}", FIXED_TIMESTAMP)
+            info = zipfile.ZipInfo(relative, FIXED_TIMESTAMP)
             # 0o644, and the high half marks it a regular file; without this
             # entries unpack with whatever mode the running umask implies.
             info.external_attr = (0o100644 & 0xFFFF) << 16
@@ -134,7 +141,7 @@ def zip_differences(files):
 
     problems = []
     with archive:
-        expected = [f"get-examples/{relative}" for relative in files]
+        expected = list(files)
         if archive.namelist() != expected:
             missing = sorted(set(expected) - set(archive.namelist()))
             extra = sorted(set(archive.namelist()) - set(expected))
@@ -212,10 +219,11 @@ def build_page(files):
 </p>
 
 <div class="tip">
-  <b>Download it:</b> <a href="../get-examples.zip">get-examples.zip</a>. Unpack
-  it, then follow the header in <code>python_from_config.py</code>. Run
-  <code>01</code> through <code>04</code> as they are; <code>05</code> is the
-  exercise and needs one block uncommented first.
+  <b>Download it:</b> <a href="../get-examples.zip">get-examples.zip</a>. It is
+  flat, so unpack it into a folder of its own, then follow the header in
+  <code>python_from_config.py</code>. Run <code>01</code> through <code>04</code>
+  as they are; <code>05</code> is the exercise and needs one block uncommented
+  first. <code>run_all.py</code> runs all five and plots each one.
 </div>
 
 {sections}

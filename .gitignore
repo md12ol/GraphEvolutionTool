@@ -59,3 +59,9 @@ python/get/*.so
 python/get/*.pyd
 
 documentation-audit/
+
+# What running the example bundle in the checkout produces. `get-examples/output/` itself is tracked,
+# for the `.gitkeep` that carries an empty folder into the download; everything a run writes into it
+# is one person's results and belongs to nobody else.
+get-examples/output/example_*/
+get-examples/output/*.png
