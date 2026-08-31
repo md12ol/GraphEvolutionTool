@@ -1,4 +1,4 @@
-# 01 — edge editing, generational, maximize outbreak size
+# 01: edge editing, generational, maximize outbreak size
 #
 # The smallest complete document. Every later config adds to this shape rather
 # than replacing it, so read this one first.
@@ -26,7 +26,7 @@ type = "global"
 
 [selection]
 # Which of that slice becomes a parent. `tournament_size` sizes the tournament
-# only — the scope has its own `size`, which `global` does not take.
+# only. The scope has its own `size`, which `global` does not take.
 type            = "tournament"
 tournament_size = 5
 

@@ -9,7 +9,7 @@ Point it at one or more of the `output/example_N/` folders that
 
 On Windows, write `.venv\Scripts\python.exe` in place of `python` throughout
 this file, and `.venv\Scripts\python.exe -m pip` in place of `pip`. Nothing
-else changes — the last form above still works, because PowerShell does not
+else changes. The last form above still works, because PowerShell does not
 expand `output/example_*` itself, so it arrives here as a literal pattern and is
 expanded below rather than by the shell.
 
@@ -36,7 +36,7 @@ result into a PNG using nothing but the standard library:
 It is the fallback rather than the main path. Its layout starts from a circle,
 which makes it reproducible without a seed but means a ring-shaped picture can
 be the starting condition rather than the graph, and it shows neither node
-degree nor edge multiplicity — the two things this script colours for.
+degree nor edge multiplicity, the two things this script colours for.
 """
 
 import argparse
@@ -61,7 +61,7 @@ NAME_DIGEST_LENGTH = 8
 GROUP_GAP = 1
 
 # Where isolated nodes are ringed, in the coordinates Kamada-Kawai returns for
-# the connected part — outside it, so they read as detached rather than central.
+# the connected part, outside it, so they read as detached rather than central.
 STRAY_RADIUS = 1.35
 
 # Up to this multiplicity the edge scale is a legend with one swatch per value;
@@ -72,7 +72,7 @@ STRAY_RADIUS = 1.35
 MAX_LEGEND_MULTIPLICITY = 5
 
 # Which part of a colour ramp is used. Both ends of `plasma` are extreme enough
-# to lose against white — dark navy below, pale yellow above — and an edge is one
+# to lose against white (dark navy below, pale yellow above), and an edge is one
 # pixel wide, so the whole edge scale is taken from the middle of the range. The
 # swatches and the colourbar sample the same trimmed ramp, so a legend and a bar
 # drawn from the same data agree.
@@ -207,7 +207,7 @@ def expand(paths):
     """Every example folder named by the arguments, de-duplicated, in order.
 
     A shell normally expands `output/example_*` before this sees it, but an
-    unexpanded pattern is passed through too — on Windows PowerShell it arrives
+    unexpanded pattern is passed through too, since on Windows PowerShell it arrives
     here verbatim.
     """
     found = []
@@ -226,7 +226,7 @@ def pyplot():
     """matplotlib's pyplot, with the message this script owes a reader without it.
 
     Imported here rather than at the top so that reading and summarising work on
-    an interpreter that has only GET installed — the plots are the one part of
+    an interpreter that has only GET installed. The plots are the one part of
     the bundle with a dependency, and it should fail where it is used.
     """
     try:
@@ -304,7 +304,7 @@ def draw_boxplot(examples, out_dir):
     boxplot of a single folder says nothing its final fitness does not.
 
     The y-axis is shared, and two configs optimising different objectives do
-    not share a scale — the colour and the legend name the config for exactly
+    not share a scale. The colour and the legend name the config for exactly
     that reason, so a reader can see when they are looking at two units rather
     than one.
     """
@@ -410,13 +410,13 @@ def draw_convergence(examples, out_dir):
     Two decisions shape this plot, and both come from the same fact: folders
     produced by different configurations optimise different objectives.
 
-    The average is **per folder**, never one line for the whole comparison —
+    The average is **per folder**, never one line for the whole comparison:
     averaging two objectives together gives a number in no unit at all. With one
     folder given, that collapses to exactly one average over its replicates.
 
     Each configuration gets its **own panel**, rather than a shared pair of
     axes. Iteration counts differ by orders of magnitude between configurations
-    — 150 against 20000 among the shipped examples — so a shared x-axis crushes
+    (150 against 20000 among the shipped examples), so a shared x-axis crushes
     the shorter run into the left edge and hides the convergence it was drawn to
     show. Panels keep every curve readable at its own scale, which is the whole
     point of plotting it.
@@ -495,7 +495,7 @@ def best_individual_path(run):
 def infer_direction(example):
     """Whether a larger fitness is better in `example`, judged from its runs.
 
-    GET does not tell Python which way an objective points — `RunResult` has no
+    GET does not tell Python which way an objective points. `RunResult` has no
     orientation, and a callable registered through `set_fitness_function` gets
     its direction at registration, where nothing downstream can see it. So the
     direction is read from the runs themselves: evolution improves, so whichever
@@ -503,14 +503,14 @@ def infer_direction(example):
     the direction that counts as better.
 
     **One folder at a time, never pooled.** The objective is a property of the
-    configuration, so two folders can point opposite ways — `epi_prof_match`
-    minimizes an RMSE while `epi_spread` maximizes a node count — and the
+    configuration, so two folders can point opposite ways (`epi_prof_match`
+    minimizes an RMSE while `epi_spread` maximizes a node count), and the
     shipped examples do exactly that. Judging them together lets whichever
     objective has the larger numbers decide for the other, which silently draws
     the *worst* replicate of the folder that lost the vote.
 
     Every replicate of this one folder is counted, which is what makes it safe
-    on a single unlucky run. Pass `--maximize` or `--minimize` to override it —
+    on a single unlucky run. Pass `--maximize` or `--minimize` to override it:
     an objective already near its optimum at iteration zero can drift the wrong
     way and fool this.
     """
@@ -545,7 +545,7 @@ def read_edge_file(path):
     """`(num_nodes, edges)` from a GET edge file.
 
     Parsed by `graph_to_png.py`, which ships beside this script and already
-    reads the format `save_results` writes — including the `# nodes = N` header,
+    reads the format `save_results` writes, including the `# nodes = N` header,
     without which a node that has no edges is invisible and the count comes up
     short by exactly the nodes hardest to notice.
     """
@@ -578,7 +578,7 @@ def network_positions(graph, nx):
 
     Isolated nodes are placed rather than solved for. Kamada-Kawai works from
     shortest-path distances, which are undefined between disconnected nodes, and
-    it settles them in a tight knot at the **centre** — where a reader reads
+    it settles them in a tight knot at the **centre**, where a reader reads
     "central, therefore important" about the one kind of node that is connected
     to nothing. Putting them on a ring outside the graph says what they are.
     """
@@ -652,8 +652,8 @@ def ramp_swatches(ramp, values):
 def add_integer_bar(figure, axes, drawn, label, values):
     """A colourbar beside `axes`, ticked at the integers `values` can hold.
 
-    Both scales this draws are counts — a degree and a multiplicity are both
-    numbers of edge copies — so a tick at 1.4 labels a value nothing in the
+    Both scales this draws are counts (a degree and a multiplicity are both
+    numbers of edge copies), so a tick at 1.4 labels a value nothing in the
     graph can be. Only forced over a narrow span: over a wide one matplotlib
     already picks integers, and one tick per value would be an unreadable stack.
     """
@@ -676,7 +676,7 @@ def draw_best_networks(examples, out_dir, directions):
 
     Both codes are given a key, and the two get different ones because they are
     different kinds of number. Degree is open-ended and takes a colourbar.
-    Multiplicity is a small count — `max_edge_multiplicity` is usually 1 to 5 —
+    Multiplicity is a small count (`max_edge_multiplicity` is usually 1 to 5),
     so up to `MAX_LEGEND_MULTIPLICITY` it takes a legend naming each value, and
     only a graph that goes past that falls back to a bar. Nothing about the
     edges is drawn at all when every edge is a single copy: under
@@ -760,8 +760,8 @@ def draw_best_networks(examples, out_dir, directions):
                 linewidths=0.6,
             )
 
-        # Degree is genuinely open-ended — a hub in a 100-node graph can reach
-        # any degree at all — so it takes a bar. Without one the node colours are
+        # Degree is genuinely open-ended (a hub in a 100-node graph can reach
+        # any degree at all), so it takes a bar. Without one the node colours are
         # a code with no key, which defeats the point of colouring by degree.
         if drawn_nodes is not None:
             degrees = [graph.degree(node) for node in core]
@@ -775,7 +775,7 @@ def draw_best_networks(examples, out_dir, directions):
             add_integer_bar(figure, axes, drawn_edges, "edge multiplicity", weights)
 
         # What the two bars cannot say. Isolated nodes need their own entry
-        # because grey-with-a-ring is not a point on the degree scale — it is
+        # because grey-with-a-ring is not a point on the degree scale. It is
         # what a node off the scale looks like.
         keys = []
         for weight in present if by_swatch else []:
@@ -864,7 +864,7 @@ def main():
 
     # One direction per folder. The flag, when given, is deliberately global:
     # it is the answer for a comparison of folders sharing an objective, and on
-    # a mixed set there is no single right value to pass — which is why the
+    # a mixed set there is no single right value to pass, which is why the
     # inferred case is the one that has to be per folder.
     directions = {}
     for example in examples:

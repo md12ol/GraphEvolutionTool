@@ -5,7 +5,7 @@
   </style>
   <rect width="720" height="374" fill="#f6f8fb"/>
   <g style="color:var(--border-firm)">
-  <text x="170" y="16" class="d-text-acc" text-anchor="middle">generation 0 — an empty base graph</text>
+  <text x="170" y="16" class="d-text-acc" text-anchor="middle">generation 0: an empty base graph</text>
 
     <circle cx="170.0" cy="32.0" r="3.5" class="d-fill-acc"/><circle cx="170.0" cy="32.0" r="3.5" class="d-stroke" stroke-width="0.8"/>
     <circle cx="192.5" cy="33.8" r="3.5" class="d-fill-acc"/><circle cx="192.5" cy="33.8" r="3.5" class="d-stroke" stroke-width="0.8"/>
@@ -49,7 +49,7 @@
     <circle cx="147.5" cy="33.8" r="3.5" class="d-fill-acc"/><circle cx="147.5" cy="33.8" r="3.5" class="d-stroke" stroke-width="0.8"/>
   </g>
   <g style="color:var(--border-firm)" transform="translate(380 0)">
-  <text x="170" y="16" class="d-text-acc" text-anchor="middle">generation 60 — 89 edges</text>
+  <text x="170" y="16" class="d-text-acc" text-anchor="middle">generation 60: 89 edges</text>
     <line x1="170.0" y1="32.0" x2="271.8" y2="277.8" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
     <line x1="170.0" y1="32.0" x2="27.8" y2="153.5" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>
     <line x1="192.5" y1="33.8" x2="147.5" y2="318.2" class="d-stroke-acc" stroke-width="0.7" opacity="0.5" style="color:var(--accent)"/>

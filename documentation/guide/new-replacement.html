@@ -13,12 +13,12 @@
 <p class="page-kicker">Advanced Extensions</p>
 <h1>Add a Replacement Policy</h1>
 <p class="lede">
-  Choosing which members of a scope a breeding event's children overwrite. Three steps — the
-  shortest chain in GET — and the only one that belongs to a single strategy.
+  Choosing which members of a scope a breeding event's children overwrite. Three steps, the
+  shortest chain in GET, and the only one that belongs to a single strategy.
 </p>
 
 <div class="warn not-in-release">
-  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet — only
+  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet; only
   <a href="new-fitness.html">adding an objective</a> is ready to use today. This note is removed
   once the chain is finished and documented.
 </div>
@@ -26,8 +26,8 @@
 <div class="warn">
   <b>This axis is steady-state's alone.</b> Generational rebuilds its whole population every
   iteration and never asks who to overwrite, so a reader extending <i>that</i> strategy has no step
-  in this chain to take. Every marker says so on the line —
-  <code>(for SteadyState)</code> — so a grep across all the chains at once
+  in this chain to take. Every marker says so on the line:
+  <code>(for SteadyState)</code>, so a grep across all the chains at once
   does not hand you a step that is not yours.
 </div>
 
@@ -37,7 +37,7 @@
   A policy is handed the scope a breeding event drew and the fitnesses of everyone in it, and returns
   which positions the children take. It is the counterpart to selection: that answers who breeds,
   this who dies, and both work inside the same slice. Keeping them apart is what lets any selection
-  scheme pair with any policy — a scheme no longer has to supply a replacement draw it has no theory
+  scheme pair with any policy: a scheme no longer has to supply a replacement draw it has no theory
   for.
 </p>
 
@@ -54,7 +54,7 @@
 
 <p>
   <code>Worst</code> takes the scope's least fit members, never its best. That is what makes
-  steady-state self-elitist — and note it is a property of the <i>policy</i>, not of the selection
+  steady-state self-elitist, and note it is a property of the <i>policy</i>, not of the selection
   scheme, which is why it holds whichever scheme picked the parents. <code>Random</code> gives that
   guarantee up by design: it can draw the scope's best, so a run's best fitness can fall.
 </p>
@@ -68,7 +68,7 @@ replacement       = { type = "random" }   # or "worst", the default</code></pre>
 
 <p>
   It is read from the strategy's own table rather than a section of its own, because it belongs to
-  whichever strategy displaces individuals — the same way <code>elite_count</code> belongs to
+  whichever strategy displaces individuals, the same way <code>elite_count</code> belongs to
   generational. Absent means <code>worst</code>.
 </p>
 
@@ -93,22 +93,22 @@ replacement       = { type = "random" }   # or "worst", the default</code></pre>
 </div>
 
 <p>
-  Step 3 is one step across four sites rather than four steps, because none of them is a decision —
+  Step 3 is one step across four sites rather than four steps, because none of them is a decision:
   once the variant and its arm exist, the rest is naming it in each of the three places a name can
   arrive from. The Python half is optional; leaving it out makes the policy TOML-only.
 </p>
 
-<h2>Steps 1 and 2 — The Engine Side</h2>
+<h2>Steps 1 and 2: The Engine Side</h2>
 
 <p>
   Both are in <code>get/src/evolver/replacement.rs</code>. Add the variant, then the arm that names
   the victims:
 </p>
 
-<pre><code class="language-rust">// step 1 — evolver/replacement.rs:15
+<pre><code class="language-rust">// step 1: evolver/replacement.rs:15
 Tournament { size: usize },
 
-// step 2 — evolver/replacement.rs:61
+// step 2: evolver/replacement.rs:61
 Replacement::Tournament { size } =&gt; {
     // draw `size` members, overwrite the least fit of them
 }</code></pre>
@@ -129,7 +129,7 @@ where
         indices, so returning a position within it is a bug that type-checks.</li>
     <li><b>Draw only from <code>rng</code>, never from a thread RNG or a clock.</b> It is the
         run's seeded stream, shared with selection, scope and mutation, which is what makes a run
-        reproducible from its seed. A policy that draws is fine — <code>Random</code> does — but
+        reproducible from its seed. A policy that draws is fine (<code>Random</code> does) but
         two runs are only comparable if they used the same policy, because a draw here changes what
         every later draw in the run sees.</li>
   </ul>
@@ -141,19 +141,19 @@ where
   comment. Leaving that to be discovered later is how a run quietly stops improving.
 </p>
 
-<h2>Step 3 — The Three Places a Name Arrives From</h2>
+<h2>Step 3: The Three Places a Name Arrives From</h2>
 
-<pre><code class="language-rust">// step 3 — config.rs:95
+<pre><code class="language-rust">// step 3: config.rs:95
 Tournament { size: usize },
 
-// step 3 — dispatch.rs:695
+// step 3: dispatch.rs:695
 ReplacementConfig::Tournament { size } =&gt; Replacement::Tournament { size: *size },
 
-// step 3 — py_config.rs:170   (optional)
+// step 3: py_config.rs:170   (optional)
 #[pyo3(constructor = (size))]
 Tournament { size: usize },
 
-// step 3 — py_config.rs:641   (optional, the matching arm)
+// step 3: py_config.rs:641   (optional, the matching arm)
 PyReplacementConfig::Tournament { size } =&gt; {
     table.insert("type".to_string(), Value::String("tournament".to_string()));
     table.insert("size".to_string(), integer("size", *size)?);
@@ -168,7 +168,7 @@ PyReplacementConfig::Tournament { size } =&gt; {
 <h2>Testing It</h2>
 
 <p>
-  <code>pick</code> takes a scope, a fitness slice and an RNG, and returns a list of indices — no
+  <code>pick</code> takes a scope, a fitness slice and an RNG, and returns a list of indices, with no
   evolver, nothing else to set up:
 </p>
 
@@ -186,7 +186,7 @@ fn tournament_returns_population_indices_from_the_scope() {
 
 <p>
   The existing test beside it, <code>the_worst_are_returned_worst_first</code>, is the one to read
-  before writing yours — it pins the ordering contract that the children's slot assignment depends
+  before writing yours: it pins the ordering contract that the children's slot assignment depends
   on. If your policy draws, seed a fixed RNG so the test is reproducible, and read
   <code>random_returns_distinct_members_of_the_scope</code> for the distinctness assertion every
   drawing policy owes: two victims that coincide mean one child overwrites the other.
@@ -196,7 +196,7 @@ fn tournament_returns_population_indices_from_the_scope() {
 
 <div class="warn">
   <b>A policy can only read what the engine records per individual.</b> Today that is a genome and a
-  fitness — nothing else. So <code>Oldest</code>, or anything keyed on lineage, tenure or distance
+  fitness and nothing else. So <code>Oldest</code>, or anything keyed on lineage, tenure or distance
   from a parent, is not a variant plus an arm: it needs that quantity recorded first, which is a
   change to the engine rather than to this enum. Check what you need exists before writing the
   variant.

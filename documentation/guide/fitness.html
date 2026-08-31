@@ -28,9 +28,9 @@
 }</code></pre>
 
 <p>
-  <code>evaluate</code> returns a score <b><b>as-measured</b> — the units and sign your objective returned</b> — nothing is
+  <code>evaluate</code> returns a score <b><b>as-measured</b>, in the units and sign your objective returned</b>. Nothing is
   normalised or flipped for you. <code>direction</code> declares whether bigger or smaller is
-  better, and is a property of what the function computes, never of the run — so it is never
+  better, and is a property of what the function computes, never of the run, so it is never
   configurable. <code>evaluate_batch</code> scores a whole population at once, which is what lets a
   <a href="new-fitness.html">Python objective</a> pay one crossing per batch rather than one per
   individual.
@@ -66,14 +66,14 @@
   <rect x="60" y="106" width="580" height="74" rx="9" class="d-stroke"/>
   <text x="350" y="130" class="d-text-mono" text-anchor="middle" font-weight="600">common::express_and_score</text>
   <text x="350" y="150" class="d-text-sm" text-anchor="middle">express the batch in parallel · score the batch · reject NaN</text>
-  <text x="350" y="169" class="d-text-acc" text-anchor="middle">ORIENT — the one and only flip inward</text>
+  <text x="350" y="169" class="d-text-acc" text-anchor="middle">ORIENT: the one and only flip inward</text>
 
   <path d="M350 184 L350 210" class="d-stroke-acc" stroke-width="1.8" marker-end="url(#af)"/>
   <text x="360" y="203" class="d-text-sm">1470.0 → −1470.0</text>
 
   <rect x="60" y="216" width="580" height="118" rx="9" class="d-fill-box"/>
   <rect x="60" y="216" width="580" height="118" rx="9" class="d-stroke"/>
-  <text x="350" y="240" class="d-text" text-anchor="middle" font-weight="600">LOWER-IS-BETTER — what the engine compares</text>
+  <text x="350" y="240" class="d-text" text-anchor="middle" font-weight="600">LOWER-IS-BETTER: what the engine compares</text>
   <text x="350" y="266" class="d-text-sm" text-anchor="middle">tournament ranking · elitism · replace-worst · argmin</text>
   <text x="350" y="285" class="d-text-sm" text-anchor="middle">GenerationStats · EvolutionOutcome</text>
   <text x="350" y="313" class="d-text-acc" text-anchor="middle">None of these know, ask, or store which way the objective ran.</text>
@@ -84,16 +84,16 @@
   <rect x="60" y="370" width="580" height="58" rx="9" class="d-fill-warn"/>
   <rect x="60" y="370" width="580" height="58" rx="9" class="d-stroke"/>
   <text x="350" y="393" class="d-text" text-anchor="middle" font-weight="600">the dispatch boundary</text>
-  <text x="350" y="412" class="d-text-acc" text-anchor="middle">ORIENT BACK — the one and only flip outward</text>
+  <text x="350" y="412" class="d-text-acc" text-anchor="middle">ORIENT BACK: the one and only flip outward</text>
 
   <rect x="60" y="440" width="580" height="26" rx="7" class="d-fill-good"/>
   <rect x="60" y="440" width="580" height="26" rx="7" class="d-stroke"/>
-  <text x="350" y="458" class="d-text-sm" text-anchor="middle">AS-MEASURED AGAIN — 1470, exactly what your function returned</text>
+  <text x="350" y="458" class="d-text-sm" text-anchor="middle">AS-MEASURED AGAIN: 1470, exactly what your function returned</text>
 
   </g>
 </svg>
 <figcaption>Two flips per run, at the two edges. Everything between them is a plain
-<code>f64</code> comparison with no direction in sight — which is why a missed conversion is
+<code>f64</code> comparison with no direction in sight, which is why a missed conversion is
 impossible rather than merely unlikely.</figcaption>
 </figure>
 
@@ -113,7 +113,7 @@ impossible rather than merely unlikely.</figcaption>
 
 <p>
   <code>NaN</code> is rejected because under <code>Maximize</code> the value is negated, and
-  <code>-NaN</code> sorts <i>below</i> <code>-inf</code> — making it the <b>best</b> individual in
+  <code>-NaN</code> sorts <i>below</i> <code>-inf</code>, making it the <b>best</b> individual in
   every tournament it enters, filling the population with whatever genome produced it and leaving a
   run that looks converged. <code>±inf</code> is allowed deliberately: <code>+inf</code> under
   <code>Minimize</code> is the sanctioned way to say <i>this individual is invalid</i>.
@@ -121,7 +121,7 @@ impossible rather than merely unlikely.</figcaption>
 
 <div class="warn">
   <b>The <code>NaN</code> gate is an assertion, so it aborts rather than raising.</b> From Python it
-  surfaces as a <code>pyo3_runtime.PanicException</code> naming the batch index that produced it —
+  surfaces as a <code>pyo3_runtime.PanicException</code> naming the batch index that produced it,
   not a <code>ValueError</code> you would normally catch. Treat it as a bug in your objective, which
   it is: the message names the usual causes (a division by a possibly-zero count,
   <code>0.0/0.0</code>, <code>inf - inf</code>). Note the two infinities are the opposite case and
@@ -149,7 +149,7 @@ impossible rather than merely unlikely.</figcaption>
 <p>
   The first three all read one <a href="#sir">SIR simulation</a> and are stochastic.
   <code>struct_match</code> shares none of that vocabulary: it compares three structural statistics
-  of a graph — degree histogram, clustering-coefficient histogram, Laplacian spectrum — against the
+  of a graph (degree histogram, clustering-coefficient histogram, Laplacian spectrum) against the
   same statistics over a reference set loaded with <code>load_reference_graphs</code>, and it is
   <b>deterministic</b>, so a second call on the same graph gives the same score. It
   <b>requires <code>max_edge_multiplicity = 1</code></b> and refuses a multigraph rather than
@@ -159,12 +159,12 @@ impossible rather than merely unlikely.</figcaption>
 <div class="tip">
   <b>Where a reference set comes from.</b> The repository carries two standard-library scripts that
   are not part of the package and are not in the wheel:
-  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0a1/tools/tudataset_to_get.py"><code>tools/tudataset_to_get.py</code></a>
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0/tools/tudataset_to_get.py"><code>tools/tudataset_to_get.py</code></a>
   converts a <a href="https://chrsmrrs.github.io/datasets/">TUDataset</a> collection into the folder
   of edge files <code>load_reference_graphs</code> reads, and
-  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0a1/tools/graph_to_png.py"><code>tools/graph_to_png.py</code></a>
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0/tools/graph_to_png.py"><code>tools/graph_to_png.py</code></a>
   draws any GET edge file as a PNG. Both are documented in
-  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0a1/tools/README.md"><code>tools/README.md</code></a>.
+  <a href="https://github.com/md12ol/GraphEvolutionTool/blob/v0.9.0/tools/README.md"><code>tools/README.md</code></a>.
 </div>
 
 <div class="note">
@@ -172,7 +172,7 @@ impossible rather than merely unlikely.</figcaption>
   Iterate <code>0 .. target.len()</code>, treat a shorter run's missing values as <code>0</code>,
   <b>ignore</b> a longer run's surplus, and divide by <code>target.len()</code> always. So a run
   that burns out early is penalised by the whole remaining target while one that outlasts it is not
-  penalised at all — this objective rewards <b>matching or exceeding</b> the target's tail, not
+  penalised at all: this objective rewards <b>matching or exceeding</b> the target's tail, not
   matching it exactly. Inherited from the original C++ for comparability.
 </div>
 
@@ -184,7 +184,7 @@ impossible rather than merely unlikely.</figcaption>
   <code>t</code> spends step <code>t+1</code> infectious, transmitting to each still-susceptible
   neighbour with probability <code>infection_rate</code> <b>per edge</b>, then recovers forever. A
   single <code>patient_zero</code> seeds the outbreak, which runs until no infectious nodes remain
-  — no step cap is needed, because a node only ever moves S → I → R and so can be infected at most
+  No step cap is needed, because a node only ever moves S → I → R and so can be infected at most
   once, which bounds the run by the node count.
 </p>
 
@@ -248,7 +248,7 @@ impossible rather than merely unlikely.</figcaption>
         <text x="140" y="235">R</text><text x="230" y="235">R</text><text x="320" y="235">R</text>
         <text x="410" y="235">S</text><text x="500" y="235">S</text>
       </g>
-      <text x="560" y="235" class="d-text-sm">nobody infected — burnout</text>
+      <text x="560" y="235" class="d-text-sm">nobody infected: burnout</text>
     </g>
 
     <text x="140" y="275" class="d-text-sm">amber = infectious · green = recovered · grey = susceptible</text>
@@ -256,7 +256,7 @@ impossible rather than merely unlikely.</figcaption>
 </svg>
 <figcaption>An outbreak on a 5-node path that failed to transmit at step 3. It occupied three
 infecting timesteps plus a burnout step, and infected three nodes, so <code>length = 3</code>, <code>spread = 3</code>, and
-<code>profile = [1, 1, 1, 0]</code> — note that <code>profile</code> always carries one more
+<code>profile = [1, 1, 1, 0]</code>. Note that <code>profile</code> always carries one more
 element than <code>length</code>, because of the terminating zero.</figcaption>
 </figure>
 
@@ -281,7 +281,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
 <p>
   An outbreak shorter than <code>min_epidemic_length</code> is discarded and re-simulated, up to
   <code>max_epidemic_retries</code> attempts; whatever the final attempt produces is kept
-  regardless. It exists because a fizzled outbreak reports the dice, not the graph — without it a
+  regardless. It exists because a fizzled outbreak reports the dice, not the graph. Without it a
   large share of evaluations return near-nothing and selection chases noise.
 </p>
 
@@ -289,7 +289,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
   <b>It is a biased resample, not variance reduction.</b> It shifts expected fitness upward by an
   amount depending on how often a given graph fizzles, so it is <b>not</b> interchangeable with
   raising <code>num_epidemics</code>. Accepted deliberately, for comparability with the historical
-  C++ results — which is why both values are exposed rather than hardcoded. To switch it off set
+  C++ results, which is why both values are exposed rather than hardcoded. To switch it off set
   <code>min_epidemic_length = 1</code>; <code>0</code> is a validation error, not an off switch.
 </div>
 
@@ -304,7 +304,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
             <code>[0, 1]</code>.</td></tr>
     <tr><td><code>num_epidemics</code></td><td><i>required</i></td>
         <td>Outbreaks averaged per evaluation. A single draw is very noisy, so this is not a tuning
-            nicety — and it dominates run time, since the simulations run sequentially within one
+            nicety, and it dominates run time, since the simulations run sequentially within one
             evaluation.</td></tr>
     <tr><td><code>patient_zero</code></td><td><i>unset</i></td>
         <td>Pin the seed node, or leave unset for a fresh one per epidemic.</td></tr>
@@ -320,13 +320,13 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
 
 <p>
   <b>One seed for the whole experiment</b>, passed to <code>run</code> rather than set in the
-  config — the seed describes <i>this invocation</i>, the config describes <i>the experiment</i>.
+  config: the seed describes <i>this invocation</i>, the config describes <i>the experiment</i>.
   Everything derives from it, in layers, each drawing <i>from</i> the previous rather than reusing
   it:
 </p>
 
 <ol>
-  <li>The master seed feeds a generator whose output stream <i>is</i> the per-run seed list — run
+  <li>The master seed feeds a generator whose output stream <i>is</i> the per-run seed list; run
       <code>i</code> takes draw <code>i</code>. So a run's seed does not depend on how many runs you
       asked for: requesting 50 reproduces the first 30 exactly.</li>
   <li>Within a run, the starting population is drawn, then the evolver's own seed next from the
@@ -336,7 +336,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
 
 <div class="note">
   <b>The generator is pinned.</b> Both strategies seed <code>ChaCha8Rng</code>, not the library
-  default, whose algorithm may change between releases — which would defeat the entire purpose of a
+  default, whose algorithm may change between releases, which would defeat the entire purpose of a
   seed argument.
 </div>
 
@@ -344,7 +344,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
 
 <p>
   Two requirements pull in opposite directions. <b>Within one evaluation</b> every population
-  member must face the <i>same</i> draws — <b>common random numbers</b>, which is what makes
+  member must face the <i>same</i> draws: <b>common random numbers</b>, which is what makes
   fitness differences reflect the graph rather than the dice. <b>Across evaluations</b> the same
   network must <i>not</i> keep getting the same epidemic, or the run optimises against one frozen
   sample of the disease.
@@ -354,7 +354,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
   So the objective holds a run seed plus an <b>atomic evaluation counter</b>: each batch increments
   it once and derives that batch's epidemic seed from the pair. Within the batch, epidemic
   <code>i</code> attempt <code>a</code> takes draw
-  <code>i × max_epidemic_retries + a</code> — position-indexed, which is what keeps the
+  <code>i × max_epidemic_retries + a</code>, position-indexed, which is what keeps the
   <a href="#reroll">re-roll</a> compatible with common random numbers and makes scoring
   <b>order-independent</b> across parallel workers.
 </p>
@@ -362,7 +362,7 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
 <div class="note">
   <b>"The re-roll breaks CRN" is the easy misreading, and it is wrong.</b> Every graph draws from
   an identical pool of dice, none of it graph-specific. What differs is only <i>which</i> of those
-  common draws each one stops on — and that is what a retry <b>is</b>. The randomness is common;
+  common draws each one stops on, and that is what a retry <b>is</b>. The randomness is common;
   the stopping rule is outcome-dependent, deliberately.
 </div>
 
@@ -422,7 +422,7 @@ nodes; the mean tracks it a little below, which is what a healthy run looks like
 </figure>
 
 <p>
-  One row per logged iteration — every generation for
+  One row per logged iteration: every generation for
   <a href="variation.html#generational">generational</a>, every <code>population_size</code> events
   for <a href="variation.html#steady-state">steady-state</a>. Both log the starting population as
   iteration 0, so the two share an axis.
@@ -432,20 +432,20 @@ nodes; the mean tracks it a little below, which is what a healthy run looks like
 
 <p>
   <code>seed</code> and <code>run_index</code> repeat on every row so that replicate logs can be
-  concatenated into one file and still be separated — no naming convention, no
+  concatenated into one file and still be separated, with no naming convention and no
   parse-the-filename step in whatever plots them.
 </p>
 
 <div class="note">
   <b>The two denominators disagree on purpose.</b> <code>std_dev</code> describes the population as
   the complete thing it is, dividing by <code>n</code>. <code>ci_95</code> is a <i>sampling</i>
-  statistic — <code>1.96 · s / √n</code> with the sample deviation, dividing by
+  statistic: <code>1.96 · s / √n</code> with the sample deviation, dividing by
   <code>n-1</code>. A single individual has <code>std_dev = 0</code> and <code>ci_95 = 0</code>,
   never <code>NaN</code>.
 </div>
 
 <div class="warn">
-  <b><code>ci_95</code> is a <i>within-population</i> band, per iteration</b> — how tightly this
+  <b><code>ci_95</code> is a <i>within-population</i> band, per iteration</b>: how tightly this
   generation is clustered around its mean. It is <b>not</b> the band on a published convergence
   plot, which is mean best-fitness across replicates and is computed when their logs are
   aggregated. Mixing them up produces a plot that looks right and answers the wrong question.
@@ -456,7 +456,7 @@ nodes; the mean tracks it a little below, which is what a healthy run looks like
 <p>
   A run hands back the winning genome printed, the network it expressed as
   <code>(u, v, multiplicity)</code> triples with <code>u &lt; v</code>, and its fitness. It is the
-  best of the <i>final</i> population rather than a running best —
+  best of the <i>final</i> population rather than a running best,
   <a href="../design-notes.html">Design Notes</a> has why that is the honest number.
 </p>
 
@@ -470,12 +470,12 @@ nodes; the mean tracks it a little below, which is what a healthy run looks like
 
 <div class="warn">
   <b>Which routes convert, and the one that does not.</b> The outward conversion lives in the
-  dispatch layer, not at the language boundary — so <a href="route-python-objects.html">both Python
+  dispatch layer, not at the language boundary, so <a href="route-python-objects.html">both Python
   routes</a>, the <a href="route-rust-cli.html"><code>get-run</code> CLI</a> and
   <code>run_many_from_toml</code> all hand you numbers already in your objective's units. The
   exception is <a href="route-rust-library.html">driving an <code>Evolver</code> directly</a>: that
   returns an <code>EvolutionOutcome</code> carrying <code>best_fitness_engine</code>, which is
-  lower-is-better, plus the <code>direction</code> to undo it —
+  lower-is-better, plus the <code>direction</code> to undo it:
   <code>direction.orient(outcome.best_fitness_engine)</code> is the same negation, and it is its own
   inverse.
 </div>
@@ -498,7 +498,7 @@ best.save_config(".")                 # writes one shared config.toml</code></pr
 <div class="tip">
   <b><code>save_results</code> writes a loadable edge file, not a report.</b> The fitness, the
   genome and the node count go in <code>#</code> comment lines above ordinary
-  <code>u,v,weight</code> rows — the same format <code>set_base_graph_from_file</code> reads. So the
+  <code>u,v,weight</code> rows, the same format <code>set_base_graph_from_file</code> reads. So the
   winner of one run feeds straight into the next as a base graph, which is what makes
   <a href="pipeline.html#genomes">stacking SDA into edge-edit</a> a two-line operation.
 </div>
@@ -523,7 +523,7 @@ selection bias.</p>
 <h2>Writing Your Own Objective</h2>
 
 <p>
-  Two routes, and neither is a fallback for the other — see <a href="new-fitness.html">Add an
+  Two routes, and neither is a fallback for the other. See <a href="new-fitness.html">Add an
   Objective</a> for both. <b>Python</b>:
   <code>set_fitness_function(callable, direction)</code>, taking the whole batch at once, with no
   Rust and no compilation. <b>Rust</b>: depend on the crate, <code>impl Fitness</code>, drive an
@@ -538,7 +538,7 @@ selection bias.</p>
 <p>
   A user-supplied objective deliberately gets no <code>[fitness]</code> variant. A string-keyed
   registry would move validation out of the parser, which is the exact failure the one-validator
-  design prevents — nothing user-supplied is ever deserialized, so there is nothing new to
+  design prevents: nothing user-supplied is ever deserialized, so there is nothing new to
   validate.
 </p>
 

@@ -37,6 +37,12 @@ handoff_edge_multiplicity_cap_simplification.md
 .codex/
 AGENTS.md
 
+# .agents/ holds Codex-convention copies of `.claude/skills/`, written on 2026-08-31. `.codex/` is a
+# clone and carries no skills of its own, so this is a plain directory nothing above catches. Same
+# argument again: it must sit in the tree to be read, so tracking it puts the working-docs pipeline
+# into every clone and the built wheel.
+.agents/
+
 # Output of the get-run dev CLI (see get/src/bin/run.rs). Since 2026-08-30 each run
 # makes its own <timestamp>-<seed>/ folder rather than writing these three names into
 # whatever directory it was run from, so the folder is what needs ignoring — the bare

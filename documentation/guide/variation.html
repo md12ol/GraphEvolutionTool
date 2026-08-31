@@ -37,7 +37,7 @@
 
     <rect x="250" y="24" width="190" height="58" rx="8" class="d-fill-acc"/>
     <rect x="250" y="24" width="190" height="58" rx="8" class="d-stroke"/>
-    <text x="345" y="48" class="d-text" text-anchor="middle" font-weight="600">roll 1 — crossover?</text>
+    <text x="345" y="48" class="d-text" text-anchor="middle" font-weight="600">roll 1: crossover?</text>
     <text x="345" y="68" class="d-text-mono" text-anchor="middle" font-size="11">crossover_rate</text>
 
     <rect x="480" y="24" width="190" height="58" rx="8" class="d-fill-good"/>
@@ -56,12 +56,12 @@
     <!-- row 2: per child -->
     <rect x="30" y="155" width="200" height="58" rx="8" class="d-fill-acc"/>
     <rect x="30" y="155" width="200" height="58" rx="8" class="d-stroke"/>
-    <text x="130" y="179" class="d-text" text-anchor="middle" font-weight="600">roll 2 — mutate at all?</text>
+    <text x="130" y="179" class="d-text" text-anchor="middle" font-weight="600">roll 2: mutate at all?</text>
     <text x="130" y="199" class="d-text-mono" text-anchor="middle" font-size="11">mutation_rate</text>
 
     <rect x="270" y="155" width="200" height="58" rx="8" class="d-fill-acc"/>
     <rect x="270" y="155" width="200" height="58" rx="8" class="d-stroke"/>
-    <text x="370" y="179" class="d-text" text-anchor="middle" font-weight="600">roll 3 — how many?</text>
+    <text x="370" y="179" class="d-text" text-anchor="middle" font-weight="600">roll 3: how many?</text>
     <text x="370" y="199" class="d-text-mono" text-anchor="middle" font-size="11">uniform 1..=max_mutations</text>
 
     <rect x="510" y="155" width="180" height="58" rx="8" class="d-fill-good"/>
@@ -88,7 +88,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
     <tr><td><code>mutation_rate</code></td><td>Does this child mutate <b>at all</b>?</td>
         <td>Once per child</td></tr>
     <tr><td><code>max_mutations</code></td>
-        <td>If it does, <b>how many</b> — drawn uniformly from
+        <td>If it does, <b>how many</b>, drawn uniformly from
             <code>1..=max_mutations</code>.</td>
         <td>Once per child</td></tr>
   </tbody>
@@ -98,7 +98,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 <p>
   So <code>mutation_rate = 0.2, max_mutations = 4</code> means 80% of children are untouched, and
   the other 20% take 1, 2, 3 or 4 mutations with equal probability. It does <b>not</b> mean each
-  gene mutates with probability 0.2 — a different and much more common convention, and confusing
+  gene mutates with probability 0.2, a different and much more common convention, and confusing
   the two will cost you a run.
 </p>
 
@@ -112,7 +112,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 <h3>What One Mutation Is, and Which Operator Runs</h3>
 
 <p>
-  Crossover recombines <b>in place</b>, leaving one child in each parent — both are kept. The
+  Crossover recombines <b>in place</b>, leaving one child in each parent, and both are kept. The
   operator is selected under <code>[crossover]</code> and <b>applies to whichever representation is
   running</b>, because both genomes ship the same two-point operator. Mutation is the other way
   round: its operator is chosen <b>per genome</b>, under <code>[genome]</code>, because the two
@@ -125,7 +125,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
   <tbody>
     <tr><td><a href="pipeline.html#edge-edit">edge-edit</a></td>
         <td>Two-point over genes</td>
-        <td>Reroll <b>one gene</b> — opcode drawn from the configured
+        <td>Reroll <b>one gene</b>, opcode drawn from the configured
             <a href="pipeline.html#operations">operation mix</a>, payload redrawn.</td></tr>
     <tr><td><a href="pipeline.html#sda">SDA</a></td>
         <td>Two-point over states</td>
@@ -140,7 +140,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 
 <div class="warn">
   <b>The same count is not the same disruption.</b> One edge-edit mutation changes one edit in a
-  script of <code>gene_length</code>. One SDA mutation changes one table entry — and because the
+  script of <code>gene_length</code>. One SDA mutation changes one table entry, and because the
   automaton feeds on its own output, a single changed response can alter every character after it.
   SDA is correspondingly more disruptive at the same <code>max_mutations</code>.
 </div>
@@ -154,7 +154,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 
 <p>
   A breeding event is <b>three independent choices</b>, each its own config section and each one
-  variant to extend. Every combination is legal — there is deliberately no
+  variant to extend. Every combination is legal; there is deliberately no
   scheme-by-strategy rejection table.
 </p>
 
@@ -185,7 +185,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 
 <div class="note">
   <b><code>random_subset</code> draws distinct individuals; <code>tournament</code> samples with
-  replacement.</b> The distinctness is not stylistic — "the worst two members" means nothing over a
+  replacement.</b> The distinctness is not stylistic: "the worst two members" means nothing over a
   multiset. The consequence: under a global scope two picks can be the same individual, so
   crossover between a genome and its own clone does nothing but mutate.
 </div>
@@ -199,7 +199,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 <p>
   <b>The whole population is replaced each generation</b>: score everyone, log a row, copy the
   <code>elite_count</code> best forward unchanged, then fill every remaining slot with children of
-  pairs drawn from the configured scope. Replacement does not arise — the population is rebuilt, so
+  pairs drawn from the configured scope. Replacement does not arise, because the population is rebuilt, so
   <code>elite_count</code> is this strategy's own knob. The usual configuration is
   <code>global</code> scope with <code>tournament</code> selection, but the scope is read from
   config like any other, not fixed by the strategy. Three rules are easy to get wrong:
@@ -207,7 +207,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 
 <ul>
   <li><b>Elites are rescored every generation</b>, like everyone else. Under a stochastic objective
-      an elite's recorded fitness moves while its genome does not, and that is correct — the new
+      an elite's recorded fitness moves while its genome does not, and that is correct: the new
       number is a fresh sample, and freezing the old one would let a lucky draw persist forever.</li>
   <li><b>Odd slot counts lose one child.</b> Crossover yields two, but
       <code>population_size - elite_count</code> may be odd; the last pair contributes one and the
@@ -221,7 +221,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 <p>
   <b>One mate-and-replace event at a time</b>: each event draws the configured scope, selects two
   parents within it, and applies the configured replacement policy to that same scope. Most of the
-  population simply persists. Replacement is this strategy's own knob — generational has no use for
+  population simply persists. Replacement is this strategy's own knob; generational has no use for
   one. The usual configuration is <code>random_subset { size }</code> with <code>best</code> and
   <code>worst</code>, which is what "tournament selection with tournament-local replacement"
   decomposes into, and everything below describes that default.
@@ -235,7 +235,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
     </marker>
   </defs>
   <g style="color:var(--border-firm)">
-    <text x="20" y="28" class="d-text-acc">the population — most of it is untouched</text>
+    <text x="20" y="28" class="d-text-acc">the population, most of it untouched</text>
     <g>
       <rect x="20" y="42" width="660" height="34" rx="6" class="d-fill-bg"/>
       <rect x="20" y="42" width="660" height="34" rx="6" class="d-stroke" stroke-dasharray="4 3"/>
@@ -277,7 +277,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 
     <path d="M294 149 L396 149" class="d-stroke-acc" stroke-width="1.6" marker-end="url(#as)" style="color:var(--accent)"/>
 
-    <text x="20" y="212" class="d-text-sm">Replacement is scope-local, not global — which is what makes the strategy self-elitist</text>
+    <text x="20" y="212" class="d-text-sm">Replacement is scope-local, not global, which is what makes the strategy self-elitist</text>
     <text x="20" y="232" class="d-text-sm">and diversity-preserving, and why the scope needs at least four distinct members.</text>
   </g>
 </svg>
@@ -285,8 +285,8 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 </figure>
 
 <p>
-  Scope-local replacement makes the strategy <b>self-elitist</b> — the scope's best is never among
-  the replaced, so no explicit elitism is needed — and <b>diversity-preserving</b>, since a globally
+  Scope-local replacement makes the strategy <b>self-elitist</b> (the scope's best is never among
+  the replaced, so no explicit elitism is needed) and <b>diversity-preserving</b>, since a globally
   poor individual survives until it is drawn. It is also <b>cheap</b>: <code>O(k log k)</code> per
   event rather than an <code>O(population)</code> scan, which matters at 100,000 events. Replacement
   is <b>unconditional</b>: a child takes its slot even if it scores worse than what it displaces.
@@ -301,7 +301,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 
 <p>
   <b>Logging cadence:</b> the starting population as iteration 0, then one row per
-  <code>population_size</code> events — a "generation equivalent", so
+  <code>population_size</code> events, a "generation equivalent", so
   <code>history.len() == num_mating_events / population_size + 1</code>. Logging every event would
   give a 100,000-row history.
 </p>
@@ -320,9 +320,9 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
     <tr><td>Population-level parallelism</td><td>As wide as the population</td>
         <td><b>Two-way, regardless of cores</b></td></tr>
     <tr><td>With a Python objective</td><td>One crossing per generation</td>
-        <td>One crossing per <i>event</i> — a poor fit</td></tr>
-    <tr><td>Fitness comparisons</td><td>Fair — everyone rescored under one seed</td>
-        <td><b>Carries stale fitnesses</b> — see below</td></tr>
+        <td>One crossing per <i>event</i>, a poor fit</td></tr>
+    <tr><td>Fitness comparisons</td><td>Fair: everyone rescored under one seed</td>
+        <td><b>Carries stale fitnesses</b>; see below</td></tr>
   </tbody>
 </table>
 </div>
@@ -330,11 +330,11 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 <div class="warn">
   <b>Steady-state carries stale fitnesses, and this is a known accepted limitation.</b> Only the two
   new children are scored per event, so an individual that is not replaced keeps the fitness it was
-  born with — a score can stand for thousands of events. The bias compounds in the worst available
+  born with, and a score can stand for thousands of events. The bias compounds in the worst available
   direction, since a lucky score makes an individual both likelier to be selected and less likely to
   be replaced. It stands because rescoring per event is exactly the <code>O(population)</code> work
   that scope-local replacement exists to avoid. <b>Prefer generational when the objective is
-  stochastic and the comparison needs to be fair</b> — which, with any of the three SIR objectives,
+  stochastic and the comparison needs to be fair</b>, which, with any of the three SIR objectives,
   it is.
 </div>
 
@@ -343,7 +343,7 @@ the two evolution strategies cannot drift apart on what a mutation means.</figca
 <p>
   A new scope, selection scheme, replacement policy or crossover operator is one enum variant plus
   one dispatch arm, and works with every strategy. A new strategy is one config variant, one match
-  arm, and an implementation of <code>Evolver</code> — whose one non-optional rule is to score
+  arm, and an implementation of <code>Evolver</code>, whose one non-optional rule is to score
   through <a href="fitness.html#gate"><code>express_and_score</code></a>. Recipes on
   <a href="new-evolver.html">Add a Strategy</a> and
   <a href="new-selection.html">Add a Selection Scheme</a>.

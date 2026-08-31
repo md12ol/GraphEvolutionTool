@@ -13,13 +13,13 @@
 <p class="page-kicker">Advanced Extensions</p>
 <h1>Add a Strategy</h1>
 <p class="lede">
-  A third evolution strategy — a different answer to "who breeds and who gets replaced". Seven steps,
+  A third evolution strategy: a different answer to "who breeds and who gets replaced". Seven steps,
   three of them required, and the genome match is untouched, because your evolver is generic over the
   representation.
 </p>
 
 <div class="warn not-in-release">
-  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet — only
+  <b>Not part of the v0.9 release.</b> This chain isn't finished and documented yet; only
   <a href="new-fitness.html">adding an objective</a> is ready to use today. This note is removed
   once the chain is finished and documented.
 </div>
@@ -37,13 +37,13 @@
   <thead><tr><th>Piece</th><th>Is</th></tr></thead>
   <tbody>
     <tr><td><code>TypeContext</code></td>
-        <td>Whatever <i>your</i> strategy needs and the others do not — the generational one carries
+        <td>Whatever <i>your</i> strategy needs and the others do not. The generational one carries
             its generation count and elite count, the steady-state one its mating-event count.</td></tr>
     <tr><td><code>SharedEvolutionContext</code></td>
         <td>What every strategy needs: the genome context; <code>crossover_rate</code>,
             <code>mutation_rate</code> and <code>max_mutations</code>; and the configured
             <code>scope</code>, <code>selection</code> and <code>crossover</code> operator. Nothing
-            else — see below.</td></tr>
+            else; see below.</td></tr>
     <tr><td><code>population</code></td>
         <td>Handed in, already built. You never mint genomes.</td></tr>
     <tr><td><code>run</code></td>
@@ -56,7 +56,7 @@
 <h2>What the User Ends Up Writing</h2>
 
 <p>
-  A GET run is configured by a <b>TOML document</b> — see the
+  A GET run is configured by a <b>TOML document</b>. See the
   <a href="route-python-toml.html">Python: TOML File</a> for its full shape, and
   <a href="route-python-objects.html">Python: Config Objects</a> for how to run one. The strategy is the
   <code>[evolution]</code> section. Adding one called <code>MyStrategy</code> is what makes this
@@ -90,7 +90,7 @@ num_my_events = 500</code></pre>
 
 <pre><code class="language-bash">git grep -n "ADD A STRATEGY STEP" get/src config.example.toml    # 7 steps, 8 sites</code></pre>
 
-<p>Each step is named at more than one site, because a marker points forward to the next — go by the step numbers rather than the number of lines the grep prints.</p>
+<p>Each step is named at more than one site, because a marker points forward to the next; go by the step numbers rather than the number of lines the grep prints.</p>
 
 <div class="table-wrap">
 <table>
@@ -121,21 +121,21 @@ num_my_events = 500</code></pre>
 </table>
 </div>
 
-<h2>Step 1 — The Module</h2>
+<h2>Step 1: The Module</h2>
 
-<pre><code class="language-rust">// step 1 — evolver.rs:17
+<pre><code class="language-rust">// step 1: evolver.rs:17
 pub mod my_strategy;
 
 pub use my_strategy::MyStrategyEvolver;</code></pre>
 
-<h2>Steps 2 and 3 — The Config Side</h2>
+<h2>Steps 2 and 3: The Config Side</h2>
 
-<pre><code class="language-rust">// step 2 — config.rs:58
+<pre><code class="language-rust">// step 2: config.rs:58
 MyStrategy {
     num_my_events: usize,
 },
 
-// step 3 — config.rs:644, optional
+// step 3: config.rs:644, optional
 EvolutionConfig::MyStrategy { num_my_events, .. } =&gt; {
     if *num_my_events == 0 {
         return Err(invalid("num_my_events", "must be at least 1"));
@@ -145,16 +145,16 @@ EvolutionConfig::MyStrategy { num_my_events, .. } =&gt; {
 <div class="callout">
   <p>
     <b>Put only what is yours in step 2.</b> <code>elite_count</code> and <code>replacement</code>
-    are each one strategy's business — how generational carries individuals forward, and how
-    steady-state makes room for a child — and neither means anything to the other. What every
+    are each one strategy's business (how generational carries individuals forward, and how
+    steady-state makes room for a child), and neither means anything to the other. What every
     strategy shares, <code>[scope]</code> and <code>[selection]</code>, already sits on
     <code>Config</code> and needs nothing from you.
   </p>
 </div>
 
-<h2>Steps 4 and 5 — Dispatch</h2>
+<h2>Steps 4 and 5: Dispatch</h2>
 
-<pre><code class="language-rust">// step 4 — dispatch.rs:583
+<pre><code class="language-rust">// step 4: dispatch.rs:583
 EvolutionConfig::MyStrategy { num_my_events } =&gt; {
     let type_context = MyStrategyContext {
         num_my_events: *num_my_events,
@@ -171,12 +171,12 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
   </p>
   <p>
     <b>Step 5 is usually not a step at all.</b> <code>erase</code> is generic over the genome with
-    no match on strategy inside it — touch it only if your <code>EvolutionOutcome</code> needs
+    no match on strategy inside it; touch it only if your <code>EvolutionOutcome</code> needs
     conversion the existing loop does not cover. None of the shipped strategies do.
   </p>
 </div>
 
-<h2>Steps 6 and 7 — Python and the Example, Both Optional</h2>
+<h2>Steps 6 and 7: Python and the Example, Both Optional</h2>
 
 <p>
   Leaving step 6 out costs nothing elsewhere; the strategy is then configurable from a TOML file but
@@ -187,7 +187,7 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 <p>
   Step 7 is a commented-out <code>[evolution]</code> block in
   <code>config.example.toml:161</code>, beside generational's and steady-state's. <b>It is the step
-  people skip</b>, and it costs nothing mechanically — the example file is simply what a user copies
+  people skip</b>, and it costs nothing mechanically: the example file is simply what a user copies
   from, so a strategy missing from it is one most people never find. The test suite parses and
   validates that file, so a block that does not parse fails the build rather than a user's
   afternoon.
@@ -200,12 +200,12 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
   <code>Fitness::evaluate</code> or <code>evaluate_batch</code> directly, anywhere. That one
   function is both the direction conversion and the <code>NaN</code> gate. Calling the trait
   yourself produces values that compare backwards under a maximizing objective <i>and</i> lets a
-  <code>NaN</code> through that will win every tournament it enters — and neither failure announces
+  <code>NaN</code> through that will win every tournament it enters, and neither failure announces
   itself. Detail on <a href="fitness.html#gate">Fitness &amp; Output</a>.
 </div>
 
 <div class="warn">
-  <b>2. Everything inside your evolver is as lower-is-better — lower is better.</b> Do not
+  <b>2. Everything inside your evolver is as lower-is-better: lower is better.</b> Do not
   convert on the way in or on the way out. The fitness arrays, the stats rows and the outcome are
   all lower-is-better; conversion happens once at each edge of the system, and a strategy that
   helpfully converts something in the middle reintroduces the double-flip the design removed.
@@ -218,7 +218,7 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 </div>
 
 <div class="warn">
-  <b>4. Seed a pinned generator.</b> Seed <code>ChaCha8Rng</code> from <code>run</code>'s seed —
+  <b>4. Seed a pinned generator.</b> Seed <code>ChaCha8Rng</code> from <code>run</code>'s seed,
   not the library's default generator, whose algorithm may change between releases, which would
   defeat the entire purpose of a seed argument. The same seed must mean the same thing across
   strategies.
@@ -240,9 +240,9 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
   <tbody>
     <tr><td>the whole population</td>
         <td>You must rescore everyone, which is expensive but makes every comparison fair under a
-            stochastic objective — and gives you population-wide parallelism.</td></tr>
+            stochastic objective, and gives you population-wide parallelism.</td></tr>
     <tr><td>a few individuals</td>
-        <td>You score incrementally, which is cheap — but the population then carries
+        <td>You score incrementally, which is cheap, but the population then carries
             <b>stale fitnesses</b> computed under different dice, and an individual that drew lucky
             keeps its inflated score until something rescores it.</td></tr>
   </tbody>
@@ -259,7 +259,7 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 
 <p>
   Generational is explicitly elitist via <code>elite_count</code>. Steady-state is
-  <i>structurally</i> elitist — the tournament's best is never among the replaced — and needs no
+  <i>structurally</i> elitist (the tournament's best is never among the replaced) and needs no
   setting at all. Either is fine; what is not fine is being accidentally elitist and not knowing
   which.
 </p>
@@ -270,13 +270,13 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
   Once per meaningful unit of progress, and <b>log the starting population as iteration 0</b>. Both
   existing strategies do, which is what lets their histories share an axis. Steady-state logs one
   row per <code>population_size</code> events rather than per event, because a 100,000-row history
-  is not a log — pick an interval that makes your history readable at your largest realistic run.
+  is not a log; pick an interval that makes your history readable at your largest realistic run.
 </p>
 
 <h3>What Do You Report as the Best?</h3>
 
 <p>
-  <b>The best of the final population</b>, matching both existing strategies — not a running best
+  <b>The best of the final population</b>, matching both existing strategies, not a running best
   carried across the run. A running best under a stochastic objective is substantially a record of
   which iteration drew the luckiest sample, and if a configuration genuinely can lose its best
   individual, a report claiming otherwise describes a population that no longer exists. Compare by
@@ -287,7 +287,7 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 
 <p>
   If your strategy needs something the others do not, put it in the validator, not in the evolver's
-  setup. Steady-state's <code>[scope] size ≥ 4</code> is the worked example — two parents and the
+  setup. Steady-state's <code>[scope] size ≥ 4</code> is the worked example: two parents and the
   two they replace must be distinct. It is strategy specific, so it is checked only when that
   strategy is selected, and switching strategies can therefore make a previously valid scope
   invalid. Note <code>tournament_size</code> and <code>[scope] size</code> are deliberately
@@ -297,11 +297,11 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 
 <div class="note">
   <b>The engine's own assertions are backstops, not validation.</b> They exist for direct library
-  use — tests, embedding — where no config was involved. A config-driven run must never reach one,
+  use (tests, embedding) where no config was involved. A config-driven run must never reach one,
   because a bad config has to surface as a proper exception naming the field, not as a panic
-  crossing the FFI boundary. Note the validator constrains the <i>scope</i> against the population
-  — <code>[scope] size</code> must be at least 1 and at most <code>population_size</code>, because
-  distinct individuals cannot be drawn from fewer — while <code>tournament_size</code> is left
+  crossing the FFI boundary. Note the validator constrains the <i>scope</i> against the population:
+  <code>[scope] size</code> must be at least 1 and at most <code>population_size</code>, because
+  distinct individuals cannot be drawn from fewer, while <code>tournament_size</code> is left
   unbounded above, since a tournament samples with replacement and may legitimately exceed the
   population.
 </div>
@@ -311,7 +311,7 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 <ul>
   <li><b>Run it twice from one seed</b> and compare the outcome and the whole history.</li>
   <li><b>Run it with a deliberately maximizing objective</b> and confirm the reported fitness moves
-      the right way — this is the test that catches a missed orientation, and nothing else
+      the right way: this is the test that catches a missed orientation, and nothing else
       will.</li>
   <li><b>Feed it an objective that returns <code>NaN</code></b> and confirm the run fails rather
       than converging on the offender.</li>
@@ -328,7 +328,7 @@ EvolutionConfig::MyStrategy { num_my_events } =&gt; {
 <p>
   Every representation, every objective, both front ends, orientation, <code>NaN</code> rejection,
   the variation scheme, and the statistics. Your strategy is a loop over machinery that already
-  exists — which is why five required steps is a realistic estimate rather than an optimistic one.
+  exists, which is why five required steps is a realistic estimate rather than an optimistic one.
 </p>
 
 </main>

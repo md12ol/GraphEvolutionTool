@@ -56,7 +56,7 @@
   <!-- the loop -->
   <rect x="260" y="20" width="480" height="330" rx="12" class="d-fill-bg"/>
   <rect x="260" y="20" width="480" height="330" rx="12" class="d-stroke" stroke-dasharray="5 4"/>
-  <text x="500" y="43" class="d-text-acc" text-anchor="middle">the evolution loop — generational shape *</text>
+  <text x="500" y="43" class="d-text-acc" text-anchor="middle">the evolution loop, generational shape *</text>
 
   <rect x="330" y="60" width="185" height="52" rx="8" class="d-fill-acc"/>
   <rect x="330" y="60" width="185" height="52" rx="8" class="d-stroke"/>
@@ -123,7 +123,7 @@ population and logs a row.
 <a href="variation.html#steady-state">Steady-state</a> runs the same stages in the same order, but
 one mating event expresses and scores only the two new children, and logs once every
 <code>population_size</code> events rather than every iteration.
-<b>*</b> marks a stage you choose rather than one that is fixed — the genome you express, the
+<b>*</b> marks a stage you choose rather than one that is fixed: the genome you express, the
 objective you score against, the loop's shape, and each of scope, selection, replacement, crossover
 and mutation. Every one is set from the config and has an
 <a href="extending.html">extension chain</a> behind it; the unmarked stages are the engine.</figcaption>
@@ -135,7 +135,7 @@ and mutation. Every one is set from the config and has an
   <tbody>
     <tr><td><b id="two-front-ends">Config</b></td>
         <td>Written as <a href="route-python-toml.html">TOML</a> or built from
-            <a href="route-python-objects.html">Python objects</a> — which do not parse anything,
+            <a href="route-python-objects.html">Python objects</a>, which do not parse anything,
             they serialize to TOML, and that TOML is what Rust parses. <b>One parser, one
             validator</b>, so neither front end can accept a configuration the other would reject,
             and the generated TOML doubles as a provenance record.</td></tr>
@@ -144,7 +144,7 @@ and mutation. Every one is set from the config and has an
             naming the field, never a panic.</td></tr>
     <tr><td><b>Dispatch</b></td>
         <td>Picks the concrete strategy and genome types, and <b>builds the starting
-            population</b> — the evolver never mints genomes itself.</td></tr>
+            population</b>; the evolver never mints genomes itself.</td></tr>
     <tr><td><b>Express</b></td>
         <td>Every genome becomes a <a href="#graph">graph</a>, in parallel.</td></tr>
     <tr><td><b>Score &amp; orient</b></td>
@@ -152,7 +152,7 @@ and mutation. Every one is set from the config and has an
             for <code>NaN</code>. <a href="fitness.html#gate">→</a></td></tr>
     <tr><td><b>Select, breed, mutate</b></td>
         <td>The configured <a href="variation.html#event">scope, selection and replacement</a>,
-            plus three probability rolls — all owned by the engine.</td></tr>
+            plus three probability rolls, all owned by the engine.</td></tr>
     <tr><td><b>Out</b></td>
         <td>The best genome, its graph, its fitness, and the run history.
             <a href="fitness.html#output">→</a></td></tr>
@@ -162,7 +162,7 @@ and mutation. Every one is set from the config and has an
 
 <div class="note">
   <b>Two rules worth memorising.</b> Everything inside the engine is <b>lower-is-better</b>,
-  whatever your objective was — as-measured values come back at the dispatch boundary on the way out. And
+  whatever your objective was; as-measured values come back at the dispatch boundary on the way out. And
   the engine never calls a fitness function directly; one gate does all scoring, orientation and
   <code>NaN</code> rejection.
 </div>
@@ -173,7 +173,7 @@ and mutation. Every one is set from the config and has an
   A <code>Graph</code> is an <b>undirected multigraph on a fixed node count</b>, stored as a
   symmetric adjacency matrix of weights. Weight <code>0</code> means no edge; weight <code>k</code>
   means <code>k</code> parallel edges. Every graph carries a <code>max_edge_multiplicity</code>
-  cap — set it to <code>1</code>, the default, and you have an ordinary simple graph.
+  cap: set it to <code>1</code>, the default, and you have an ordinary simple graph.
 </p>
 
 <figure>
@@ -235,20 +235,20 @@ and mutation. Every one is set from the config and has an
     <text x="480" y="240" class="d-text-sm" text-anchor="middle">symmetric; the diagonal is always 0</text>
   </g>
 </svg>
-<figcaption>Five nodes and five distinct neighbour pairs, six edge copies in total — the 3–4 pair has multiplicity 2. The matrix is always
-<code>network_size × network_size</code> however sparse the graph is — which is why
+<figcaption>Five nodes and five distinct neighbour pairs, six edge copies in total, since the 3–4 pair has multiplicity 2. The matrix is always
+<code>network_size × network_size</code> however sparse the graph is, which is why
 <a href="route-python-objects.html">memory scales with the square of the node count</a>.</figcaption>
 </figure>
 
 <div class="warn">
   <b>The graph is silent, and that is the design.</b> Self-loops, out-of-range vertices and
   over-cap weights are ignored or clamped rather than rejected, so an impossible edit is simply a
-  no-op. Genome expression therefore never has to validate anything and cannot fail — and five of
+  no-op. Genome expression therefore never has to validate anything and cannot fail, and five of
   the nine <a href="#operations">edge-edit operations</a> do nothing on an empty graph as a direct
   consequence.
   <br><br>
   <b>The clamping is not reachable from Python.</b> <code>set_edge</code> itself still collapses an
-  over-cap weight, which is why the base-graph setter has to check at all — but
+  over-cap weight, which is why the base-graph setter has to check at all, but
   <code>set_base_graph</code> inspects every multiplicity first and raises
   <code>ValueError</code> naming the offending edge, its weight and the configured cap. So feeding
   a cap-5 result into a cap-1 run fails loudly rather than quietly flattening every weight to 1.
@@ -258,7 +258,7 @@ and mutation. Every one is set from the config and has an
 
 <p>
   The node count never changes during a run, edges are undirected and carry no attributes, and
-  storage is dense — reading or updating one edge is <code>O(1)</code>, while a scan like
+  storage is dense: reading or updating one edge is <code>O(1)</code>, while a scan like
   <code>degree</code> is <code>O(n)</code> and <code>get_edge_list</code> <code>O(n²)</code>, at a
   memory cost <a href="route-python-objects.html">quadratic in the node count</a>. Those are
   <a href="../design-notes.html#non-goals">stated non-goals</a> rather than gaps.
@@ -268,14 +268,14 @@ and mutation. Every one is set from the config and has an
   Reading a graph out gives <code>get_edge_list()</code>: every edge once as
   <code>(u, v, multiplicity)</code> with <code>u &lt; v</code>, row-major. That is the order SDA
   expression writes in, and the shape a run hands back to Python. <code>degree</code> counts
-  <b>distinct neighbours</b>, not edge copies — on a multigraph the two differ.
+  <b>distinct neighbours</b>, not edge copies; on a multigraph the two differ.
 </p>
 
 <h2 id="genomes">Genomes</h2>
 
 <p>
   A genome is a compact recipe that <b>expresses</b> into a graph. Both of GET's are <b>indirect
-  encodings</b> — small objects whose local changes produce structured changes in the resulting
+  encodings</b>: small objects whose local changes produce structured changes in the resulting
   graph, which explores far better than flipping bits in an edge list.
 </p>
 
@@ -313,7 +313,7 @@ and mutation. Every one is set from the config and has an
 }</code></pre>
 
 <ul>
-  <li><code>crossover</code> recombines <b>in place</b>, leaving one child in each parent — both are
+  <li><code>crossover</code> recombines <b>in place</b>, leaving one child in each parent, and both are
       kept.</li>
   <li><code>mutate</code> applies <b>exactly one</b> mutation per call. The engine calls it in a
       loop; the genome does not get a vote on how many times.</li>
@@ -323,7 +323,7 @@ and mutation. Every one is set from the config and has an
       edge cap. It is shared by reference across every worker, which is why the bounds are there.</li>
 </ul>
 
-<h3 id="edge-edit">Edge-edit — A Script Over a Base Graph</h3>
+<h3 id="edge-edit">Edge-edit: A Script Over a Base Graph</h3>
 
 <p>
   A list of encoded operations, applied in order to a clone of the base graph. <b>It is a script,
@@ -332,9 +332,9 @@ and mutation. Every one is set from the config and has an
 </p>
 
 <p>
-  Each gene is one 64-bit integer — an <b>opcode in the low 4 bits</b> and a <b>32-bit payload</b>
+  Each gene is one 64-bit integer: an <b>opcode in the low 4 bits</b> and a <b>32-bit payload</b>
   above it, decoded mixed-radix into four vertex parameters using the node count <code>n</code> as
-  the base — <code>payload % n</code>, <code>/n % n</code>, <code>/n² % n</code>,
+  the base: <code>payload % n</code>, <code>/n % n</code>, <code>/n² % n</code>,
   <code>/n³ % n</code>. Nothing is validated; an impossible edit is a no-op.
 </p>
 
@@ -350,7 +350,7 @@ and mutation. Every one is set from the config and has an
         <td>Absent → add. At the cap → remove. Otherwise <code>v3</code>'s parity decides.</td></tr>
     <tr><td><code>LocalAdd</code> / <code>LocalDelete</code> / <code>LocalToggle</code></td>
         <td>The same three, but the far endpoint is reached by a <b>two-hop walk</b> from
-            <code>v1</code> — to neighbour <code>v2</code>, then to <i>its</i> neighbour
+            <code>v1</code>, to neighbour <code>v2</code>, then to <i>its</i> neighbour
             <code>v3</code>. A walk that returns to the start or passes a degree-1 node is
             rejected.</td></tr>
     <tr><td><code>Hop</code></td>
@@ -367,12 +367,12 @@ and mutation. Every one is set from the config and has an
 </div>
 
 <p>
-  All of them are no-ops when their preconditions fail — nothing errors and nothing is retried. You
+  All of them are no-ops when their preconditions fail: nothing errors and nothing is retried. You
   choose the mix with <b>relative weights</b> that need not sum to anything; <code>0.0</code>
   disables an operation and at least one must be positive.
 </p>
 
-<h3 id="sda">SDA — An Automaton That Writes a Graph</h3>
+<h3 id="sda">SDA: An Automaton That Writes a Graph</h3>
 
 <p>
   A Self-Driving Automaton is a small finite-state machine that reads back its own output as the
@@ -384,7 +384,7 @@ and mutation. Every one is set from the config and has an
 <p>
   <b>Expression emits one character per upper-triangle vertex pair, and each character's raw value
   <i>is</i> that edge's weight.</b> There is no decoding step. Output length is
-  <code>n(n-1)/2</code>, in the same row-major order <code>get_edge_list</code> uses — so
+  <code>n(n-1)/2</code>, in the same row-major order <code>get_edge_list</code> uses, so
   <code>output[0]</code> is <code>init_char</code> and sets edge <code>(0,1)</code>. Every response
   is at least one character long, so the tape always grows and the run always terminates.
 </p>
@@ -392,7 +392,7 @@ and mutation. Every one is set from the config and has an
 <figure>
 <svg viewBox="0 0 700 300" role="img" aria-label="An SDA reading its own output tape: the read head consumes a character, the machine emits a response, and the tape grows until it holds one character per vertex pair.">
   <g style="color:var(--border-firm)">
-    <text x="20" y="24" class="d-text-acc">the tape — it is both the output and the input</text>
+    <text x="20" y="24" class="d-text-acc">the tape: it is both the output and the input</text>
 
     <g>
       <rect x="20"  y="40" width="46" height="40" rx="5" class="d-fill-acc"/>
@@ -434,7 +434,7 @@ and mutation. Every one is set from the config and has an
       <text x="570" y="204">(2,3) = 0</text>
     </g>
     <text x="20" y="234" class="d-text-sm">Four nodes need 4×3/2 = 6 characters. The automaton stops the moment it has them.</text>
-    <text x="20" y="258" class="d-text-sm">Weight 2 on (0,3) means two parallel edges — legal here because the cap is at least 2.</text>
+    <text x="20" y="258" class="d-text-sm">Weight 2 on (0,3) means two parallel edges, legal here because the cap is at least 2.</text>
     <text x="20" y="282" class="d-text-sm">Every character is a legal weight by construction, so nothing is ever clamped.</text>
   </g>
 </svg>
@@ -452,8 +452,8 @@ and mutation. Every one is set from the config and has an
 </div>
 
 <p>
-  <code>init_state</code> is configuration rather than genome data — mutation and crossover never
-  touch it — and must be <code>&lt; num_states</code>.
+  <code>init_state</code> is configuration rather than genome data (mutation and crossover never
+  touch it) and must be <code>&lt; num_states</code>.
 </p>
 
 <h3>Adding a Third Representation</h3>

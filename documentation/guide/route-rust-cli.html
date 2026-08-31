@@ -14,7 +14,7 @@
 <h1>Rust: The get-run CLI</h1>
 <p class="lede">
   One command, one config file, three output files. No Python interpreter and no compiled module to
-  install — this is the route for reproducing a run from a pinned copy of the source and a document.
+  install. This is the route for reproducing a run from a pinned copy of the source and a document.
 </p>
 
 <div class="warn not-in-release">
@@ -35,7 +35,7 @@
 
 <pre><code class="language-bash">git clone https://github.com/md12ol/GraphEvolutionTool
 cd GraphEvolutionTool
-git checkout &lt;tag&gt;               # a release tag — omit to build main instead
+git checkout &lt;tag&gt;               # a release tag; omit to build main instead
 
 cargo build --release -p graph-evolution-tool --features cli --bin get-run
 ./target/release/get-run --help</code></pre>
@@ -59,7 +59,7 @@ cargo build --release -p graph-evolution-tool --features cli --bin get-run
   <b>The same interpreter's <code>libpython</code> must be findable at run time too</b>, which is a
   separate failure from the one above and looks nothing like it: the build succeeds and the binary
   dies before printing a word. It bites when Python was installed somewhere the dynamic loader does
-  not search — a <code>pyenv</code> or CI interpreter rather than the system one.
+  not search: a <code>pyenv</code> or CI interpreter rather than the system one.
 </div>
 
 <p>Point the loader at it:</p>
@@ -77,7 +77,7 @@ cargo build --release -p graph-evolution-tool --features cli --bin get-run
 
 <p>
   The first argument is the config document, the second an optional master seed. Omit the seed and
-  one is drawn at random — fine for a look around, useless for anything you want to repeat.
+  one is drawn at random, which is fine for a look around and useless for anything you want to repeat.
 </p>
 
 <div class="table-wrap">
@@ -125,7 +125,7 @@ num_epidemics  = 30</code></pre>
 
 <div class="warn">
   <b>Top-level keys go before the first <code>[section]</code> header.</b> Once a table opens, every
-  following key belongs to it — a <code>population_size</code> written under
+  following key belongs to it, so a <code>population_size</code> written under
   <code>[evolution]</code> becomes <code>evolution.population_size</code>, and the error you get is
   a <i>missing</i> <code>population_size</code>.
 </div>
@@ -184,7 +184,7 @@ output/20260821-141233-7/config.toml</code></pre>
   </p>
   <p>
     One master seed goes in and GET derives one seed per replicate. Reproduce a replicate by
-    re-running with the same master seed and reading the same run folder — the derived seed is not
+    re-running with the same master seed and reading the same run folder. The derived seed is not
     something you pass back in. Run folders count from one and are zero-padded to the width of
     <code>--runs</code>, so ten replicates sort as <code>run_01</code> through <code>run_10</code>;
     the <code>run_index</code> recorded in the log stays zero-based.
@@ -210,8 +210,8 @@ done</code></pre>
 <p>
   <b>Configurations are portable; the command line is not.</b> A config document this accepts is one
   every other route accepts, because all of them converge on the same parser and the same validator
-  before anything is constructed. The binary's own surface — argument order, the names of the three
-  files, the shape of the folder they land in — may change between versions. Pin a commit if you
+  before anything is constructed. The binary's own surface (argument order, the names of the three
+  files, the shape of the folder they land in) may change between versions. Pin a commit if you
   are depending on it, which is what this route is for.
 </p>
 
@@ -219,7 +219,7 @@ done</code></pre>
 
 <p>
   A config document can only select the objectives GET ships. To score graphs with your own function
-  and still stay in Rust, use the crate directly — see
+  and still stay in Rust, use the crate directly. See
   <a href="route-rust-library.html">Rust: As a Library</a>.
 </p>
 
