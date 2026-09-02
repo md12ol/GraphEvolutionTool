@@ -29,12 +29,23 @@ clone above is **per-session, not per-machine**: you will do it again next time.
 place:
 
 ```bash
-.claude/hooks/cloud_setup.sh mdube      # or jsargant
-.claude/checks/cloud_ready.sh           # 13 checks, non-zero exit if any fail
+.claude/hooks/cloud_setup.sh <mdube|jsargant>   # your own name, not the other owner's
+.claude/checks/cloud_ready.sh                   # 13 checks, non-zero exit if any fail
 ```
 
-`cloud_setup.sh` sets the git identity, builds the venv, installs maturin and builds the crate.
-Measured 2026-09-02: 53s cold, 17s on a re-run.
+`cloud_setup.sh` sets the git identity **globally**, turns off the container's own commit signing
+(it signs with a key that is neither owner's), builds the venv, installs maturin and builds the
+crate. Measured 2026-09-02: 53s cold, 17s on a re-run.
+
+**Run it on a cloud container only, and it enforces that itself**: outside one it refuses and
+changes nothing, because setting a global identity and disabling global commit signing on a machine
+you own would override your own settings for every repository on it. `cloud_ready.sh` has no such
+guard and needs none: it writes nothing anywhere.
+
+**Re-run `cloud_setup.sh` after a resume or a compact, not just once.** The container rewrites its
+own name and email back into `~/.gitconfig`, so the identity does not survive; a resume on
+2026-09-02 came back as `Claude` and the session brief stopped. Re-running costs nothing when
+nothing needs changing.
 
 **Set your own identity, and never copy the other owner's to get past a stop.** The working-docs
 skills resolve who you are from `git config user.email`, and a cloud container ships an address the
