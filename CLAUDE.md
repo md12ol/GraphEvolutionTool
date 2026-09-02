@@ -22,6 +22,29 @@ nothing to say so. This is the only file that still loads, so it is the only pla
 live. Once `.claude/` is cloned, `.claude/CLAUDE.md` loads too and carries the real rules; there is
 no need to repeat them here, and a second copy would only drift.
 
+## If you are on the web or an iPad, in a cloud container
+
+The container clones this repository fresh every session and is reclaimed after inactivity, so the
+clone above is **per-session, not per-machine**: you will do it again next time. Once it is in
+place:
+
+```bash
+.claude/hooks/cloud_setup.sh mdube      # or jsargant
+.claude/checks/cloud_ready.sh           # 13 checks, non-zero exit if any fail
+```
+
+`cloud_setup.sh` sets the git identity, builds the venv, installs maturin and builds the crate.
+Measured 2026-09-02: 53s cold, 17s on a re-run.
+
+**Set your own identity, and never copy the other owner's to get past a stop.** The working-docs
+skills resolve who you are from `git config user.email`, and a cloud container ships an address the
+owner table does not know, so they stop rather than guess. Using someone else's address writes into
+their `work/` directory. `cloud_setup.sh` refuses rather than guessing if you do not name an owner.
+
+**Hooks do not run on a cloud session's first startup**, because `settings.json` is inside the
+directory that has not been cloned yet. A resume or a compact does fire them, so the session brief
+arrives late rather than never. Nothing is watching you in between: save deliberately.
+
 ## The short version, for a session that cannot clone
 
 - `official_spec_sheet.md` at the repo root is the authority on how this system is designed. Read it
