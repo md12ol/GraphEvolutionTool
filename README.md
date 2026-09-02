@@ -20,7 +20,7 @@ configuration the other would reject.
   switching between them is commenting one block out and uncommenting the
   other, not editing scattered keys. What each key means is on the
   [Configuration page](https://md12ol.github.io/GraphEvolutionTool/guide/configuration.html).
-- **Python** — build the same thing as objects. Worked examples for all four
+- **Python** — build the same thing as objects. Worked examples for four of the five
   objectives, both genomes and both evolution strategies are in
   [`examples/config_builder.py`](https://github.com/md12ol/GraphEvolutionTool/blob/main/examples/config_builder.py).
 
@@ -52,8 +52,12 @@ beside your results and the run reproduces verbatim.
 
 ## Installing
 
-Building the extension module needs [maturin](https://www.maturin.rs):
-`maturin develop` for a working copy, or `pip install .`.
+```
+pip install graph-evolution-tool
+```
+
+To build from a checkout instead, the extension module needs
+[maturin](https://www.maturin.rs): `maturin develop` for a working copy, or `pip install .`.
 
 ## Contact
 
