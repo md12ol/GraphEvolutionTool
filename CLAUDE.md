@@ -30,7 +30,7 @@ place:
 
 ```bash
 .claude/hooks/cloud_setup.sh <mdube|jsargant>   # your own name, not the other owner's
-.claude/checks/cloud_ready.sh                   # 13 checks, non-zero exit if any fail
+.claude/checks/cloud_ready.sh                   # non-zero exit if any check fails
 ```
 
 `cloud_setup.sh` sets the git identity **globally**, turns off the container's own commit signing
@@ -55,6 +55,12 @@ their `work/` directory. `cloud_setup.sh` refuses rather than guessing if you do
 **Hooks do not run on a cloud session's first startup**, because `settings.json` is inside the
 directory that has not been cloned yet. A resume or a compact does fire them, so the session brief
 arrives late rather than never. Nothing is watching you in between: save deliberately.
+
+**A refusal to register `.claude/` as a repository root is not a broken clone.** The harness expects
+a repository added mid-session to live at `/home/user/get-claude` and rejects any other path, so
+registering the clone you just made will fail. Nothing is wrong with it. Read `.claude/CLAUDE.md`
+yourself, which is the fallback that refusal names, and carry on: the skills and hooks load from the
+directory regardless of what is registered.
 
 ## The short version, for a session that cannot clone
 
