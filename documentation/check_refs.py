@@ -48,8 +48,10 @@ CARD = re.compile(r'<a[^>]*\bclass="[^"]*\bcard\b[^"]*"[^>]*>.*?</a>', re.S)
 # dash introducing what to do. A cross-reference naming a step is wrapped in
 # backticks and carries no dash, and must not count: a reference that snapped
 # to one would point at prose about a different step. This comment deliberately
-# does not spell the marker prefix out, because the grep that audits the chains
-# would then hand a reader this line as though it were a step.
+# does not spell the marker prefix out *with a step number*, because the grep
+# that audits the chains matches a digit there and would hand a reader this line
+# as though it were a step. The docstring above spells it with `n` for exactly
+# that reason, and should keep it: it is what explains the tool.
 # The qualifier's first word is the branch, so `(for SteadyState, Python half)`
 # is SteadyState, and where a chain forks it is a third thing to match on:
 # py_config.rs carries MUTATION step 4 for EdgeEdit *and* for SDA.
