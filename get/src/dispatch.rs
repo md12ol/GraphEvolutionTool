@@ -175,8 +175,11 @@ impl GraphEvolver {
 
         // An upper bound for rejecting wild indices, not a size: each graph's
         // real size comes from `EdgeFile::to_graph`. `load_reference_graphs`
-        // computes the same bound, so what a run reads and what a caller can
-        // inspect are the same set of files.
+        // computes the same bound, so anything a run can score against can be
+        // read back there. Not the reverse: only this cap is symmetric.
+        // `max_edge_multiplicity` agrees only because validation forces it, and
+        // `min_node_index` is deliberately asymmetric: `unwrap_or(0)` here
+        // against a caller-supplied argument on the Python path.
         let index_cap = self.config.network_size.max(MAX_REFERENCE_NODES);
 
         let loaded = graph_io::load_edge_folder(
