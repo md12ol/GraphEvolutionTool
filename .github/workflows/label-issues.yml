@@ -1,0 +1,99 @@
+# Applies the two labels that can be DERIVED from a new issue, so neither owner
+# has to remember them. It sets nothing that needs judgement.
+#
+#   area:*        from the title's `component:` prefix, which `work/issue_style.md`
+#                 rule 1 already requires every title to carry.
+#   needs-ruling  when the body contains `Unknown: needs`, which `issue_style.md`
+#                 rule 2 requires instead of a guessed solution.
+#
+# Deliberately NOT set here: the kind (`bug` / `enhancement` / `task` /
+# `investigation`) and `breaking`. Both are calls about what the issue means, not
+# facts about its text, and a workflow that guessed them would be wrong quietly.
+# The filer sets those, per CLAUDE.md's "Filing issues".
+#
+# Additive only. It never removes a label, so a human decision always wins and an
+# edit that drops `Unknown: needs` does not silently unlabel the issue. An unknown
+# prefix is logged and left alone rather than guessed at, which is what keeps the
+# label set closed: GitHub creates an unknown label as a side effect of using it.
+#
+# Like `assign-owner.yml` this is a convenience, not a gate. Nothing breaks if it
+# fails and it blocks nothing.
+
+name: label a new issue
+
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            // Title prefix to area. Every value must be a label that already
+            // exists: a name that does not is created on use, silently.
+            const AREA = {
+              config: 'area:config',
+              graph: 'area:graph',
+              graph_io: 'area:graph',
+              stats: 'area:graph',
+              evolver: 'area:evolver',
+              steady_state: 'area:evolver',
+              generational: 'area:evolver',
+              dispatch: 'area:evolver',
+              scope: 'area:evolver',
+              selection: 'area:evolver',
+              replacement: 'area:evolver',
+              genomes: 'area:genomes',
+              edge_edit: 'area:genomes',
+              sda: 'area:genomes',
+              py_result: 'area:python',
+              py_config: 'area:python',
+              python: 'area:python',
+              docs: 'area:docs',
+              objective: 'area:docs',
+              tools: 'area:tools',
+              check_refs: 'area:tools',
+              ci: 'area:ci',
+              examples: 'area:examples',
+              analyze_output: 'area:examples',
+            };
+
+            const issue = context.payload.issue;
+            const title = issue.title || '';
+            const body = issue.body || '';
+            const existing = (issue.labels || []).map(l => l.name);
+            const add = [];
+
+            const prefix = (title.split(':')[0] || '').trim();
+            const area = AREA[prefix];
+            if (!area) {
+              core.info(`no area mapped for prefix "${prefix}", leaving it unlabelled`);
+            } else if (existing.some(l => l.startsWith('area:'))) {
+              core.info('an area label is already set, leaving it alone');
+            } else {
+              add.push(area);
+            }
+
+            if (body.includes('Unknown: needs') && !existing.includes('needs-ruling')) {
+              add.push('needs-ruling');
+            }
+
+            if (add.length === 0) {
+              core.info('nothing to add');
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              labels: add,
+            });
+            core.info(`added ${add.join(', ')}`);
