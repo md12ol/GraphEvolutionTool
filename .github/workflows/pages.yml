@@ -9,12 +9,20 @@
 
 name: pages
 
+# Publication is deliberately decoupled from `main`. `documentation/` still changes
+# in the same commit as the code that falsified it, so the page is correct on `main`
+# before it is live; what waits is the reader seeing it. Decided 2026-09-11.
+#
+# Correcting a page that is ALREADY published is a disposable branch cut from the
+# release tag, with the fix cherry-picked onto it and this workflow dispatched
+# against that branch. workflow_dispatch on its own cannot do it: the checkout below
+# takes a whole ref, so dispatching gives either the tag without the fix or `main`
+# with everything unreleased. The fix must also land on `main`, or the next tag
+# silently reverts it.
 on:
   push:
-    branches: [main]
-    paths:
-      - 'documentation/**'
-      - '.github/workflows/pages.yml'
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 # Read the tree, mint the deploy token, and nothing else.
