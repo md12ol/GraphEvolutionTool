@@ -1,0 +1,13 @@
+# Every pull request requests a review from both owners, and GitHub drops the
+# author, so each of us is asked to review the other's work without anyone
+# remembering to add them. `main` requires one approving review from a
+# non-author, and this is what puts the right name on it.
+#
+# Both entries need write access for the request to be made at all. Order does
+# not matter: every listed owner is requested, not just the last match.
+#
+# GET-claude cannot do this. CODEOWNERS is a paid feature on private
+# repositories, and that one is private on a free plan, so its pull requests
+# name a reviewer at creation time instead.
+
+*  @md12ol @shorinbonsai
