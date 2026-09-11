@@ -1,0 +1,59 @@
+# Assigns a new pull request to whichever owner did not open it, so neither of
+# us has to remember. `CODEOWNERS` already requests the *review*, which is what
+# `main`'s ruleset counts; this sets the *assignee*, which it does not. The two
+# are separate fields and neither implies the other, so both exist.
+#
+# Assignment is a convenience rather than a gate: it puts the pull request in
+# the other owner's "Assigned to you" list. Nothing breaks if this job fails,
+# which is why it does not run on anything but the two events below and does
+# not block merging.
+#
+# A pull request opened by anyone other than the two owners is left alone: the
+# step below finds no counterpart and exits without assigning. That is
+# deliberate, so an outside contributor's pull request is never silently
+# handed to one of us.
+
+name: assign the other owner
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+# `addAssignees` is the issues endpoint even for a pull request, so both scopes
+# are needed. Everything else stays read-only.
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  assign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const owners = ['md12ol', 'shorinbonsai'];
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+
+            // Not one of us: leave it alone.
+            if (!owners.includes(author)) {
+              core.info(`author ${author} is not an owner, nothing to assign`);
+              return;
+            }
+
+            const other = owners.find(o => o !== author);
+            const already = (pr.assignees || []).map(a => a.login);
+            if (already.includes(other)) {
+              core.info(`${other} is already assigned`);
+              return;
+            }
+
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              assignees: [other],
+            });
+            core.info(`assigned ${other}`);
