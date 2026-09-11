@@ -81,6 +81,15 @@ its own `max_edge_multiplicity`; `1` makes it a simple unweighted graph.
 `add_edge` adds one parallel edge, saturating at the cap, and reports whether the multiplicity
 actually changed. `remove_edge` removes one copy.
 
+**Undirected is a decision, and it is scheduled to change.** Agreed at the joint meeting of
+2026-09-11: a directed mode is wanted and sequenced for 1.0, so the symmetry above describes what
+exists rather than what is intended permanently. The shape agreed: the edge-editing operations act
+on edges running from the first node to the second, decided per operation; a flag inside `Graph` is
+preferred if it is sufficient, and a second graph type is the fallback. The epidemic logic, the
+edit operations and the config all change together, because a directed graph scored by a symmetric
+simulation is a silently wrong run rather than a compile error. This section is amended again when
+that lands; until then every clause above holds as written.
+
 **Amended 2026-08-18 — Michael.** ~~`clear_edge` removes all.~~ ~~`total_edge_multiplicity`
 counts **edge copies** ... the edit operations depend on which they use.~~ Both methods were
 deleted, and this table's claim that the edit operations depended on the distinction was never
