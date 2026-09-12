@@ -61,6 +61,10 @@ jobs:
               tools: 'area:tools',
               check_refs: 'area:tools',
               ci: 'area:ci',
+              cargo: 'area:release',
+              release: 'area:release',
+              run: 'area:cli',
+              cli: 'area:cli',
               examples: 'area:examples',
               analyze_output: 'area:examples',
             };
