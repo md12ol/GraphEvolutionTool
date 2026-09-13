@@ -220,9 +220,9 @@ half of variation:
   helper, so a shared enum carries no variant that is meaningless for either. A third genome joining
   states which of the two boundary shapes in §3 it follows, or names a third — and it selects from
   the same enum.~~ **Amended 2026-09-13: crossover moves onto the genome's context, exactly as
-  mutation already is.** `EdgeEditContext` carries the operator, `EdgeEditGenome::crossover` matches
-  on it and delegates to an inherent method, and the engine-level enum and its `recombine` dispatch
-  point go. A representation offers the operators it can express and config validation refuses an
+  mutation already is.** Each genome's context carries the operator, so `EdgeEditContext` and `SdaContext` both gain
+  one, `EdgeEditGenome::crossover` and `SdaGenome::crossover` each match on it and delegate to an
+  inherent method, and the engine-level enum and its `recombine` dispatch point go. A representation offers the operators it can express and config validation refuses an
   invalid pairing. `crossover_rate` stays engine-level, because the rate is an engine property even
   when the operator is not.
 
@@ -715,9 +715,18 @@ input-only and is never remapped, the same "once in, once out" shape `Direction`
 already uses.
 
 **Amended 2026-08-18 — James.** The parameter is taken by the in-memory base-graph setter as well as
-by the two file loaders, so the enumeration above named two of three entry points. One run has one
+by the two file loaders, so the enumeration above named two of three entry points. ~~One run has one
 numbering: whichever entry point is called first declares it, a later call that disagrees is
-rejected rather than mixed in, and that numbering is what the evolved output is shifted back into.
+rejected rather than mixed in, and that numbering is what the evolved output is shifted back into.~~
+
+**Struck for the two file loaders, 2026-09-13.** An edge file declares its own lowest node index and
+that declaration **replaces** the loader parameter, so a folder may hold graphs numbered differently
+and "one run has one numbering" no longer holds for file input. A file with no declaration is an error
+rather than a default. GitHub #215 carries the change.
+
+**Two questions are deliberately unwritten here:** whether the in-memory setter keeps its parameter,
+and which numbering the evolved output is shifted back into. Neither is agreed, and the sheet says only
+what is agreed.
 Excluding the setter would have left it as the single path still requiring a caller to renumber data
 by hand, which is the burden this parameter exists to remove — so the omission was a gap in the
 enumeration rather than a deliberate limit. GitHub #107; raised as an FYI in `collab.md` because it
@@ -863,9 +872,33 @@ the default configuration — `RandomSubset{k} + Best + Worst` — is exactly th
 behaviour this section always specified. Everything below holds for that default; a different
 `Selection` or `Replacement` changes only the sentence it names.
 
-- **Self-elitist.** Under `Replacement::Worst` the scope's best is never among the replaced, so the
-  population's best is never discarded and no explicit elitism is needed. This is the guarantee a
-  future policy that can overwrite the scope's best would give up, and it must say so at the variant.
+- **Self-elitist under `Worst` only.** Under `Replacement::Worst` the scope's best is never among the
+  replaced, so the population's best is never discarded and no explicit elitism is needed. ~~This is
+  the guarantee a future policy that can overwrite the scope's best would give up, and it must say so
+  at the variant.~~ **That future policy arrived: `Replacement::Random` (2026-08-25) can overwrite the
+  scope's best, and under `Scope::Global` that is the population's best.** Explicit elitism is what
+  replaces the guarantee for any policy that draws; see below.
+
+**Explicit elitism, agreed 2026-09-13.** Steady-state takes an elitism parameter on its context, the
+same key regardless of evolver, and it **shields rather than copies**: the top N of the **population**
+cannot be selected for replacement by any policy, ranked over the whole population each event, because
+protecting the scope's top N would guarantee nothing under `Scope::RandomSubset`.
+
+- A protected individual **can still be selected as a parent**. Elitism shields from replacement only,
+  so the best individual still contributes its genes.
+- A policy that draws a protected individual **redraws** rather than skipping the event or falling
+  through to a deterministic pick, so the policy is honoured as far as it can be.
+- The interaction is **reported once at config load**, not per occurrence: at `elite_count / scope_size`
+  a collision happens thousands of times in a long run.
+- Under `Replacement::Worst` the whole mechanism is a **no-op**, since worst-first can never pick the
+  scope's best.
+- It carries a validation rule: `size >= elite_count + 2` for `Scope::RandomSubset` and
+  `population >= elite_count + 2` for `Scope::Global`, so a shielded top N still leaves two replaceable
+  members in the worst-case draw. Without it the redraw can fail to terminate. §7 states the same rule
+  where it lists validation.
+
+`PyRunResult::best_fitness` stays the best of the **final population**, which is correct again once
+elitism restores the guarantee that the best cannot be discarded.
 - **Diversity-preserving.** A globally poor individual survives until it happens to be drawn.
 - **Cheap** — `O(k log k)` per event rather than an `O(population)` scan for the global worst,
   which matters at 100,000 events. Choosing `Scope::Global` here is legal and gives that cost back.
@@ -1307,10 +1340,13 @@ engine-generated indices is wrong for caller-supplied data at the boundary.
 **A base graph or a reference set (§5.4) may also arrive from a file, not just a setter call.**
 Added 2026-08-17 at the joint meeting — `collab.md` #75. One edge per line, `start,end,weight`,
 comma-delimited, any line ending; a **bulk reference set is one such file per graph in a folder**,
-read in a fixed and reported order. ~~Both loaders take~~ **Both loaders and the in-memory setter
-take** (amended 2026-08-18 — James, see §5.4) a shared `min_node_index`, so a caller whose own data
-is not 0-indexed does not have to renumber it by hand — every index shifts to 0 once on the way in,
-and only the run's evolved output graph shifts back on the way out (§5.4, §6). Validated
+read in a fixed and reported order. ~~Both loaders take~~ ~~**Both loaders and the in-memory setter
+take** (amended 2026-08-18 — James, see §5.4) a shared `min_node_index`~~ **Struck for the file
+loaders, 2026-09-13: an edge file declares its own lowest node index and that declaration replaces the
+parameter (§5.4, GitHub #215).** A caller whose own data is not 0-indexed does not have to renumber it
+by hand — every index shifts to 0 once on the way in, and only the run's evolved output graph shifts
+back on the way out (§5.4, §6), though which numbering it shifts back into is one of the two questions
+§5.4 leaves open. Validated
 eagerly, whole-file, before anything is built — the same shape as checks 1–3 above: a self-loop
 (`start == end`) or a malformed row is rejected outright, an out-of-range or over-cap edge is
 rejected outright and names the offending line, a repeated edge (canonicalized as

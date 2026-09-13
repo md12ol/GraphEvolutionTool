@@ -288,8 +288,8 @@ element than <code>length</code>, because of the terminating zero.</figcaption>
 <div class="warn">
   <b>It is a biased resample, not variance reduction.</b> It shifts expected fitness upward by an
   amount depending on how often a given graph fizzles, so it is <b>not</b> interchangeable with
-  raising <code>num_epidemics</code>. Accepted deliberately, for comparability with the historical
-  C++ results, which is why both values are exposed rather than hardcoded. To switch it off set
+  raising <code>num_epidemics</code>. Accepted deliberately, which is why both values are exposed
+  rather than hardcoded. To switch it off set
   <code>min_epidemic_length = 1</code>; <code>0</code> is a validation error, not an off switch.
 </div>
 
