@@ -4,27 +4,23 @@ The design of the Graph Evolution Tool: what each component **is**, the contract
 the invariants that are not obvious from its signature.
 
 **This document does not sequence work.** No build order, no task list, no "what's left". Those
-live in a separate planning document. Where this spec describes something not yet built, it says
-so in the status table below and nowhere else — the design is the same either way.
+live in a separate planning document. ~~Where this spec describes something not yet built, it says
+so in the status table below and nowhere else — the design is the same either way.~~
+
+**The status table is deleted, 2026-09-13.** A hand-maintained list of what is built rots by
+construction: it was stale on four of nine rows for days in August, and every row it carried was stale
+again by September, naming none of `struct_match`, the scope/selection/replacement split, replicate
+output or the graph-file loaders. **The tracker's milestones are the live view of what is built**, and
+this document gives up its claim to be the single source for build status. It describes the design, and
+the design is the same whether a thing is built or not.
 
 Superseded `IMPLEMENTATION.md`, which mixed design with a build order and had gone stale on
 fitness direction, steady-state replacement, and mutation. Started 2026-07-31.
 
-| Component | Status |
-|---|---|
-| `Graph` | built |
-| `EdgeEditGenome`, `SdaGenome` | built — mutation contract landed 2026-08-04 (§4) |
-| `Selection`, population scoring, logging stats | built |
-| `SteadyStateEvolver` | built |
-| `GenerationalEvolver` | built — landed 2026-08-06 via GitHub #25 |
-| `sir_sim` | built |
-| the three SIR objectives | built — GitHub #17, with #18's epidemic seeding (§8.1) |
-| `Config` parsing | built, and `Config::validate` covers both front ends — GitHub #23 |
-| Python interface | **built** — the module, the config builders (§8), `set_fitness_function` and `GraphEvolver::run` are all in. `run` is complete at `lib.rs:218-243`, and all four strategy × genome arms are wired and tested (`dispatch.rs:823`). GitHub #26 is closed |
-
-*Status table corrected 2026-08-09 at the joint meeting: four rows still read "designed, not built"
-for components that had since landed. It is the only place in this document that carries status, so
-a stale row here is the whole signal.*
+*The table that stood here was removed on 2026-09-13; `git log -- official_spec_sheet.md` has it. It
+had already been corrected once, on 2026-08-09, when four of its nine rows read "designed, not built"
+for components that had since landed, and that correction is the evidence for deleting rather than
+repairing it.*
 
 ---
 
@@ -980,7 +976,7 @@ gene_length = 256
 # init_char_mutation_rate = 0.04       sda only; picks init_char vs. the rest
 # transition_vs_response_rate = 0.5    sda only; splits the remainder
 
-[fitness]                     # epi_spread | epi_length | epi_prof_match | structural_distance | python
+[fitness]                     # epi_spread | epi_length | epi_prof_match | struct_match | python
 type           = "epi_spread"
 infection_rate = 0.05
 num_epidemics  = 30           # epidemics averaged per evaluation
@@ -1001,7 +997,10 @@ The three SIR objectives share their parameters; only `epi_prof_match` adds a ta
 shared block rather than triplicating it, so the TOML stays flat and the Rust stays DRY.
 
 **Validation is a function, not a side effect of parsing.** Today deserialization *is* the
-validation — missing fields, wrong types, unknown keys. A second construction path from Python
+validation — missing fields, wrong types, unknown keys. **One exception, recorded 2026-09-13:**
+`[fitness]`'s variants `#[serde(flatten)]` their shared SIR block, and `deny_unknown_fields` cannot
+fire through a flatten, so a misspelled key there is silently ignored rather than rejected. `seed` and
+a misplaced `target_profile` are caught by name; nothing else in that block is. A second construction path from Python
 (§8) bypasses serde entirely, so unless validation is an explicit `Config::validate` that **both
 front ends call**, the Python path silently accepts configurations the TOML path rejects. That is
 the worse direction, because Python is the path users actually take.
@@ -1010,12 +1009,23 @@ Everything belongs there, not scattered through dispatch:
 
 - `init_state < num_states`
 - `1 <= max_edge_multiplicity <= 255`
-- `tournament_size >= 4` **for steady-state only**, and `population_size >= tournament_size`
+- ~~`tournament_size >= 4` **for steady-state only**, and `population_size >= tournament_size`~~
+  **Corrected 2026-09-13: neither half was what the code does.** The floor of 4 belongs to
+  `[scope] size`, not to `tournament_size`, and it exists because a steady-state event needs two
+  parents and the two individuals they replace to be distinct. `tournament_size` has no floor beyond
+  1, and a tournament may legitimately exceed the population because it samples with replacement.
+  Generational has no population floor at all, and that asymmetry is intended: it follows from the
+  shape of a steady-state event rather than from an oversight.
+  **With elitism (§6.3) the scope rule gains a term:** `size >= elite_count + 2` for
+  `Scope::RandomSubset` and `population >= elite_count + 2` for `Scope::Global`, so a shielded top N
+  still leaves two replaceable members in the worst-case draw
 - `max_mutations >= 1`
 - operation weights finite, non-negative, at least one positive
 - `patient_zero < network_size` when pinned — a node index that isn't in the network
 - `0.0 <= crossover_rate <= 1.0`, `0.0 <= mutation_rate <= 1.0`, `0.0 <= infection_rate <= 1.0` —
-  they are probabilities, and a negative one or one above 1 currently parses and runs
+  they are probabilities. ~~a negative one or one above 1 currently parses and runs~~ **Corrected
+  2026-09-13: all three are rejected outside the range, with tests covering both ends.** The sheet's
+  intent was satisfied; only the status phrase was stale
 - `num_epidemics >= 1`
 - `min_epidemic_length >= 1` and `max_epidemic_retries >= 1` — both default to the C++ constants
   (3 and 5); `min_epidemic_length = 1` disables the re-roll rather than being an error (§5.2)
@@ -1331,9 +1341,15 @@ Three consequences, all deliberate:
 - **A reference graph's size is never an error** and must not become one. Reference graphs are real
   data of varying size, and §5.4 compares normalized distributions precisely so that they can be.
 - **GET writes the format it reads.** The run output of §6.4 is a loadable edge file, so a run's
-  winner is meant to go straight back in as the next run's base graph. It does not yet do so on
-  every route — the config-driven route has no entry point for a base graph at all, and a written
-  file does not record which `min_node_index` produced it. Both are known and neither is fixed here.
+  winner is meant to go straight back in as the next run's base graph. ~~It does not yet do so on
+  every route — the config-driven route has no entry point for a base graph at all~~ **Corrected
+  2026-09-13, and the claim was wrong in both its readings.** `GraphEvolver` has `set_base_graph` and
+  `set_base_graph_from_file`, so the library route has always had an entry point; and
+  `config.example.toml` gained a `base_graph` key, so the narrower "TOML and the CLI cannot name one"
+  is false too. The setter remains the route for a file numbered from anything but the declared
+  lowest index. ~~and a written file does not record which `min_node_index` produced it~~ **Settled
+  2026-09-13: the file declares its own lowest node index and that declaration replaces the loader
+  parameter**, so a written file records it and a file without the header is an error.
 
 ---
 
