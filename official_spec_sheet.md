@@ -446,18 +446,17 @@ transmitting. So an outbreak that infects nobody beyond patient zero has `length
 `length = 6`, `spread = 6`, and `profile = [1, 1, 1, 1, 1, 1, 0]`.
 
 > **Amended 2026-08-04 — Michael & James.** This previously read `length = 0` for a lone patient
-> zero and specified no trailing zero. It now matches `legacy/Graph.cpp`, which is the intended
-> behaviour: `Graph::SIR` increments `epiLen` on the burnout pass and writes `epiProfile[epiLen] = 0`.
-> `spread` is unchanged — the C++ `totInf` already agreed with it. Consequently `length` is one
+> zero and specified no trailing zero. The behaviour above is the intended one: the simulator
+> increments the length on the burnout pass and writes a terminating zero into the profile.
+> `spread` is unchanged. Consequently `length` is one
 > higher than `profile.len() - 1` under the old convention, and `epi_prof_match` compares against a
 > profile one element longer. `get/src/sir.rs` was built to the old wording and is corrected by its
 > own issue.
 
-**Short epidemics are re-rolled.** Agreed 2026-08-04, porting `legacy/main.cpp`. An outbreak that
-burns out in fewer than `min_epidemic_length` timesteps is discarded and re-simulated, up to
-`max_epidemic_retries` attempts; whatever the final attempt produces is kept regardless. Both are
-config fields, defaulting to the C++ constants — `max_epidemic_retries = 5` (`rse`) and
-`min_epidemic_length = 3` (`mepl`).
+**Short epidemics are re-rolled.** Agreed 2026-08-04. An outbreak that burns out in fewer than
+`min_epidemic_length` timesteps is discarded and re-simulated, up to `max_epidemic_retries` attempts;
+whatever the final attempt produces is kept regardless. Both are config fields, defaulting to
+`max_epidemic_retries = 5` and `min_epidemic_length = 3`.
 
 ```
 attempts = 0
@@ -473,8 +472,7 @@ return near-nothing and selection chases the dice instead of structure.
 **Be clear about what it is: a biased resample, not variance reduction.** It shifts expected
 fitness upward, by an amount that depends on how often a given graph fizzles — so it is *not*
 interchangeable with raising `num_epidemics`, and the two do different jobs. This is accepted
-deliberately, for comparability with the historical C++ results, and is why both values are
-exposed rather than hardcoded.
+deliberately, and is why both values are exposed rather than hardcoded.
 
 **Disabling it** is `min_epidemic_length = 1`: every epidemic has `length >= 1` under the
 convention above, so nothing is ever re-rolled. `max_epidemic_retries = 1` gives one attempt and is
@@ -518,7 +516,7 @@ do run in parallel.
 
 Each direction is fixed by the objective and is never configurable — see §5.
 
-**`epi_prof_match` RMSE when the lengths differ.** Agreed 2026-08-04, matching `legacy/main.cpp`.
+**`epi_prof_match` RMSE when the lengths differ.** Agreed 2026-08-04.
 The target and the run will usually be different lengths, and the rule is fixed by the **target**:
 
 - iterate `0 .. target.len()`, never the run's length;
@@ -528,9 +526,9 @@ The target and the run will usually be different lengths, and the rule is fixed 
 - divide by `target.len()` always, then take the square root.
 
 So a run that burns out early is penalised by the whole remaining target, and a run that outlasts
-the target is not penalised for the overshoot at all. That asymmetry is inherited deliberately from
-the C++ (`main.cpp:545-553`) for comparability, and it is worth knowing when reading a score: this
-objective rewards *matching or exceeding* the target's tail, not matching it exactly.
+the target is not penalised for the overshoot at all. That asymmetry is deliberate, and it is worth
+knowing when reading a score: this objective rewards *matching or exceeding* the target's tail, not
+matching it exactly.
 
 **`num_epidemics`** — how many independent epidemics one evaluation averages over, set by the
 user. It is not a tuning nicety: a single SIR draw is very noisy, and selection will happily chase
@@ -1027,8 +1025,8 @@ Everything belongs there, not scattered through dispatch:
   2026-09-13: all three are rejected outside the range, with tests covering both ends.** The sheet's
   intent was satisfied; only the status phrase was stale
 - `num_epidemics >= 1`
-- `min_epidemic_length >= 1` and `max_epidemic_retries >= 1` — both default to the C++ constants
-  (3 and 5); `min_epidemic_length = 1` disables the re-roll rather than being an error (§5.2)
+- `min_epidemic_length >= 1` and `max_epidemic_retries >= 1` — defaulting to 3 and 5;
+  `min_epidemic_length = 1` disables the re-roll rather than being an error (§5.2)
 - `elite_count < population_size` — equal means no breeding happens and the run is a fixed point
 - base graph node count and cap narrowing (§8)
 - `0.0 <= init_char_mutation_rate <= 1.0` and `0.0 <= transition_vs_response_rate <= 1.0` — SDA
@@ -1264,11 +1262,10 @@ through setters before `run`:
   whenever `type = "epi_prof_match"`, and rejected as a contradiction if supplied for any other
   objective.
 
-  **The profile is the target verbatim — GET reproduces neither C++ loading convention.** The
-  legacy loader (`legacy/main.cpp:378-386`) prepended patient zero, so a stored file omitted its
-  own first element, and multiplied every value by `verts / 128`, because profiles were normalized
-  to a 128-node network. Both are dropped. The user supplies the profile they want, at the size of
-  the network they are building, and GET compares against it unchanged. Decided 2026-08-09: a
+  **The profile is the target verbatim.** GET neither prepends patient zero nor rescales the
+  profile: a target is compared exactly as the user wrote it, at the size of the network being built.
+  Two conventions that would change it silently are deliberately absent, namely prepending the first
+  element and multiplying every value to normalize against a fixed node count. Decided 2026-08-09: a
   silent one-step shift and a silent rescale are two ways to get a wrong number rather than an
   error, and neither is worth carrying for comparability with archived runs whose network size is
   usually not 128 anyway.
