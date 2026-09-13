@@ -1,0 +1,88 @@
+# Comments when a `needs-ruling` issue is closed with nothing linking to it.
+#
+# `needs-ruling` means the issue cannot be started until someone decides
+# something, so closing it means a decision was made, and the decision is worth
+# more than the close: the ruling belongs in `decisions.md`, any file it binds
+# has to be amended, and the implementation issue has to exist.
+#
+# It PROMPTS, it does not block, and that is deliberate. A ruling of "no, we are
+# not doing this" closes with no follow-up and is a legitimate outcome, so a
+# gate here would be wrong more often than it was right. It is also a comment
+# rather than a reopen, because reopening someone's deliberate close is worse
+# than asking.
+#
+# Quiet in the cases that are not the failure: an issue closed as `not_planned`
+# is a decline, and an issue that already has a timeline cross-reference from
+# another issue or pull request has its follow-up.
+#
+# Like the other two issue workflows here this is a convenience. Nothing breaks
+# if it fails, and it blocks nothing.
+
+name: prompt on a silent needs-ruling close
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  prompt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const labels = (issue.labels || []).map(l => l.name);
+            if (!labels.includes('needs-ruling')) {
+              core.info('not a needs-ruling issue, nothing to check');
+              return;
+            }
+
+            // A decline is a ruling too, and it owes no follow-up.
+            if (issue.state_reason === 'not_planned') {
+              core.info('closed as not planned, which is a decline rather than a ruling');
+              return;
+            }
+
+            // A cross-reference from another issue or pull request is the
+            // follow-up. Anything else in the timeline is not evidence.
+            const events = await github.paginate(
+              github.rest.issues.listEventsForTimeline,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                per_page: 100,
+              },
+            );
+            const linked = events.some(e => e.event === 'cross-referenced');
+            if (linked) {
+              core.info('something links to this issue, so the follow-up exists');
+              return;
+            }
+
+            const body = [
+              'Closed with the `needs-ruling` label and nothing linking to it.',
+              '',
+              'That label means this could not be started until something was decided, so closing it',
+              'means a decision was made. Three things are owed, and the close is the least of them:',
+              '',
+              '- the ruling appended to `decisions.md`, with its reasoning and the option not taken',
+              '- every file the ruling binds amended, the spec sheet through a pull request',
+              '- the implementation issue filed and linked here, so this is not the only record',
+              '',
+              'If the ruling was "no, we are not doing this", none of that applies: reopen and close',
+              'it as **not planned** instead, and this will stay quiet.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body,
+            });
+            core.info('commented on a silent close');
