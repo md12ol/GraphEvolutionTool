@@ -4,27 +4,23 @@ The design of the Graph Evolution Tool: what each component **is**, the contract
 the invariants that are not obvious from its signature.
 
 **This document does not sequence work.** No build order, no task list, no "what's left". Those
-live in a separate planning document. Where this spec describes something not yet built, it says
-so in the status table below and nowhere else — the design is the same either way.
+live in a separate planning document. ~~Where this spec describes something not yet built, it says
+so in the status table below and nowhere else — the design is the same either way.~~
+
+**The status table is deleted, 2026-09-13.** A hand-maintained list of what is built rots by
+construction: it was stale on four of nine rows for days in August, and every row it carried was stale
+again by September, naming none of `struct_match`, the scope/selection/replacement split, replicate
+output or the graph-file loaders. **The tracker's milestones are the live view of what is built**, and
+this document gives up its claim to be the single source for build status. It describes the design, and
+the design is the same whether a thing is built or not.
 
 Superseded `IMPLEMENTATION.md`, which mixed design with a build order and had gone stale on
 fitness direction, steady-state replacement, and mutation. Started 2026-07-31.
 
-| Component | Status |
-|---|---|
-| `Graph` | built |
-| `EdgeEditGenome`, `SdaGenome` | built — mutation contract landed 2026-08-04 (§4) |
-| `Selection`, population scoring, logging stats | built |
-| `SteadyStateEvolver` | built |
-| `GenerationalEvolver` | built — landed 2026-08-06 via GitHub #25 |
-| `sir_sim` | built |
-| the three SIR objectives | built — GitHub #17, with #18's epidemic seeding (§8.1) |
-| `Config` parsing | built, and `Config::validate` covers both front ends — GitHub #23 |
-| Python interface | **built** — the module, the config builders (§8), `set_fitness_function` and `GraphEvolver::run` are all in. `run` is complete at `lib.rs:218-243`, and all four strategy × genome arms are wired and tested (`dispatch.rs:823`). GitHub #26 is closed |
-
-*Status table corrected 2026-08-09 at the joint meeting: four rows still read "designed, not built"
-for components that had since landed. It is the only place in this document that carries status, so
-a stale row here is the whole signal.*
+*The table that stood here was removed on 2026-09-13; `git log -- official_spec_sheet.md` has it. It
+had already been corrected once, on 2026-08-09, when four of its nine rows read "designed, not built"
+for components that had since landed, and that correction is the evidence for deleting rather than
+repairing it.*
 
 ---
 
@@ -80,6 +76,15 @@ its own `max_edge_multiplicity`; `1` makes it a simple unweighted graph.
 
 `add_edge` adds one parallel edge, saturating at the cap, and reports whether the multiplicity
 actually changed. `remove_edge` removes one copy.
+
+**Undirected is a decision, and it is scheduled to change.** Agreed at the joint meeting of
+2026-09-11: a directed mode is wanted and sequenced for 1.0, so the symmetry above describes what
+exists rather than what is intended permanently. The shape agreed: the edge-editing operations act
+on edges running from the first node to the second, decided per operation; a flag inside `Graph` is
+preferred if it is sufficient, and a second graph type is the fallback. The epidemic logic, the
+edit operations and the config all change together, because a directed graph scored by a symmetric
+simulation is a silently wrong run rather than a compile error. This section is amended again when
+that lands; until then every clause above holds as written.
 
 **Amended 2026-08-18 — Michael.** ~~`clear_edge` removes all.~~ ~~`total_edge_multiplicity`
 counts **edge copies** ... the edit operations depend on which they use.~~ Both methods were
@@ -211,19 +216,35 @@ everything else in this sheet is implemented ... no enum, no config field and no
 for crossover.~~ That gate has lifted, and the shape it predicted turned out to be right for only
 half of variation:
 
-- **One `Crossover` enum, shared by both genomes.** Both ship the same two-point operator through one
+- ~~**One `Crossover` enum, shared by both genomes.** Both ship the same two-point operator through one
   helper, so a shared enum carries no variant that is meaningless for either. A third genome joining
   states which of the two boundary shapes in §3 it follows, or names a third — and it selects from
-  the same enum.
+  the same enum.~~ **Amended 2026-09-13: crossover moves onto the genome's context, exactly as
+  mutation already is.** `EdgeEditContext` carries the operator, `EdgeEditGenome::crossover` matches
+  on it and delegates to an inherent method, and the engine-level enum and its `recombine` dispatch
+  point go. A representation offers the operators it can express and config validation refuses an
+  invalid pairing. `crossover_rate` stays engine-level, because the rate is an engine property even
+  when the operator is not.
+
+  **Why the 2026-08-20 reasoning did not survive.** It was true of the one operator that exists: both
+  representations recombine the same way, so a shared enum carried nothing meaningless. It said
+  nothing about a second. Under the engine-level design a second operator needs a second method on the
+  `Genome` trait and an implementation in every representation, and `Genome` is now documented,
+  committed public API, so every future operator would be a semver-breaking change for third-party
+  implementors while forcing every representation to implement operators that may be meaningless for
+  it. Per-genome, an operator is purely additive inside one representation. The cost accepted is that
+  a shared `TwoPoint` becomes the same logic named twice, which mutation already pays. Scheduled for
+  1.0.
 - **One mutation enum *per genome*.** Their mutations share no shape at all: edge-edit rerolls a
   gene, SDA redraws `init_char` or a transition. A shared `MutationConfig` would therefore carry
   variants that are dead for one genome from its first release, and a config would accept them.
 
 **"It follows `Selection`" was written about crossover and settles nothing about mutation.** That
 sentence was the whole textual basis for reading this section as demanding a single shared operator
-enum, and it was never meant to reach past the operator it described. Crossover does follow
-`Selection` — one new variant plus one match arm, mapping onto a `config.toml` field. Mutation
-follows it once per genome.
+enum, and it was never meant to reach past the operator it described. ~~Crossover does follow
+`Selection` — one new variant plus one match arm, mapping onto a `config.toml` field.~~ **Struck
+2026-09-13 with the amendment above: crossover now follows mutation instead, once per genome.**
+Mutation follows it once per genome.
 
 **Mutation is two independent rolls, both owned by the engine, never by the genome:**
 
@@ -425,18 +446,17 @@ transmitting. So an outbreak that infects nobody beyond patient zero has `length
 `length = 6`, `spread = 6`, and `profile = [1, 1, 1, 1, 1, 1, 0]`.
 
 > **Amended 2026-08-04 — Michael & James.** This previously read `length = 0` for a lone patient
-> zero and specified no trailing zero. It now matches `legacy/Graph.cpp`, which is the intended
-> behaviour: `Graph::SIR` increments `epiLen` on the burnout pass and writes `epiProfile[epiLen] = 0`.
-> `spread` is unchanged — the C++ `totInf` already agreed with it. Consequently `length` is one
+> zero and specified no trailing zero. The behaviour above is the intended one: the simulator
+> increments the length on the burnout pass and writes a terminating zero into the profile.
+> `spread` is unchanged. Consequently `length` is one
 > higher than `profile.len() - 1` under the old convention, and `epi_prof_match` compares against a
 > profile one element longer. `get/src/sir.rs` was built to the old wording and is corrected by its
 > own issue.
 
-**Short epidemics are re-rolled.** Agreed 2026-08-04, porting `legacy/main.cpp`. An outbreak that
-burns out in fewer than `min_epidemic_length` timesteps is discarded and re-simulated, up to
-`max_epidemic_retries` attempts; whatever the final attempt produces is kept regardless. Both are
-config fields, defaulting to the C++ constants — `max_epidemic_retries = 5` (`rse`) and
-`min_epidemic_length = 3` (`mepl`).
+**Short epidemics are re-rolled.** Agreed 2026-08-04. An outbreak that burns out in fewer than
+`min_epidemic_length` timesteps is discarded and re-simulated, up to `max_epidemic_retries` attempts;
+whatever the final attempt produces is kept regardless. Both are config fields, defaulting to
+`max_epidemic_retries = 5` and `min_epidemic_length = 3`.
 
 ```
 attempts = 0
@@ -452,8 +472,7 @@ return near-nothing and selection chases the dice instead of structure.
 **Be clear about what it is: a biased resample, not variance reduction.** It shifts expected
 fitness upward, by an amount that depends on how often a given graph fizzles — so it is *not*
 interchangeable with raising `num_epidemics`, and the two do different jobs. This is accepted
-deliberately, for comparability with the historical C++ results, and is why both values are
-exposed rather than hardcoded.
+deliberately, and is why both values are exposed rather than hardcoded.
 
 **Disabling it** is `min_epidemic_length = 1`: every epidemic has `length >= 1` under the
 convention above, so nothing is ever re-rolled. `max_epidemic_retries = 1` gives one attempt and is
@@ -497,7 +516,7 @@ do run in parallel.
 
 Each direction is fixed by the objective and is never configurable — see §5.
 
-**`epi_prof_match` RMSE when the lengths differ.** Agreed 2026-08-04, matching `legacy/main.cpp`.
+**`epi_prof_match` RMSE when the lengths differ.** Agreed 2026-08-04.
 The target and the run will usually be different lengths, and the rule is fixed by the **target**:
 
 - iterate `0 .. target.len()`, never the run's length;
@@ -507,9 +526,9 @@ The target and the run will usually be different lengths, and the rule is fixed 
 - divide by `target.len()` always, then take the square root.
 
 So a run that burns out early is penalised by the whole remaining target, and a run that outlasts
-the target is not penalised for the overshoot at all. That asymmetry is inherited deliberately from
-the C++ (`main.cpp:545-553`) for comparability, and it is worth knowing when reading a score: this
-objective rewards *matching or exceeding* the target's tail, not matching it exactly.
+the target is not penalised for the overshoot at all. That asymmetry is deliberate, and it is worth
+knowing when reading a score: this objective rewards *matching or exceeding* the target's tail, not
+matching it exactly.
 
 **`num_epidemics`** — how many independent epidemics one evaluation averages over, set by the
 user. It is not a tuning nicety: a single SIR draw is very noisy, and selection will happily chase
@@ -588,11 +607,17 @@ reproducible artifact, the exact code behind a paper's published numbers, where 
 a library makes results depend on whichever version happened to be installed. Both users are
 designed for; the sheet previously implied only the first.
 
-**Distribution.** Alongside PyPI (§8), the crate publishes to crates.io as `graph-evolution-tool` —
-`get` is unavailable on both registries (taken on crates.io since 2024-03-14, blocked outright on
-PyPI), so both registries share one name; the crate keeps `[lib] name = "get"` so `use get::` is
-unaffected. **Staged alongside the PyPI release**, after route-4 functionality, its tests and its
-documentation land — not published ahead of them.
+**Distribution: both registries, and a release is not complete until both are published.** GET is
+distributed as a PyPI wheel (§8) and as a crates.io crate named `graph-evolution-tool`. `get` is
+unavailable on both registries (taken on crates.io since 2024-03-14, blocked outright on PyPI), so
+both share one name; the crate keeps `[lib] name = "get"` so `use get::` is unaffected and so
+`import get` does not break.
+
+**Amended 2026-09-13.** ~~**Staged alongside the PyPI release**, after route-4 functionality, its
+tests and its documentation land — not published ahead of them.~~ The requirement to publish both
+applies **from 1.0 onward**; `v0.9.0` shipped to PyPI alone and the crate has never been published,
+which is recorded here rather than left as a gap between the sheet and what happened. Publishing is
+automated on the version tag rather than performed by hand, so neither registry can be forgotten.
 
 **How a route-4 user obtains `get-run`: from source, and it is not in the wheel.** Route 4 is
 reached by cloning or forking the repository and building the binary — `cargo build --features cli`
@@ -949,7 +974,7 @@ gene_length = 256
 # init_char_mutation_rate = 0.04       sda only; picks init_char vs. the rest
 # transition_vs_response_rate = 0.5    sda only; splits the remainder
 
-[fitness]                     # epi_spread | epi_length | epi_prof_match | structural_distance | python
+[fitness]                     # epi_spread | epi_length | epi_prof_match | struct_match | python
 type           = "epi_spread"
 infection_rate = 0.05
 num_epidemics  = 30           # epidemics averaged per evaluation
@@ -970,7 +995,10 @@ The three SIR objectives share their parameters; only `epi_prof_match` adds a ta
 shared block rather than triplicating it, so the TOML stays flat and the Rust stays DRY.
 
 **Validation is a function, not a side effect of parsing.** Today deserialization *is* the
-validation — missing fields, wrong types, unknown keys. A second construction path from Python
+validation — missing fields, wrong types, unknown keys. **One exception, recorded 2026-09-13:**
+`[fitness]`'s variants `#[serde(flatten)]` their shared SIR block, and `deny_unknown_fields` cannot
+fire through a flatten, so a misspelled key there is silently ignored rather than rejected. `seed` and
+a misplaced `target_profile` are caught by name; nothing else in that block is. A second construction path from Python
 (§8) bypasses serde entirely, so unless validation is an explicit `Config::validate` that **both
 front ends call**, the Python path silently accepts configurations the TOML path rejects. That is
 the worse direction, because Python is the path users actually take.
@@ -979,15 +1007,26 @@ Everything belongs there, not scattered through dispatch:
 
 - `init_state < num_states`
 - `1 <= max_edge_multiplicity <= 255`
-- `tournament_size >= 4` **for steady-state only**, and `population_size >= tournament_size`
+- ~~`tournament_size >= 4` **for steady-state only**, and `population_size >= tournament_size`~~
+  **Corrected 2026-09-13: neither half was what the code does.** The floor of 4 belongs to
+  `[scope] size`, not to `tournament_size`, and it exists because a steady-state event needs two
+  parents and the two individuals they replace to be distinct. `tournament_size` has no floor beyond
+  1, and a tournament may legitimately exceed the population because it samples with replacement.
+  Generational has no population floor at all, and that asymmetry is intended: it follows from the
+  shape of a steady-state event rather than from an oversight.
+  **With elitism (§6.3) the scope rule gains a term:** `size >= elite_count + 2` for
+  `Scope::RandomSubset` and `population >= elite_count + 2` for `Scope::Global`, so a shielded top N
+  still leaves two replaceable members in the worst-case draw
 - `max_mutations >= 1`
 - operation weights finite, non-negative, at least one positive
 - `patient_zero < network_size` when pinned — a node index that isn't in the network
 - `0.0 <= crossover_rate <= 1.0`, `0.0 <= mutation_rate <= 1.0`, `0.0 <= infection_rate <= 1.0` —
-  they are probabilities, and a negative one or one above 1 currently parses and runs
+  they are probabilities. ~~a negative one or one above 1 currently parses and runs~~ **Corrected
+  2026-09-13: all three are rejected outside the range, with tests covering both ends.** The sheet's
+  intent was satisfied; only the status phrase was stale
 - `num_epidemics >= 1`
-- `min_epidemic_length >= 1` and `max_epidemic_retries >= 1` — both default to the C++ constants
-  (3 and 5); `min_epidemic_length = 1` disables the re-roll rather than being an error (§5.2)
+- `min_epidemic_length >= 1` and `max_epidemic_retries >= 1` — defaulting to 3 and 5;
+  `min_epidemic_length = 1` disables the re-roll rather than being an error (§5.2)
 - `elite_count < population_size` — equal means no breeding happens and the run is a fixed point
 - base graph node count and cap narrowing (§8)
 - `0.0 <= init_char_mutation_rate <= 1.0` and `0.0 <= transition_vs_response_rate <= 1.0` — SDA
@@ -1223,11 +1262,10 @@ through setters before `run`:
   whenever `type = "epi_prof_match"`, and rejected as a contradiction if supplied for any other
   objective.
 
-  **The profile is the target verbatim — GET reproduces neither C++ loading convention.** The
-  legacy loader (`legacy/main.cpp:378-386`) prepended patient zero, so a stored file omitted its
-  own first element, and multiplied every value by `verts / 128`, because profiles were normalized
-  to a 128-node network. Both are dropped. The user supplies the profile they want, at the size of
-  the network they are building, and GET compares against it unchanged. Decided 2026-08-09: a
+  **The profile is the target verbatim.** GET neither prepends patient zero nor rescales the
+  profile: a target is compared exactly as the user wrote it, at the size of the network being built.
+  Two conventions that would change it silently are deliberately absent, namely prepending the first
+  element and multiplying every value to normalize against a fixed node count. Decided 2026-08-09: a
   silent one-step shift and a silent rescale are two ways to get a wrong number rather than an
   error, and neither is worth carrying for comparability with archived runs whose network size is
   usually not 128 anyway.
@@ -1300,9 +1338,15 @@ Three consequences, all deliberate:
 - **A reference graph's size is never an error** and must not become one. Reference graphs are real
   data of varying size, and §5.4 compares normalized distributions precisely so that they can be.
 - **GET writes the format it reads.** The run output of §6.4 is a loadable edge file, so a run's
-  winner is meant to go straight back in as the next run's base graph. It does not yet do so on
-  every route — the config-driven route has no entry point for a base graph at all, and a written
-  file does not record which `min_node_index` produced it. Both are known and neither is fixed here.
+  winner is meant to go straight back in as the next run's base graph. ~~It does not yet do so on
+  every route — the config-driven route has no entry point for a base graph at all~~ **Corrected
+  2026-09-13, and the claim was wrong in both its readings.** `GraphEvolver` has `set_base_graph` and
+  `set_base_graph_from_file`, so the library route has always had an entry point; and
+  `config.example.toml` gained a `base_graph` key, so the narrower "TOML and the CLI cannot name one"
+  is false too. The setter remains the route for a file numbered from anything but the declared
+  lowest index. ~~and a written file does not record which `min_node_index` produced it~~ **Settled
+  2026-09-13: the file declares its own lowest node index and that declaration replaces the loader
+  parameter**, so a written file records it and a file without the header is an error.
 
 ---
 
