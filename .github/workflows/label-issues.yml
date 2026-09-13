@@ -67,6 +67,8 @@ jobs:
               tools: 'area:tools',
               check_refs: 'area:tools',
               ci: 'area:ci',
+              get_src: 'area:crate',
+              crate: 'area:crate',
               cargo: 'area:release',
               release: 'area:release',
               run: 'area:cli',
@@ -81,7 +83,9 @@ jobs:
             const existing = (issue.labels || []).map(l => l.name);
             const add = [];
 
-            const prefix = (title.split(':')[0] || '').trim();
+            // `get/src:` is a real prefix and contains a slash, so normalise it the
+            // same way the map is keyed: `get/src` becomes `get_src`.
+            const prefix = (title.split(':')[0] || '').trim().replace(/[\/\-]/g, '_');
             const area = AREA[prefix];
             if (!area) {
               core.info(`no area mapped for prefix "${prefix}", leaving it unlabelled`);
