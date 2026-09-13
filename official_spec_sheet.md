@@ -220,19 +220,35 @@ everything else in this sheet is implemented ... no enum, no config field and no
 for crossover.~~ That gate has lifted, and the shape it predicted turned out to be right for only
 half of variation:
 
-- **One `Crossover` enum, shared by both genomes.** Both ship the same two-point operator through one
+- ~~**One `Crossover` enum, shared by both genomes.** Both ship the same two-point operator through one
   helper, so a shared enum carries no variant that is meaningless for either. A third genome joining
   states which of the two boundary shapes in §3 it follows, or names a third — and it selects from
-  the same enum.
+  the same enum.~~ **Amended 2026-09-13: crossover moves onto the genome's context, exactly as
+  mutation already is.** `EdgeEditContext` carries the operator, `EdgeEditGenome::crossover` matches
+  on it and delegates to an inherent method, and the engine-level enum and its `recombine` dispatch
+  point go. A representation offers the operators it can express and config validation refuses an
+  invalid pairing. `crossover_rate` stays engine-level, because the rate is an engine property even
+  when the operator is not.
+
+  **Why the 2026-08-20 reasoning did not survive.** It was true of the one operator that exists: both
+  representations recombine the same way, so a shared enum carried nothing meaningless. It said
+  nothing about a second. Under the engine-level design a second operator needs a second method on the
+  `Genome` trait and an implementation in every representation, and `Genome` is now documented,
+  committed public API, so every future operator would be a semver-breaking change for third-party
+  implementors while forcing every representation to implement operators that may be meaningless for
+  it. Per-genome, an operator is purely additive inside one representation. The cost accepted is that
+  a shared `TwoPoint` becomes the same logic named twice, which mutation already pays. Scheduled for
+  1.0.
 - **One mutation enum *per genome*.** Their mutations share no shape at all: edge-edit rerolls a
   gene, SDA redraws `init_char` or a transition. A shared `MutationConfig` would therefore carry
   variants that are dead for one genome from its first release, and a config would accept them.
 
 **"It follows `Selection`" was written about crossover and settles nothing about mutation.** That
 sentence was the whole textual basis for reading this section as demanding a single shared operator
-enum, and it was never meant to reach past the operator it described. Crossover does follow
-`Selection` — one new variant plus one match arm, mapping onto a `config.toml` field. Mutation
-follows it once per genome.
+enum, and it was never meant to reach past the operator it described. ~~Crossover does follow
+`Selection` — one new variant plus one match arm, mapping onto a `config.toml` field.~~ **Struck
+2026-09-13 with the amendment above: crossover now follows mutation instead, once per genome.**
+Mutation follows it once per genome.
 
 **Mutation is two independent rolls, both owned by the engine, never by the genome:**
 
@@ -597,11 +613,17 @@ reproducible artifact, the exact code behind a paper's published numbers, where 
 a library makes results depend on whichever version happened to be installed. Both users are
 designed for; the sheet previously implied only the first.
 
-**Distribution.** Alongside PyPI (§8), the crate publishes to crates.io as `graph-evolution-tool` —
-`get` is unavailable on both registries (taken on crates.io since 2024-03-14, blocked outright on
-PyPI), so both registries share one name; the crate keeps `[lib] name = "get"` so `use get::` is
-unaffected. **Staged alongside the PyPI release**, after route-4 functionality, its tests and its
-documentation land — not published ahead of them.
+**Distribution: both registries, and a release is not complete until both are published.** GET is
+distributed as a PyPI wheel (§8) and as a crates.io crate named `graph-evolution-tool`. `get` is
+unavailable on both registries (taken on crates.io since 2024-03-14, blocked outright on PyPI), so
+both share one name; the crate keeps `[lib] name = "get"` so `use get::` is unaffected and so
+`import get` does not break.
+
+**Amended 2026-09-13.** ~~**Staged alongside the PyPI release**, after route-4 functionality, its
+tests and its documentation land — not published ahead of them.~~ The requirement to publish both
+applies **from 1.0 onward**; `v0.9.0` shipped to PyPI alone and the crate has never been published,
+which is recorded here rather than left as a gap between the sheet and what happened. Publishing is
+automated on the version tag rather than performed by hand, so neither registry can be forgotten.
 
 **How a route-4 user obtains `get-run`: from source, and it is not in the wheel.** Route 4 is
 reached by cloning or forking the repository and building the binary — `cargo build --features cli`
