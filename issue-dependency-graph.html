@@ -14,6 +14,7 @@
       --muted: #92a0ba;
       --open: #50d890;
       --blocked: #ffbd5b;
+      --ruling: #c792ea;
       --closed: #7f8ca6;
       --accent: #79a7ff;
     }
@@ -35,8 +36,8 @@
       left: 18px;
       right: 18px;
       display: flex;
-      align-items: center;
-      gap: 14px;
+      flex-direction: column;
+      gap: 10px;
       padding: 14px 16px;
       border: 1px solid rgba(121, 167, 255, 0.2);
       border-radius: 14px;
@@ -44,11 +45,12 @@
       box-shadow: 0 14px 45px rgba(0, 0, 0, 0.28);
       backdrop-filter: blur(16px);
     }
+    .header-row { display: flex; align-items: center; gap: 14px; }
 
     .heading { min-width: 250px; }
     h1 { margin: 0; font-size: 16px; letter-spacing: 0.01em; }
     .subtitle { margin-top: 2px; color: var(--muted); font-size: 12px; }
-    .controls { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .controls { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; }
     input[type="search"] {
       width: min(300px, 27vw);
       padding: 9px 12px;
@@ -70,15 +72,34 @@
     }
     button:hover { border-color: var(--accent); }
 
+    #filters { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }
+    #filters:empty { display: none; }
+    .chip-group { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+    .chip-group .group-name { color: #71809d; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; font-size: 10px; margin-right: 2px; }
+    .chip {
+      padding: 3px 9px;
+      color: var(--muted);
+      border: 1px solid #34425e;
+      border-radius: 999px;
+      background: #0d1424;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1.3;
+    }
+    .chip:hover { border-color: var(--accent); }
+    .chip.on { color: #fff; border-color: var(--accent); background: rgba(121, 167, 255, 0.22); }
+
     #canvas { width: 100%; height: 100%; cursor: grab; touch-action: none; }
     #canvas.dragging { cursor: grabbing; }
     .edge { fill: none; stroke: var(--line); stroke-width: 1.7; opacity: 0.8; }
     .edge.active { stroke: var(--accent); stroke-width: 2.6; opacity: 1; }
+    .edge.faint { opacity: 0.08; }
     .edge-marker { fill: var(--line); }
     .node { cursor: pointer; transition: opacity 120ms ease; }
     .node rect { stroke-width: 1.5; filter: drop-shadow(0 7px 8px rgba(0, 0, 0, 0.22)); }
     .node.open rect { fill: #10271f; stroke: var(--open); }
     .node.blocked rect { fill: #2b2113; stroke: var(--blocked); }
+    .node.ruling rect { fill: #24192f; stroke: var(--ruling); }
     .node.closed rect { fill: #171d29; stroke: var(--closed); }
     .node.selected rect { stroke: var(--accent); stroke-width: 3; }
     .node.dim { opacity: 0.14; }
@@ -90,8 +111,12 @@
     .node .status { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
     .node.open .status { fill: var(--open); }
     .node.blocked .status { fill: var(--blocked); }
+    .node.ruling .status { fill: var(--ruling); }
     .node.closed .status { fill: var(--closed); }
     .column-label { fill: #71809d; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    .lane-label { fill: #a9b6cf; font-size: 13px; font-weight: 750; letter-spacing: 0.04em; }
+    .lane-count { fill: #71809d; font-size: 11px; }
+    .lane-rule { stroke: #233049; stroke-width: 1; stroke-dasharray: 6 6; }
 
     .legend {
       position: fixed;
@@ -111,6 +136,7 @@
     .dot { width: 8px; height: 8px; border-radius: 50%; }
     .ready-dot { background: var(--open); }
     .blocked-dot { background: var(--blocked); }
+    .ruling-dot { background: var(--ruling); }
     .closed-dot { background: var(--closed); }
 
     #details {
@@ -118,7 +144,9 @@
       z-index: 9;
       right: 20px;
       bottom: 18px;
-      width: min(390px, calc(100vw - 40px));
+      width: min(420px, calc(100vw - 40px));
+      max-height: calc(100vh - 220px);
+      overflow: auto;
       padding: 16px;
       border: 1px solid rgba(121, 167, 255, 0.3);
       border-radius: 13px;
@@ -130,6 +158,9 @@
     #details h2 { margin: 0 26px 8px 0; font-size: 15px; }
     #details p { margin: 6px 0; color: var(--muted); }
     #details a { color: var(--accent); }
+    #details ul { margin: 2px 0 6px; padding-left: 18px; color: var(--muted); }
+    #details li a { text-decoration: none; }
+    #details li a:hover { text-decoration: underline; }
     #detail-assignee { display: flex; align-items: center; gap: 7px; }
     .detail-avatar { width: 24px; height: 24px; border-radius: 50%; }
     #close-details { position: absolute; top: 10px; right: 10px; padding: 3px 8px; }
@@ -157,8 +188,8 @@
     .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }
 
     @media (max-width: 760px) {
-      header { align-items: flex-start; flex-direction: column; }
-      .controls { width: 100%; margin-left: 0; flex-wrap: wrap; }
+      .header-row { align-items: flex-start; flex-direction: column; }
+      .controls { width: 100%; margin-left: 0; }
       input[type="search"] { flex: 1; width: auto; min-width: 150px; }
       .legend { display: none; }
     }
@@ -166,17 +197,21 @@
 </head>
 <body>
   <header>
-    <div class="heading">
-      <h1>GraphEvolutionTool issue dependencies</h1>
-      <div class="subtitle" id="summary">Loading graph…</div>
+    <div class="header-row">
+      <div class="heading">
+        <h1>GraphEvolutionTool issue dependencies</h1>
+        <div class="subtitle" id="summary">Loading graph…</div>
+      </div>
+      <div class="controls">
+        <input id="search" type="search" placeholder="Find issue number or title…" aria-label="Find issue">
+        <label><input id="show-closed" type="checkbox"> Show closed</label>
+        <label><input id="hide-fanout" type="checkbox" checked> Hide release fan-out</label>
+        <button id="authenticate" type="button">Authenticate</button>
+        <button id="refresh" type="button">Refresh data</button>
+        <button id="reset" type="button">Reset view</button>
+      </div>
     </div>
-    <div class="controls">
-      <input id="search" type="search" placeholder="Find issue number or title…" aria-label="Find issue">
-      <label><input id="show-closed" type="checkbox"> Show closed</label>
-      <button id="authenticate" type="button">Authenticate</button>
-      <button id="refresh" type="button">Refresh data</button>
-      <button id="reset" type="button">Reset view</button>
-    </div>
+    <div id="filters"></div>
   </header>
 
   <svg id="canvas" role="img" aria-label="Issue blocking dependency graph">
@@ -186,6 +221,7 @@
       </marker>
     </defs>
     <g id="viewport">
+      <g id="lanes"></g>
       <g id="edges"></g>
       <g id="nodes"></g>
     </g>
@@ -194,6 +230,7 @@
   <div class="legend">
     <span><i class="dot ready-dot"></i> Ready</span>
     <span><i class="dot blocked-dot"></i> Blocked by open issue</span>
+    <span><i class="dot ruling-dot"></i> Needs a ruling</span>
     <span><i class="dot closed-dot"></i> Closed</span>
     <span>Arrow: blocker → blocked</span>
   </div>
@@ -202,17 +239,20 @@
     <button id="close-details" type="button" aria-label="Close details">×</button>
     <h2 id="detail-title"></h2>
     <p id="detail-status"></p>
+    <p id="detail-labels"></p>
     <p id="detail-assignee"></p>
     <p id="detail-blockers"></p>
+    <ul id="detail-blockers-list"></ul>
     <p id="detail-blocking"></p>
+    <ul id="detail-blocking-list"></ul>
     <p id="detail-prs"></p>
     <a id="detail-link" target="_blank" rel="noopener">Open on GitHub ↗</a>
   </aside>
 
   <dialog id="auth-dialog">
     <form id="auth-form">
-      <h2>Authenticate live refresh</h2>
-      <p>GitHub limits anonymous requests. Paste a read-only GitHub token to refresh the graph. It is kept for this tab session; choosing “remember” stores it in this browser, never in the HTML file.</p>
+      <h2>Authenticate to load the graph</h2>
+      <p>The graph is one GraphQL query, and GitHub's GraphQL API needs a token even for a public repository. A fine-grained token with read access to issues is enough. It is kept for this tab session; choosing “remember” stores it in this browser, never in the HTML file.</p>
       <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_… or ghp_…" required>
       <label><input id="remember-token" type="checkbox" checked> Remember on this device after closing the browser</label>
       <div class="dialog-actions">
@@ -224,83 +264,31 @@
   </dialog>
 
   <script>
-    const REPOSITORY = "md12ol/GraphEvolutionTool";
-    const FALLBACK_UPDATED = "2026-08-20 00:01 CEST";
-    const fallbackAssignees = {
-      130:["md12ol"],121:["shorinbonsai"],115:["md12ol"],114:["md12ol"],111:["shorinbonsai"],
-      109:["shorinbonsai"],108:["md12ol"],107:["shorinbonsai"],102:["shorinbonsai"],101:["shorinbonsai"],
-      100:["shorinbonsai"],99:["shorinbonsai"],98:["md12ol"],97:["shorinbonsai"],96:["md12ol"],
-      88:["shorinbonsai"],87:["md12ol"],84:["shorinbonsai"],81:["md12ol"],80:["shorinbonsai"],
-      79:["shorinbonsai"],73:["shorinbonsai"],68:["md12ol"],67:["md12ol"],56:["md12ol"],
-      123:["md12ol"],137:["shorinbonsai"]
-    };
-    const fallbackPrs = {
-      123:[{number:136,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/136"}],
-      98:[{number:138,state:"OPEN",url:"https://github.com/md12ol/GraphEvolutionTool/pull/138"}],
-      115:[{number:122,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/122"}],
-      114:[{number:128,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/128"}],
-      109:[{number:117,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/117"}],
-      108:[{number:116,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/116"}],
-      107:[{number:118,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/118"}],
-      101:[{number:134,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/134"}],
-      97:[{number:127,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/127"}],
-      84:[{number:103,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/103"}],
-      81:[{number:105,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/105"}],
-      80:[{number:106,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/106"}],
-      79:[{number:104,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/104"}],
-      56:[{number:129,state:"MERGED",url:"https://github.com/md12ol/GraphEvolutionTool/pull/129"}]
-    };
-    let issues = [
-      {number:121,state:"OPEN",title:"Prove route 3 reaches every genome, evolver and setting, and can read results back",blockedBy:[115]},
-      {number:115,state:"CLOSED",title:"Dead-code pass: decide what is public API and what only exists for tests",blockedBy:[]},
-      {number:114,state:"CLOSED",title:"Sweep for field lists that are re-spelled positionally instead of carried as a type",blockedBy:[]},
-      {number:111,state:"OPEN",title:"Spec-sheet, config.example.toml and config_builder.py sweep for the 2026-08-17 meeting's decisions",blockedBy:[99,109,108,107]},
-      {number:109,state:"CLOSED",title:"Promote get-run to a supported route, and add a route-3 library-usage example",blockedBy:[]},
-      {number:108,state:"CLOSED",title:"sda's mutation-mix probabilities become user-configurable",blockedBy:[]},
-      {number:107,state:"CLOSED",title:"Base-graph and bulk reference-graph file loaders, with min_node_index remapping",blockedBy:[]},
-      {number:102,state:"OPEN",title:"Make crossover and mutation config-selectable enums, and document both",blockedBy:[80,79,81,84]},
-      {number:101,state:"CLOSED",title:"Document where a new selection scheme goes",blockedBy:[80,79,81,84]},
-      {number:100,state:"OPEN",title:"Document where a new evolution strategy goes",blockedBy:[80,79,56,81,84]},
-      {number:99,state:"CLOSED",title:"Test the fitness docs by adding a second objective through them",blockedBy:[107,97]},
-      {number:98,state:"OPEN",title:"Document where a new genome representation goes",blockedBy:[115,114,80,79,81,84]},
-      {number:97,state:"CLOSED",title:"Document where a new fitness function goes: the six files it has to touch",blockedBy:[80,79,56,81,84]},
-      {number:96,state:"OPEN",title:"Publish documentation/ to GitHub Pages so the Python route has a site to land on",blockedBy:[115,114,67,87]},
-      {number:88,state:"OPEN",title:"Publish the crate to crates.io: the Rust route has no way to obtain GET",blockedBy:[73,114,111,109]},
-      {number:87,state:"OPEN",title:"Publish the first real release to PyPI",blockedBy:[114,111,73]},
-      {number:84,state:"CLOSED",title:"(1) Nothing tests a seeded base graph across replicate runs",blockedBy:[]},
-      {number:81,state:"CLOSED",title:"The shipped example exists in three places and only two are checked",blockedBy:[]},
-      {number:80,state:"CLOSED",title:"config.rs and py_config.rs: make each divergence say why it exists",blockedBy:[]},
-      {number:79,state:"CLOSED",title:"Sweep edge_edit and sda for divergent style and duplication",blockedBy:[115,114]},
-      {number:73,state:"OPEN",title:"Audit the whole test suite: do the tests exercise the behaviour, or just the code?",blockedBy:[102,68,123,135]},
-      {number:68,state:"OPEN",title:"Cut the comment volume in get/src: explain the logic, not the design history",blockedBy:[102,101,100,99,98,123,135]},
-      {number:67,state:"OPEN",title:"Rework documentation/: explain what the code does, not why it was designed that way, and cut the length",blockedBy:[121,115,114,111,102,101,100,99,98,135,137]},
-      {number:56,state:"CLOSED",title:"Sweep generational and steady_state for divergent style and outright duplication",blockedBy:[115,114]},
-      {number:123,state:"CLOSED",title:"Validation-field guard test cannot see fields raised from a loop",blockedBy:[]},
-      {number:135,state:"OPEN",title:"Split Selection from replacement, so steady-state stops constraining every future scheme",blockedBy:[]},
-      {number:137,state:"OPEN",title:"TUDataset-to-GET reference-graph converter",blockedBy:[]}
-    ].map(issue => ({
-      ...issue,
-      assignees: fallbackAssignees[issue.number] || [],
-      prs: fallbackPrs[issue.number] || [],
-      url: `https://github.com/${REPOSITORY}/issues/${issue.number}`
-    }));
+    const OWNER = "md12ol";
+    const NAME = "GraphEvolutionTool";
+    const KIND_LABELS = ["bug", "enhancement", "task", "investigation"];
+    const NO_MILESTONE = "No milestone";
+    let issues = [];
 
     const NS = "http://www.w3.org/2000/svg";
     const NODE_W = 270;
     const NODE_H = 91;
     const X_GAP = 120;
     const Y_GAP = 24;
+    const LANE_GAP = 70;
     let issueMap = new Map();
     const svg = document.querySelector("#canvas");
     const viewport = document.querySelector("#viewport");
+    const lanesLayer = document.querySelector("#lanes");
     const edgesLayer = document.querySelector("#edges");
     const nodesLayer = document.querySelector("#nodes");
-    let transform = {x: 70, y: 120, scale: 0.82};
+    let transform = {x: 70, y: 160, scale: 0.82};
     let selected = null;
     let positions = new Map();
-    let dataStatus = `offline snapshot ${FALLBACK_UPDATED}`;
+    let dataStatus = "no data yet";
     let githubToken = "";
-    const CACHE_KEY = "get-issue-dependency-graph-v5";
+    const filters = {kind: new Set(), area: new Set(), assignee: new Set()};
+    const CACHE_KEY = "get-issue-dependency-graph-v6";
     const TOKEN_KEY = "get-issue-dependency-graph-token-v1";
     const CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 
@@ -343,7 +331,6 @@
         for (const blocker of issue.blockedBy) issueMap.get(blocker)?.blocking.push(issue.number);
       }
     }
-    rebuildIndexes();
 
     function svgElement(name, attributes = {}) {
       const element = document.createElementNS(NS, name);
@@ -351,18 +338,60 @@
       return element;
     }
 
+    function kindOf(issue) {
+      return issue.labels.find(label => KIND_LABELS.includes(label)) || "";
+    }
+
+    function areasOf(issue) {
+      return issue.labels.filter(label => label.startsWith("area:"));
+    }
+
+    function isReleaseHub(issue) {
+      return issue.milestone === NO_MILESTONE && /^release:/i.test(issue.title);
+    }
+
+    function passesFilters(issue) {
+      if (filters.kind.size && !filters.kind.has(kindOf(issue))) return false;
+      if (filters.area.size && !areasOf(issue).some(area => filters.area.has(area))) return false;
+      if (filters.assignee.size && !issue.assignees.some(login => filters.assignee.has(login))) return false;
+      return true;
+    }
+
     function visibleIssues() {
       const showClosed = document.querySelector("#show-closed").checked;
-      return issues.filter(issue => showClosed || issue.state === "OPEN");
+      return issues.filter(issue => (showClosed || issue.state === "OPEN") && passesFilters(issue));
+    }
+
+    // The edges the layout and the drawing use. Status never looks at this: an issue blocked by
+    // the release hub is still blocked, it is only not drawn that way.
+    function visibleBlockers(issue, visible) {
+      const hideFanout = document.querySelector("#hide-fanout").checked;
+      const result = [];
+      for (const number of issue.blockedBy) {
+        if (!visible.has(number)) continue;
+        if (hideFanout && isReleaseHub(issueMap.get(number))) continue;
+        result.push(number);
+      }
+      return result;
+    }
+
+    function laneOrder(a, b) {
+      const rank = title => {
+        if (title === NO_MILESTONE) return 2;
+        if (/^v?\d|^version/i.test(title)) return 0;
+        return 1;
+      };
+      return rank(a) - rank(b) || a.localeCompare(b, undefined, {numeric: true});
     }
 
     function layout(items) {
       const visible = new Set(items.map(issue => issue.number));
+      const blockers = new Map(items.map(issue => [issue.number, visibleBlockers(issue, visible)]));
       const levels = new Map(items.map(issue => [issue.number, 0]));
       for (let pass = 0; pass < items.length; pass++) {
         let changed = false;
         for (const issue of items) {
-          for (const blocker of issue.blockedBy.filter(number => visible.has(number))) {
+          for (const blocker of blockers.get(issue.number)) {
             const next = Math.max(levels.get(issue.number), levels.get(blocker) + 1);
             if (next !== levels.get(issue.number)) {
               levels.set(issue.number, next);
@@ -373,26 +402,73 @@
         if (!changed) break;
       }
 
-      const columns = new Map();
+      const lanes = new Map();
       for (const issue of items) {
+        if (!lanes.has(issue.milestone)) lanes.set(issue.milestone, new Map());
+        const columns = lanes.get(issue.milestone);
         const level = levels.get(issue.number);
         if (!columns.has(level)) columns.set(level, []);
         columns.get(level).push(issue);
       }
-      for (const column of columns.values()) column.sort((a, b) => b.number - a.number);
+      const laneTitles = [...lanes.keys()].sort(laneOrder);
+      const maxLevel = Math.max(0, ...levels.values());
 
-      const maxRows = Math.max(...[...columns.values()].map(column => column.length), 1);
-      const graphHeight = maxRows * (NODE_H + Y_GAP);
-      positions = new Map();
-      for (const [level, column] of columns) {
-        const columnHeight = column.length * (NODE_H + Y_GAP);
-        const offset = (graphHeight - columnHeight) / 2;
-        column.forEach((issue, index) => positions.set(issue.number, {
-          x: level * (NODE_W + X_GAP),
-          y: offset + index * (NODE_H + Y_GAP)
-        }));
+      // Row index per node, refined by two barycentre sweeps: left to right by the rows of the
+      // node's blockers, then right to left by the rows of what it blocks.
+      const rows = new Map();
+      for (const columns of lanes.values()) {
+        for (const column of columns.values()) {
+          column.sort((a, b) => b.number - a.number);
+          column.forEach((issue, index) => rows.set(issue.number, index));
+        }
       }
-      return {columns, visible};
+      const blocking = new Map(items.map(issue => [issue.number, []]));
+      for (const [number, list] of blockers) for (const blocker of list) blocking.get(blocker).push(number);
+      const sweep = (neighbours, levelsInOrder) => {
+        for (const columns of lanes.values()) {
+          for (const level of levelsInOrder) {
+            const column = columns.get(level);
+            if (!column) continue;
+            const key = new Map();
+            for (const issue of column) {
+              const around = neighbours.get(issue.number);
+              key.set(issue.number, around.length
+                ? around.reduce((sum, number) => sum + rows.get(number), 0) / around.length
+                : rows.get(issue.number));
+            }
+            column.sort((a, b) => key.get(a.number) - key.get(b.number) || b.number - a.number);
+            column.forEach((issue, index) => rows.set(issue.number, index));
+          }
+        }
+      };
+      const ascending = [...Array(maxLevel + 1).keys()];
+      sweep(blockers, ascending);
+      sweep(blocking, [...ascending].reverse());
+      sweep(blockers, ascending);
+
+      positions = new Map();
+      const laneBoxes = [];
+      let y = 0;
+      for (const title of laneTitles) {
+        const columns = lanes.get(title);
+        const maxRows = Math.max(...[...columns.values()].map(column => column.length));
+        const laneHeight = maxRows * (NODE_H + Y_GAP) - Y_GAP;
+        let count = 0;
+        for (const [level, column] of columns) {
+          const columnHeight = column.length * (NODE_H + Y_GAP) - Y_GAP;
+          const offset = (laneHeight - columnHeight) / 2;
+          for (const issue of column) {
+            positions.set(issue.number, {
+              x: level * (NODE_W + X_GAP),
+              y: y + offset + rows.get(issue.number) * (NODE_H + Y_GAP)
+            });
+            count++;
+          }
+        }
+        laneBoxes.push({title, top: y, height: laneHeight, count});
+        y += laneHeight + LANE_GAP;
+      }
+      return {visible, blockers, maxLevel, laneBoxes, width: (maxLevel + 1) * (NODE_W + X_GAP) - X_GAP};
     }
 
     function wrapTitle(title, limit = 38) {
@@ -412,33 +488,109 @@
 
     function statusFor(issue) {
       if (issue.state === "CLOSED") return "closed";
+      if (issue.labels.includes("needs-ruling")) return "ruling";
       return issue.blockedBy.some(number => issueMap.get(number)?.state === "OPEN") ? "blocked" : "open";
+    }
+
+    const STATUS_TEXT = {open: "ready", blocked: "blocked", ruling: "needs ruling", closed: "closed"};
+
+    // Everything upstream and downstream of the selected node, over the drawn edges.
+    function focusSet(blockers) {
+      if (selected === null || !blockers.has(selected)) return null;
+      const blocking = new Map([...blockers.keys()].map(number => [number, []]));
+      for (const [number, list] of blockers) for (const blocker of list) blocking.get(blocker).push(number);
+      const reach = new Set([selected]);
+      for (const neighbours of [blockers, blocking]) {
+        const queue = [selected];
+        while (queue.length) {
+          for (const next of neighbours.get(queue.pop())) {
+            if (!reach.has(next)) { reach.add(next); queue.push(next); }
+          }
+        }
+      }
+      return reach;
+    }
+
+    function renderFilters() {
+      const groups = {kind: new Set(), area: new Set(), assignee: new Set()};
+      for (const issue of issues) {
+        if (issue.state !== "OPEN") continue;
+        const kind = kindOf(issue);
+        if (kind) groups.kind.add(kind);
+        for (const area of areasOf(issue)) groups.area.add(area);
+        for (const login of issue.assignees) groups.assignee.add(login);
+      }
+      const container = document.querySelector("#filters");
+      container.replaceChildren();
+      for (const [group, values] of Object.entries(groups)) {
+        if (!values.size) continue;
+        const wrapper = document.createElement("div");
+        wrapper.className = "chip-group";
+        const name = document.createElement("span");
+        name.className = "group-name";
+        name.textContent = group;
+        wrapper.append(name);
+        const sorted = [...values].sort((a, b) => group === "kind"
+          ? KIND_LABELS.indexOf(a) - KIND_LABELS.indexOf(b)
+          : a.localeCompare(b));
+        for (const value of sorted) {
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = `chip${filters[group].has(value) ? " on" : ""}`;
+          chip.textContent = group === "area" ? value.slice("area:".length) : value;
+          chip.addEventListener("click", () => {
+            if (filters[group].has(value)) filters[group].delete(value);
+            else filters[group].add(value);
+            chip.classList.toggle("on");
+            render();
+            resetView();
+          });
+          wrapper.append(chip);
+        }
+        container.append(wrapper);
+      }
     }
 
     function render() {
       const items = visibleIssues();
-      const {columns, visible} = layout(items);
+      const {visible, blockers, maxLevel, laneBoxes, width} = layout(items);
+      const focus = focusSet(blockers);
+      lanesLayer.replaceChildren();
       edgesLayer.replaceChildren();
       nodesLayer.replaceChildren();
 
-      for (const [level] of [...columns].sort((a, b) => a[0] - b[0])) {
+      for (let level = 0; level <= maxLevel; level++) {
         const label = svgElement("text", {x: level * (NODE_W + X_GAP), y: -24, class: "column-label"});
         label.textContent = level === 0 ? "Available first" : `Dependency stage ${level}`;
         nodesLayer.append(label);
       }
+      laneBoxes.forEach((lane, index) => {
+        const label = svgElement("text", {x: -18, y: lane.top + 16, class: "lane-label", "text-anchor": "end"});
+        label.textContent = lane.title;
+        lanesLayer.append(label);
+        const count = svgElement("text", {x: -18, y: lane.top + 32, class: "lane-count", "text-anchor": "end"});
+        count.textContent = `${lane.count} issue${lane.count === 1 ? "" : "s"}`;
+        lanesLayer.append(count);
+        if (index) {
+          const ruleY = lane.top - LANE_GAP / 2;
+          lanesLayer.append(svgElement("line", {x1: -200, x2: width + 40, y1: ruleY, y2: ruleY, class: "lane-rule"}));
+        }
+      });
 
       for (const issue of items) {
         const target = positions.get(issue.number);
-        for (const blockerNumber of issue.blockedBy.filter(number => visible.has(number))) {
+        for (const blockerNumber of blockers.get(issue.number)) {
           const source = positions.get(blockerNumber);
           const startX = source.x + NODE_W;
           const startY = source.y + NODE_H / 2;
           const endX = target.x;
           const endY = target.y + NODE_H / 2;
           const bend = Math.max(45, (endX - startX) * 0.44);
+          const active = selected !== null && (selected === issue.number || selected === blockerNumber);
+          const faint = focus && !(focus.has(issue.number) && focus.has(blockerNumber));
           const edge = svgElement("path", {
             d: `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX} ${endY}`,
-            class: `edge${selected && (selected === issue.number || selected === blockerNumber) ? " active" : ""}`,
+            class: `edge${active ? " active" : ""}${faint ? " faint" : ""}`,
             "data-from": blockerNumber,
             "data-to": issue.number,
             "marker-end": "url(#arrow)"
@@ -452,8 +604,9 @@
         const point = positions.get(issue.number);
         const status = statusFor(issue);
         const matches = !query || `#${issue.number} ${issue.title}`.toLowerCase().includes(query);
+        const inFocus = !focus || focus.has(issue.number);
         const group = svgElement("g", {
-          class: `node ${status}${selected === issue.number ? " selected" : ""}${matches ? "" : " dim"}`,
+          class: `node ${status}${selected === issue.number ? " selected" : ""}${matches && inFocus ? "" : " dim"}`,
           transform: `translate(${point.x} ${point.y})`,
           tabindex: "0",
           role: "link",
@@ -466,7 +619,7 @@
         group.append(number);
 
         const statusText = svgElement("text", {x: NODE_W - 13, y: 21, class: "status", "text-anchor": "end"});
-        statusText.textContent = status === "open" ? "ready" : status;
+        statusText.textContent = STATUS_TEXT[status];
         group.append(statusText);
 
         const title = svgElement("text", {x: 13, y: 43, class: "title"});
@@ -488,12 +641,13 @@
             class: "avatar"
           }));
         });
-        const assigneeX = shownAssignees.length ? 13 + shownAssignees.length * 15 + 6 : 13;
-        const assignee = svgElement("text", {x: assigneeX, y: 79, class: "meta"});
-        assignee.textContent = issue.assignees.length
-          ? `Assignee: ${issue.assignees.join(", ")}`
-          : "Assignee: unassigned";
-        group.append(assignee);
+        const metaX = shownAssignees.length ? 13 + shownAssignees.length * 15 + 6 : 13;
+        const meta = svgElement("text", {x: metaX, y: 79, class: "meta"});
+        const metaParts = [kindOf(issue), ...areasOf(issue).map(area => area.slice("area:".length))];
+        if (issue.assignees.length) metaParts.push(issue.assignees.join(", "));
+        else metaParts.push("unassigned");
+        meta.textContent = metaParts.filter(Boolean).join(" · ");
+        group.append(meta);
         if (issue.prs.length) {
           const pr = issue.prs.find(item => item.state === "OPEN") || issue.prs[0];
           const prBadge = svgElement("text", {x: NODE_W - 13, y: 78, class: "pr-badge", "text-anchor": "end"});
@@ -511,18 +665,49 @@
         nodesLayer.append(group);
       }
 
-      const edgeCount = items.reduce((sum, issue) => sum + issue.blockedBy.filter(number => visible.has(number)).length, 0);
-      const blockedCount = items.filter(issue => statusFor(issue) === "blocked").length;
-      const prCount = items.filter(issue => issue.prs.length).length;
-      document.querySelector("#summary").textContent = `${items.length} issues · ${edgeCount} dependencies · ${blockedCount} blocked · ${prCount} with PRs · ${dataStatus}`;
+      const counts = {open: 0, blocked: 0, ruling: 0, closed: 0};
+      for (const issue of items) counts[statusFor(issue)]++;
+      let edgeCount = 0;
+      for (const issue of items) edgeCount += issue.blockedBy.filter(number => visible.has(number)).length;
+      const parts = [
+        `${items.length} issues`,
+        `${edgeCount} dependencies`,
+        `${counts.open} ready`,
+        `${counts.blocked} blocked`,
+        `${counts.ruling} need a ruling`
+      ];
+      if (counts.closed) parts.push(`${counts.closed} closed`);
+      parts.push(dataStatus);
+      document.querySelector("#summary").textContent = parts.join(" · ");
       applyTransform();
+    }
+
+    function issueList(container, numbers) {
+      container.replaceChildren();
+      for (const number of numbers) {
+        const issue = issueMap.get(number);
+        const item = document.createElement("li");
+        const link = document.createElement("a");
+        link.href = issue ? issue.url : `https://github.com/${OWNER}/${NAME}/issues/${number}`;
+        link.textContent = issue ? `#${number} · ${issue.title} (${STATUS_TEXT[statusFor(issue)]})` : `#${number}`;
+        link.addEventListener("click", event => {
+          if (!issue) return;
+          event.preventDefault();
+          selectIssue(number);
+        });
+        item.append(link);
+        container.append(item);
+      }
     }
 
     function selectIssue(number) {
       selected = number;
       const issue = issueMap.get(number);
       document.querySelector("#detail-title").textContent = `#${number} · ${issue.title}`;
-      document.querySelector("#detail-status").textContent = `Status: ${statusFor(issue) === "open" ? "ready" : statusFor(issue)}`;
+      document.querySelector("#detail-status").textContent = `Status: ${STATUS_TEXT[statusFor(issue)]} · ${issue.milestone}`;
+      document.querySelector("#detail-labels").textContent = issue.labels.length
+        ? `Labels: ${issue.labels.join(", ")}`
+        : "Labels: none";
       const assigneeDetails = document.querySelector("#detail-assignee");
       assigneeDetails.replaceChildren();
       for (const login of issue.assignees) {
@@ -536,11 +721,13 @@
         `Assignee: ${issue.assignees.length ? issue.assignees.join(", ") : "unassigned"}`
       ));
       document.querySelector("#detail-blockers").textContent = issue.blockedBy.length
-        ? `Blocked by: ${issue.blockedBy.map(value => `#${value}`).join(", ")}`
+        ? `Blocked by ${issue.blockedBy.length}:`
         : "Blocked by: nobody";
+      issueList(document.querySelector("#detail-blockers-list"), issue.blockedBy);
       document.querySelector("#detail-blocking").textContent = issue.blocking.length
-        ? `Blocking: ${issue.blocking.map(value => `#${value}`).join(", ")}`
+        ? `Blocking ${issue.blocking.length}:`
         : "Blocking: nobody";
+      issueList(document.querySelector("#detail-blocking-list"), issue.blocking);
       const prDetails = document.querySelector("#detail-prs");
       prDetails.replaceChildren(document.createTextNode("Pull requests: "));
       if (!issue.prs.length) {
@@ -561,61 +748,90 @@
       render();
     }
 
+    function clearSelection() {
+      selected = null;
+      document.querySelector("#details").classList.remove("visible");
+      render();
+    }
+
     function applyTransform() {
       viewport.setAttribute("transform", `translate(${transform.x} ${transform.y}) scale(${transform.scale})`);
     }
 
     function resetView() {
       const items = visibleIssues();
+      if (!items.length) return;
       layout(items);
       const bounds = [...positions.values()];
-      const width = Math.max(...bounds.map(point => point.x), 0) + NODE_W;
+      const width = Math.max(...bounds.map(point => point.x), 0) + NODE_W + 200;
       const height = Math.max(...bounds.map(point => point.y), 0) + NODE_H;
+      const headerBottom = document.querySelector("header").getBoundingClientRect().bottom + 50;
       const availableW = window.innerWidth - 80;
-      const availableH = window.innerHeight - 180;
+      const availableH = window.innerHeight - headerBottom - 60;
       transform.scale = Math.min(1, availableW / Math.max(width, 1), availableH / Math.max(height, 1));
-      transform.x = Math.max(35, (window.innerWidth - width * transform.scale) / 2);
-      transform.y = 120 + Math.max(0, (availableH - height * transform.scale) / 2);
+      transform.x = 200 * transform.scale + Math.max(35, (window.innerWidth - width * transform.scale) / 2);
+      transform.y = headerBottom + Math.max(0, (availableH - height * transform.scale) / 2);
       applyTransform();
     }
 
-    function normalizeIssue(raw, blockedBy = []) {
+    const ISSUE_FIELDS = `
+      number title state url
+      milestone { title }
+      labels(first: 20) { nodes { name } }
+      assignees(first: 5) { nodes { login } }
+    `;
+    const QUERY = `
+      query($owner: String!, $name: String!, $after: String) {
+        repository(owner: $owner, name: $name) {
+          issues(first: 100, states: OPEN, after: $after) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              ${ISSUE_FIELDS}
+              blockedBy(first: 50) { pageInfo { hasNextPage } nodes { ${ISSUE_FIELDS} } }
+              closedByPullRequestsReferences(first: 10, includeClosedPrs: true) { nodes { number state url } }
+            }
+          }
+        }
+      }
+    `;
+
+    async function githubGraphql(variables) {
+      const response = await fetch("https://api.github.com/graphql", {
+        method: "POST",
+        headers: {Authorization: `Bearer ${githubToken}`, "Content-Type": "application/json"},
+        body: JSON.stringify({query: QUERY, variables})
+      });
+      if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+      const payload = await response.json();
+      if (payload.errors?.length) throw new Error(payload.errors.map(error => error.message).join("; "));
+      return payload.data.repository.issues;
+    }
+
+    function normalizeIssue(raw) {
       return {
         number: raw.number,
         state: raw.state.toUpperCase(),
         title: raw.title,
-        blockedBy,
+        url: raw.url,
+        milestone: raw.milestone?.title || NO_MILESTONE,
+        labels: (raw.labels?.nodes || []).map(label => label.name),
+        assignees: (raw.assignees?.nodes || []).map(assignee => assignee.login),
+        blockedBy: [],
         blocking: [],
-        assignees: (raw.assignees || []).map(assignee => assignee.login),
-        prs: [],
-        url: raw.html_url || `https://github.com/${REPOSITORY}/issues/${raw.number}`
+        prs: []
       };
-    }
-
-    async function githubApi(path) {
-      const headers = {Accept: "application/vnd.github+json"};
-      if (githubToken) headers.Authorization = `Bearer ${githubToken}`;
-      const response = await fetch(`https://api.github.com/repos/${REPOSITORY}${path}`, {
-        headers
-      });
-      if (!response.ok) {
-        const remaining = response.headers.get("x-ratelimit-remaining");
-        const suffix = remaining === "0" && !githubToken ? " (anonymous rate limit reached; authenticate to continue)" : "";
-        throw new Error(`GitHub returned ${response.status}${suffix}`);
-      }
-      return response.json();
     }
 
     function loadCachedData() {
       try {
         const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
-        if (!cached || !Array.isArray(cached.issues) || Date.now() - cached.at > CACHE_MAX_AGE_MS) return false;
+        if (!cached || !Array.isArray(cached.issues)) return null;
         issues = cached.issues;
         rebuildIndexes();
         dataStatus = `cached · refreshed ${new Date(cached.at).toLocaleString()}`;
-        return true;
+        return cached.at;
       } catch {
-        return false;
+        return null;
       }
     }
 
@@ -627,68 +843,57 @@
       }
     }
 
-    function issueNumbersReferencedBy(pr) {
-      const numbers = new Set();
-      const closingText = `${pr.title || ""}\n${pr.body || ""}`;
-      const closingPattern = /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:https:\/\/github\.com\/[^/]+\/[^/]+\/issues\/|#)(\d+)/gi;
-      for (const match of closingText.matchAll(closingPattern)) numbers.add(Number(match[1]));
-      for (const match of (pr.title || "").matchAll(/#(\d+)/g)) numbers.add(Number(match[1]));
-      return numbers;
-    }
-
     async function refreshFromGitHub() {
+      if (!githubToken) {
+        dataStatus = "authenticate to load live data";
+        render();
+        document.querySelector("#auth-dialog").showModal();
+        return;
+      }
       const refreshButton = document.querySelector("#refresh");
       refreshButton.disabled = true;
       refreshButton.textContent = "Refreshing…";
       dataStatus = "loading live GitHub data…";
       render();
       try {
-        const [rawItems, pulls] = await Promise.all([
-          githubApi("/issues?state=open&per_page=100"),
-          githubApi("/pulls?state=all&per_page=100&sort=updated&direction=desc")
-        ]);
-        const openIssues = rawItems.filter(item => !item.pull_request);
-        const liveMap = new Map(openIssues.map(item => [item.number, normalizeIssue(item)]));
-        const dependencyLists = await Promise.all(openIssues.map(async item => ({
-          number: item.number,
-          blockers: await githubApi(`/issues/${item.number}/dependencies/blocked_by?per_page=100`)
-        })));
-
-        for (const {number, blockers} of dependencyLists) {
-          const issue = liveMap.get(number);
-          issue.blockedBy = blockers.map(blocker => blocker.number);
-          for (const blocker of blockers) {
-            if (!liveMap.has(blocker.number)) liveMap.set(blocker.number, normalizeIssue(blocker));
-          }
-        }
-
-        for (const pr of pulls) {
-          for (const number of issueNumbersReferencedBy(pr)) {
-            const issue = liveMap.get(number);
-            if (!issue) continue;
-            issue.prs.push({
+        const liveMap = new Map();
+        const truncated = [];
+        let after = null;
+        do {
+          const page = await githubGraphql({owner: OWNER, name: NAME, after});
+          for (const raw of page.nodes) {
+            const issue = normalizeIssue(raw);
+            issue.blockedBy = raw.blockedBy.nodes.map(blocker => blocker.number);
+            issue.prs = raw.closedByPullRequestsReferences.nodes.map(pr => ({
               number: pr.number,
-              state: pr.merged_at ? "MERGED" : pr.state.toUpperCase(),
-              url: pr.html_url
-            });
+              state: pr.state.toUpperCase(),
+              url: pr.url
+            }));
+            if (raw.blockedBy.pageInfo.hasNextPage) truncated.push(issue.number);
+            liveMap.set(issue.number, issue);
+            for (const blocker of raw.blockedBy.nodes) {
+              if (!liveMap.has(blocker.number)) liveMap.set(blocker.number, normalizeIssue(blocker));
+            }
           }
-        }
+          after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+        } while (after);
 
+        // A closed blocker added from a nested list carries no own blockers, so a live open
+        // issue must overwrite a placeholder for the same number, never the reverse.
         issues = [...liveMap.values()].sort((a, b) => b.number - a.number);
         rebuildIndexes();
-        if (selected && !issueMap.has(selected)) selected = null;
+        if (selected !== null && !issueMap.has(selected)) selected = null;
         dataStatus = `live · refreshed ${new Date().toLocaleString()}`;
+        if (truncated.length) dataStatus += ` · blockers truncated at 50 for #${truncated.join(", #")}`;
         cacheLiveData();
+        renderFilters();
         render();
         resetView();
       } catch (error) {
-        dataStatus = `offline fallback · ${error.message}`;
-        if (githubToken && /401/.test(error.message)) {
+        dataStatus = `${issues.length ? "cached data" : "no data"} · ${error.message}`;
+        if (/401/.test(error.message)) {
           forgetGitHubToken();
           dataStatus = "saved GitHub token was rejected · authenticate again";
-        }
-        if (!githubToken && /403|rate limit/i.test(error.message)) {
-          document.querySelector("#authenticate").textContent = "Authenticate to refresh";
         }
         render();
       } finally {
@@ -725,6 +930,7 @@
 
     document.querySelector("#search").addEventListener("input", render);
     document.querySelector("#show-closed").addEventListener("change", () => { render(); resetView(); });
+    document.querySelector("#hide-fanout").addEventListener("change", () => { render(); resetView(); });
     document.querySelector("#refresh").addEventListener("click", refreshFromGitHub);
     document.querySelector("#authenticate").addEventListener("click", () => {
       document.querySelector("#auth-dialog").showModal();
@@ -749,22 +955,22 @@
       refreshFromGitHub();
     });
     document.querySelector("#reset").addEventListener("click", resetView);
-    document.querySelector("#close-details").addEventListener("click", () => {
-      selected = null;
-      document.querySelector("#details").classList.remove("visible");
-      render();
-    });
-    svg.addEventListener("click", () => {
-      selected = null;
-      document.querySelector("#details").classList.remove("visible");
-      render();
+    document.querySelector("#close-details").addEventListener("click", clearSelection);
+    svg.addEventListener("click", clearSelection);
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && selected !== null) clearSelection();
     });
 
     const restoredAuthentication = restoreGitHubToken();
-    const loadedCache = loadCachedData();
+    const cachedAt = loadCachedData();
+    renderFilters();
     render();
     resetView();
-    if (restoredAuthentication || !loadedCache) refreshFromGitHub();
+    if (!restoredAuthentication) {
+      if (cachedAt === null) refreshFromGitHub();
+    } else if (cachedAt === null || Date.now() - cachedAt > CACHE_MAX_AGE_MS) {
+      refreshFromGitHub();
+    }
   </script>
 </body>
 </html>
