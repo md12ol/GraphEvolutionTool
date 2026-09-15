@@ -56,7 +56,7 @@ python-source = "python"
 # fails to LINK, with dozens of undefined `Py*` symbols. Hence: off in
 # `[dependencies]`, on here, where the module is actually produced.
 #
-# **Measured 2026-08-07, and narrower than it sounds:** on this Linux/pyenv
+# **Narrower than it sounds:** on a Linux/pyenv
 # setup, dropping this line changes nothing observable about the wheel — same 75
 # undefined `Py*` symbols, no libpython in `ldd`, and it imports fine either way.
 # The feature earns its place on macOS and Windows, whose linkers reject
