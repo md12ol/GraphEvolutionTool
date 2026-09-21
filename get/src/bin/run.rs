@@ -197,10 +197,8 @@ mod tests {
 
     #[test]
     fn several_replicates_need_no_output_directory() {
-        // Rejected until 2026-08-30, because every replicate would have landed
-        // on the last in the working directory. The timestamped folder is now
-        // made with or without `--out`, so there is nothing left to collide and
-        // the guard that said so has gone.
+        // The timestamped folder is made with or without `--out`, and each
+        // replicate writes its own `run_<n>/` inside it, so none can collide.
         let parsed = parse_args(&args(&["c.toml", "7", "--runs", "3"]))
             .expect("--runs without --out is accepted");
         assert_eq!(parsed.n_runs, 3);

@@ -29,7 +29,7 @@ any static server works equally well. **On Windows**, run `python -m http.server
 previous/next links are built at load time by `assets/site.js`. With scripts blocked, each page
 still renders its own content readably, but you lose the navigation between them.
 
-**Light is the default theme, dark an explicit choice** (`decisions.md`, 2026-08-30). The toggle in
+**Light is the default theme, dark an explicit choice.** The toggle in
 the header sets `data-theme` and remembers it; the un-toggled default follows the system otherwise.
 
 You do **not** need Rust, maturin, the `get` extension module, npm, or any documentation generator
@@ -40,8 +40,8 @@ to *read* the site. `check_doc_examples.py` and the accessibility check below do
 
 ## What is on it
 
-The site has six groups; every page belongs to exactly one. Restructured 2026-08-30 around what a
-reader is trying to do rather than around the codebase; full reasoning in `decisions.md`.
+The site has six groups; every page belongs to exactly one. The groups follow what a reader is
+trying to do rather than the layout of the codebase.
 
 | Section | Pages | For |
 |---|---|---|
@@ -102,7 +102,7 @@ a short page. The same headings are what `check_refs.py`'s `heading_ids` check s
 | **`data-example`** | Put it on a Rust block that *illustrates* code the reader is about to write, rather than quoting `get/src`. It changes nothing visually; the signature checker reads it, and without it an invented `fn` is reported as a stale signature |
 | **Diagrams / figures** | Inline SVG only, using the `d-fill-*` / `d-stroke*` / `d-text*` classes so they take their colours from the palette. No diagram libraries. Every content SVG needs `role="img"` and an accessible name; `figure_labels` checks it |
 | **Escaping** | `<` and `>` inside signatures must be `&lt;` `&gt;`, or the generics disappear |
-| **Present tense only** | Say how GET works now. A rewrite carries the old wording out into `git log` and `decisions.md`, not into the page; see `decisions.md`, 2026-08-30, "the site says how GET works now, not how it used to" |
+| **Present tense only** | Say how GET works now. A rewrite carries the old wording out of the page and into `git log`, never into a dated note or a struck line |
 
 ### Where pages come from
 

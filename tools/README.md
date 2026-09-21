@@ -165,6 +165,6 @@ MUTAG has none in 188 graphs — which is why it is constructed.
 
 ### Verified against a real dataset
 
-MUTAG (2026-08-19): 188 graphs, 3371 nodes, 3721 edges converted and loaded back
+MUTAG: 188 graphs, 3371 nodes, 3721 edges converted and loaded back
 through `get` with zero node-count or edge-count mismatches, matching the
 dataset's own file counts and its published graph count.
