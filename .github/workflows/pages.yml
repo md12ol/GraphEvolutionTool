@@ -9,12 +9,29 @@
 
 name: pages
 
+# Publication is deliberately decoupled from `main`. `documentation/` still changes
+# in the same commit as the code that falsified it, so the page is correct on `main`
+# before it is live; what waits is the reader seeing it. Pre-release tags (a, b, rc)
+# are excluded so the site moves only with a final release.
+#
+# Correcting a page that is ALREADY published is a disposable branch named
+# `pages-fix/<anything>`, cut from the release tag, with the fix cherry-picked onto it
+# and this workflow dispatched against that branch. workflow_dispatch on its own
+# cannot do it: the checkout below takes a whole ref, so dispatching gives either the
+# tag without the fix or `main` with everything unreleased. The fix must also land on
+# `main`, or the next tag silently reverts it.
+#
+# The `github-pages` environment refuses any ref its deployment rules do not name. It
+# admits branch `main`, branch `pages-fix/*` and tag `v*`; a change to the tag filter
+# or the fix-branch name here needs the matching rule changed in the repository's
+# environment settings, or the deploy is refused.
 on:
   push:
-    branches: [main]
-    paths:
-      - 'documentation/**'
-      - '.github/workflows/pages.yml'
+    tags:
+      - 'v*'
+      - '!v*a*'
+      - '!v*b*'
+      - '!v*rc*'
   workflow_dispatch:
 
 # Read the tree, mint the deploy token, and nothing else.
