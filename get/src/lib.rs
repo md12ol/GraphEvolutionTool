@@ -487,7 +487,7 @@ impl GraphEvolver {
 
         // An upper bound rather than the network size, since reference graphs
         // may be larger; the objective applies the same one.
-        let index_cap = self.config.network_size.max(dispatch::MAX_REFERENCE_NODES);
+        let index_cap = dispatch::MAX_REFERENCE_NODES;
 
         let loaded = graph_io::load_edge_folder(
             std::path::Path::new(&folder),

@@ -60,8 +60,8 @@ pub(crate) struct ErasedOutcome {
     pub history: Vec<GenerationStats>,
 }
 
-/// The node index a reference file may not exceed, when the run's own
-/// `network_size` is smaller.
+/// The node index a reference file may not exceed, whatever the run's own
+/// `network_size`.
 ///
 /// Reference graphs come from real data and differ in size, so there is no
 /// single right value. This one is loose enough for any plausible reference
@@ -180,7 +180,7 @@ impl GraphEvolver {
         // `max_edge_multiplicity` agrees only because validation forces it, and
         // `min_node_index` is deliberately asymmetric: `unwrap_or(0)` here
         // against a caller-supplied argument on the Python path.
-        let index_cap = self.config.network_size.max(MAX_REFERENCE_NODES);
+        let index_cap = MAX_REFERENCE_NODES;
 
         let loaded = graph_io::load_edge_folder(
             std::path::Path::new(reference_folder.as_str()),
