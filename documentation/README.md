@@ -127,12 +127,13 @@ python3 documentation/check_refs.py --fix    # repair shifted line references
 python3 tools/check_doc_examples.py          # run the Python, TOML and Rust the site prints
 ```
 
-**`check_refs.py`**: ten checks, each catching something the others cannot:
+**`check_refs.py`**: these checks, each catching something the others cannot:
 
 | | |
 |---|---|
 | **Source references** | every `file.rs:NNN` lands on a marker **of that page's own chain** |
 | **Step tables** | each `new-*.html`'s table matches its chain's markers, catching a page that stops one step short |
+| **Step-table files** | every file a step-table row names exists and carries that row's marker, with or without a line number |
 | **Signatures** | every `fn` line shown on the site appears verbatim in `get/src` |
 | **Grep counts** | every `git grep … # N steps, M sites` a chain page tells a reader to run returns exactly that |
 | **Documented defaults** | the configuration reference's Default column matches what `config.rs` actually implements |
