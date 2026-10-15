@@ -776,14 +776,11 @@ mod tests {
             "the scope's own size must travel, not a default"
         );
 
-        // `matches!` rather than `assert_eq!` only because `Selection` is the
-        // one axis enum of the four that derives neither `Debug` nor
-        // `PartialEq`; the other three are compared directly above and below.
-        assert!(matches!(selection(&SelectionConfig::Best), Selection::Best));
-        assert!(matches!(
+        assert_eq!(selection(&SelectionConfig::Best), Selection::Best);
+        assert_eq!(
             selection(&SelectionConfig::Tournament { tournament_size: 5 }),
             Selection::Tournament { tournament_size: 5 }
-        ));
+        );
 
         assert_eq!(replacement(&ReplacementConfig::Worst), Replacement::Worst);
         assert_eq!(crossover(&CrossoverConfig::TwoPoint), Crossover::TwoPoint);
