@@ -305,8 +305,10 @@ def grep_counts():
             if "E" in flags:
                 argv.append("-E")
             argv += [pattern, "--"] + paths
+            # Without an explicit encoding Windows decodes git's UTF-8 as
+            # cp1252, the marker's dash never matches, and every step count is 0.
             lines = subprocess.run(
-                argv, capture_output=True, text=True).stdout.splitlines()
+                argv, capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
             sites = len(lines)
             # A step is (number, branch), not a number: MUTATION's eight are
             # four steps on each of two branches, and counting numbers alone
