@@ -1,6 +1,8 @@
 //! The self-driving-automaton representation: the genome, the checked
 //! dimensions it is built to, and the default mutation rates.
 
+use std::num::NonZeroUsize;
+
 use rand::Rng;
 
 use super::genome::{Genome, SdaContext, SdaMutation};
@@ -382,10 +384,11 @@ impl Genome for SdaGenome {
     /// `shared_length` guards the positions indexed, not the values carried.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) {
         // States past the shorter automaton's length have no counterpart to swap.
-        let shared_length = self.transitions.len().min(other.transitions.len());
-        if shared_length == 0 {
+        let Some(shared_length) =
+            NonZeroUsize::new(self.transitions.len().min(other.transitions.len()))
+        else {
             return;
-        }
+        };
 
         let (start, end) = super::two_distinct_cut_points(shared_length, rng);
 
