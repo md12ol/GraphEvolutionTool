@@ -67,6 +67,7 @@ impl Crossover {
 /// - **Compare through `rank`**, never a `Direction` of your own.
 /// - **All randomness comes from `rng`**, never a thread RNG or the clock, or
 ///   two runs at one seed stop agreeing.
+#[derive(Debug, PartialEq)]
 pub enum Selection {
     /// The fittest members of the scope, best first. Consumes no randomness.
     Best,
