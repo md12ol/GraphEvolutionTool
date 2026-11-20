@@ -72,7 +72,7 @@ its own `max_edge_multiplicity`; `1` makes it a simple unweighted graph.
 | Self-loops and out-of-range vertices are **silently ignored** by `set_edge` and `weight` | Genome expression relies on this: a decoded vertex pair is never validated before use |
 | `degree` counts **distinct neighbours**, not edge copies | On a multigraph the two differ, and the edit operations pick neighbours rather than copies |
 | `get_neighbor_at_index` wraps modulo the degree | Lets an arbitrary 32-bit payload always name a real neighbour. `None` only for an isolated or invalid node |
-| `get_edge_list` returns each edge once, `u < v`, row-major | The same order SDA expression writes in, and the shape the Python `run` returns |
+| `get_edge_list` returns each edge once, `u < v`, row-major | The shape the Python `run` returns. SDA expression writes in a different order, along diagonals (§3.2) |
 
 `add_edge` adds one parallel edge, saturating at the cap, and reports whether the multiplicity
 actually changed. `remove_edge` removes one copy.
@@ -163,9 +163,12 @@ it is not observable from the current data.
 **Expression emits one character per upper-triangle pair, and each character's raw value *is*
 that edge's weight.**
 
-- Output length is `n(n-1)/2`. Index `i` maps onto the `i`-th pair in the same row-major order as
-  `get_edge_list` — `(0,1), (0,2), …, (0,n-1), (1,2), …`. So `output[0]` is `init_char`, and the
-  initial character directly sets edge `(0,1)`.
+- Output length is `n(n-1)/2`. Index `i` maps onto the `i`-th pair in **diagonal order**: the first
+  diagonal `(0,1), (1,2), …, (n-2,n-1)`, then `(0,2), (1,3), …`, and so on to the last diagonal, the
+  single pair `(0,n-1)`. So `output[0]` is `init_char`, and the initial character directly sets edge
+  `(0,1)`. The first `n-1` characters are the path through every node in order, which is what makes
+  a chain cheap for an SDA to reach. This is the only order, and it is not `get_edge_list`'s
+  row-major one (§2).
 - The run starts in `init_state` and **consumes its own output as the driving tape**: the
   character at the read head selects a transition, that transition's response is appended
   (truncated if it would overshoot), the state advances, and the head moves on.
@@ -187,6 +190,15 @@ alphabet and a permanently empty graph, and `256` exceeds the `u8` response stor
 mutation and crossover never touch it. It must be `< num_states`: expression indexes the response
 table with it, so an out-of-range value panics. Graphs of two nodes never run the loop, so the
 bug hides at small sizes.
+
+**A new SDA's responses can start biased toward zero.** One probability, `zero_probability`,
+applies when an SDA is created at random: each response character is `0` with that probability and
+drawn uniformly from `1..=cap` otherwise. Unset, the draw is uniform over the whole alphabet. The
+bias applies to creation only: mutation redraws a response character uniformly over the whole
+alphabet, and `init_char` is never biased.
+
+**An SDA's network can be filtered for viability.** The necrotic filter (§5.5) applies to this
+genome and to no other.
 
 **Crossover:** two-point over **states** — swap a contiguous band of states, transitions and
 responses together. Swapping state 0 also swaps `init_char`, since together they determine the
@@ -583,6 +595,18 @@ generational when the objective is stochastic and the comparison needs to be fai
 `patient_zero` may be pinned by the user, and must be a real node — validated against
 `network_size` in §7. Unset, a fresh node is drawn per epidemic.
 
+**Patient zero can be optimised over the population.** A sweep tries every node as patient zero:
+the whole population is scored under each node, the node with the best total is kept, and the
+population is rescored under it. From then on the run has one patient zero, used for every epidemic
+until the next sweep. `patient_zero_updates` sets how many sweeps a run makes, evenly spaced: `2`
+is the start and the halfway point, `1` is the start only, and `0`, the default, is no sweep. The
+evolver runs the sweep (§6.3), and the node it chose is run state, not configuration.
+
+**Each candidate node is scored as one ordinary batch.** It takes the next batch seed, and every
+population member faces that seed, so the candidates are compared under different seeds. A seed
+shared across the whole sweep would not replay the same outbreak from a different starting node,
+so it would buy little for a special path through the scorer.
+
 **Guidance:** keep hot objectives native in Rust. The Python adapter (§8) is for prototyping,
 where developer speed matters more than run time.
 
@@ -732,6 +756,24 @@ by hand, which is the burden this parameter exists to remove — so the omission
 enumeration rather than a deliberate limit. GitHub #107; raised as an FYI in `collab.md` because it
 amends the sheet outside a joint meeting.
 
+### 5.5 The necrotic filter, SDA only
+
+An SDA can express a network that is nearly empty or nearly complete, and evolving toward one is
+wasted search. Four bounds, each **per node**, mark such a network as dead: a minimum and a maximum
+number of edges, and a minimum and a maximum total weight. Each bound is multiplied by
+`network_size` and compared with the expressed graph's edge count or its total weight.
+
+- **A dead individual scores 10% worse than the worst living individual**, taken in engine
+  orientation, where lower is better.
+- **The starting population is redrawn until every member is alive.**
+- **A mating event is never repeated because its children are dead.** They take the dead score and
+  the run moves on.
+- **Off unless the bounds are set**, and a config that sets them for any other genome is rejected
+  (§7).
+
+It acts at the scoring gate (§5.1) and is not `struct_match`'s density penalty (§5.4), which pulls
+the edge count toward a reference mean inside one objective.
+
 ---
 
 ## 6. Evolvers
@@ -754,7 +796,8 @@ directly testable from a hand-built population.
 undocumented. Generation 0 is `population_size` genomes drawn at random, for both representations —
 **except** that when edge-edit has a base graph set (§8's `set_base_graph`), one slot is filled with
 the identity genome instead: every gene `Null`, which expresses to exactly the supplied base graph.
-Unconditional, no config flag. Without it, a seeded run's generation 0 contains nothing near the
+A config switch, `seed_base_graph`, on by default, turns this off, and every slot is then a random
+edit script. Without the identity genome, a seeded run's generation 0 contains nothing near the
 graph the user supplied, and a run can return something worse than its own input if nothing beats
 it by chance. The guarantee this buys is a **soft floor under a stochastic objective** — §6.2 rescores
 elites every generation, so a bad draw can still evict the identity individual — and a genuine
@@ -772,6 +815,13 @@ run history.
 **Reproducibility:** both strategies seed `ChaCha8Rng` from `run`'s `seed`. Not `StdRng`, whose
 algorithm may change between `rand` releases — which would defeat the entire purpose of a seed
 argument. The same seed must mean the same thing in both strategies.
+
+**A run can be budgeted in fitness evaluations.** One evaluation is one individual scored at
+`express_and_score` (§5.1), so the starting population, every child, and every individual scored
+during a patient zero sweep (§5.2) count alike. A run sized by `max_evaluations` treats it as an
+exact upper bound: it stops before the generation or mating event that would take the count past
+it, so it finishes at or under the budget and never over. An evaluation is not a fixed amount of
+compute, since a re-rolled epidemic costs more; that is the accepted cost of the unit.
 
 ### 6.1 Scope, selection and replacement
 
@@ -934,6 +984,14 @@ evaluations rather than `O(population)` — and that change is deliberately not 
 alters the trajectory of every seeded steady-state run that exists, so it wants a version boundary.
 Until then this paragraph is what makes the sheet honest about the difference.
 
+**Patient zero sweeps (§5.2) happen between events.** The first follows the scoring of the starting
+population. The rest are evenly spaced along whatever sizes the run: along the evaluation budget
+when `max_evaluations` is set, and along `num_mating_events` otherwise, so two sweeps fall at the
+start and at the halfway point either way. Spaced along a budget, a sweep never falls near its end.
+A sweep costs `network_size × population_size` evaluations plus the rescore, so a config whose
+sweeps alone would consume the whole budget draws a warning. The rescore under the chosen node is
+the one place steady-state rescores individuals it did not just breed.
+
 **Logging cadence:** the starting population as iteration 0, then one row per `population_size`
 events — a "generation equivalent". So `history.len() == num_mating_events / population_size + 1`.
 Logging every event would give a 100,000-row history; the iteration-0 row is what makes a log
@@ -956,6 +1014,17 @@ Every run produces two things: a **convergence log** and a **best individual**.
 
 **The best individual** — the most fit genome (via `Genome::print`), the network it expressed as
 a weighted edge list, and its fitness.
+
+**The evaluation count and the patient zero travel with the output.** A run reports how many
+evaluations it spent (§6), in the log and with the result. A run whose patient zero is pinned or
+swept has exactly one when it ends, and that node is written with the best individual; a run that
+draws a fresh node per epidemic records none.
+
+**The output file is the hand-off between stages.** A later run names the file as its base graph
+and starts under the file's patient zero. Its own `patient_zero_updates` decides whether that node
+is replaced: `0` keeps it. A config that pins a different `patient_zero` from the file's is
+refused. What is handed on is the best of the **final population**, not the best the run ever saw.
+Chaining runs, and pairing one stage's replicates with the next stage's, is the caller's business.
 
 Everything in the log is in **engine orientation** while inside the engine; the Python boundary
 converts `best_fitness` and `mean_fitness` on the way out and leaves `std_dev` and `ci_95` alone,
@@ -995,6 +1064,7 @@ max_mutations         = 1     # roll 2: how many, uniform 1..=max (default 1)
 type            = "generational"
 num_generations = 500
 elite_count     = 1
+# max_evaluations = 100000    a budget in fitness evaluations; a run never exceeds it (§6)
 
 [selection]                   # tournament
 type            = "tournament"
@@ -1006,12 +1076,19 @@ gene_length = 256
 # [genome.operation_weights]  relative, all default 1.0, 0.0 disables
 # init_char_mutation_rate = 0.04       sda only; picks init_char vs. the rest
 # transition_vs_response_rate = 0.5    sda only; splits the remainder
+# seed_base_graph = true               edge_edit only; false leaves out the unedited individual (§6)
+# zero_probability = 0.9               sda only; biases a new SDA's responses toward 0 (§3.2)
+# min_edges_per_node = 1               sda only; the four necrotic bounds (§5.5)
+# max_edges_per_node = 4
+# min_weight_per_node = 4
+# max_weight_per_node = 16
 
 [fitness]                     # epi_spread | epi_length | epi_prof_match | struct_match | python
 type           = "epi_spread"
 infection_rate = 0.05
 num_epidemics  = 30           # epidemics averaged per evaluation
 # patient_zero = 0            optional; omit for a random node per epidemic
+# patient_zero_updates = 0    sweeps that optimise patient zero over the population (§5.2)
 # min_epidemic_length = 3     re-roll outbreaks shorter than this; 1 disables
 # max_epidemic_retries = 5    attempts before keeping whatever came out
 ```
@@ -1023,6 +1100,10 @@ invocation*, while the config describes the experiment.
 
 The SDA genome takes `num_states`, `max_resp_len` and `init_state` (default 0) — **not**
 `num_chars`, which is derived from the edge cap (§3.2).
+
+**Seven of the key names above are proposals:** `patient_zero_updates`, `seed_base_graph`,
+`zero_probability` and the four necrotic bounds. Whoever implements each one chooses its final
+name and corrects this section in the same pull request. `max_evaluations` is settled.
 
 The three SIR objectives share their parameters; only `epi_prof_match` adds a target. Flatten the
 shared block rather than triplicating it, so the TOML stays flat and the Rust stays DRY.
@@ -1064,6 +1145,10 @@ Everything belongs there, not scattered through dispatch:
 - base graph node count and cap narrowing (§8)
 - `0.0 <= init_char_mutation_rate <= 1.0` and `0.0 <= transition_vs_response_rate <= 1.0` — SDA
   only (§4), probabilities like the others above
+- `0.0 <= zero_probability <= 1.0` when set, SDA only (§3.2)
+- the necrotic bounds are rejected for any genome but SDA (§5.5)
+- a warning, not an error: patient zero sweeps that would by themselves consume the whole of
+  `max_evaluations` (§6.3)
 - base-graph and reference-set file loaders (§5.4, §8): self-loops, out-of-range or malformed
   edges, and a weight above `max_edge_multiplicity` are rejected before anything is built, the same
   eager-and-named-field shape as everything else in this list
