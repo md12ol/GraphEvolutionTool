@@ -90,7 +90,7 @@ mutation    = { type = "my_mutation", some_param = 0.5 }</code></pre>
   <tbody>
     <tr><td>1</td><td><code>get/src/genomes/genome.rs:108</code></td>
         <td>A variant on <code>enum EdgeEditMutation</code>, plus any parameters it reads.</td></tr>
-    <tr><td>2</td><td><code>get/src/genomes/edge_edit.rs:235</code></td>
+    <tr><td>2</td><td><code>get/src/genomes/edge_edit.rs:238</code></td>
         <td>The arm in <code>EdgeEditGenome::mutate</code> that performs it.</td></tr>
     <tr><td>3</td><td><code>get/src/config.rs:207</code> and
         <code>get/src/dispatch.rs:656</code></td>
@@ -107,7 +107,7 @@ mutation    = { type = "my_mutation", some_param = 0.5 }</code></pre>
 <pre><code class="language-rust">// step 1: genomes/genome.rs:108
 MyMutation { some_param: f64 },
 
-// step 2: genomes/edge_edit.rs:235
+// step 2: genomes/edge_edit.rs:238
 EdgeEditMutation::MyMutation { some_param } =&gt; {
     // exactly one change to `self.genes`
 }
@@ -134,7 +134,7 @@ EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
   <tbody>
     <tr><td>1</td><td><code>get/src/genomes/genome.rs:121</code></td>
         <td>A variant on <code>enum SdaMutation</code>, plus any parameters it reads.</td></tr>
-    <tr><td>2</td><td><code>get/src/genomes/sda.rs:405</code></td>
+    <tr><td>2</td><td><code>get/src/genomes/sda.rs:408</code></td>
         <td>The arm in <code>SdaGenome::mutate</code> that performs it.</td></tr>
     <tr><td>3</td><td><code>get/src/config.rs:249</code> and
         <code>get/src/dispatch.rs:670</code></td>
@@ -151,7 +151,7 @@ EdgeEditMutationConfig::MyMutation { some_param } =&gt; {
 <pre><code class="language-rust">// step 1: genomes/genome.rs:121
 MyMutation { some_param: f64 },
 
-// step 2: genomes/sda.rs:405
+// step 2: genomes/sda.rs:408
 SdaMutation::MyMutation { some_param } =&gt; self.my_mutation(context, rng),
 
 // step 3a: config.rs:249

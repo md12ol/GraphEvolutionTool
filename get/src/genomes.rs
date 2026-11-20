@@ -3,6 +3,8 @@
 //! them needs, so callers name them from `crate::genomes` rather than from the
 //! module each is declared in.
 
+use std::num::NonZeroUsize;
+
 use rand::Rng;
 
 // ADD A GENOME STEP 3 — declare your module, then add your types to the
@@ -24,10 +26,11 @@ pub use sda::{SdaDimensions, SdaGenome};
 /// Draw two distinct cut points in `0..=shared_length` and return them in
 /// ascending order, for a two-point crossover that swaps the half-open
 /// segment `[start, end)`.
-///
-/// Callers must ensure `shared_length >= 1`; below that there is no pair of
-/// distinct points to draw and this loops forever.
-fn two_distinct_cut_points<R: Rng + ?Sized>(shared_length: usize, rng: &mut R) -> (usize, usize) {
+fn two_distinct_cut_points<R: Rng + ?Sized>(
+    shared_length: NonZeroUsize,
+    rng: &mut R,
+) -> (usize, usize) {
+    let shared_length = shared_length.get();
     loop {
         let a = rng.random_range(0..=shared_length);
         let b = rng.random_range(0..=shared_length);
@@ -42,6 +45,7 @@ mod tests {
     use super::two_distinct_cut_points;
     use rand::SeedableRng;
     use rand::rngs::StdRng;
+    use std::num::NonZeroUsize;
 
     /// Every pair of cut points has to be equally likely, and the obvious
     /// simplification is not: drawing `start` first and `end` somewhere above
@@ -63,9 +67,10 @@ mod tests {
         let width = LENGTH + 1;
         let mut counts = vec![0usize; width * width];
         let mut rng = StdRng::seed_from_u64(2026);
+        let length = NonZeroUsize::new(LENGTH).unwrap();
 
         for _ in 0..DRAWS {
-            let (start, end) = two_distinct_cut_points(LENGTH, &mut rng);
+            let (start, end) = two_distinct_cut_points(length, &mut rng);
             assert!(
                 start < end,
                 "({start}, {end}) is not distinct and ascending"
@@ -84,6 +89,16 @@ mod tests {
                     "({start}, {end}) drawn {seen} times, expected about {expected}"
                 );
             }
+        }
+    }
+
+    /// 1 is the smallest length the type admits: two points and one pair,
+    /// which the draw must find rather than spin on.
+    #[test]
+    fn the_smallest_shared_length_returns_its_only_pair() {
+        let mut rng = StdRng::seed_from_u64(7);
+        for _ in 0..100 {
+            assert_eq!(two_distinct_cut_points(NonZeroUsize::MIN, &mut rng), (0, 1));
         }
     }
 }

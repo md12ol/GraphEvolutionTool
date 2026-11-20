@@ -1,6 +1,7 @@
 //! The edge-edit representation: the genome, the operation mix it draws from,
 //! and the identity gene.
 
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 #[cfg(test)]
 use std::sync::OnceLock;
@@ -205,8 +206,10 @@ impl Genome for EdgeEditGenome {
     /// Declines to cross below two shared genes: with one there is a single
     /// possible pair of cut points, so nothing is being chosen.
     fn crossover<R: Rng + ?Sized>(&mut self, other: &mut Self, rng: &mut R) {
-        let shared_length = self.genes.len().min(other.genes.len());
-        if shared_length < 2 {
+        let Some(shared_length) = NonZeroUsize::new(self.genes.len().min(other.genes.len())) else {
+            return;
+        };
+        if shared_length.get() < 2 {
             return;
         }
 
@@ -572,9 +575,6 @@ mod tests {
 
     #[test]
     fn crossover_of_empty_genomes_is_a_noop() {
-        // `shared_length` is 0, below the two distinct cut points a swap needs,
-        // so this returns before drawing anything rather than panicking on an
-        // empty range.
         let mut left = EdgeEditGenome::new_with_operators(Vec::new(), EdgeEditOperators::uniform());
         let mut right =
             EdgeEditGenome::new_with_operators(Vec::new(), EdgeEditOperators::uniform());
