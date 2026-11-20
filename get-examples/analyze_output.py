@@ -876,7 +876,8 @@ def read_edge_file(path):
     except ImportError:
         raise ValueError(
             "graph_to_png.py is not beside this script, and it is what reads the "
-            "edge-file format. Unpack the whole bundle rather than one file."
+            "edge-file format. The two live together in get-examples/; keep them "
+            "together when copying this script elsewhere."
         ) from None
     return graph_to_png.read_graph(path)
 

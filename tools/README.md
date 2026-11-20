@@ -54,31 +54,11 @@ the empty directory into the archive. That second one matters: this script is
 normally run by someone who has been running the examples, and without it the
 published zip would ship whoever built it last.
 
-## `graph_to_png.py`
+## `graph_to_png.py` is not here
 
-Draws a GET edge file as a PNG — a run's `best_individual.txt`, a base graph, a
-reference graph, anything carrying the `# nodes = N` header.
-
-```bash
-python3 tools/graph_to_png.py best_individual.txt              # -> best_individual.png
-python3 tools/graph_to_png.py best_individual.txt out/win.png  # -> out/win.png
-```
-
-One required argument, the graph file; an optional second says where the image
-goes, defaulting to the input path with a `.png` extension.
-
-Standard library only, like everything else here: the PNG is encoded with
-`zlib` and the layout is a plain force-directed one, so there is no matplotlib
-and no install step. It draws a readable diagram, not a publication figure —
-for the latter, read the edge list into whichever library you already use.
-
-Deterministic, with no seed to pass: the layout starts from a circle rather
-than from random positions, so two runs over one file produce byte-identical
-images and a picture is safe to check in beside a result.
-
-**It reads 0-indexed files, because that is what GET writes.** A 1-indexed file
-— `examples/base_graph.csv` is one — is rejected by name rather than shifted
-silently, since nothing in the file says which numbering produced it.
+It lives in `get-examples/`, beside the `analyze_output.py` that imports it to
+read the edge-file format, so the download and a checkout hold the same files.
+It is still standard library only; its own docstring documents it.
 
 ## `tudataset_to_get.py`
 
