@@ -78,8 +78,8 @@ impl Graph {
     /// sorted by `u` then `v`.
     pub fn get_edge_list(&self) -> Vec<(usize, usize, u32)> {
         let mut edges = Vec::new();
-        for u in 0..self.num_nodes {
-            for (v, &weight) in self.adjacency[u].iter().enumerate().skip(u + 1) {
+        for (u, row) in self.adjacency.iter().enumerate() {
+            for (v, &weight) in row.iter().enumerate().skip(u + 1) {
                 if weight != 0 {
                     edges.push((u, v, weight));
                 }
