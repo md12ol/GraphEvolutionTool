@@ -60,8 +60,8 @@ pub(crate) struct ErasedOutcome {
     pub history: Vec<GenerationStats>,
 }
 
-/// The node index a reference file may not exceed, when the run's own
-/// `network_size` is smaller.
+/// The node index a reference file may not exceed, whatever the run's own
+/// `network_size`.
 ///
 /// Reference graphs come from real data and differ in size, so there is no
 /// single right value. This one is loose enough for any plausible reference
@@ -180,7 +180,7 @@ impl GraphEvolver {
         // `max_edge_multiplicity` agrees only because validation forces it, and
         // `min_node_index` is deliberately asymmetric: `unwrap_or(0)` here
         // against a caller-supplied argument on the Python path.
-        let index_cap = self.config.network_size.max(MAX_REFERENCE_NODES);
+        let index_cap = MAX_REFERENCE_NODES;
 
         let loaded = graph_io::load_edge_folder(
             std::path::Path::new(reference_folder.as_str()),
@@ -776,14 +776,11 @@ mod tests {
             "the scope's own size must travel, not a default"
         );
 
-        // `matches!` rather than `assert_eq!` only because `Selection` is the
-        // one axis enum of the four that derives neither `Debug` nor
-        // `PartialEq`; the other three are compared directly above and below.
-        assert!(matches!(selection(&SelectionConfig::Best), Selection::Best));
-        assert!(matches!(
+        assert_eq!(selection(&SelectionConfig::Best), Selection::Best);
+        assert_eq!(
             selection(&SelectionConfig::Tournament { tournament_size: 5 }),
             Selection::Tournament { tournament_size: 5 }
-        ));
+        );
 
         assert_eq!(replacement(&ReplacementConfig::Worst), Replacement::Worst);
         assert_eq!(crossover(&CrossoverConfig::TwoPoint), Crossover::TwoPoint);
