@@ -11,7 +11,8 @@ edit. Run from the repository root.
     python3 documentation-audit/check_refs.py          # report
     python3 documentation-audit/check_refs.py --fix    # snap each reference to its marker
 
-Also checks that each new-*.html's step table matches its chain's markers, and
+Also checks that each new-*.html's step table matches its chain's markers, that
+every file a table row names carries that row's marker, line number or not, and
 that every `fn` signature shown on the site appears verbatim in get/src. Each
 catches something the others cannot: a page that stops one step short is not a
 wrong line number, and a stale signature is neither.
@@ -40,7 +41,12 @@ CHAIN = {
     "new-selection": "SELECTION", "new-scope": "SCOPE", "new-replacement": "REPLACEMENT",
     "new-crossover": "CROSSOVER", "new-mutation": "MUTATION",
 }
-REF = re.compile(r"([a-z_]+\.rs|config\.example\.toml):(\d+)|<code>:(\d+)</code>")
+REF = re.compile(r"([A-Za-z0-9_]+\.rs|config\.example\.toml):(\d+)|<code>:(\d+)</code>")
+# A source file named in a step table's file cell, with or without a line
+# number: `get/src/evolver/common.rs:27`, `config.example.toml`.
+ROW_FILE = re.compile(r"((?:[A-Za-z0-9_]+/)*[A-Za-z0-9_]+\.rs|config\.example\.toml)")
+# One step-table row: the step number, then the rest of the row.
+ROW = re.compile(r"<tr><td>(\d+)[ab]?</td>((?:(?!</tr>).)*?)</tr>", re.S)
 # A card is navigation, not a section. site.js keeps their headings out of the
 # contents panel, so they never receive a generated id.
 CARD = re.compile(r'<a[^>]*\bclass="[^"]*\bcard\b[^"]*"[^>]*>.*?</a>', re.S)
@@ -305,8 +311,10 @@ def grep_counts():
             if "E" in flags:
                 argv.append("-E")
             argv += [pattern, "--"] + paths
+            # Without an explicit encoding Windows decodes git's UTF-8 as
+            # cp1252, the marker's dash never matches, and every step count is 0.
             lines = subprocess.run(
-                argv, capture_output=True, text=True).stdout.splitlines()
+                argv, capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
             sites = len(lines)
             # A step is (number, branch), not a number: MUTATION's eight are
             # four steps on each of two branches, and counting numbers alone
@@ -666,6 +674,66 @@ def step_tables():
     return bad
 
 
+def find_source(named):
+    """The repository path of a file a page names, or None if there is none.
+
+    Matched case-sensitively on every platform, so a name that only resolves on
+    a case-insensitive filesystem fails here as it would on CI. A name with a
+    directory part must be that exact path, not merely a file of the same name.
+    """
+    if named == "config.example.toml":
+        return named
+    base = named.rsplit("/", 1)[-1]
+    for root, _, files in os.walk("get/src"):
+        if base in files:
+            path = os.path.join(root, base).replace(os.sep, "/")
+            if "/" not in named or path == named:
+                return path
+    return None
+
+
+def step_table_files():
+    """Every file a step-table row names must carry that row's step marker.
+
+    Checked whether or not the row gives a line number. The reference check only
+    reads a file with a `:NNN` after it, and `step_tables()` compares the set of
+    step numbers, so without this a row naming the wrong file, or a file that
+    does not exist, passes both.
+    """
+    rows = files = bad = 0
+    for page, chain in sorted(CHAIN.items()):
+        path = f"{SITE}/guide/{page}.html"
+        text = open(path, encoding="utf-8").read()
+        names = branch_names(chain)
+        for row in ROW.finditer(text):
+            rows += 1
+            step = int(row.group(1))
+            branch = cued_branch(text, row.start(), names)
+            wanted = f"{chain} step {step}"
+            if branch is not None:
+                wanted += f" (for {branch})"
+            # Only the file cell: a description may name the reader's own new
+            # file, such as `genomes/my_genome.rs`, which is not a reference.
+            cell = re.search(r"<td>(.*?)</td>", row.group(2), re.S)
+            named = ROW_FILE.findall(cell.group(1)) if cell else []
+            if not named:
+                bad += 1
+                print(f"  {page}: the step {step} row names no source file")
+                continue
+            for name in named:
+                files += 1
+                source = find_source(name)
+                if source is None:
+                    bad += 1
+                    print(f"  {page}: the step {step} row names {name}, which does not exist")
+                elif not markers(source, chain, step, branch):
+                    bad += 1
+                    print(f"  {page}: the step {step} row names {name}, "
+                          f"which carries no {wanted} marker")
+    print(f"{rows} step-table rows naming {files} files, {bad} wrong")
+    return bad
+
+
 def main(fix):
     pages = []
     for root, _, files in os.walk(SITE):
@@ -754,6 +822,7 @@ def main(fix):
 
     print(f"{total} references, {wrong} wrong" + (f", {repaired} repaired" if fix else ""))
     bad_tables = step_tables()
+    bad_rows = step_table_files()
     bad_sigs = signatures()
     bad_counts = grep_counts()
     bad_defaults = config_defaults()
@@ -762,7 +831,7 @@ def main(fix):
     bad_figures = figure_labels()
     bad_links = external_links()
     bad_structure = structure()
-    return 1 if (wrong and not fix) or bad_tables or bad_sigs or bad_counts or bad_defaults or bad_versions or bad_ids or bad_figures or bad_links or bad_structure else 0
+    return 1 if (wrong and not fix) or bad_tables or bad_rows or bad_sigs or bad_counts or bad_defaults or bad_versions or bad_ids or bad_figures or bad_links or bad_structure else 0
 
 
 if __name__ == "__main__":
