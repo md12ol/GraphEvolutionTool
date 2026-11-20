@@ -5,10 +5,10 @@ Two outputs, both checked into the repository:
     documentation/get-examples.zip        what a reader downloads
     documentation/guide/example-bundle.html   the same files, readable in a browser
 
-Both are built from `get-examples/`, plus the handful of files named in
-`IMPORTED` that the bundle ships from elsewhere in the repository.
+Both are built from `get-examples/`, and from nothing else: the bundle ships
+exactly the files a checkout has in that directory.
 
-Run it after changing anything under `get-examples/`, or any imported file:
+Run it after changing anything under `get-examples/`:
 
     python3 tools/build_bundle.py
 
@@ -38,14 +38,6 @@ PAGE_PATH = os.path.join(REPO, "documentation", "guide", "example-bundle.html")
 # different zip and defeats the --check comparison.
 FIXED_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
-# Files the bundle ships that do not live under `get-examples/`, as
-# {name in the bundle: path on disk}. `analyze_output.py` imports
-# `graph_to_png.py` to draw the winning network, so a reader who only ever
-# unpacks the zip needs a copy of it, while the repository keeps exactly one,
-# in `tools/`. A second copy under `get-examples/` would ship just as well and
-# then drift from the original.
-IMPORTED = {"graph_to_png.py": os.path.join(REPO, "tools", "graph_to_png.py")}
-
 LANGUAGE = {".py": "python", ".toml": "toml", ".csv": None}
 
 # A base graph is 100+ lines of `0,1,1`. Enough to see the shape and the header,
@@ -67,14 +59,7 @@ def is_shipped(relative):
 
 
 def source_path(relative):
-    """Where a bundle-relative path is read from on disk.
-
-    Almost everything is under `get-examples/`; `IMPORTED` names the few that
-    are not, and every reader of a bundle file goes through here so that those
-    few need no special case of their own.
-    """
-    if relative in IMPORTED:
-        return IMPORTED[relative]
+    """Where a bundle-relative path is read from on disk."""
     return os.path.join(BUNDLE, relative)
 
 
@@ -91,9 +76,6 @@ def bundle_files():
             relative = os.path.relpath(full, BUNDLE).replace(os.sep, "/")
             if is_shipped(relative):
                 found.append(relative)
-    for name in IMPORTED:
-        if name not in found:
-            found.append(name)
     found.sort()
     return found
 
