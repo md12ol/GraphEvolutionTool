@@ -44,11 +44,12 @@ jobs:
         include:
           - { os: linux,   runner: ubuntu-22.04,  target: x86_64 }
           - { os: linux,   runner: ubuntu-22.04,  target: aarch64 }
-          # macos-13 was retired, and a job asking for it queues forever rather
-          # than failing — four runs sat unstarted for hours. macos-15-intel is
-          # the Intel replacement.
+          # A job naming a retired macOS image either queues forever or is
+          # cancelled within seconds as "not supported", with no build log
+          # either way, so these name current images: macos-15-intel for Intel
+          # and macos-15 for Apple silicon.
           - { os: macos,   runner: macos-15-intel, target: x86_64 }
-          - { os: macos,   runner: macos-14,      target: aarch64 }
+          - { os: macos,   runner: macos-15,      target: aarch64 }
           - { os: windows, runner: windows-latest, target: x64 }
 
     steps:
