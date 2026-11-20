@@ -25,8 +25,23 @@ Writes run_log.csv, best_individual.txt and config.toml into a
   --out DIR   make the timestamped folder under DIR instead of here. Either way
               nothing is overwritten between invocations.";
 
+/// What `parse_args` found on the command line.
+enum Parsed {
+    Run(Args),
+    HelpWanted,
+    Error(String),
+}
+
 /// Parse the command line, or say what was wrong with it.
-fn parse_args(argv: &[String]) -> Result<Args, String> {
+fn parse_args(argv: &[String]) -> Parsed {
+    // First, so `--help` works without a config file and wins over any other
+    // problem on the line, including a flag that would take it as its value.
+    for arg in &argv[1..] {
+        if arg == "--help" || arg == "-h" {
+            return Parsed::HelpWanted;
+        }
+    }
+
     let mut positional: Vec<&String> = Vec::new();
     let mut n_runs = 1usize;
     let mut out_dir: Option<String> = None;
@@ -37,14 +52,16 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
         if arg == "--runs" || arg == "--out" {
             let value = match argv.get(i + 1) {
                 Some(value) => value,
-                None => return Err(format!("{arg} needs a value")),
+                None => return Parsed::Error(format!("{arg} needs a value")),
             };
             if arg == "--runs" {
                 n_runs = match value.parse() {
-                    Ok(0) => return Err("--runs must be at least 1".to_string()),
+                    Ok(0) => return Parsed::Error("--runs must be at least 1".to_string()),
                     Ok(parsed) => parsed,
                     Err(_) => {
-                        return Err(format!("--runs must be a positive integer, got {value:?}"));
+                        return Parsed::Error(format!(
+                            "--runs must be a positive integer, got {value:?}"
+                        ));
                     }
                 };
             } else {
@@ -52,7 +69,7 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
             }
             i += 2;
         } else if arg.starts_with("--") {
-            return Err(format!("unknown option {arg:?}"));
+            return Parsed::Error(format!("unknown option {arg:?}"));
         } else {
             positional.push(arg);
             i += 1;
@@ -60,18 +77,20 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
     }
 
     if positional.is_empty() || positional.len() > 2 {
-        return Err("expected a config file and an optional seed".to_string());
+        return Parsed::Error("expected a config file and an optional seed".to_string());
     }
 
     let seed = match positional.get(1) {
         Some(raw) => match raw.parse() {
             Ok(seed) => seed,
-            Err(_) => return Err(format!("seed must be a non-negative integer, got {raw:?}")),
+            Err(_) => {
+                return Parsed::Error(format!("seed must be a non-negative integer, got {raw:?}"));
+            }
         },
         None => rand::random(),
     };
 
-    Ok(Args {
+    Parsed::Run(Args {
         config_path: positional[0].clone(),
         seed,
         n_runs,
@@ -82,15 +101,13 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
 fn main() -> ExitCode {
     let argv: Vec<String> = env::args().collect();
 
-    // Before parsing, so `--help` works without a config file.
-    if argv[1..].iter().any(|arg| arg == "--help" || arg == "-h") {
-        println!("{USAGE}");
-        return ExitCode::SUCCESS;
-    }
-
     let args = match parse_args(&argv) {
-        Ok(args) => args,
-        Err(problem) => {
+        Parsed::Run(args) => args,
+        Parsed::HelpWanted => {
+            println!("{USAGE}");
+            return ExitCode::SUCCESS;
+        }
+        Parsed::Error(problem) => {
             eprintln!("{problem}\n\n{USAGE}");
             return ExitCode::FAILURE;
         }
@@ -184,7 +201,7 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_args;
+    use super::{Args, Parsed, parse_args};
 
     /// `argv[0]` is the program name, which `parse_args` skips.
     fn args(rest: &[&str]) -> Vec<String> {
@@ -195,19 +212,27 @@ mod tests {
         argv
     }
 
+    /// Parse a command line that is expected to start a run.
+    fn run(rest: &[&str]) -> Args {
+        match parse_args(&args(rest)) {
+            Parsed::Run(parsed) => parsed,
+            Parsed::HelpWanted => panic!("{rest:?} asked for help, expected a run"),
+            Parsed::Error(problem) => panic!("{rest:?} was rejected: {problem}"),
+        }
+    }
+
     #[test]
     fn several_replicates_need_no_output_directory() {
         // The timestamped folder is made with or without `--out`, and each
         // replicate writes its own `run_<n>/` inside it, so none can collide.
-        let parsed = parse_args(&args(&["c.toml", "7", "--runs", "3"]))
-            .expect("--runs without --out is accepted");
+        let parsed = run(&["c.toml", "7", "--runs", "3"]);
         assert_eq!(parsed.n_runs, 3);
         assert_eq!(parsed.out_dir, None);
     }
 
     #[test]
     fn several_replicates_with_out_is_accepted() {
-        let parsed = parse_args(&args(&["c.toml", "7", "--runs", "3", "--out", "d"])).unwrap();
+        let parsed = run(&["c.toml", "7", "--runs", "3", "--out", "d"]);
         assert_eq!(parsed.n_runs, 3);
         assert_eq!(parsed.out_dir.as_deref(), Some("d"));
     }
@@ -216,13 +241,28 @@ mod tests {
     /// check runs exactly this way.
     #[test]
     fn a_single_run_needs_no_out() {
-        let parsed = parse_args(&args(&["c.toml", "7"])).unwrap();
+        let parsed = run(&["c.toml", "7"]);
         assert_eq!(parsed.n_runs, 1);
         assert!(parsed.out_dir.is_none());
     }
 
     #[test]
     fn zero_replicates_is_rejected() {
-        assert!(parse_args(&args(&["c.toml", "--runs", "0"])).is_err());
+        let parsed = parse_args(&args(&["c.toml", "--runs", "0"]));
+        assert!(matches!(parsed, Parsed::Error(_)));
+    }
+
+    #[test]
+    fn help_needs_no_config_file() {
+        assert!(matches!(parse_args(&args(&["--help"])), Parsed::HelpWanted));
+        assert!(matches!(parse_args(&args(&["-h"])), Parsed::HelpWanted));
+    }
+
+    #[test]
+    fn help_wins_over_a_flag_that_would_take_it_as_a_value() {
+        let after_runs = parse_args(&args(&["c.toml", "--runs", "--help"]));
+        assert!(matches!(after_runs, Parsed::HelpWanted));
+        let after_out = parse_args(&args(&["c.toml", "--out", "-h"]));
+        assert!(matches!(after_out, Parsed::HelpWanted));
     }
 }
