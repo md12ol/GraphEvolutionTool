@@ -79,8 +79,7 @@ impl Graph {
     pub fn get_edge_list(&self) -> Vec<(usize, usize, u32)> {
         let mut edges = Vec::new();
         for u in 0..self.num_nodes {
-            for v in (u + 1)..self.num_nodes {
-                let weight = self.adjacency[u][v];
+            for (v, &weight) in self.adjacency[u].iter().enumerate().skip(u + 1) {
                 if weight != 0 {
                     edges.push((u, v, weight));
                 }
@@ -96,8 +95,8 @@ impl Graph {
             return Vec::new();
         }
         let mut found = Vec::new();
-        for neighbor in 0..self.num_nodes {
-            if self.adjacency[node][neighbor] > 0 {
+        for (neighbor, &weight) in self.adjacency[node].iter().enumerate() {
+            if weight > 0 {
                 found.push(neighbor);
             }
         }
@@ -124,8 +123,8 @@ impl Graph {
         }
         let target = index % count;
         let mut seen = 0;
-        for neighbor in 0..self.num_nodes {
-            if self.adjacency[node][neighbor] > 0 {
+        for (neighbor, &weight) in self.adjacency[node].iter().enumerate() {
+            if weight > 0 {
                 if seen == target {
                     return Some(neighbor);
                 }
