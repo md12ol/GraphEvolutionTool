@@ -1377,7 +1377,7 @@ mod tests {
             .join("base_graph.csv");
         let config_path = folder_holding(
             "absolute_config",
-            &config_text_with_genome_keys(&format!("base_graph = \"{}\"", graph_path.display())),
+            &config_text_with_genome_keys(&format!("base_graph = '{}'", graph_path.display())),
             None,
         );
         let config = Config::from_toml_str(
