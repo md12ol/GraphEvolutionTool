@@ -52,6 +52,10 @@ CONFIG_SUFFIX = ".toml"
 LOG_NAME = "run_log.csv"
 BEST_INDIVIDUAL = "best_individual.txt"
 
+# The download ships `graph_to_png.py` beside this script. A checkout keeps its
+# one copy in `tools/`, a sibling of this script's directory.
+REPO_TOOLS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools")
+
 # Beyond this many folders a filename listing them all stops being a filename,
 # so the set is identified by a digest of every name instead. The digest is of
 # the whole sorted set, so two different comparisons never collide.
@@ -866,18 +870,21 @@ def networkx():
 def read_edge_file(path):
     """`(num_nodes, edges)` from a GET edge file.
 
-    Parsed by `graph_to_png.py`, which ships beside this script and already
-    reads the format `save_results` writes, including the `# nodes = N` header,
-    without which a node that has no edges is invisible and the count comes up
-    short by exactly the nodes hardest to notice.
+    Parsed by `graph_to_png.py`, which already reads the format `save_results`
+    writes, including the `# nodes = N` header, without which a node that has no
+    edges is invisible and the count comes up short by exactly the nodes hardest
+    to notice.
     """
+    # Appended, so the copy beside this script wins wherever there is one.
+    if REPO_TOOLS not in sys.path:
+        sys.path.append(REPO_TOOLS)
     try:
         import graph_to_png
     except ImportError:
         raise ValueError(
-            "graph_to_png.py is not beside this script, and it is what reads the "
-            "edge-file format. The two live together in get-examples/; keep them "
-            "together when copying this script elsewhere."
+            "graph_to_png.py is neither beside this script nor in ../tools, and it "
+            "is what reads the edge-file format. Unpack the whole bundle rather "
+            "than one file."
         ) from None
     return graph_to_png.read_graph(path)
 

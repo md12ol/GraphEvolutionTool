@@ -1,28 +1,23 @@
 #!/usr/bin/env python3
 """Draw a GET edge file as a PNG.
 
-    python3 graph_to_png.py best_individual.txt
-    python3 graph_to_png.py best_individual.txt out/winner.png
+    python3 tools/graph_to_png.py best_individual.txt
+    python3 tools/graph_to_png.py best_individual.txt out/winner.png
 
 One required argument, the graph file. With a second, that is where the image
 goes; without one it is the input path with its extension replaced by `.png`.
 
-**Standard library only.** No matplotlib, no networkx, no install step. The PNG
-is encoded here with `zlib` and the layout is a plain force-directed one, so
-this runs on the bare interpreter a reader has before installing anything.
-`analyze_output.py` beside it imports this file to read the edge-file format,
-so the summarising half of that script inherits the same freedom. The cost is
-that it draws a readable diagram rather than a publication figure; if you want
-the latter, read the edge list into whichever library you already use.
+**Standard library only, like everything else in `tools/`.** No matplotlib, no
+networkx, no install step. The PNG is encoded here with `zlib` and the layout
+is a plain force-directed one, so this runs on the same bare interpreter that
+runs the converter beside it. The cost is that it draws a readable diagram
+rather than a publication figure; if you want the latter, read the edge list
+into whichever library you already use.
 
 Everything is deterministic: the same file always produces the same image, with
 no seed to pass, because the layout starts from a circle rather than from
 random positions. Two runs over the same graph are byte-identical, which is
 what makes an image safe to check in beside a result.
-
-It reads 0-indexed files, because that is what GET writes. A 1-indexed file is
-rejected by name rather than shifted silently, since nothing in the file says
-which numbering produced it.
 """
 
 import math
@@ -38,7 +33,7 @@ import zlib
 USAGE = (
     (__doc__ or "").strip().split("\n\n")[1]
     if __doc__
-    else "usage: python3 graph_to_png.py <edges.txt> [out.png]"
+    else "usage: python3 tools/graph_to_png.py <edges.txt> [out.png]"
 )
 
 SIZE = 900  # output edge length in pixels, square
