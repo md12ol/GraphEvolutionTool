@@ -378,10 +378,14 @@ matplotlib draws the two plots; networkx lays the winning network out, and its
 Kamada-Kawai layout is what needs scipy. Reading and summarising work with none
 of them installed, and each error says which one is missing.
 
-**No installation at all?** `graph_to_png.py`, beside this file, turns any one
-result into a PNG using nothing but the standard library:
+**No installation at all?** `graph_to_png.py` turns any one result into a PNG
+using nothing but the standard library. In the download it sits beside this
+file:
 
     python graph_to_png.py output/example_1/run_01/best_individual.txt
+
+In a checkout of the repository it is in `tools/`, so the command starts
+`python ../tools/graph_to_png.py` and takes the same argument.
 
 It is the fallback rather than the main path. Its layout starts from a circle,
 which makes it reproducible without a seed but means a ring-shaped picture can
