@@ -866,7 +866,8 @@ def networkx():
             "drawing the winning network needs networkx and scipy:\n"
             "    pip install networkx scipy\n"
             "For a picture with no installation at all, run the graph file through "
-            "graph_to_png.py, which ships beside this script."
+            "graph_to_png.py, which ships beside this script and is in ../tools in "
+            "a checkout."
         ) from None
     return networkx
 
