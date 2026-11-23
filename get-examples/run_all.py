@@ -45,14 +45,6 @@ PATCHED_RUNNER = os.path.join(HERE, ".run_all_with_objective.py")
 
 PLOT_PACKAGES = ["matplotlib", "networkx", "scipy"]
 
-# `analyze_output.py` imports `graph_to_png.py` to read the edge-file format.
-# The download ships a copy beside it, but the repository keeps exactly one, in
-# `tools/`, so a checkout has nothing to import and the network drawing fails
-# with an error about unpacking the whole bundle. Where that is the situation,
-# `tools/` goes on the child's import path. In the download the file is present
-# and this finds nothing to add.
-REPO_TOOLS = os.path.join(os.path.dirname(HERE), "tools")
-
 # The first line of the commented-out block in `register_objective`, and the
 # last. Matching both, rather than assuming the block's extent, means a block
 # that has been edited into a different shape is noticed instead of half
@@ -169,30 +161,13 @@ def check_plot_packages():
         )
 
 
-def child_environment():
-    """The environment the child scripts run in.
-
-    Identical to this process's, except that a checkout gets `tools/` on
-    `PYTHONPATH` so `graph_to_png.py` is importable. See `REPO_TOOLS`.
-    """
-    environment = dict(os.environ)
-    if os.path.isfile(os.path.join(HERE, "graph_to_png.py")):
-        return environment
-    if not os.path.isfile(os.path.join(REPO_TOOLS, "graph_to_png.py")):
-        return environment
-
-    existing = environment.get("PYTHONPATH")
-    environment["PYTHONPATH"] = REPO_TOOLS + os.pathsep + existing if existing else REPO_TOOLS
-    return environment
-
-
 def run(command, label):
     """Run one subprocess, streaming its output, and raise if it fails."""
     # Flushed, or these headers land after the child's output: this process
     # writes to a buffered pipe and the child writes to the terminal directly.
     print(f"\n=== {label} ===", flush=True)
     print("    " + " ".join(command), flush=True)
-    completed = subprocess.run(command, cwd=HERE, env=child_environment(), check=False)
+    completed = subprocess.run(command, cwd=HERE, check=False)
     if completed.returncode != 0:
         raise ValueError(f"{label} failed with exit code {completed.returncode}")
 

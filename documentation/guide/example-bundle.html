@@ -378,10 +378,15 @@ matplotlib draws the two plots; networkx lays the winning network out, and its
 Kamada-Kawai layout is what needs scipy. Reading and summarising work with none
 of them installed, and each error says which one is missing.
 
-**No installation at all?** `graph_to_png.py`, beside this file, turns any one
-result into a PNG using nothing but the standard library:
+**No installation at all?** `graph_to_png.py` turns any one result into a PNG
+using nothing but the standard library. In the download it sits beside this
+file:
 
     python graph_to_png.py output/example_1/run_01/best_individual.txt
+
+In a checkout of the repository it is in the repository&#x27;s `tools/` folder
+instead, so from this folder the command starts `python ../tools/graph_to_png.py`
+and takes the same argument.
 
 It is the fallback rather than the main path. Its layout starts from a circle,
 which makes it reproducible without a seed but means a ring-shaped picture can
@@ -393,6 +398,7 @@ import argparse
 import csv
 import glob
 import hashlib
+import importlib.util
 import math
 import os
 import tomllib
@@ -401,6 +407,15 @@ import sys
 CONFIG_SUFFIX = &quot;.toml&quot;
 LOG_NAME = &quot;run_log.csv&quot;
 BEST_INDIVIDUAL = &quot;best_individual.txt&quot;
+
+# Where `graph_to_png.py` is looked for, in order. The download ships it beside
+# this script. A checkout keeps its one copy in the repository&#x27;s `tools/`, and
+# `get/Cargo.toml` is what tells a checkout apart from whatever folder the
+# download was unpacked into, whose own `tools/` would be someone else&#x27;s.
+HERE = os.path.dirname(os.path.abspath(__file__))
+GRAPH_TO_PNG_PLACES = [os.path.join(HERE, &quot;graph_to_png.py&quot;)]
+if os.path.isfile(os.path.join(os.path.dirname(HERE), &quot;get&quot;, &quot;Cargo.toml&quot;)):
+    GRAPH_TO_PNG_PLACES.append(os.path.join(os.path.dirname(HERE), &quot;tools&quot;, &quot;graph_to_png.py&quot;))
 
 # Beyond this many folders a filename listing them all stops being a filename,
 # so the set is identified by a digest of every name instead. The digest is of
@@ -1208,7 +1223,8 @@ def networkx():
             &quot;drawing the winning network needs networkx and scipy:\n&quot;
             &quot;    pip install networkx scipy\n&quot;
             &quot;For a picture with no installation at all, run the graph file through &quot;
-            &quot;graph_to_png.py, which ships beside this script.&quot;
+            &quot;graph_to_png.py, which ships beside this script, or is in the &quot;
+            &quot;repository&#x27;s tools/ folder in a checkout.&quot;
         ) from None
     return networkx
 
@@ -1216,19 +1232,28 @@ def networkx():
 def read_edge_file(path):
     &quot;&quot;&quot;`(num_nodes, edges)` from a GET edge file.
 
-    Parsed by `graph_to_png.py`, which ships beside this script and already
-    reads the format `save_results` writes, including the `# nodes = N` header,
-    without which a node that has no edges is invisible and the count comes up
-    short by exactly the nodes hardest to notice.
+    Parsed by `graph_to_png.py`, which already reads the format `save_results`
+    writes, including the `# nodes = N` header, without which a node that has no
+    edges is invisible and the count comes up short by exactly the nodes hardest
+    to notice.
     &quot;&quot;&quot;
-    try:
-        import graph_to_png
-    except ImportError:
-        raise ValueError(
-            &quot;graph_to_png.py is not beside this script, and it is what reads the &quot;
-            &quot;edge-file format. Unpack the whole bundle rather than one file.&quot;
-        ) from None
-    return graph_to_png.read_graph(path)
+    # Loaded from its file rather than imported by name, so no other module
+    # called `graph_to_png` on the import path can stand in for it, and the
+    # import path is left as it was.
+    for place in GRAPH_TO_PNG_PLACES:
+        if not os.path.isfile(place):
+            continue
+        spec = importlib.util.spec_from_file_location(&quot;graph_to_png&quot;, place)
+        if spec is None or spec.loader is None:
+            continue
+        graph_to_png = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(graph_to_png)
+        return graph_to_png.read_graph(path)
+    raise ValueError(
+        &quot;graph_to_png.py reads the edge-file format and was not found. The &quot;
+        &quot;download ships it beside this script, so unpack the whole bundle rather &quot;
+        &quot;than one file; in a checkout it is the repository&#x27;s tools/graph_to_png.py.&quot;
+    )
 
 
 def best_run_of(example, maximize):
@@ -2275,14 +2300,6 @@ PATCHED_RUNNER = os.path.join(HERE, &quot;.run_all_with_objective.py&quot;)
 
 PLOT_PACKAGES = [&quot;matplotlib&quot;, &quot;networkx&quot;, &quot;scipy&quot;]
 
-# `analyze_output.py` imports `graph_to_png.py` to read the edge-file format.
-# The download ships a copy beside it, but the repository keeps exactly one, in
-# `tools/`, so a checkout has nothing to import and the network drawing fails
-# with an error about unpacking the whole bundle. Where that is the situation,
-# `tools/` goes on the child&#x27;s import path. In the download the file is present
-# and this finds nothing to add.
-REPO_TOOLS = os.path.join(os.path.dirname(HERE), &quot;tools&quot;)
-
 # The first line of the commented-out block in `register_objective`, and the
 # last. Matching both, rather than assuming the block&#x27;s extent, means a block
 # that has been edited into a different shape is noticed instead of half
@@ -2399,30 +2416,13 @@ def check_plot_packages():
         )
 
 
-def child_environment():
-    &quot;&quot;&quot;The environment the child scripts run in.
-
-    Identical to this process&#x27;s, except that a checkout gets `tools/` on
-    `PYTHONPATH` so `graph_to_png.py` is importable. See `REPO_TOOLS`.
-    &quot;&quot;&quot;
-    environment = dict(os.environ)
-    if os.path.isfile(os.path.join(HERE, &quot;graph_to_png.py&quot;)):
-        return environment
-    if not os.path.isfile(os.path.join(REPO_TOOLS, &quot;graph_to_png.py&quot;)):
-        return environment
-
-    existing = environment.get(&quot;PYTHONPATH&quot;)
-    environment[&quot;PYTHONPATH&quot;] = REPO_TOOLS + os.pathsep + existing if existing else REPO_TOOLS
-    return environment
-
-
 def run(command, label):
     &quot;&quot;&quot;Run one subprocess, streaming its output, and raise if it fails.&quot;&quot;&quot;
     # Flushed, or these headers land after the child&#x27;s output: this process
     # writes to a buffered pipe and the child writes to the terminal directly.
     print(f&quot;\n=== {label} ===&quot;, flush=True)
     print(&quot;    &quot; + &quot; &quot;.join(command), flush=True)
-    completed = subprocess.run(command, cwd=HERE, env=child_environment(), check=False)
+    completed = subprocess.run(command, cwd=HERE, check=False)
     if completed.returncode != 0:
         raise ValueError(f&quot;{label} failed with exit code {completed.returncode}&quot;)
 

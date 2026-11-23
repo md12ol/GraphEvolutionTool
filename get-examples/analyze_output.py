@@ -28,10 +28,15 @@ matplotlib draws the two plots; networkx lays the winning network out, and its
 Kamada-Kawai layout is what needs scipy. Reading and summarising work with none
 of them installed, and each error says which one is missing.
 
-**No installation at all?** `graph_to_png.py`, beside this file, turns any one
-result into a PNG using nothing but the standard library:
+**No installation at all?** `graph_to_png.py` turns any one result into a PNG
+using nothing but the standard library. In the download it sits beside this
+file:
 
     python graph_to_png.py output/example_1/run_01/best_individual.txt
+
+In a checkout of the repository it is in the repository's `tools/` folder
+instead, so from this folder the command starts `python ../tools/graph_to_png.py`
+and takes the same argument.
 
 It is the fallback rather than the main path. Its layout starts from a circle,
 which makes it reproducible without a seed but means a ring-shaped picture can
@@ -43,6 +48,7 @@ import argparse
 import csv
 import glob
 import hashlib
+import importlib.util
 import math
 import os
 import tomllib
@@ -51,6 +57,15 @@ import sys
 CONFIG_SUFFIX = ".toml"
 LOG_NAME = "run_log.csv"
 BEST_INDIVIDUAL = "best_individual.txt"
+
+# Where `graph_to_png.py` is looked for, in order. The download ships it beside
+# this script. A checkout keeps its one copy in the repository's `tools/`, and
+# `get/Cargo.toml` is what tells a checkout apart from whatever folder the
+# download was unpacked into, whose own `tools/` would be someone else's.
+HERE = os.path.dirname(os.path.abspath(__file__))
+GRAPH_TO_PNG_PLACES = [os.path.join(HERE, "graph_to_png.py")]
+if os.path.isfile(os.path.join(os.path.dirname(HERE), "get", "Cargo.toml")):
+    GRAPH_TO_PNG_PLACES.append(os.path.join(os.path.dirname(HERE), "tools", "graph_to_png.py"))
 
 # Beyond this many folders a filename listing them all stops being a filename,
 # so the set is identified by a digest of every name instead. The digest is of
@@ -858,7 +873,8 @@ def networkx():
             "drawing the winning network needs networkx and scipy:\n"
             "    pip install networkx scipy\n"
             "For a picture with no installation at all, run the graph file through "
-            "graph_to_png.py, which ships beside this script."
+            "graph_to_png.py, which ships beside this script, or is in the "
+            "repository's tools/ folder in a checkout."
         ) from None
     return networkx
 
@@ -866,19 +882,28 @@ def networkx():
 def read_edge_file(path):
     """`(num_nodes, edges)` from a GET edge file.
 
-    Parsed by `graph_to_png.py`, which ships beside this script and already
-    reads the format `save_results` writes, including the `# nodes = N` header,
-    without which a node that has no edges is invisible and the count comes up
-    short by exactly the nodes hardest to notice.
+    Parsed by `graph_to_png.py`, which already reads the format `save_results`
+    writes, including the `# nodes = N` header, without which a node that has no
+    edges is invisible and the count comes up short by exactly the nodes hardest
+    to notice.
     """
-    try:
-        import graph_to_png
-    except ImportError:
-        raise ValueError(
-            "graph_to_png.py is not beside this script, and it is what reads the "
-            "edge-file format. Unpack the whole bundle rather than one file."
-        ) from None
-    return graph_to_png.read_graph(path)
+    # Loaded from its file rather than imported by name, so no other module
+    # called `graph_to_png` on the import path can stand in for it, and the
+    # import path is left as it was.
+    for place in GRAPH_TO_PNG_PLACES:
+        if not os.path.isfile(place):
+            continue
+        spec = importlib.util.spec_from_file_location("graph_to_png", place)
+        if spec is None or spec.loader is None:
+            continue
+        graph_to_png = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(graph_to_png)
+        return graph_to_png.read_graph(path)
+    raise ValueError(
+        "graph_to_png.py reads the edge-file format and was not found. The "
+        "download ships it beside this script, so unpack the whole bundle rather "
+        "than one file; in a checkout it is the repository's tools/graph_to_png.py."
+    )
 
 
 def best_run_of(example, maximize):
